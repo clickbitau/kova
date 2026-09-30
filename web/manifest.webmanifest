@@ -1,0 +1,9 @@
+{
+  "name": "Kova",
+  "short_name": "Kova",
+  "start_url": "/phone.html",
+  "display": "standalone",
+  "background_color": "#0e0f10",
+  "theme_color": "#0e0f10",
+  "icons": [{ "src": "assets/logo/kova-app-icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

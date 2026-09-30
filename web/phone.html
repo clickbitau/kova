@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0e0f10">
+<title>Kova</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./assets/logo/kova-favicon.svg">
+<link rel="apple-touch-icon" href="./assets/logo/kova-app-icon.svg">
+<script>(function(){var t="";try{var u=new URL(location.href);t=u.searchParams.get("token")||localStorage.getItem("kova_token")||"";if(u.searchParams.get("token"))localStorage.setItem("kova_token",t)}catch(e){}document.write('<script src="/api/boot.js'+(t?"?token="+encodeURIComponent(t):"")+'"><\/script>')})();</script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..24,400,0..1,0&display=swap" rel="stylesheet"><style>body{margin:0;background:#0e0f10;-webkit-font-smoothing:antialiased}*{box-sizing:border-box}a{color:#f2b14c}a:hover{color:#f7cb82}input[type=range]{accent-color:#f2b14c}::-webkit-scrollbar{display:none}</style></helmet>
+<div style="height:100dvh;display:flex;flex-direction:column;background:#0e0f10;position:relative;overflow:hidden;font-family:Manrope,system-ui,sans-serif;color:#f1efea">
+<div style="position:absolute;top:-160px;left:-80px;width:520px;height:420px;background:radial-gradient(closest-side, {{ mode.glow }}, transparent);pointer-events:none"></div>
+<div style="flex:1;overflow-y:auto;scrollbar-width:none;padding:calc(env(safe-area-inset-top, 0px) + 18px) 18px 20px;position:relative;display:flex;flex-direction:column;gap:22px">
+
+<sc-if value="{{ isNow }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;justify-content:space-between;align-items:center"><div style="display:flex;align-items:center;gap:8px"><svg width="22" height="22" viewBox="0 0 48 48"><path d="M8 26L24 11L40 26" fill="none" stroke="#f1efea" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path><path d="M16 32L24 24.5L32 32" fill="none" stroke="#f1efea" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="24" cy="38.5" r="3.5" fill="#f2b14c"></circle></svg><span style="font-size:13px;font-weight:700;color:#a3a09a">{{ homeName }}</span></div><div style="display:flex"><sc-for list="{{ avatars }}" as="av" hint-placeholder-count="2"><div style="width:30px;height:30px;border-radius:50%;background:#2a2b2f;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;border:2px solid #0e0f10;margin-left:{{ av.ml }};opacity:{{ av.op }}">{{ av.initial }}</div></sc-for></div></div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<span style="font-size:13px;color:#a3a09a">{{ dateLine }}</span>
+<div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Material Symbols Rounded';font-size:34px;font-variation-settings:'FILL' 1;color:{{ mode.color }}">{{ mode.icon }}</span><span style="font-size:38px;font-weight:700;letter-spacing:-0.03em;line-height:1">{{ mode.name }}</span></div>
+<span style="font-size:14px;color:#c9c6c0">{{ untilLine }} · {{ lightsOn }}</span>
+<sc-if value="{{ overlayOn }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:8px;padding:6px 6px 6px 12px;border-radius:12px;background:#1c1d20;align-self:flex-start;margin-top:4px"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#f2b14c;font-variation-settings:'FILL' 1">{{ ovIcon }}</span><span style="font-size:12.5px;font-weight:600">{{ ovLabel }}</span><div onClick="{{ endOverlay }}" style="padding:5px 10px;border-radius:8px;background:rgba(255,255,255,0.08);font-size:12px;font-weight:700">End</div></div></sc-if>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="position:relative;height:30px;border-radius:9px;overflow:hidden;display:flex"><sc-for list="{{ bands }}" as="b" hint-placeholder-count="6"><div style="height:100%;width:{{ b.w }};background:{{ b.bg }}"></div></sc-for><div style="position:absolute;left:{{ nowLeft }};top:0;bottom:0;width:2px;background:#fff"></div></div>
+<div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:10px;color:#6f6d69"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px">
+<span style="font-size:16px;font-weight:700">Coming up</span>
+<div style="display:flex;gap:10px;overflow-x:auto;scrollbar-width:none;margin:0 -18px;padding:0 18px">
+<sc-for list="{{ upcoming }}" as="u" hint-placeholder-count="3">
+<div style="flex:none;width:200px;border-radius:16px;padding:14px;background:#16171a;display:flex;flex-direction:column;gap:8px;opacity:{{ u.op }}">
+<div style="display:flex;align-items:center;gap:6px"><div style="width:8px;height:8px;border-radius:50%;background:{{ u.color }}"></div><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:{{ u.color }}">{{ u.t }}</span></div>
+<span style="font-size:14px;font-weight:700;text-decoration:{{ u.deco }}">{{ u.label }}</span>
+<span style="font-size:12px;color:#a3a09a;line-height:1.35">{{ u.what }}</span>
+<div onClick="{{ u.skip }}" style="padding:7px 10px;border-radius:9px;background:rgba(255,255,255,0.07);font-size:12px;font-weight:700;align-self:flex-start;cursor:pointer">{{ u.btn }}</div>
+</div>
+</sc-for>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px">
+<span style="font-size:16px;font-weight:700">Favourites</span>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+<sc-for list="{{ favs }}" as="d" hint-placeholder-count="4">
+<div onClick="{{ d.toggle }}" style="border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:16px;cursor:pointer;background:{{ d.bg }};border:1px solid {{ d.border }}">
+<div style="display:flex;justify-content:space-between"><div style="width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:{{ d.iconBg }};color:{{ d.iconFg }}"><span style="font-family:'Material Symbols Rounded';font-size:21px;font-variation-settings:'FILL' 1">{{ d.icon }}</span></div><div onClick="{{ d.open }}" style="width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#a3a09a"><span style="font-family:'Material Symbols Rounded';font-size:20px">more_horiz</span></div></div>
+<div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:14px;font-weight:700">{{ d.name }}</span><span style="font-size:12px;color:{{ d.stateFg }}">{{ d.state }}</span></div>
+</div>
+</sc-for>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px">
+<span style="font-size:16px;font-weight:700">Switch the home to</span>
+<div style="display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;margin:0 -18px;padding:0 18px">
+<sc-for list="{{ overlays }}" as="o" hint-placeholder-count="6"><div onClick="{{ o.go }}" style="flex:none;display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:14px;cursor:pointer;background:{{ o.bg }};border:1px solid {{ o.border }}"><span style="font-family:'Material Symbols Rounded';font-size:19px;font-variation-settings:'FILL' 1;color:#f2b14c">{{ o.icon }}</span><span style="font-size:13.5px;font-weight:700">{{ o.name }}</span></div></sc-for>
+</div>
+</div>
+<sc-if value="{{ hasFindings }}" hint-placeholder-val="{{ true }}">
+<div onClick="{{ goModes }}" style="border-radius:16px;padding:14px 16px;background:#16171a;display:flex;align-items:center;gap:12px;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:22px;color:#7fd4a0">fact_check</span><div style="display:flex;flex-direction:column;gap:2px;flex:1"><span style="font-size:14px;font-weight:700">{{ findingsTitle }}</span><span style="font-size:12px;color:#a3a09a">Kova replayed your modes on the last 14 days</span></div><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#a3a09a">chevron_right</span></div>
+</sc-if>
+<div style="display:flex;flex-direction:column;gap:6px">
+<span style="font-size:16px;font-weight:700">Just happened</span>
+<sc-for list="{{ happened }}" as="h" hint-placeholder-count="3"><div style="display:flex;gap:12px;padding:10px 0;border-top:1px solid rgba(255,255,255,0.05)"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#a3a09a;width:38px;padding-top:1px">{{ h.t }}</span><div style="display:flex;flex-direction:column;gap:2px;flex:1"><span style="font-size:13.5px;font-weight:600">{{ h.what }}</span><span style="font-size:12px;color:#a3a09a">↳ {{ h.why }}</span></div></div></sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ isRooms }}" hint-placeholder-val="{{ false }}">
+<span style="font-size:30px;font-weight:700;letter-spacing:-0.02em">Rooms</span>
+<div style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:-6px -18px 0;padding:0 18px">
+<sc-for list="{{ roomTabs }}" as="rt" hint-placeholder-count="10"><div onClick="{{ rt.open }}" style="flex:none;padding:8px 14px;border-radius:999px;font-size:13px;font-weight:600;cursor:pointer;background:{{ rt.bg }};color:{{ rt.fg }}">{{ rt.name }}</div></sc-for>
+</div>
+<div style="display:flex;justify-content:space-between;font-size:13px;color:#a3a09a"><span>{{ roomSummary }}</span><span onClick="{{ roomAllOff }}" style="color:#f2b14c;font-weight:600;cursor:pointer">All lights off</span></div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+<sc-for list="{{ tiles }}" as="d" hint-placeholder-count="6">
+<div onClick="{{ d.toggle }}" style="border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:16px;cursor:pointer;background:{{ d.bg }};border:1px solid {{ d.border }}">
+<div style="display:flex;justify-content:space-between"><div style="width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:{{ d.iconBg }};color:{{ d.iconFg }}"><span style="font-family:'Material Symbols Rounded';font-size:21px;font-variation-settings:'FILL' 1">{{ d.icon }}</span></div><div onClick="{{ d.open }}" style="width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#a3a09a"><span style="font-family:'Material Symbols Rounded';font-size:20px">more_horiz</span></div></div>
+<div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:14px;font-weight:700">{{ d.name }}</span><span style="font-size:12px;color:{{ d.stateFg }}">{{ d.state }}</span></div>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ isModes }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:4px"><span style="font-size:30px;font-weight:700;letter-spacing:-0.02em">Modes</span><span style="font-size:13px;color:#a3a09a">How your home behaves through the day</span></div>
+<sc-for list="{{ findings }}" as="f" hint-placeholder-count="2">
+<div style="border-radius:16px;padding:14px;background:#16171a;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;align-items:center;gap:6px"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:{{ f.fg }}">{{ f.icon }}</span><span style="font-size:11px;font-weight:700;color:{{ f.fg }};text-transform:uppercase;letter-spacing:0.06em;flex:1">{{ f.kind }}</span><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:{{ f.modeTint }};color:{{ f.modeColor }}">{{ f.modeName }}</span></div>
+<span style="font-size:14px;font-weight:700;line-height:1.35">{{ f.title }}</span>
+<div style="display:flex;gap:8px"><div onClick="{{ f.doFix }}" style="padding:8px 12px;border-radius:9px;background:#f2b14c;color:#1a1408;font-size:12px;font-weight:700;cursor:pointer">{{ f.fix }}</div><div onClick="{{ f.doAlt }}" style="padding:8px 12px;border-radius:9px;background:rgba(255,255,255,0.06);font-size:12px;font-weight:600;cursor:pointer">Later</div></div>
+</div>
+</sc-for>
+<div style="display:flex;flex-direction:column;gap:8px">
+<sc-for list="{{ modeList }}" as="m" hint-placeholder-count="5">
+<div onClick="{{ m.pick }}" style="border-radius:18px;overflow:hidden;background:#16171a;border:1px solid {{ m.border }};cursor:pointer">
+<div style="display:flex;align-items:center;gap:12px;padding:14px 16px"><div style="width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:{{ m.tint }};color:{{ m.color }}"><span style="font-family:'Material Symbols Rounded';font-size:21px;font-variation-settings:'FILL' 1">{{ m.icon }}</span></div><div style="display:flex;flex-direction:column;gap:2px;flex:1"><span style="font-size:15px;font-weight:700">{{ m.name }}</span><span style="font-size:12px;color:#a3a09a">{{ m.span }}</span></div><sc-if value="{{ m.now }}" hint-placeholder-val="{{ false }}"><span style="font-size:10.5px;font-weight:800;padding:3px 8px;border-radius:999px;background:{{ m.color }};color:#141517">NOW</span></sc-if></div>
+<sc-if value="{{ m.open }}" hint-placeholder-val="{{ false }}">
+<div style="padding:0 16px 16px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ m.chips }}" as="c" hint-placeholder-count="3"><span style="padding:7px 10px;border-radius:9px;background:#1c1d20;font-size:12.5px;font-weight:600">{{ c }}</span></sc-for></div>
+<div style="display:flex;flex-direction:column;gap:6px"><div style="display:grid;grid-template-columns:repeat(14,1fr);gap:4px"><sc-for list="{{ m.days }}" as="d" hint-placeholder-count="14"><div style="aspect-ratio:1;border-radius:4px;background:{{ d.bg }}"></div></sc-for></div><span style="font-size:12px;color:#a3a09a;line-height:1.45">{{ m.test }}</span></div>
+</div>
+</sc-if>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ isActivity }}" hint-placeholder-val="{{ false }}">
+<span style="font-size:30px;font-weight:700;letter-spacing:-0.02em">Activity</span>
+<div style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:-6px -18px 0;padding:0 18px"><sc-for list="{{ actFilters }}" as="af" hint-placeholder-count="4"><div onClick="{{ af.pick }}" style="flex:none;padding:8px 14px;border-radius:999px;font-size:13px;font-weight:600;cursor:pointer;background:{{ af.bg }};color:{{ af.fg }}">{{ af.label }}</div></sc-for></div>
+<div style="display:flex;flex-direction:column">
+<sc-for list="{{ activity }}" as="a" hint-placeholder-count="8"><div style="display:flex;gap:12px;padding:12px 0;border-top:1px solid rgba(255,255,255,0.05)"><div style="width:32px;height:32px;border-radius:10px;flex:none;display:flex;align-items:center;justify-content:center;background:{{ a.iconBg }};color:{{ a.iconFg }}"><span style="font-family:'Material Symbols Rounded';font-size:18px">{{ a.icon }}</span></div><div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:13.5px;font-weight:600">{{ a.what }}</span><span style="font-size:12px;color:#a3a09a">{{ a.why }}</span></div><span style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#a3a09a">{{ a.t }}</span></div></sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ isAsk }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:30px;font-weight:700;letter-spacing:-0.02em">Ask Kova</span><div style="display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:{{ engine.bg }};align-self:flex-start"><span style="font-family:'Material Symbols Rounded';font-size:15px;color:{{ engine.fg }}">{{ engine.icon }}</span><span style="font-size:12px;font-weight:700;color:{{ engine.fg }}">{{ engine.label }}</span></div></div><div onClick="{{ openAi }}" style="width:38px;height:38px;border-radius:50%;background:#16171a;display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px">tune</span></div></div>
+<sc-for list="{{ chat }}" as="m" hint-placeholder-count="2"><div style="display:flex;flex-direction:column;align-items:{{ m.align }};gap:4px"><div style="max-width:86%;padding:11px 14px;border-radius:16px;font-size:14px;line-height:1.5;background:{{ m.bg }};color:{{ m.fg }}">{{ m.text }}</div><sc-if value="{{ m.hasSrc }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;color:#8a8781;display:flex;align-items:center;gap:4px;padding:0 4px"><span style="font-family:'Material Symbols Rounded';font-size:13px">{{ m.srcIcon }}</span>{{ m.src }}</span></sc-if></div></sc-for>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:11px;font-weight:700;color:#8a8781;text-transform:uppercase;letter-spacing:0.06em">Try</span><div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ asks }}" as="q" hint-placeholder-count="5"><div onClick="{{ q.ask }}" style="padding:8px 12px;border-radius:999px;background:#16171a;border:1px solid rgba(255,255,255,0.08);font-size:12.5px;font-weight:600;cursor:pointer">{{ q.text }}</div></sc-for></div></div>
+</sc-if>
+</div>
+
+<sc-if value="{{ isAsk }}" hint-placeholder-val="{{ false }}">
+<div style="flex:none;padding:10px 14px 12px;background:#0e0f10;border-top:1px solid rgba(255,255,255,0.06);display:flex;flex-direction:column;gap:8px">
+<sc-if value="{{ hasParse }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:12px;background:#16171a"><span style="font-size:11px;font-weight:700;color:#7fd4a0;white-space:nowrap">Understood</span><div style="display:flex;flex-wrap:wrap;gap:4px;flex:1"><sc-for list="{{ parseChips }}" as="pc" hint-placeholder-count="2"><span style="padding:4px 8px;border-radius:7px;background:{{ pc.bg }};color:{{ pc.fg }};font-size:12px;font-weight:700">{{ pc.t }}</span></sc-for></div></div>
+</sc-if>
+<sc-if value="{{ showNoParse }}" hint-placeholder-val="{{ false }}">
+<div style="padding:8px 10px;border-radius:12px;background:#16171a;font-size:12px;color:#a3a09a;line-height:1.4">{{ noParseText }}</div>
+</sc-if>
+<div style="display:flex;gap:8px;align-items:center;padding:4px 4px 4px 14px;border-radius:16px;background:#16171a;border:1px solid rgba(255,255,255,0.1)">
+<input value="{{ draft }}" onChange="{{ setDraft }}" onKeyDown="{{ draftKey }}" placeholder="Turn off the lounge, why is…" style="flex:1;min-width:0;background:transparent;border:none;outline:none;color:#f1efea;font-family:Manrope,sans-serif;font-size:14px;padding:8px 0">
+<div onClick="{{ send }}" style="width:38px;height:38px;border-radius:12px;background:#f2b14c;color:#1a1408;display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px">arrow_upward</span></div>
+</div>
+</div>
+</sc-if>
+
+<div style="flex:none;padding:10px 14px 30px;background:rgba(17,18,20,0.96);border-top:1px solid rgba(255,255,255,0.06);display:flex;justify-content:space-around;align-items:center;position:relative">
+<sc-for list="{{ tabs }}" as="t" hint-placeholder-count="5">
+<div onClick="{{ t.go }}" style="display:flex;flex-direction:column;align-items:center;gap:3px;width:60px;cursor:pointer;color:{{ t.fg }}">
+<div style="width:{{ t.size }};height:{{ t.size }};border-radius:50%;display:flex;align-items:center;justify-content:center;background:{{ t.bg }};margin-top:{{ t.mt }}"><span style="font-family:'Material Symbols Rounded';font-size:{{ t.iconSize }};font-variation-settings:'FILL' {{ t.fill }};color:{{ t.iconFg }}">{{ t.icon }}</span></div>
+<span style="font-size:10.5px;font-weight:700">{{ t.label }}</span>
+</div>
+</sc-for>
+</div>
+
+<sc-if value="{{ sheetOpen }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ closeSheet }}" style="position:absolute;inset:0;background:rgba(0,0,0,0.55)"></div>
+<div style="position:absolute;left:0;right:0;bottom:0;border-radius:28px 28px 0 0;background:#141517;padding:10px 20px 40px;display:flex;flex-direction:column;gap:16px">
+<div style="width:40px;height:5px;border-radius:3px;background:#35363a;align-self:center"></div>
+<div style="display:flex;justify-content:space-between;align-items:center"><div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:12px;color:#a3a09a">{{ sh.room }}</span><span style="font-size:22px;font-weight:700">{{ sh.name }}</span></div><div onClick="{{ sh.toggle }}" style="width:52px;height:32px;border-radius:16px;padding:3px;display:flex;justify-content:{{ sh.justify }};background:{{ sh.track }};cursor:pointer"><div style="width:26px;height:26px;border-radius:50%;background:#fff"></div></div></div>
+<sc-if value="{{ sh.dimmable }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:8px"><div style="display:flex;justify-content:space-between;font-size:13px;font-weight:600"><span>Brightness</span><span style="color:#a3a09a">{{ sh.briLabel }}</span></div><input type="range" min="1" max="100" value="{{ sh.bri }}" onChange="{{ sh.setBri }}" style="width:100%;height:28px"></div></sc-if>
+<div style="display:flex;flex-direction:column;border-radius:14px;background:#1c1d20;overflow:hidden"><div style="display:flex;gap:12px;padding:12px 14px"><span style="font-family:'Material Symbols Rounded';font-size:19px;color:#a3a09a">help</span><div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">Why it’s like this</span><span style="font-size:13px;line-height:1.45">{{ sh.why }}</span></div></div><div style="display:flex;gap:12px;padding:12px 14px;border-top:1px solid rgba(255,255,255,0.05)"><span style="font-family:'Material Symbols Rounded';font-size:19px;color:#f2b14c">schedule</span><div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">What’s next</span><span style="font-size:13px;line-height:1.45">{{ sh.next }}</span></div></div></div>
+</div>
+</sc-if>
+
+<sc-if value="{{ aiOpen }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ closeAi }}" style="position:absolute;inset:0;background:rgba(0,0,0,0.55)"></div>
+<div style="position:absolute;left:0;right:0;bottom:0;max-height:92%;overflow-y:auto;scrollbar-width:none;border-radius:28px 28px 0 0;background:#141517;padding:10px 18px 40px;display:flex;flex-direction:column;gap:16px">
+<div style="width:40px;height:5px;border-radius:3px;background:#35363a;align-self:center"></div>
+<div style="display:flex;flex-direction:column;gap:4px"><span style="font-size:22px;font-weight:700">Assistant</span><span style="font-size:13px;color:#a3a09a;line-height:1.45">Kova understands commands and questions about your home on its own. AI is optional and only adds free-form requests.</span></div>
+<div style="display:flex;flex-direction:column;gap:8px">
+<sc-for list="{{ engines }}" as="en" hint-placeholder-count="3">
+<div onClick="{{ en.pick }}" style="border-radius:16px;padding:14px;cursor:pointer;display:flex;gap:12px;background:#1c1d20;border:1.5px solid {{ en.border }}">
+<div style="width:20px;height:20px;border-radius:50%;flex:none;margin-top:2px;border:2px solid {{ en.ring }};display:flex;align-items:center;justify-content:center"><div style="width:10px;height:10px;border-radius:50%;background:{{ en.dot }}"></div></div>
+<div style="display:flex;flex-direction:column;gap:4px;flex:1"><div style="display:flex;align-items:center;gap:8px"><span style="font-size:14.5px;font-weight:700;flex:1">{{ en.name }}</span><span style="font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:999px;background:{{ en.tagBg }};color:{{ en.tagFg }}">{{ en.tag }}</span></div><span style="font-size:12.5px;color:#a3a09a;line-height:1.45">{{ en.body }}</span><span style="font-size:11.5px;color:#8a8781">{{ en.data }}</span></div>
+</div>
+</sc-for>
+</div>
+<sc-if value="{{ isCloud }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:12px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">API key</span><div style="padding:12px 14px;border-radius:12px;background:#1c1d20;border:1px solid rgba(255,255,255,0.1);font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#6f6d69">sk-••••••••••••••••••••</div></div>
+</sc-if>
+<sc-if value="{{ usesAi }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:12px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">What the AI can see</span>
+<div style="border-radius:16px;background:#1c1d20;overflow:hidden">
+<sc-for list="{{ shares }}" as="sh2" hint-placeholder-count="5"><div onClick="{{ sh2.toggle }}" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid rgba(255,255,255,0.05);cursor:pointer;opacity:{{ sh2.op }}"><span style="font-family:'Material Symbols Rounded';font-size:19px;color:#a3a09a">{{ sh2.icon }}</span><div style="display:flex;flex-direction:column;gap:2px;flex:1"><span style="font-size:13.5px;font-weight:600">{{ sh2.name }}</span><span style="font-size:11.5px;color:#8a8781">{{ sh2.note }}</span></div><div style="width:34px;height:20px;border-radius:10px;padding:2px;display:flex;justify-content:{{ sh2.justify }};background:{{ sh2.track }}"><div style="width:16px;height:16px;border-radius:50%;background:#fff"></div></div></div></sc-for>
+</div>
+<span style="font-size:11.5px;color:#8a8781;line-height:1.45">Built-in commands never go to the AI. Only requests Kova can’t understand are sent, and each one shows up in Activity.</span>
+</div>
+</sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{ toastOn }}" hint-placeholder-val="{{ false }}"><div style="position:absolute;left:16px;right:16px;bottom:104px;display:flex;align-items:center;gap:12px;padding:12px 12px 12px 16px;border-radius:14px;background:#f1efea;color:#141517;font-size:13.5px;font-weight:600;box-shadow:0 10px 30px rgba(0,0,0,0.4)"><span style="flex:1">{{ toastText }}</span><sc-if value="{{ canUndo }}" hint-placeholder-val="{{ false }}"><div onClick="{{ undo }}" style="padding:6px 12px;border-radius:9px;background:#141517;color:#f1efea;font-size:12.5px;cursor:pointer">Undo</div></sc-if></div></sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+// ---- Kova phone app logic. The markup above is the Kova Phone design; everything comes from the hub. ----
+const KOVA_TOKEN=(()=>{try{return localStorage.getItem('kova_token')||''}catch(e){return ''}})();
+async function api(method,path,body){
+  const r=await fetch(path,{method,headers:{...(body!==undefined?{'content-type':'application/json'}:{}),...(KOVA_TOKEN?{authorization:'Bearer '+KOVA_TOKEN}:{})},body:body===undefined?undefined:JSON.stringify(body)});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(j.error||r.statusText);
+  return j;
+}
+const BOOT=window.KOVA_BOOT||{home:{name:'Kova',timezone:'UTC',nowHour:12,dateLabel:'',clock:''},rooms:[],groups:{},people:[],devices:[],modes:[{id:'day',name:'Day',color:'#dcd27e',icon:'light_mode',startLabel:'',endLabel:'',groups:[],inherit:[],moments:[],test:{days:[],text:''}}],current:{modeId:'day',untilLabel:'',nextId:'day',overlay:null},day:{bands:[],items:[],marks:[]},upcoming:[],overlays:[],sources:[],findings:[],activity:[],integrations:[],lightTheWay:[],weather:null,offline:true};
+const ICON={light:'lightbulb',dimmer:'lightbulb',fan:'air_purifier',media:'speaker',tv:'tv',camera:'videocam',plug:'outlet',sensor:'sensors'};
+const AS={auto:['rgba(242,177,76,0.13)','#f2b14c'],people:['rgba(127,212,160,0.14)','#7fd4a0'],device:['rgba(124,184,240,0.13)','#7cb8f0'],system:['#232428','#a3a09a']};
+const SRC_ICON={'Device control':'toggle_on','From the activity log':'history','From your modes':'routine','Built-in · nothing left your home':'lock'};
+const isLight=d=>d.type==='light'||d.type==='dimmer';
+const isPlayer=d=>d.type==='media'||d.type==='tv';
+const lst=xs=>xs.length<=1?xs.join(''):xs.slice(0,-1).join(', ')+' and '+xs[xs.length-1];
+const FAV_KEY='kova_favs';
+const loadFavs=()=>{try{return JSON.parse(localStorage.getItem(FAV_KEY)||'null')}catch(e){return null}};
+
+class Component extends DCLogic {
+  state={hub:BOOT,conn:!!window.KOVA_BOOT,tab:'now',room:(BOOT.rooms[0]||{}).id,sheet:null,modeOpen:BOOT.current.modeId,actF:'all',
+    chat:[{from:'kova',text:`Hi. ${BOOT.modes.find(m=>m.id===BOOT.current.modeId)?.name||'Day'} mode, ${BOOT.devices.filter(d=>isLight(d)&&d.state.on).length} lights on.`,src:'Built-in · nothing left your home'}],
+    toast:null,undo:null,draft:'',parse:null,ai:'builtin',aiOpen:false,share:{names:true,rooms:true,history:false,presence:false},favs:loadFavs()};
+  componentDidMount(){this.connect();api('GET','/api/assistant/settings').then(r=>this.setState({ai:r.engine,share:r.share})).catch(()=>{})}
+  componentWillUnmount(){this._closed=true;try{this._ws&&this._ws.close()}catch(e){}}
+  connect(){
+    if(this._closed)return;
+    let ws;try{ws=new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.host}/api/ws${KOVA_TOKEN?'?token='+encodeURIComponent(KOVA_TOKEN):''}`)}catch(e){setTimeout(()=>this.connect(),3000);return}
+    this._ws=ws;
+    ws.onmessage=ev=>{try{const m=JSON.parse(ev.data);if(m.type==='state')this.setState({hub:m.data,conn:true})}catch(e){}};
+    ws.onclose=()=>{this.setState({conn:false});setTimeout(()=>this.connect(),2000)};
+  }
+  toast(t,u){clearTimeout(this._t);this.setState({toast:t,undo:u||null});this._t=setTimeout(()=>this.setState({toast:null,undo:null}),4000)}
+  undoFn(id){return id?()=>api('POST','/api/undo/'+id).catch(e=>this.toast(e.message)):null}
+  err(e){this.toast(e.message||String(e))}
+  optimistic(id,p){this.setState(s=>({hub:{...s.hub,devices:s.hub.devices.map(d=>d.id===id?{...d,state:{...d.state,...p}}:d)}}))}
+  send(id,p){this.optimistic(id,p);return api('POST','/api/devices/'+id,p).catch(e=>this.err(e))}
+  patch(id,p){clearTimeout(this._pt);this.optimistic(id,p);this._pt=setTimeout(()=>api('POST','/api/devices/'+id,p).catch(e=>this.err(e)),150)}
+  devs(){const o={};this.state.hub.devices.forEach(d=>{o[d.id]={...d,...d.state,bri:d.state.bri??100}});return o}
+  modeById(id){const H=this.state.hub;return H.modes.find(m=>m.id===id)||H.modes[0]}
+  tog(id){const d=this.devs()[id];if(!d||d.type==='camera'||d.type==='sensor')return;
+    if(d.type==='fan'){this.send(id,{mode:d.mode==='Auto'?'Sleep':'Auto'});return}
+    if(isPlayer(d)){this.send(id,d.on?{on:false,media:null}:{on:true,media:(this.state.hub.sources[0]||{}).name||'Radio',vol:d.vol??30});return}
+    this.send(id,{on:!d.on})}
+  st(d){if(d.type==='camera'||d.type==='sensor')return d.online===false?['Offline','#ff6b5e']:['Live','#7fd4a0'];if(d.online===false)return['Not responding','#ff6b5e'];if(d.type==='fan')return[d.mode||'Auto','#7cb8f0'];if(isPlayer(d))return d.on?[d.media?`Playing ${d.media}`:'Playing','#7cb8f0']:['Idle','#a3a09a'];if(!d.on)return['Off','#a3a09a'];if(d.type==='dimmer')return[`On · ${d.bri}%`,'#f2b14c'];if(d.type==='plug')return[d.power!=null?`On · ${d.power} W`:'On','#f2b14c'];return['On','#f2b14c']}
+  tint(d){const media=isPlayer(d);if(d.type==='camera'||d.type==='sensor')return{bg:'#16171a',border:'rgba(255,255,255,0.05)',iconBg:'rgba(127,212,160,0.15)',iconFg:'#7fd4a0'};if(d.type==='fan'||media)return{bg:d.on&&media?'rgba(124,184,240,0.12)':'#16171a',border:d.on&&media?'rgba(124,184,240,0.3)':'rgba(255,255,255,0.05)',iconBg:d.on?'rgba(124,184,240,0.2)':'#232428',iconFg:d.on?'#7cb8f0':'#8a8781'};return d.on?{bg:'rgba(242,177,76,0.11)',border:'rgba(242,177,76,0.28)',iconBg:d.color||'#f2b14c',iconFg:'#1a1408'}:{bg:'#16171a',border:'rgba(255,255,255,0.05)',iconBg:'#232428',iconFg:'#8a8781'}}
+  tile(d){const [s,f]=this.st(d);return{...d,...this.tint(d),icon:ICON[d.type],state:s,stateFg:f,toggle:()=>this.tog(d.id),open:e=>{e.stopPropagation();this.setState({sheet:d.id})}}}
+  // Live "Understood" preview, parsed on the hub as you type.
+  setDraft(v){this.setState({draft:v});clearTimeout(this._pp);if(v.trim().length<3){this.setState({parse:null});return}
+    this._pp=setTimeout(()=>api('POST','/api/ask/parse',{text:v}).then(r=>{if(this.state.draft===v)this.setState({parse:r})}).catch(()=>{}),180)}
+  async ask(q){
+    this.setState(p=>({draft:'',parse:null,chat:[...p.chat,{from:'you',text:q}]}));
+    try{const r=await api('POST','/api/ask',{text:q});
+      this.setState(p=>({chat:[...p.chat,{from:'kova',text:r.text,src:r.source}]}));
+      if(r.undo)this.toast(r.text,this.undoFn(r.undo));
+      const learn=(r.actions||[]).find(a=>a.action.type==='learnGroup');
+      if(learn){const x=await api('POST','/api/ask/act',{action:learn.action});this.setState(p=>({chat:[...p.chat,{from:'kova',text:x.text,src:'Built-in · nothing left your home'}]}))}
+    }catch(e){this.setState(p=>({chat:[...p.chat,{from:'kova',text:'I couldn’t reach the hub. '+e.message,src:''}]}))}
+  }
+  saveAi(patch){this.setState(patch);const s={...this.state,...patch};api('PUT','/api/assistant/settings',{engine:s.ai,share:s.share}).catch(e=>this.err(e))}
+
+  renderVals(){
+    const s=this.state,H=s.hub,devs=this.devs(),list=Object.values(devs);
+    const RN=Object.fromEntries(H.rooms.map(r=>[r.id,r.name]));
+    const M=this.modeById(H.current.modeId),nx=this.modeById(H.current.nextId);
+    const on=list.filter(d=>isLight(d)&&d.on).length;
+    const TABS=[['now','Now','home'],['rooms','Rooms','meeting_room'],['ask','Ask','graphic_eq'],['modes','Modes','routine'],['activity','Activity','history']];
+    const tabs=TABS.map(([id,label,icon])=>{const a=s.tab===id;const c=id==='ask';return{label,icon,go:()=>this.setState({tab:id}),fg:a?'#f1efea':'#8a8781',size:c?'46px':'28px',mt:c?'-20px':'0px',bg:c?'#f2b14c':'transparent',iconFg:c?'#1a1408':a?(id==='modes'?M.color:'#f2b14c'):'#8a8781',iconSize:c?'24px':'23px',fill:a||c?1:0}});
+    const ov=H.current.overlay;
+    const upcoming=H.upcoming.map(e=>{const sk=e.skipped;return{t:e.t,label:e.label,what:sk?'Skipped tonight':e.what,color:this.modeById(e.modeId).color,op:sk?0.55:1,deco:sk?'line-through':'none',btn:sk?'Undo':'Skip tonight',skip:()=>api('POST','/api/plan/skip',{id:e.id,skip:!sk}).catch(x=>this.err(x))}});
+    // Favourites: the user's picks (saved on this phone), or the first four lights and plugs.
+    const favIds=(s.favs||list.filter(d=>isLight(d)||d.type==='plug').slice(0,4).map(d=>d.id)).filter(id=>devs[id]);
+    const favs=favIds.map(id=>this.tile(devs[id]));
+    const overlays=H.overlays.map(o=>{const a=ov&&ov.id===o.id;return{name:o.name,icon:o.icon,bg:a?'rgba(242,177,76,0.12)':'#16171a',border:a?'rgba(242,177,76,0.45)':'rgba(255,255,255,0.05)',
+      go:()=>{if(a)return;api('POST',`/api/overlays/${o.id}/start`).then(r=>this.toast(`${o.name} is on · ${o.endsLabel.toLowerCase()}`,this.undoFn(r.undo))).catch(x=>this.err(x))}}});
+    const findings=H.findings.map(f=>{const m=this.modeById(f.modeId);return{...f,fg:f.tone==='alert'?'#ff6b5e':'#f2b14c',modeName:m.name,modeColor:m.color,modeTint:m.color+'24',
+      doFix:()=>api('POST',`/api/findings/${encodeURIComponent(f.id)}/fix`).then(r=>{this.setState({modeOpen:f.modeId});this.toast(`${m.name} updated`,this.undoFn(r.undo))}).catch(x=>this.err(x)),
+      doAlt:()=>api('POST',`/api/findings/${encodeURIComponent(f.id)}/dismiss`).then(r=>this.toast('Kept as is',this.undoFn(r.undo))).catch(x=>this.err(x))}});
+    const DAYC={ok:null,problem:'#ff6b5e',skipped:'#26272b',none:'rgba(255,255,255,0.06)'};
+    const modeList=H.modes.map(m=>{const open=s.modeOpen===m.id;const chips=[...m.groups.flatMap(g=>g.chips.map(c=>g.room==='Everywhere'?c:`${g.room}: ${c}`)),...m.moments.map(x=>`${x.t} ${x.text}`)];
+      return{...m,span:`${m.startLabel} → ${m.endLabel}`,chips:chips.length?chips:['Nothing changes'],tint:m.color+'24',now:m.id===H.current.modeId,open,border:open?m.color+'66':'rgba(255,255,255,0.04)',
+        days:(m.test.days.length?m.test.days:Array(14).fill('none')).map(c=>({bg:DAYC[c]||m.color})),test:m.test.text,pick:()=>this.setState({modeOpen:open?null:m.id})}});
+    const room=s.room||(H.rooms[0]||{}).id;
+    const rDevs=list.filter(d=>d.room===room);
+    const AF=[['all','All'],['auto','Modes'],['people','People'],['device','Devices']];
+    const D=s.sheet&&devs[s.sheet];let sh={};
+    if(D)sh={name:D.name,room:RN[D.room]||'',justify:D.on?'flex-end':'flex-start',track:D.on?'#f2b14c':'#35363a',toggle:()=>this.tog(D.id),dimmable:D.type==='dimmer'&&D.on,bri:D.bri,briLabel:D.bri+'%',setBri:e=>this.patch(D.id,{bri:+e.target.value}),why:D.why.now,next:D.why.next};
+    const home=H.people.filter(p=>p.home);
+    const w=H.weather;
+    const V='rgba(242,177,76,0.18)',VF='#f2b14c',N='#26272b',NF='#f1efea';
+    const p=s.parse;const E={builtin:['Built-in · works offline','lock','rgba(127,212,160,0.14)','#7fd4a0'],local:['Local AI · on your server','dns','rgba(124,184,240,0.14)','#7cb8f0'],cloud:['Cloud AI · your key','cloud','rgba(242,177,76,0.14)','#f2b14c']}[s.ai]||['Built-in · works offline','lock','rgba(127,212,160,0.14)','#7fd4a0'];
+    const ENG=[['builtin','Built-in','Default','rgba(127,212,160,0.14)','#7fd4a0','Controls devices, rooms and modes, and answers “why”, “what’s next” and “who’s home” from your own data.','Nothing leaves your home.'],['local','Local AI','Private','rgba(124,184,240,0.14)','#7cb8f0','Adds free-form requests and rule drafting with a model running on your own server, e.g. through Dockbit.','Data stays on your network.'],['cloud','Cloud AI','Your API key','rgba(242,177,76,0.14)','#f2b14c','Best understanding, using a provider you choose with your own key.','Only what you allow below is sent.']];
+    const SH=[['names','Device and room names','lightbulb','Needed to understand requests'],['rooms','Current device states','toggle_on','On/off, brightness, what’s playing'],['history','Activity history','history','Last 7 days of changes'],['presence','Who’s home','group','Names and arrival times'],['cameras','Cameras','videocam','Never shared']];
+    return {tabs,isNow:s.tab==='now',isRooms:s.tab==='rooms',isModes:s.tab==='modes',isActivity:s.tab==='activity',isAsk:s.tab==='ask',
+      homeName:H.home.name,avatars:(home.length?home:H.people).slice(0,3).map((x,i)=>({initial:x.name[0],ml:i?'-9px':'0px',op:x.home?1:0.4})),
+      dateLine:`${H.home.dateLabel} · ${H.home.clock}${w?` · ${w.temp}° ${w.text.toLowerCase()}`:''}`,
+      untilLine:H.current.waitingForSomeone?`Lights wait until someone’s home`:`Until ${H.current.untilLabel}, then ${nx.name}`,nowLeft:(H.home.nowHour/24*100)+'%',
+      mode:{...M,glow:M.color+'33'},lightsOn:`${on} light${on===1?'':'s'} on`,bands:H.day.bands.map(b=>{const m=this.modeById(b.modeId);return{w:((b.end-b.start)/24*100)+'%',bg:m.color+(b.modeId===H.current.modeId?'55':'2a')}}),upcoming,favs,overlays,
+      overlayOn:!!ov,ovIcon:ov?ov.icon:'',ovLabel:ov?`${ov.name} · ${ov.endsLabel.toLowerCase()}`:'',endOverlay:()=>api('POST','/api/overlays/end').then(()=>this.toast('Back to '+M.name)).catch(x=>this.err(x)),
+      hasFindings:findings.length>0,findingsTitle:`${findings.length} thing${findings.length===1?'':'s'} worth a look`,goModes:()=>this.setState({tab:'modes'}),findings,modeList,
+      happened:H.activity.filter(a=>a.type==='auto'||a.type==='people').slice(0,3).map(a=>({t:a.t,what:a.what,why:a.why})),
+      roomTabs:H.rooms.map(r=>({name:r.name,open:()=>this.setState({room:r.id}),bg:room===r.id?'#f1efea':'#16171a',fg:room===r.id?'#141517':'#d8d5cf'})),tiles:rDevs.map(d=>this.tile(d)),roomSummary:`${rDevs.length} devices · ${rDevs.filter(d=>isLight(d)&&d.on).length} lights on`,
+      roomAllOff:()=>api('POST',`/api/rooms/${room}/off`,{}).then(r=>this.toast(`${RN[room]} lights off`,this.undoFn(r.undo))).catch(x=>this.err(x)),
+      actFilters:AF.map(([id,label])=>({label,pick:()=>this.setState({actF:id}),bg:s.actF===id?'#f1efea':'#16171a',fg:s.actF===id?'#141517':'#d8d5cf'})),
+      activity:H.activity.filter(a=>s.actF==='all'||a.type===s.actF).map(a=>({t:a.t,icon:a.icon,what:a.what,why:a.why,iconBg:(AS[a.type]||AS.system)[0],iconFg:(AS[a.type]||AS.system)[1]})),
+      chat:s.chat.map(m=>({text:m.text,align:m.from==='you'?'flex-end':'flex-start',bg:m.from==='you'?'#f1efea':'#16171a',fg:m.from==='you'?'#141517':'#f1efea',hasSrc:!!m.src,src:m.src||'',srcIcon:SRC_ICON[m.src]||'lock'})),
+      asks:['Turn off the kitchen','Lamp to 30%','Why is the garage light on?','What’s happening tonight?','Who’s home?','I’m leaving'].map(text=>({text,ask:()=>this.ask(text)})),
+      hasParse:!!(p&&p.understood),parseChips:p&&p.understood?p.chips.map((t,i)=>({t,bg:i===0?V:N,fg:i===0?VF:(p.kind==='unknownLabel'&&i===1?'#ff6b5e':i===2?'#a3a09a':NF)})):[],
+      showNoParse:!!(p&&!p.understood),noParseText:s.ai==='builtin'?'Not a built-in command. Kova can still try, or turn on AI for free-form requests.':'Not a built-in command. This will go to '+(s.ai==='local'?'your local AI.':'cloud AI.'),
+      draft:s.draft,setDraft:e=>this.setDraft(e.target.value),draftKey:e=>{if(e.key==='Enter'&&s.draft.trim())this.ask(s.draft.trim())},send:()=>{if(s.draft.trim())this.ask(s.draft.trim())},
+      engine:{label:E[0],icon:E[1],bg:E[2],fg:E[3]},openAi:()=>this.setState({aiOpen:true}),closeAi:()=>this.setState({aiOpen:false}),aiOpen:s.aiOpen,isCloud:s.ai==='cloud',usesAi:s.ai!=='builtin',
+      engines:ENG.map(([id,name,tag,tagBg,tagFg,body,data])=>{const a=s.ai===id;return{name,tag,tagBg,tagFg,body,data,border:a?tagFg:'transparent',ring:a?tagFg:'#4a4b50',dot:a?tagFg:'transparent',pick:()=>this.saveAi({ai:id})}}),
+      shares:SH.map(([id,name,icon,note])=>{const locked=id==='cameras';const a=!locked&&!!s.share[id];return{name,icon,note,op:locked?0.5:1,justify:a?'flex-end':'flex-start',track:a?'#f2b14c':'#35363a',toggle:()=>{if(!locked)this.saveAi({share:{...s.share,[id]:!s.share[id]}})}}}),
+      sheetOpen:!!D,sh,closeSheet:()=>this.setState({sheet:null}),toastOn:!!s.toast,toastText:s.toast,canUndo:!!s.undo,undo:()=>{s.undo&&s.undo();this.setState({toast:null,undo:null})}};
+  }
+}
+</script>
+</body>
+</html>

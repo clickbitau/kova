@@ -81,6 +81,61 @@ These are carried over from v2 (same visual language). See the file for details:
 - **Import**: HA migration steps, stats, a review list and suite hand-offs.
 - **Developer**: a filterable entity table.
 
+## Phone app (Kova Phone.dc.html, iPhone, 402×874)
+The file shows two frames: the interactive app and the lock screen. The frame comes from `ios-frame.jsx`; `IOSDevice` takes `time`, and the lock screen passes an empty value. The visual language is the same as desktop. Content padding is 62px 18px 20px (to clear the status bar). All scrollers hide their scrollbars.
+
+- **Tab bar**: Now, Rooms, **Ask** (centre: 46px amber circle raised 20px, icon #1a1408), Modes, Activity.
+  - Bar: bg rgba(17,18,20,.96), top hairline, bottom padding 30px for the home indicator.
+  - Active tab: filled icon (Modes uses the mode colour, others amber).
+- **Now**:
+  - Header: home name and avatars, then the date line, then the mode icon plus name (38/700), then "Until 20:00, then Wind down · 8 lights on".
+  - A 30px day band with a now line.
+  - **Coming up**: horizontal cards, 200px wide, each with Skip tonight.
+  - **Favourites**: 2×2 tiles (Lamp, TV backlight, Porch, Garage).
+  - **Switch the home to**: horizontal overlay chips.
+  - Findings row, then **Just happened**.
+  - The mode glow is a radial gradient at the top-left.
+- **Rooms**: horizontal room pills, then a summary line with "All lights off", then a 2-column tile grid. Tapping a tile toggles it; ⋯ opens the bottom sheet.
+- **Device sheet**: radius 28 top, bg #141517. Contains a grabber, the room and name, a 52×32 switch, a brightness slider (dimmers), and the Why / What's next card.
+- **Modes**: findings cards (fix / later), then 5 expandable mode cards. An expanded card shows target chips and the 14-day test strip. The NOW pill sits on the current mode.
+- **Activity**: filter pills, then rows with a 32px tinted icon, what, why, and time on the right.
+- **Ask**: see Assistant below. The input bar is pinned above the tab bar.
+- **Lock screen**: 92px clock.
+  - Live Activity card (radius 24, bg rgba(28,29,32,.88)): mark tile, then "Evening · 8 lights on", then "20:00 Wind down · lamp to 5%", then a progress bar and a Skip button.
+  - Doorbell notification: camera thumbnail plus "View camera" and "Talk" buttons.
+
+## Assistant (Ask): must work with NO AI
+Kova does not ship with AI. The assistant is a deterministic intent parser running on the home server, with optional AI layered on top.
+
+**Built-in (the default, offline)** handles:
+- Device control by name or room, including brightness ("lamp to 30%")
+- Overlays and modes ("I'm leaving", "movie")
+- "Why is X on", answered from the event log's cause chain
+- "What's happening tonight", answered from the mode schedule
+- "Who's home", answered from presence
+- Clarifying labels such as "downstairs": Kova asks once, then stores the answer as a label
+
+**Understood preview**: as the user types, the parse shows as chips before running (e.g. [Turn off] [Kitchen lights] [3 devices]). Unparsed input gets a plain fallback message.
+
+**Every reply carries a source tag**: From the activity log, From your modes, Device control, or Built-in · nothing left your home.
+
+**Engines (Assistant settings sheet)**:
+1. **Built-in**: default.
+2. **Local AI**: a model on the user's own server (e.g. via Dockbit).
+3. **Cloud AI**: the user's own API key.
+
+**AI rules**:
+- AI only receives requests that the built-in parser cannot handle.
+- "What the AI can see" toggles:
+  - Device and room names: on
+  - Current device states: on
+  - Activity history: off
+  - Who's home: off
+  - Cameras: locked off, never shared
+- Every AI request is logged in Activity.
+
+**Suggested implementation**: an intent grammar with slots (action, target, value, time), fuzzy matching against device, room and label names plus synonyms, and question handlers that query the event log and mode schedule directly.
+
 ## Interactions & behaviour
 - Scene or overlay activation snapshots the previous device state. A toast (bottom centre, inverted #f1efea on #141517, 5s) offers Undo. Ending an overlay restores the snapshot.
 - Preview mode is read-only: it runs the day simulation and does not change real devices.
@@ -155,6 +210,7 @@ All tokens are in `styles.css` and `tokens/*.css`; the visual spec is in `Kova D
 
 ## Files
 - `Kova App v3.dc.html`: the main prototype. All screens and state are here.
+- `Kova Phone.dc.html` + `ios-frame.jsx`: iPhone app and lock screen.
 - `Kova Direction.dc.html`: product rationale (Timeline, Modes, Test on history).
 - `Kova Sitemap.dc.html`: 49 pages mapped to HA features and to levels L1–L4.
 - `Kova Design Language.dc.html`: foundations and component specs.

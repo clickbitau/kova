@@ -81,10 +81,51 @@ It never makes decisions. See `sdk.ts`.
 
 | Adapter | Status |
 |---|---|
-| `virtual` | The demo home: 28 devices modelled on the owner's former setup. On by default (`KOVA_DEMO=0` turns it off). |
-| `sonos` | Local UPnP. Discovers speakers over SSDP, or uses `KOVA_SONOS_HOSTS` for speakers on another VLAN. Supports play source / pause / volume, and polls state every 5 s. Tested against a fake speaker only; not yet tried on real hardware. |
-| Matter | Next. Planned on `matter.js`. |
-| Google Cast, TP-Link (Kasa/Tapo), Tuya local, Hue, VeSync, Nest, GoodWe… | Planned. |
+| `virtual` | The demo home: 28 devices modelled on the owner's former setup. Runs when there's no `integrations.json` (or with `KOVA_DEMO=1`). |
+| `tuya` | Tuya Wi-Fi switches and lights over the local network, protocol 3.3 and 3.4 (session-key handshake). One Kova device per switch channel, or a dimmable light from its data points. Persistent connection, heartbeat, reconnect with backoff. Needs each device's id, IP and local key. |
+| `tapo` | TP-Link Tapo plugs and bulbs over KLAP v2 (local HTTP, AES). On/off, brightness, warmth and colour. Needs the TP-Link account credentials, or the credentials hash Home Assistant stored. Polls every 10 s. |
+| `cast` | Google Cast speakers, displays and TVs over Cast v2 (TLS on port 8009) with mDNS discovery. Plays a source's stream URL, sets volume, stops. **Perfect sync:** commands that arrive together (e.g. a mode starting) and play the same source on several speakers go to the Cast group whose members are exactly those speakers, so the speakers sync themselves. Cast groups are made in the Google Home app; Google offers no API to create them. |
+| `sonos` | Local UPnP. SSDP discovery or `KOVA_SONOS_HOSTS`. Play source / pause / volume. |
+| `matter` | See below. |
+| VeSync, Nest, GoodWe, Samsung TV, Ecovacs | Planned. |
+
+All adapters except `virtual` are tested against fake devices that speak the protocol; none has been tried on real hardware yet.
+
+### integrations.json
+
+Real devices are configured in `<KOVA_DATA>/integrations.json` (created with owner-only permissions; it holds device keys and never goes in git):
+
+```json
+{
+  "tuya": { "devices": [{ "id": "bf…", "host": "192.168.1.230", "key": "16-char-local-key", "version": "3.3",
+                          "switches": { "2": { "name": "Kitchen light", "room": "kitchen", "id": "kitchen_ceiling" } } }] },
+  "tapo": { "username": "you@example.com", "password": "…", "devices": [{ "host": "10.10.30.218", "room": "lounge", "id": "lamp" }] },
+  "cast": { "rooms": { "Music Room Speaker": "music" } }
+}
+```
+
+`id` is optional everywhere; giving a device the id your modes already use lets you swap simulated devices for real ones without editing the modes.
+
+`npx tsx src/tools/import-ha.ts <homeassistant/.storage> ../data` (from `hub/`) writes `integrations.json` and `home.json` from a Home Assistant install: rooms from areas, people, location, localtuya devices with their keys, Tapo hosts plus HA's credentials hash, and Cast names mapped to rooms. It only reads files; Kova never talks to Home Assistant.
+
+## Bridges (`hub/src/bridges/`)
+
+A bridge is the reverse of an adapter: it exposes Kova's devices to another
+ecosystem. It sits on top of the registry, sends every write through
+`engine.command()` (so it's logged, undoable and overlay-aware, with the cause
+"Apple Home"), and pushes registry changes back out.
+
+**Apple Home** (`homekit.ts`, on `hap-nodejs`; `KOVA_HOMEKIT=1`) publishes one
+HAP bridge named after the home. Lights and dimmers become Lightbulbs (with
+Brightness, ColorTemperature and Hue/Saturation when the device has them),
+plugs become Outlets, purifiers become AirPurifiers (`Auto` ↔ AUTO, any other
+mode ↔ MANUAL), and each overlay (Movie, Date, Party…) becomes a Switch that
+starts or ends it. Speakers, TVs, cameras and sensors aren't exposed yet.
+Accessory UUIDs are derived from device ids, and the bridge's MAC, setup code
+and pairings live in `$KOVA_DATA/homekit/`, so restarts keep Home app rooms and
+scenes. `GET /api/integrations/homekit` returns the setup code and the
+`X-HM://` payload for a pairing QR code. mDNS uses ciao (pure JS), so the hub
+needs host networking (or macvlan) for iPhones to find it.
 
 ## API
 
@@ -104,6 +145,7 @@ It never makes decisions. See `sdk.ts`.
 | POST | `/api/people/:id/presence` | `{home, source}`, e.g. from an iOS Shortcut until the app exists |
 | POST | `/api/undo/:id` | |
 | POST | `/api/ask`, `/api/ask/act` | Ask Kova |
+| GET | `/api/integrations/homekit` | `{enabled, pincode, setupURI, paired}` for the Apple Home bridge |
 
 Set `KOVA_TOKEN` to require `Authorization: Bearer <token>` on every API call.
 Open the UI once with `?token=…` and it remembers the token. This is a stopgap

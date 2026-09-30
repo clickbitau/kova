@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><meta name="design_doc_mode" content="canvas"><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..24,400,0..1,0&display=swap" rel="stylesheet"><style>body{margin:0;background:#0a0a0b;-webkit-font-smoothing:antialiased}*{box-sizing:border-box}a{color:#f2b14c}a:hover{color:#f7cb82}input[type=range]{accent-color:#f2b14c}::-webkit-scrollbar{display:none}</style></helmet>
+<div style="min-height:100vh;background:#0a0a0b;font-family:Manrope,system-ui,sans-serif;color:#f1efea;padding:48px;display:flex;flex-wrap:wrap;gap:56px;align-items:flex-start">
+
+<div style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;flex-direction:column;gap:4px"><span style="font-size:15px;font-weight:700">Kova for iPhone</span><span style="font-size:13px;color:#a3a09a">Interactive. Tap the tabs, tiles, modes and Ask.</span></div>
+<x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" dark="{{ true }}" time="19:42" hint-size="402px,874px">
+<div style="height:874px;display:flex;flex-direction:column;background:#0e0f10;position:relative;overflow:hidden;font-family:Manrope,system-ui,sans-serif;color:#f1efea">
+<div style="position:absolute;top:-160px;left:-80px;width:520px;height:420px;background:radial-gradient(closest-side, {{ mode.glow }}, transparent);pointer-events:none"></div>
+<div style="flex:1;overflow-y:auto;scrollbar-width:none;padding:62px 18px 20px;position:relative;display:flex;flex-direction:column;gap:22px">
+
+<sc-if value="{{ isNow }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;justify-content:space-between;align-items:center"><div style="display:flex;align-items:center;gap:8px"><svg width="22" height="22" viewBox="0 0 48 48"><path d="M8 26L24 11L40 26" fill="none" stroke="#f1efea" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path><path d="M16 32L24 24.5L32 32" fill="none" stroke="#f1efea" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="24" cy="38.5" r="3.5" fill="#f2b14c"></circle></svg><span style="font-size:13px;font-weight:700;color:#a3a09a">The Ahmeds</span></div><div style="display:flex"><div style="width:30px;height:30px;border-radius:50%;background:#2a2b2f;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;border:2px solid #0e0f10">M</div><div style="width:30px;height:30px;border-radius:50%;background:#2a2b2f;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;border:2px solid #0e0f10;margin-left:-9px">B</div></div></div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<span style="font-size:13px;color:#a3a09a">Wed 30 Sep · 19:42 · 14° cloudy</span>
+<div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Material Symbols Rounded';font-size:34px;font-variation-settings:'FILL' 1;color:{{ mode.color }}">{{ mode.icon }}</span><span style="font-size:38px;font-weight:700;letter-spacing:-0.03em;line-height:1">{{ mode.name }}</span></div>
+<span style="font-size:14px;color:#c9c6c0">Until 20:00, then Wind down · {{ lightsOn }}</span>
+<sc-if value="{{ overlayOn }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:8px;padding:6px 6px 6px 12px;border-radius:12px;background:#1c1d20;align-self:flex-start;margin-top:4px"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#f2b14c;font-variation-settings:'FILL' 1">{{ ovIcon }}</span><span style="font-size:12.5px;font-weight:600">{{ ovLabel }}</span><div onClick="{{ endOverlay }}" style="padding:5px 10px;border-radius:8px;background:rgba(255,255,255,0.08);font-size:12px;font-weight:700">End</div></div></sc-if>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="position:relative;height:30px;border-radius:9px;overflow:hidden;display:flex"><sc-for list="{{ bands }}" as="b" hint-placeholder-count="6"><div style="height:100%;width:{{ b.w }};background:{{ b.bg }}"></div></sc-for><div style="position:absolute;left:82%;top:0;bottom:0;width:2px;background:#fff"></div></div>
+<div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:10px;color:#6f6d69"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px">
+<span style="font-size:16px;font-weight:700">Coming up</span>
+<div style="display:flex;gap:10px;overflow-x:auto;scrollbar-width:none;margin:0 -18px;padding:0 18px">
+<sc-for list="{{ upcoming }}" as="u" hint-placeholder-count="3">
+<div style="flex:none;width:200px;border-radius:16px;padding:14px;background:#16171a;display:flex;flex-direction:column;gap:8px;opacity:{{ u.op }}">
+<div style="display:flex;align-items:center;gap:6px"><div style="width:8px;height:8px;border-radius:50%;background:{{ u.color }}"></div><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:{{ u.color }}">{{ u.t }}</span></div>
+<span style="font-size:14px;font-weight:700;text-decoration:{{ u.deco }}">{{ u.label }}</span>
+<span style="font-size:12px;color:#a3a09a;line-height:1.35">{{ u.what }}</span>
+<div onClick="{{ u.skip }}" style="padding:7px 10px;border-radius:9px;background:rgba(255,255,255,0.07);font-size:12px;font-weight:700;align-self:flex-start;cursor:pointer">{{ u.btn }}</div>
+</div>
+</sc-for>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px">
+<span style="font-size:16px;font-weight:700">Favourites</span>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+<sc-for list="{{ favs }}" as="d" hint-placeholder-count="4">
+<div onClick="{{ d.toggle }}" style="border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:16px;cursor:pointer;background:{{ d.bg }};border:1px solid {{ d.border }}">
+<div style="display:flex;justify-content:space-between"><div style="width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:{{ d.iconBg }};color:{{ d.iconFg }}"><span style="font-family:'Material Symbols Rounded';font-size:21px;font-variation-settings:'FILL' 1">{{ d.icon }}</span></div><div onClick="{{ d.open }}" style="width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#a3a09a"><span style="font-family:'Material Symbols Rounded';font-size:20px">more_horiz</span></div></div>
+<div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:14px;font-weight:700">{{ d.name }}</span><span style="font-size:12px;color:{{ d.stateFg }}">{{ d.state }}</span></div>
+</div>
+</sc-for>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px">
+<span style="font-size:16px;font-weight:700">Switch the home to</span>
+<div style="display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;margin:0 -18px;padding:0 18px">
+<sc-for list="{{ overlays }}" as="o" hint-placeholder-count="6"><div onClick="{{ o.go }}" style="flex:none;display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:14px;cursor:pointer;background:{{ o.bg }};border:1px solid {{ o.border }}"><span style="font-family:'Material Symbols Rounded';font-size:19px;font-variation-settings:'FILL' 1;color:#f2b14c">{{ o.icon }}</span><span style="font-size:13.5px;font-weight:700">{{ o.name }}</span></div></sc-for>
+</div>
+</div>
+<sc-if value="{{ hasFindings }}" hint-placeholder-val="{{ true }}">
+<div onClick="{{ goModes }}" style="border-radius:16px;padding:14px 16px;background:#16171a;display:flex;align-items:center;gap:12px;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:22px;color:#7fd4a0">fact_check</span><div style="display:flex;flex-direction:column;gap:2px;flex:1"><span style="font-size:14px;font-weight:700">{{ findingsTitle }}</span><span style="font-size:12px;color:#a3a09a">Kova replayed your modes on the last 14 days</span></div><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#a3a09a">chevron_right</span></div>
+</sc-if>
+<div style="display:flex;flex-direction:column;gap:6px">
+<span style="font-size:16px;font-weight:700">Just happened</span>
+<sc-for list="{{ happened }}" as="h" hint-placeholder-count="3"><div style="display:flex;gap:12px;padding:10px 0;border-top:1px solid rgba(255,255,255,0.05)"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#a3a09a;width:38px;padding-top:1px">{{ h.t }}</span><div style="display:flex;flex-direction:column;gap:2px;flex:1"><span style="font-size:13.5px;font-weight:600">{{ h.what }}</span><span style="font-size:12px;color:#a3a09a">↳ {{ h.why }}</span></div></div></sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ isRooms }}" hint-placeholder-val="{{ false }}">
+<span style="font-size:30px;font-weight:700;letter-spacing:-0.02em">Rooms</span>
+<div style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:-6px -18px 0;padding:0 18px">
+<sc-for list="{{ roomTabs }}" as="rt" hint-placeholder-count="10"><div onClick="{{ rt.open }}" style="flex:none;padding:8px 14px;border-radius:999px;font-size:13px;font-weight:600;cursor:pointer;background:{{ rt.bg }};color:{{ rt.fg }}">{{ rt.name }}</div></sc-for>
+</div>
+<div style="display:flex;justify-content:space-between;font-size:13px;color:#a3a09a"><span>{{ roomSummary }}</span><span onClick="{{ roomAllOff }}" style="color:#f2b14c;font-weight:600;cursor:pointer">All lights off</span></div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+<sc-for list="{{ tiles }}" as="d" hint-placeholder-count="6">
+<div onClick="{{ d.toggle }}" style="border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:16px;cursor:pointer;background:{{ d.bg }};border:1px solid {{ d.border }}">
+<div style="display:flex;justify-content:space-between"><div style="width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:{{ d.iconBg }};color:{{ d.iconFg }}"><span style="font-family:'Material Symbols Rounded';font-size:21px;font-variation-settings:'FILL' 1">{{ d.icon }}</span></div><div onClick="{{ d.open }}" style="width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#a3a09a"><span style="font-family:'Material Symbols Rounded';font-size:20px">more_horiz</span></div></div>
+<div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:14px;font-weight:700">{{ d.name }}</span><span style="font-size:12px;color:{{ d.stateFg }}">{{ d.state }}</span></div>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ isModes }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:4px"><span style="font-size:30px;font-weight:700;letter-spacing:-0.02em">Modes</span><span style="font-size:13px;color:#a3a09a">How your home behaves through the day</span></div>
+<sc-for list="{{ findings }}" as="f" hint-placeholder-count="2">
+<div style="border-radius:16px;padding:14px;background:#16171a;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;align-items:center;gap:6px"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:{{ f.fg }}">{{ f.icon }}</span><span style="font-size:11px;font-weight:700;color:{{ f.fg }};text-transform:uppercase;letter-spacing:0.06em;flex:1">{{ f.kind }}</span><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:{{ f.modeTint }};color:{{ f.modeColor }}">{{ f.modeName }}</span></div>
+<span style="font-size:14px;font-weight:700;line-height:1.35">{{ f.title }}</span>
+<div style="display:flex;gap:8px"><div onClick="{{ f.doFix }}" style="padding:8px 12px;border-radius:9px;background:#f2b14c;color:#1a1408;font-size:12px;font-weight:700;cursor:pointer">{{ f.fix }}</div><div onClick="{{ f.doAlt }}" style="padding:8px 12px;border-radius:9px;background:rgba(255,255,255,0.06);font-size:12px;font-weight:600;cursor:pointer">Later</div></div>
+</div>
+</sc-for>
+<div style="display:flex;flex-direction:column;gap:8px">
+<sc-for list="{{ modeList }}" as="m" hint-placeholder-count="5">
+<div onClick="{{ m.pick }}" style="border-radius:18px;overflow:hidden;background:#16171a;border:1px solid {{ m.border }};cursor:pointer">
+<div style="display:flex;align-items:center;gap:12px;padding:14px 16px"><div style="width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:{{ m.tint }};color:{{ m.color }}"><span style="font-family:'Material Symbols Rounded';font-size:21px;font-variation-settings:'FILL' 1">{{ m.icon }}</span></div><div style="display:flex;flex-direction:column;gap:2px;flex:1"><span style="font-size:15px;font-weight:700">{{ m.name }}</span><span style="font-size:12px;color:#a3a09a">{{ m.span }}</span></div><sc-if value="{{ m.now }}" hint-placeholder-val="{{ false }}"><span style="font-size:10.5px;font-weight:800;padding:3px 8px;border-radius:999px;background:{{ m.color }};color:#141517">NOW</span></sc-if></div>
+<sc-if value="{{ m.open }}" hint-placeholder-val="{{ false }}">
+<div style="padding:0 16px 16px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ m.chips }}" as="c" hint-placeholder-count="3"><span style="padding:7px 10px;border-radius:9px;background:#1c1d20;font-size:12.5px;font-weight:600">{{ c }}</span></sc-for></div>
+<div style="display:flex;flex-direction:column;gap:6px"><div style="display:grid;grid-template-columns:repeat(14,1fr);gap:4px"><sc-for list="{{ m.days }}" as="d" hint-placeholder-count="14"><div style="aspect-ratio:1;border-radius:4px;background:{{ d.bg }}"></div></sc-for></div><span style="font-size:12px;color:#a3a09a;line-height:1.45">{{ m.test }}</span></div>
+</div>
+</sc-if>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ isActivity }}" hint-placeholder-val="{{ false }}">
+<span style="font-size:30px;font-weight:700;letter-spacing:-0.02em">Activity</span>
+<div style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:-6px -18px 0;padding:0 18px"><sc-for list="{{ actFilters }}" as="af" hint-placeholder-count="4"><div onClick="{{ af.pick }}" style="flex:none;padding:8px 14px;border-radius:999px;font-size:13px;font-weight:600;cursor:pointer;background:{{ af.bg }};color:{{ af.fg }}">{{ af.label }}</div></sc-for></div>
+<div style="display:flex;flex-direction:column">
+<sc-for list="{{ activity }}" as="a" hint-placeholder-count="8"><div style="display:flex;gap:12px;padding:12px 0;border-top:1px solid rgba(255,255,255,0.05)"><div style="width:32px;height:32px;border-radius:10px;flex:none;display:flex;align-items:center;justify-content:center;background:{{ a.iconBg }};color:{{ a.iconFg }}"><span style="font-family:'Material Symbols Rounded';font-size:18px">{{ a.icon }}</span></div><div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:13.5px;font-weight:600">{{ a.what }}</span><span style="font-size:12px;color:#a3a09a">{{ a.why }}</span></div><span style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#a3a09a">{{ a.t }}</span></div></sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ isAsk }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:30px;font-weight:700;letter-spacing:-0.02em">Ask Kova</span><div style="display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:{{ engine.bg }};align-self:flex-start"><span style="font-family:'Material Symbols Rounded';font-size:15px;color:{{ engine.fg }}">{{ engine.icon }}</span><span style="font-size:12px;font-weight:700;color:{{ engine.fg }}">{{ engine.label }}</span></div></div><div onClick="{{ openAi }}" style="width:38px;height:38px;border-radius:50%;background:#16171a;display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px">tune</span></div></div>
+<sc-for list="{{ chat }}" as="m" hint-placeholder-count="2"><div style="display:flex;flex-direction:column;align-items:{{ m.align }};gap:4px"><div style="max-width:86%;padding:11px 14px;border-radius:16px;font-size:14px;line-height:1.5;background:{{ m.bg }};color:{{ m.fg }}">{{ m.text }}</div><sc-if value="{{ m.hasSrc }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;color:#8a8781;display:flex;align-items:center;gap:4px;padding:0 4px"><span style="font-family:'Material Symbols Rounded';font-size:13px">{{ m.srcIcon }}</span>{{ m.src }}</span></sc-if></div></sc-for>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:11px;font-weight:700;color:#8a8781;text-transform:uppercase;letter-spacing:0.06em">Try</span><div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ asks }}" as="q" hint-placeholder-count="5"><div onClick="{{ q.ask }}" style="padding:8px 12px;border-radius:999px;background:#16171a;border:1px solid rgba(255,255,255,0.08);font-size:12.5px;font-weight:600;cursor:pointer">{{ q.text }}</div></sc-for></div></div>
+</sc-if>
+</div>
+
+<sc-if value="{{ isAsk }}" hint-placeholder-val="{{ false }}">
+<div style="flex:none;padding:10px 14px 12px;background:#0e0f10;border-top:1px solid rgba(255,255,255,0.06);display:flex;flex-direction:column;gap:8px">
+<sc-if value="{{ hasParse }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:12px;background:#16171a"><span style="font-size:11px;font-weight:700;color:#7fd4a0;white-space:nowrap">Understood</span><div style="display:flex;flex-wrap:wrap;gap:4px;flex:1"><sc-for list="{{ parseChips }}" as="pc" hint-placeholder-count="2"><span style="padding:4px 8px;border-radius:7px;background:{{ pc.bg }};color:{{ pc.fg }};font-size:12px;font-weight:700">{{ pc.t }}</span></sc-for></div></div>
+</sc-if>
+<sc-if value="{{ showNoParse }}" hint-placeholder-val="{{ false }}">
+<div style="padding:8px 10px;border-radius:12px;background:#16171a;font-size:12px;color:#a3a09a;line-height:1.4">{{ noParseText }}</div>
+</sc-if>
+<div style="display:flex;gap:8px;align-items:center;padding:4px 4px 4px 14px;border-radius:16px;background:#16171a;border:1px solid rgba(255,255,255,0.1)">
+<input value="{{ draft }}" onChange="{{ setDraft }}" onKeyDown="{{ draftKey }}" placeholder="Turn off the lounge, why is…" style="flex:1;min-width:0;background:transparent;border:none;outline:none;color:#f1efea;font-family:Manrope,sans-serif;font-size:14px;padding:8px 0">
+<div onClick="{{ send }}" style="width:38px;height:38px;border-radius:12px;background:#f2b14c;color:#1a1408;display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px">arrow_upward</span></div>
+</div>
+</div>
+</sc-if>
+
+<div style="flex:none;padding:10px 14px 30px;background:rgba(17,18,20,0.96);border-top:1px solid rgba(255,255,255,0.06);display:flex;justify-content:space-around;align-items:center;position:relative">
+<sc-for list="{{ tabs }}" as="t" hint-placeholder-count="5">
+<div onClick="{{ t.go }}" style="display:flex;flex-direction:column;align-items:center;gap:3px;width:60px;cursor:pointer;color:{{ t.fg }}">
+<div style="width:{{ t.size }};height:{{ t.size }};border-radius:50%;display:flex;align-items:center;justify-content:center;background:{{ t.bg }};margin-top:{{ t.mt }}"><span style="font-family:'Material Symbols Rounded';font-size:{{ t.iconSize }};font-variation-settings:'FILL' {{ t.fill }};color:{{ t.iconFg }}">{{ t.icon }}</span></div>
+<span style="font-size:10.5px;font-weight:700">{{ t.label }}</span>
+</div>
+</sc-for>
+</div>
+
+<sc-if value="{{ sheetOpen }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ closeSheet }}" style="position:absolute;inset:0;background:rgba(0,0,0,0.55)"></div>
+<div style="position:absolute;left:0;right:0;bottom:0;border-radius:28px 28px 0 0;background:#141517;padding:10px 20px 40px;display:flex;flex-direction:column;gap:16px">
+<div style="width:40px;height:5px;border-radius:3px;background:#35363a;align-self:center"></div>
+<div style="display:flex;justify-content:space-between;align-items:center"><div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:12px;color:#a3a09a">{{ sh.room }}</span><span style="font-size:22px;font-weight:700">{{ sh.name }}</span></div><div onClick="{{ sh.toggle }}" style="width:52px;height:32px;border-radius:16px;padding:3px;display:flex;justify-content:{{ sh.justify }};background:{{ sh.track }};cursor:pointer"><div style="width:26px;height:26px;border-radius:50%;background:#fff"></div></div></div>
+<sc-if value="{{ sh.dimmable }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:8px"><div style="display:flex;justify-content:space-between;font-size:13px;font-weight:600"><span>Brightness</span><span style="color:#a3a09a">{{ sh.briLabel }}</span></div><input type="range" min="1" max="100" value="{{ sh.bri }}" onChange="{{ sh.setBri }}" style="width:100%;height:28px"></div></sc-if>
+<div style="display:flex;flex-direction:column;border-radius:14px;background:#1c1d20;overflow:hidden"><div style="display:flex;gap:12px;padding:12px 14px"><span style="font-family:'Material Symbols Rounded';font-size:19px;color:#a3a09a">help</span><div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">Why it’s like this</span><span style="font-size:13px;line-height:1.45">{{ sh.why }}</span></div></div><div style="display:flex;gap:12px;padding:12px 14px;border-top:1px solid rgba(255,255,255,0.05)"><span style="font-family:'Material Symbols Rounded';font-size:19px;color:#f2b14c">schedule</span><div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">What’s next</span><span style="font-size:13px;line-height:1.45">{{ sh.next }}</span></div></div></div>
+</div>
+</sc-if>
+
+<sc-if value="{{ aiOpen }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ closeAi }}" style="position:absolute;inset:0;background:rgba(0,0,0,0.55)"></div>
+<div style="position:absolute;left:0;right:0;bottom:0;max-height:92%;overflow-y:auto;scrollbar-width:none;border-radius:28px 28px 0 0;background:#141517;padding:10px 18px 40px;display:flex;flex-direction:column;gap:16px">
+<div style="width:40px;height:5px;border-radius:3px;background:#35363a;align-self:center"></div>
+<div style="display:flex;flex-direction:column;gap:4px"><span style="font-size:22px;font-weight:700">Assistant</span><span style="font-size:13px;color:#a3a09a;line-height:1.45">Kova understands commands and questions about your home on its own. AI is optional and only adds free-form requests.</span></div>
+<div style="display:flex;flex-direction:column;gap:8px">
+<sc-for list="{{ engines }}" as="en" hint-placeholder-count="3">
+<div onClick="{{ en.pick }}" style="border-radius:16px;padding:14px;cursor:pointer;display:flex;gap:12px;background:#1c1d20;border:1.5px solid {{ en.border }}">
+<div style="width:20px;height:20px;border-radius:50%;flex:none;margin-top:2px;border:2px solid {{ en.ring }};display:flex;align-items:center;justify-content:center"><div style="width:10px;height:10px;border-radius:50%;background:{{ en.dot }}"></div></div>
+<div style="display:flex;flex-direction:column;gap:4px;flex:1"><div style="display:flex;align-items:center;gap:8px"><span style="font-size:14.5px;font-weight:700;flex:1">{{ en.name }}</span><span style="font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:999px;background:{{ en.tagBg }};color:{{ en.tagFg }}">{{ en.tag }}</span></div><span style="font-size:12.5px;color:#a3a09a;line-height:1.45">{{ en.body }}</span><span style="font-size:11.5px;color:#8a8781">{{ en.data }}</span></div>
+</div>
+</sc-for>
+</div>
+<sc-if value="{{ isCloud }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:12px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">API key</span><div style="padding:12px 14px;border-radius:12px;background:#1c1d20;border:1px solid rgba(255,255,255,0.1);font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#6f6d69">sk-••••••••••••••••••••</div></div>
+</sc-if>
+<sc-if value="{{ usesAi }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:12px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">What the AI can see</span>
+<div style="border-radius:16px;background:#1c1d20;overflow:hidden">
+<sc-for list="{{ shares }}" as="sh2" hint-placeholder-count="5"><div onClick="{{ sh2.toggle }}" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid rgba(255,255,255,0.05);cursor:pointer;opacity:{{ sh2.op }}"><span style="font-family:'Material Symbols Rounded';font-size:19px;color:#a3a09a">{{ sh2.icon }}</span><div style="display:flex;flex-direction:column;gap:2px;flex:1"><span style="font-size:13.5px;font-weight:600">{{ sh2.name }}</span><span style="font-size:11.5px;color:#8a8781">{{ sh2.note }}</span></div><div style="width:34px;height:20px;border-radius:10px;padding:2px;display:flex;justify-content:{{ sh2.justify }};background:{{ sh2.track }}"><div style="width:16px;height:16px;border-radius:50%;background:#fff"></div></div></div></sc-for>
+</div>
+<span style="font-size:11.5px;color:#8a8781;line-height:1.45">Built-in commands never go to the AI. Only requests Kova can’t understand are sent, and each one shows up in Activity.</span>
+</div>
+</sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{ toastOn }}" hint-placeholder-val="{{ false }}"><div style="position:absolute;left:16px;right:16px;bottom:104px;display:flex;align-items:center;gap:12px;padding:12px 12px 12px 16px;border-radius:14px;background:#f1efea;color:#141517;font-size:13.5px;font-weight:600;box-shadow:0 10px 30px rgba(0,0,0,0.4)"><span style="flex:1">{{ toastText }}</span><sc-if value="{{ canUndo }}" hint-placeholder-val="{{ false }}"><div onClick="{{ undo }}" style="padding:6px 12px;border-radius:9px;background:#141517;color:#f1efea;font-size:12.5px;cursor:pointer">Undo</div></sc-if></div></sc-if>
+</div>
+</x-import>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;flex-direction:column;gap:4px"><span style="font-size:15px;font-weight:700">Lock screen</span><span style="font-size:13px;color:#a3a09a">Live Activity for the current mode, plus the doorbell alert.</span></div>
+<x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" dark="{{ true }}" time=" " hint-size="402px,874px">
+<div style="height:874px;background:#0c0d10;position:relative;overflow:hidden;font-family:Manrope,system-ui,sans-serif;color:#f1efea;display:flex;flex-direction:column;align-items:center;padding:78px 14px 0">
+<div style="position:absolute;inset:0;background:radial-gradient(70% 45% at 50% 15%, rgba(242,177,76,0.16), transparent 70%)"></div>
+<span style="position:relative;font-size:17px;font-weight:600;color:#d8d5cf">Wednesday 30 September</span>
+<span style="position:relative;font-size:92px;font-weight:700;letter-spacing:-0.04em;line-height:1.05">19:42</span>
+<div style="position:relative;margin-top:auto;width:100%;display:flex;flex-direction:column;gap:10px;padding-bottom:120px">
+<div style="border-radius:24px;padding:14px 16px;background:rgba(28,29,32,0.88);display:flex;align-items:center;gap:12px">
+<div style="width:44px;height:44px;border-radius:12px;background:#1d1e21;display:flex;align-items:center;justify-content:center;flex:none"><svg width="30" height="30" viewBox="0 0 48 48"><path d="M8 26L24 11L40 26" fill="none" stroke="#f1efea" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path><path d="M16 32L24 24.5L32 32" fill="none" stroke="#f1efea" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="24" cy="38.5" r="3.5" fill="#f2b14c"></circle></svg></div>
+<div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:0"><div style="display:flex;align-items:center;gap:6px"><div style="width:8px;height:8px;border-radius:50%;background:#f2b14c"></div><span style="font-size:15px;font-weight:700">Evening</span><span style="font-size:12px;color:#a3a09a">· 8 lights on</span></div><span style="font-size:12.5px;color:#c9c6c0">20:00 Wind down · lamp to 5%</span><div style="height:4px;border-radius:2px;background:#35363a;margin-top:4px;overflow:hidden"><div style="height:100%;width:86%;background:#f2b14c"></div></div></div>
+<div style="padding:8px 12px;border-radius:12px;background:rgba(255,255,255,0.1);font-size:12.5px;font-weight:700">Skip</div>
+</div>
+<div style="border-radius:24px;padding:14px;background:rgba(28,29,32,0.88);display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;gap:10px"><div style="width:22px;height:22px;border-radius:6px;background:#1d1e21;display:flex;align-items:center;justify-content:center"><svg width="15" height="15" viewBox="0 0 48 48"><path d="M7 28L24 12L41 28" fill="none" stroke="#f1efea" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="24" cy="37" r="5" fill="#f2b14c"></circle></svg></div><span style="font-size:12.5px;font-weight:700;color:#d8d5cf;flex:1">KOVA</span><span style="font-size:12px;color:#a3a09a">now</span></div>
+<div style="display:flex;gap:12px;align-items:center"><div style="display:flex;flex-direction:column;gap:2px;flex:1"><span style="font-size:15px;font-weight:700">Someone’s at the front door</span><span style="font-size:13px;color:#c9c6c0">Porch lights are on for 5 min.</span></div><div style="width:84px;height:56px;border-radius:10px;flex:none;background:repeating-linear-gradient(135deg,#1b1c1f 0 6px,#23242a 6px 12px);display:flex;align-items:center;justify-content:center"><span style="font-family:'JetBrains Mono',monospace;font-size:8.5px;color:#6f6d69">doorbell</span></div></div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div style="padding:10px;border-radius:12px;background:rgba(255,255,255,0.1);font-size:13px;font-weight:700;text-align:center">View camera</div><div style="padding:10px;border-radius:12px;background:rgba(255,255,255,0.1);font-size:13px;font-weight:700;text-align:center">Talk</div></div>
+</div>
+</div>
+<div style="position:absolute;left:44px;right:44px;bottom:48px;display:flex;justify-content:space-between"><div style="width:50px;height:50px;border-radius:50%;background:rgba(40,41,45,0.8);display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:22px">flashlight_on</span></div><div style="width:50px;height:50px;border-radius:50%;background:rgba(40,41,45,0.8);display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:22px">photo_camera</span></div></div>
+</div>
+</x-import>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const ROOMS=[['lounge','Lounge'],['kitchen','Kitchen'],['office','Office'],['master','Master bed'],['music','Music room'],['baby','Baby room'],['guest','Guest room'],['laundry','Laundry'],['garage','Garage'],['front','Front door']];
+const RN=Object.fromEntries(ROOMS);
+const D0=[['lounge_main','Ceiling','lounge','light',1],['lounge_down','Downlights','lounge','light',0],['lamp','Lamp','lounge','dimmer',1,78],['tv_backlight','TV backlight','lounge','dimmer',1,31],['lounge_purifier','Purifier','lounge','fan',1],['living_display','Living room display','lounge','media',0],['kitchen_ceiling','Ceiling','kitchen','light',1],['kitchen_island','Island','kitchen','light',0],['dining','Dining light','kitchen','light',0],['office_light','Ceiling','office','light',0],['office_strip','LED strip','office','dimmer',0,100],['office_plug','Desk plug','office','plug',1],['office_cam','Camera','office','camera',1],['master_purifier','Purifier','master','fan',1],['master_speaker','Speaker','master','media',0],['bedroom_tv','Bedroom OLED','master','tv',0],['music_light','Ceiling','music','light',0],['music_speaker','Speaker','music','media',0],['baby_light','Ceiling','baby','light',0],['baby_speaker','Speaker','baby','media',0],['guest_speaker','Speaker','guest','media',0],['laundry_1','Ceiling','laundry','light',0],['laundry_2','Bench light','laundry','light',1],['garage_light','Light','garage','light',1],['garage_cam','Camera','garage','camera',1],['front_1','Porch light','front','light',1],['front_2','Path lights','front','light',1],['doorbell','Doorbell','front','camera',1]];
+const ICON={light:'lightbulb',dimmer:'lightbulb',fan:'air_purifier',media:'speaker',tv:'tv',camera:'videocam',plug:'outlet'};
+const MODES=[{id:'day',name:'Day',color:'#dcd27e',icon:'light_mode',span:'Sunrise → 10 min before sunset',chips:['All lights off','Purifiers on Auto','07:00 Rain sounds stop'],test:['oooooooooooooo','Ran 14 times. No problems found.']},{id:'evening',name:'Evening',color:'#f2b14c',icon:'wb_twilight',span:'10 min before sunset → 20:00',chips:['Kitchen, lounge, laundry on','Porch, path, garage on','Lamp 78% · 3000K','TV backlight 31%'],test:['ooooxooooxoxoo','On 3 evenings nobody was home, so 8 lights lit an empty house.']},{id:'wind',name:'Wind down',color:'#ef8f6e',icon:'nights_stay',span:'20:00 → 23:30',chips:['8 lights off','Lamp 5% · 2000K','TV backlight 16%','21:00 Rain sounds, master bed 60%'],test:['xxxxxxxxxxxxxx','The kitchen ceiling stayed on afterwards every night.']},{id:'night',name:'Night',color:'#8aaef0',icon:'bedtime',span:'23:30 → Fajr',chips:['Tarateel on 4 speakers at 15%','Never in the master bedroom'],test:['oooooooooooooo','Ran 14 times. No problems found.']},{id:'dawn',name:'Dawn',color:'#d8a6e0',icon:'wb_sunny',span:'Fajr → sunrise',chips:['Recitation stops','Everything stays quiet'],test:['oooooooooooooo','Fajr moved from 04:52 to 04:35, and Dawn followed it.']}];
+const BANDS=[['#8aaef0',4.58],['#d8a6e0',1.35],['#dcd27e',11.99],['#f2b14c',2.08],['#ef8f6e',3.5],['#8aaef0',0.5]];
+const UP=[['wind','20:00','Wind down','8 lights off, lamp to 5%','#ef8f6e'],['rain','21:00','Rain sounds','Master bed speaker at 60%','#ef8f6e'],['quran','23:30','Night · Quran','Tarateel on 4 speakers at 15%','#8aaef0']];
+const OVL=[['movie','Movie','movie','ends when the TV turns off'],['date','Date','favorite','ends at midnight'],['party','Party','celebration','ends when you end it'],['good_night','Good night','bedtime','ends at sunrise'],['away','Away','flight_takeoff','ends when someone comes home'],['guests','Guests','luggage','ends at checkout']];
+const WHY={lounge_main:['Evening started at 17:55 and turned this on.','20:00 · Wind down turns it off.'],lamp:['Evening set it to 78% at 17:55.','20:00 · Wind down sets it to 5%, 2000K.'],tv_backlight:['Evening set it to 31% at 17:55.','20:00 · Wind down sets it to 16%.'],kitchen_ceiling:['Evening started at 17:55 and turned this on.','Nothing turns it off until sunrise. Kova flagged this.'],garage_light:['Evening turned it on at 17:55. The garage camera also saw someone at 18:40.','20:00 · Wind down turns it off.'],front_1:['Light the way turned it on at 18:52: the doorbell camera saw someone.','20:00 · Wind down turns it off.'],front_2:['Light the way turned it on at 18:52: the doorbell camera saw someone.','20:00 · Wind down turns it off.'],laundry_2:['Evening turned it on at 17:55.','20:00 · Wind down turns it off.']};
+const FIND=[{id:'nobody',mode:'evening',kind:'Tested on history',icon:'history',fg:'#ff6b5e',title:'Evening lights come on when nobody’s home',fix:'Only when someone’s home'},{id:'kitchen',mode:'wind',kind:'Check',icon:'lightbulb',fg:'#f2b14c',title:'Kitchen ceiling stays on all night',fix:'Turn it off in Wind down'}];
+const ACT=[['19:40','device','lightbulb','Lamp dimmed to 78%','Methel · Kova app'],['18:52','auto','footprint','Porch and path lights on','Light the way · doorbell camera'],['18:41','people','directions_car','Brishti arrived home','Light the way lit the garage'],['18:40','auto','footprint','Garage light on','Light the way · garage camera'],['18:04','system','solar_power','Solar stopped · 21.5 kWh','GoodWe inverter'],['17:55','auto','wb_twilight','Evening started · 8 lights on','10 min before sunset'],['17:48','people','person','Methel arrived home','Methel’s iPhone Air'],['07:00','auto','nights_stay','Rain sounds stopped','Day · 07:00 moment'],['05:56','auto','light_mode','Day started · all off','Sunrise']];
+const AS={auto:['rgba(242,177,76,0.13)','#f2b14c'],people:['rgba(127,212,160,0.14)','#7fd4a0'],device:['rgba(124,184,240,0.13)','#7cb8f0'],system:['#232428','#a3a09a']};
+const SCENE_SET={movie:{lounge_down:{on:false},kitchen_island:{on:false},dining:{on:false},kitchen_ceiling:{on:false},front_1:{on:false},lamp:{on:true,bri:8},tv_backlight:{on:true,bri:12}},date:{lounge_down:{on:false},kitchen_ceiling:{on:false},front_1:{on:false},lamp:{on:true,bri:30},tv_backlight:{on:true,bri:20},dining:{on:true},living_display:{on:true}},party:{lounge_down:{on:true},kitchen_island:{on:true},dining:{on:true},music_light:{on:true},lamp:{on:true,bri:100},tv_backlight:{on:true,bri:100},living_display:{on:true},music_speaker:{on:true}},good_night:Object.fromEntries(['lounge_main','lounge_down','kitchen_ceiling','kitchen_island','dining','laundry_2','garage_light','front_1','front_2','tv_backlight'].map(i=>[i,{on:false}]).concat([['lamp',{on:true,bri:10}]])),away:Object.fromEntries(['lounge_main','kitchen_ceiling','laundry_2','garage_light','front_1','front_2','tv_backlight','lamp'].map(i=>[i,{on:false}])),guests:{}};
+class Component extends DCLogic {
+  state={tab:'now',room:'lounge',devs:Object.fromEntries(D0.map(([id,name,room,type,on,bri])=>[id,{id,name,room,type,on:!!on,bri:bri||100}])),sheet:null,skip:{},overlay:null,prev:null,fixed:{},modeOpen:'evening',actF:'all',chat:[{from:'kova',text:'Hi Methel. Evening mode, 8 lights on. Wind down starts at 20:00.',src:'Built-in · works offline',srcIcon:'lock'}],toast:null,undo:null,draft:'',ai:'builtin',aiOpen:false,share:{names:true,rooms:true,history:false,presence:false}};
+  toast(t,u){clearTimeout(this._t);this.setState({toast:t,undo:u||null});this._t=setTimeout(()=>this.setState({toast:null,undo:null}),4000)}
+  patch(id,p){this.setState(s=>({devs:{...s.devs,[id]:{...s.devs[id],...p}}}))}
+  tog(id){const d=this.state.devs[id];if(d.type==='camera'||d.type==='fan')return;this.patch(id,{on:!d.on})}
+  st(d){if(d.type==='camera')return['Live','#7fd4a0'];if(d.type==='fan')return['Auto','#7cb8f0'];if(d.type==='media'||d.type==='tv')return d.on?['Playing','#7cb8f0']:['Idle','#a3a09a'];if(!d.on)return['Off','#a3a09a'];if(d.type==='dimmer')return[`On · ${d.bri}%`,'#f2b14c'];if(d.type==='plug')return['On · 14 W','#f2b14c'];return['On','#f2b14c']}
+  tint(d){const media=d.type==='media'||d.type==='tv';if(d.type==='camera')return{bg:'#16171a',border:'rgba(255,255,255,0.05)',iconBg:'rgba(127,212,160,0.15)',iconFg:'#7fd4a0'};if(d.type==='fan'||media)return{bg:d.on&&media?'rgba(124,184,240,0.12)':'#16171a',border:d.on&&media?'rgba(124,184,240,0.3)':'rgba(255,255,255,0.05)',iconBg:d.on?'rgba(124,184,240,0.2)':'#232428',iconFg:d.on?'#7cb8f0':'#8a8781'};return d.on?{bg:'rgba(242,177,76,0.11)',border:'rgba(242,177,76,0.28)',iconBg:'#f2b14c',iconFg:'#1a1408'}:{bg:'#16171a',border:'rgba(255,255,255,0.05)',iconBg:'#232428',iconFg:'#8a8781'}}
+  tile(d){const [s,f]=this.st(d);return{...d,...this.tint(d),icon:ICON[d.type],state:s,stateFg:f,toggle:()=>this.tog(d.id),open:e=>{e.stopPropagation();this.setState({sheet:d.id})}}}
+  parse(q){const t=q.toLowerCase().replace(/[’']/g,'').trim();if(t.length<3)return null;const devs=this.state.devs;
+    const DK=[['tv backlight','tv_backlight'],['backlight','tv_backlight'],['lamp','lamp'],['porch','front_1'],['path','front_2'],['garage light','garage_light'],['garage','garage_light'],['dining','dining'],['island','kitchen_island'],['kitchen ceiling','kitchen_ceiling'],['downlights','lounge_down'],['led strip','office_strip']];
+    const dev=(DK.find(([k])=>t.includes(k))||[])[1];
+    const room=ROOMS.find(([id,n])=>t.includes(n.toLowerCase())||t.includes(id));
+    const V='rgba(242,177,76,0.18)',VF='#f2b14c',N='#26272b',NF='#f1efea';
+    if(t.startsWith('why')&&dev){const w=WHY[dev]||['No mode has changed it today.','Nothing scheduled.'];return{chips:[['Why',V,VF],[devs[dev].name,N,NF]],src:'From the activity log',srcIcon:'history',run:()=>`${w[0]} ${w[1]}`}}
+    if(t.includes('tonight')||t.includes('coming up')||t.includes('whats next'))return{chips:[['Schedule',V,VF],['Tonight',N,NF]],src:'From your modes',srcIcon:'routine',run:()=>`Wind down at 20:00, rain sounds in the master bedroom at 21:00${this.state.skip.rain?' (skipped tonight)':''}, then Night at 23:30 with Tarateel on 4 speakers.`}
+    if(t.includes('who')&&t.includes('home'))return{chips:[['Presence',V,VF]],src:'From presence',srcIcon:'group',run:()=>'Methel and Brishti are home. Methel since 17:48, Brishti since 18:41.'}
+    if(t.includes('leaving')||t.includes('going out')||/\baway\b/.test(t))return{chips:[['Switch to',V,VF],['Away',N,NF]],src:'Overlay',srcIcon:'flight_takeoff',run:()=>{const prev=this.state.devs;const nx={...prev};Object.values(prev).forEach(d=>{if(d.type==='light'||d.type==='dimmer')nx[d.id]={...d,on:false}});this.setState({devs:nx,overlay:'away',prev});return 'Away is on and all lights are off. I’ll switch back when one of you gets home.'}}
+    const ov=OVL.find(o=>t.includes(o[1].toLowerCase()));if(ov)return{chips:[['Switch to',V,VF],[ov[1],N,NF]],src:'Overlay',srcIcon:ov[2],run:()=>{const prev=this.state.devs;const nx={...prev};Object.entries(SCENE_SET[ov[0]]).forEach(([k,p])=>{nx[k]={...nx[k],...p}});this.setState({devs:nx,overlay:ov[0],prev});return `${ov[1]} is on. It ${ov[3]}.`}}
+    const pct=(t.match(/(\d{1,3})\s*(%|percent)/)||[])[1];const act=pct?'dim':/\boff\b/.test(t)?'off':/\bon\b/.test(t)?'on':null;
+    if(act&&t.includes('downstairs'))return{chips:[[act==='off'?'Turn off':'Turn on',V,VF],['Downstairs?',N,'#ff6b5e']],src:'Needs a label',srcIcon:'label',run:()=>'I don’t know which rooms are downstairs yet. Tell me once, e.g. “downstairs is lounge, kitchen, laundry, garage”, and I’ll remember.'}
+    if(act&&dev){const d=devs[dev];return{chips:[[act==='dim'?'Set':act==='off'?'Turn off':'Turn on',V,VF],[d.name,N,NF]].concat(pct?[[pct+'%',N,NF]]:[]),src:'Device control',srcIcon:'toggle_on',run:()=>{this.patch(dev,act==='dim'?{on:true,bri:Math.min(100,+pct)}:{on:act==='on'});return `${d.name} ${act==='dim'?'set to '+pct+'%':act==='off'?'is off':'is on'}.`}}}
+    if(act&&(room||t.includes('all')||t.includes('everything'))){const ids=Object.values(devs).filter(d=>(d.type==='light'||d.type==='dimmer')&&(!room||d.room===room[0])).map(d=>d.id);const label=room?room[1]+' lights':'All lights';return{chips:[[act==='off'?'Turn off':'Turn on',V,VF],[label,N,NF],[ids.length+' devices',N,'#a3a09a']],src:'Device control',srcIcon:'toggle_on',run:()=>{const prev=this.state.devs;const nx={...prev};ids.forEach(i=>{nx[i]={...nx[i],on:act==='on'}});this.setState({devs:nx});this.toast(`${label} ${act}`,()=>this.setState({devs:prev}));return `${label} ${act==='off'?'are off':'are on'}.`}}}
+    return null}
+  ask(q){const p=this.parse(q);const s=this.state;let reply;
+    if(p)reply={from:'kova',text:p.run(),src:p.src,srcIcon:p.srcIcon};
+    else if(s.ai==='builtin')reply={from:'kova',text:'I didn’t understand that. I can control devices and rooms, switch modes, and answer questions about your home. For free-form requests, turn on an AI engine in Assistant settings.',src:'Built-in · nothing left your home',srcIcon:'lock'};
+    else reply={from:'kova',text:'Here’s a draft rule: when it rains and Methel or Brishti is home, close the lounge blinds. Want me to test it on the last 14 days first?',src:s.ai==='local'?'Local AI on your server':'Cloud AI · sent device names only',srcIcon:s.ai==='local'?'dns':'cloud'};
+    this.setState(pp=>({draft:'',chat:[...pp.chat,{from:'you',text:q},reply]}))}
+  renderVals(){
+    const s=this.state,devs=s.devs,list=Object.values(devs);
+    const M=MODES[1];
+    const on=list.filter(d=>(d.type==='light'||d.type==='dimmer')&&d.on).length;
+    const TABS=[['now','Now','home'],['rooms','Rooms','meeting_room'],['ask','Ask','graphic_eq'],['modes','Modes','routine'],['activity','Activity','history']];
+    const tabs=TABS.map(([id,label,icon])=>{const a=s.tab===id;const c=id==='ask';return{label,icon,go:()=>this.setState({tab:id}),fg:a?'#f1efea':'#8a8781',size:c?'46px':'28px',mt:c?'-20px':'0px',bg:c?'#f2b14c':'transparent',iconFg:c?'#1a1408':a?(id==='modes'?M.color:'#f2b14c'):'#8a8781',iconSize:c?'24px':'23px',fill:a||c?1:0}});
+    const ov=OVL.find(o=>o[0]===s.overlay);
+    const upcoming=UP.map(([id,t,label,what,color])=>{const sk=!!s.skip[id];return{t,label,what:sk?'Skipped tonight':what,color,op:sk?0.55:1,deco:sk?'line-through':'none',btn:sk?'Undo':'Skip tonight',skip:()=>this.setState(p=>({skip:{...p.skip,[id]:!p.skip[id]}}))}});
+    const favs=['lamp','tv_backlight','front_1','garage_light'].map(id=>this.tile(devs[id]));
+    const overlays=OVL.map(([id,name,icon,ends])=>{const a=s.overlay===id;return{name,icon,bg:a?'rgba(242,177,76,0.12)':'#16171a',border:a?'rgba(242,177,76,0.45)':'rgba(255,255,255,0.05)',go:()=>{if(a)return;const prev=this.state.devs;const nx={...prev};Object.entries(SCENE_SET[id]).forEach(([k,p])=>{nx[k]={...nx[k],...p}});this.setState({devs:nx,overlay:id,prev});this.toast(`${name} is on · ${ends}`,()=>this.setState({devs:prev,overlay:null}))}}});
+    const openF=FIND.filter(f=>!s.fixed[f.id]);
+    const findings=openF.map(f=>{const m=MODES.find(x=>x.id===f.mode);return{...f,modeName:m.name,modeColor:m.color,modeTint:m.color+'24',doFix:()=>{this.setState(p=>({fixed:{...p.fixed,[f.id]:true},modeOpen:f.mode}));this.toast(`${m.name} updated`)},doAlt:()=>this.setState(p=>({fixed:{...p.fixed,[f.id]:true}}))}});
+    const modeList=MODES.map(m=>{const open=s.modeOpen===m.id;let test=m.test;if(m.id==='evening'&&s.fixed.nobody)test=['oooo-oooo-o-oo','Ran 11 times and skipped the 3 evenings nobody was home.'];if(m.id==='wind'&&s.fixed.kitchen)test=['oooooooooooooo','Ran 14 times. The house is dark apart from the lamp and TV backlight.'];return{...m,tint:m.color+'24',now:m.id==='evening',open,border:open?m.color+'66':'rgba(255,255,255,0.04)',days:test[0].split('').map(c=>({bg:c==='x'?'#ff6b5e':c==='-'?'#26272b':m.color})),test:test[1],pick:()=>this.setState({modeOpen:open?null:m.id})}});
+    const rDevs=list.filter(d=>d.room===s.room);
+    const AF=[['all','All'],['auto','Modes'],['people','People'],['device','Devices']];
+    const D=s.sheet&&devs[s.sheet];let sh={};
+    if(D){const w=WHY[D.id]||['No mode has changed this today.','Nothing scheduled.'];sh={name:D.name,room:RN[D.room],justify:D.on?'flex-end':'flex-start',track:D.on?'#f2b14c':'#35363a',toggle:()=>this.tog(D.id),dimmable:D.type==='dimmer'&&D.on,bri:D.bri,briLabel:D.bri+'%',setBri:e=>this.patch(D.id,{bri:+e.target.value}),why:w[0],next:w[1]}}
+    return {tabs,isNow:s.tab==='now',isRooms:s.tab==='rooms',isModes:s.tab==='modes',isActivity:s.tab==='activity',isAsk:s.tab==='ask',
+      mode:{...M,glow:M.color+'33'},lightsOn:`${on} lights on`,bands:BANDS.map(([c,h],i)=>({w:(h/24*100)+'%',bg:c+(i===3?'55':'2a')})),upcoming,favs,overlays,
+      overlayOn:!!ov,ovIcon:ov?ov[2]:'',ovLabel:ov?`${ov[1]} · ${ov[3]}`:'',endOverlay:()=>this.setState(p=>({devs:p.prev||p.devs,overlay:null,prev:null})),
+      hasFindings:openF.length>0,findingsTitle:`${openF.length} thing${openF.length===1?'':'s'} worth a look`,goModes:()=>this.setState({tab:'modes'}),findings,modeList,
+      happened:[['18:52','Porch and path lights on','Light the way · doorbell camera'],['18:41','Brishti arrived, garage lit','Light the way'],['17:55','Evening started · 8 lights','10 min before sunset']].map(([t,what,why])=>({t,what,why})),
+      roomTabs:ROOMS.map(([id,name])=>({name,open:()=>this.setState({room:id}),bg:s.room===id?'#f1efea':'#16171a',fg:s.room===id?'#141517':'#d8d5cf'})),tiles:rDevs.map(d=>this.tile(d)),roomSummary:`${rDevs.length} devices · ${rDevs.filter(d=>(d.type==='light'||d.type==='dimmer')&&d.on).length} lights on`,
+      roomAllOff:()=>{const prev=devs;const nx={...devs};rDevs.forEach(d=>{if(d.type==='light'||d.type==='dimmer')nx[d.id]={...d,on:false}});this.setState({devs:nx});this.toast(`${RN[s.room]} lights off`,()=>this.setState({devs:prev}))},
+      actFilters:AF.map(([id,label])=>({label,pick:()=>this.setState({actF:id}),bg:s.actF===id?'#f1efea':'#16171a',fg:s.actF===id?'#141517':'#d8d5cf'})),
+      activity:ACT.filter(a=>s.actF==='all'||a[1]===s.actF).map(([t,type,icon,what,why])=>({t,icon,what,why,iconBg:AS[type][0],iconFg:AS[type][1]})),
+      chat:s.chat.map(m=>({text:m.text,align:m.from==='you'?'flex-end':'flex-start',bg:m.from==='you'?'#f1efea':'#16171a',fg:m.from==='you'?'#141517':'#f1efea',hasSrc:!!m.src,src:m.src||'',srcIcon:m.srcIcon||''})),
+      asks:['Turn off the kitchen','Lamp to 30%','Why is the garage light on?','What’s happening tonight?','I’m leaving','Close the blinds when it rains'].map(text=>({text,ask:()=>this.ask(text)})),
+      ...(()=>{const p=this.parse(s.draft);const E={builtin:['Built-in · works offline','lock','rgba(127,212,160,0.14)','#7fd4a0'],local:['Local AI · on your server','dns','rgba(124,184,240,0.14)','#7cb8f0'],cloud:['Cloud AI · your key','cloud','rgba(242,177,76,0.14)','#f2b14c']}[s.ai];
+        const ENG=[['builtin','Built-in','Default','rgba(127,212,160,0.14)','#7fd4a0','Controls devices, rooms and modes, and answers “why”, “what’s next” and “who’s home” from your own data.','Nothing leaves your home.'],['local','Local AI','Private','rgba(124,184,240,0.14)','#7cb8f0','Adds free-form requests and rule drafting with a model running on your own server, e.g. through Dockbit.','Data stays on your network.'],['cloud','Cloud AI','Your API key','rgba(242,177,76,0.14)','#f2b14c','Best understanding, using a provider you choose with your own key.','Only what you allow below is sent.']];
+        const SH=[['names','Device and room names','lightbulb','Needed to understand requests'],['rooms','Current device states','toggle_on','On/off, brightness, what’s playing'],['history','Activity history','history','Last 7 days of changes'],['presence','Who’s home','group','Names and arrival times'],['cameras','Cameras','videocam','Never shared']];
+        return{hasParse:!!p,parseChips:p?p.chips.map(([t,bg,fg])=>({t,bg,fg})):[],showNoParse:!p&&s.draft.trim().length>=3,noParseText:s.ai==='builtin'?'Not a built-in command. Kova can still try, or turn on AI for free-form requests.':'Not a built-in command. This will go to '+(s.ai==='local'?'your local AI.':'cloud AI.'),
+          draft:s.draft,setDraft:e=>this.setState({draft:e.target.value}),draftKey:e=>{if(e.key==='Enter'&&s.draft.trim())this.ask(s.draft.trim())},send:()=>{if(s.draft.trim())this.ask(s.draft.trim())},
+          engine:{label:E[0],icon:E[1],bg:E[2],fg:E[3]},openAi:()=>this.setState({aiOpen:true}),closeAi:()=>this.setState({aiOpen:false}),aiOpen:s.aiOpen,isCloud:s.ai==='cloud',usesAi:s.ai!=='builtin',
+          engines:ENG.map(([id,name,tag,tagBg,tagFg,body,data])=>{const on=s.ai===id;return{name,tag,tagBg,tagFg,body,data,border:on?tagFg:'transparent',ring:on?tagFg:'#4a4b50',dot:on?tagFg:'transparent',pick:()=>this.setState({ai:id})}}),
+          shares:SH.map(([id,name,icon,note])=>{const locked=id==='cameras';const on=!locked&&!!s.share[id];return{name,icon,note,op:locked?0.5:1,justify:on?'flex-end':'flex-start',track:on?'#f2b14c':'#35363a',toggle:()=>{if(!locked)this.setState(pp=>({share:{...pp.share,[id]:!pp.share[id]}}))}}})}})(),
+      sheetOpen:!!D,sh,closeSheet:()=>this.setState({sheet:null}),toastOn:!!s.toast,toastText:s.toast,canUndo:!!s.undo,undo:()=>{s.undo&&s.undo();this.setState({toast:null,undo:null})}};
+  }
+}
+</script>
+</body>
+</html>
