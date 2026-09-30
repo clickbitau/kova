@@ -316,14 +316,14 @@
 </div>
 </sc-if>
 
-<div style="flex:none;padding:10px 14px 30px;background:rgba(17,18,20,0.96);border-top:1px solid rgba(255,255,255,0.06);display:flex;justify-content:space-around;align-items:center;position:relative">
+<sc-if value="{{ showTabs }}" hint-placeholder-val="{{ true }}"><div style="flex:none;padding:10px 14px 30px;background:rgba(17,18,20,0.96);border-top:1px solid rgba(255,255,255,0.06);display:flex;justify-content:space-around;align-items:center;position:relative">
 <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="5">
 <div onClick="{{ t.go }}" style="display:flex;flex-direction:column;align-items:center;gap:3px;width:60px;cursor:pointer;color:{{ t.fg }}">
 <div style="width:{{ t.size }};height:{{ t.size }};border-radius:50%;display:flex;align-items:center;justify-content:center;background:{{ t.bg }};margin-top:{{ t.mt }};position:relative"><sc-if value="{{ t.dot }}" hint-placeholder-val="{{ false }}"><div style="position:absolute;top:0;right:-2px;width:8px;height:8px;border-radius:50%;background:#f2b14c;border:2px solid #111214"></div></sc-if><span style="font-family:'Material Symbols Rounded';font-size:{{ t.iconSize }};font-variation-settings:'FILL' {{ t.fill }};color:{{ t.iconFg }}">{{ t.icon }}</span></div>
 <span style="font-size:10.5px;font-weight:700">{{ t.label }}</span>
 </div>
 </sc-for>
-</div>
+</div></sc-if>
 
 <sc-if value="{{ sheetOpen }}" hint-placeholder-val="{{ false }}">
 <div onClick="{{ closeSheet }}" style="position:absolute;inset:0;background:rgba(0,0,0,0.55)"></div>
@@ -579,6 +579,9 @@
 </x-dc>
 <script type="text/x-dc" data-dc-script>
 // ---- Kova phone app logic. The markup above is the Kova Phone design; everything comes from the hub. ----
+// Shown inside the Kova phone app: that app has its own tab bar.
+const EMBED=(()=>{try{return new URL(location.href).searchParams.get('embed')==='1'}catch(e){return false}})();
+const toApp=m=>{try{if(window.ReactNativeWebView)window.ReactNativeWebView.postMessage(m);else if(window.parent!==window)window.parent.postMessage('kova:'+m,'*')}catch(e){}};
 const KOVA_TOKEN=(()=>{try{return localStorage.getItem('kova_token')||''}catch(e){return ''}})();
 async function api(method,path,body){
   const r=await fetch(path,{method,headers:{...(body!==undefined?{'content-type':'application/json'}:{}),...(KOVA_TOKEN?{authorization:'Bearer '+KOVA_TOKEN}:{})},body:body===undefined?undefined:JSON.stringify(body)});
@@ -646,8 +649,11 @@ class Component extends DCLogic {
       const sub=(await reg.pushManager.getSubscription())||await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64u(publicKey)});
       await api('POST','/api/push/subscribe',{subscription:sub.toJSON()});this.setState({push:'on'});this.toast('Notifications are on')}catch(e){this.err(e)}}
   // Links from notifications, e.g. "Turn them off" on "Everyone's out".
-  deepLink(){try{const u=new URL(location.href);const d=u.searchParams.get('do'),cam=u.searchParams.get('cam'),page=u.searchParams.get('page');if(!d&&!cam&&!page)return;
-    ['do','cam','page'].forEach(k=>u.searchParams.delete(k));history.replaceState(null,'',u.pathname+u.search+u.hash);
+  deepLink(){try{const u=new URL(location.href);const d=u.searchParams.get('do'),cam=u.searchParams.get('cam'),page=u.searchParams.get('page'),setup=u.searchParams.get('setup'),add=u.searchParams.get('add');if(!d&&!cam&&!page&&!setup&&!add)return;
+    ['do','cam','page','setup','add'].forEach(k=>u.searchParams.delete(k));history.replaceState(null,'',u.pathname+u.search+u.hash);
+    // From the Kova phone app: one integration's setup, or the Add sheet.
+    if(setup){this.go('integrations');this.openSetup(setup);return}
+    if(add){this.openAdd();return}
     if(d==='lights-off')api('POST','/api/lights/off').then(r=>this.toast(`${r.changed.length} light${r.changed.length===1?'':'s'} off`,this.undoFn(r.undo))).catch(e=>this.err(e));
     // "View camera" on a doorbell notification: open Security on that camera and start the live view.
     if(cam)this.watch(cam);
@@ -696,7 +702,8 @@ class Component extends DCLogic {
   // ---- pages under More: Security, Energy, Media, Integrations ----
   // Pages (Modes, Activity, Energy, Media, Integrations, Customise) open over the current tab; back returns to where you were.
   go(page,extra){this.setState(p=>({page,pageFrom:page&&p.page&&p.page!==page?p.page:null,igPick:false,...(extra||{})}));if(page==='integrations'&&!this.state.igCat)this.loadInteg();try{this._scroll&&this._scroll.scrollTo(0,0)}catch(e){}}
-  back(){this.go(this.state.pageFrom||null)}
+  // Inside the Kova phone app the first page is the app's own screen: back goes back in the app.
+  back(){if(EMBED&&!this.state.pageFrom){toApp('back');return}this.go(this.state.pageFrom||null)}
   tab(id){this.setState({tab:id,page:null,pageFrom:null});try{this._scroll&&this._scroll.scrollTo(0,0)}catch(e){}}
   /** Open a camera's live view on the Security tab. */
   watch(id){const d=this.state.hub.devices.find(x=>x.id===id);this.setState({tab:'security',page:null,camSel:id,sheet:null});try{this._scroll&&this._scroll.scrollTo(0,0)}catch(e){}if(d)this.goLive(d)}
@@ -774,8 +781,9 @@ class Component extends DCLogic {
       ['media','Media','speaker','rgba(124,184,240,0.14)','#7cb8f0',`${pls.filter(d=>d.on).length} playing · ${pls.length} players`],
       ['customise','Customise home','tune','#232428','#d8d5cf',`${H.rooms.length} rooms · ${H.people.length} people · names, favourites`],
       ['integrations','Integrations','hub','#232428','#d8d5cf',bad.length?`${bad.length} need${bad.length===1?'s':''} attention: ${bad.map(i=>i.name).join(', ')}`:`${H.integrations.length} connected`],
-      ['assistant','Assistant','graphic_eq','#232428','#d8d5cf','How Ask Kova understands you']];
-    const moreRows=MORE.map(([id,name,icon,iconBg,iconFg,sub])=>({name,icon,iconBg,iconFg,sub,subFg:(id==='integrations'&&bad.length)||(id==='modes'&&H.findings.length)?'#f2b14c':'#a3a09a',go:()=>id==='assistant'?this.setState({aiOpen:true}):this.go(id)}));
+      ['assistant','Assistant','graphic_eq','#232428','#d8d5cf','How Ask Kova understands you'],
+      ['app','Kova app on your phone','phone_iphone','rgba(127,212,160,0.14)','#7fd4a0','Show the code to scan with the app']];
+    const moreRows=MORE.filter(([id])=>!(id==='app'&&EMBED)).map(([id,name,icon,iconBg,iconFg,sub])=>({name,icon,iconBg,iconFg,sub,subFg:(id==='integrations'&&bad.length)||(id==='modes'&&H.findings.length)?'#f2b14c':'#a3a09a',go:()=>id==='assistant'?this.setState({aiOpen:true}):id==='app'?(location.href='./connect.html'):this.go(id)}));
     // Security
     const camId=s.camSel&&devs[s.camSel]?s.camSel:(cams[0]&&cams[0].id);const cm=devs[camId];
     const lastSeen=id=>{const a=H.activity.find(x=>x.what.startsWith((devs[id]||{}).name||'~')&&(x.icon==='person'||x.icon==='doorbell'));return a?`${a.what.includes('rang')?'Rang':'Person'} at ${a.t}`:'No activity today'};
@@ -1020,7 +1028,7 @@ class Component extends DCLogic {
       {title:'Lights, plugs and appliances',rows:[row('tuya','Tuya · Smart Life','toggle_on',A,'Switches, lights and LED strips, locally'),row('tapo','TP-Link Tapo','outlet',A,'Plugs and bulbs, locally'),row('vesync','Levoit (VeSync)','air_purifier',B,'Air purifiers · Cloud'),row('ecovacs','Ecovacs DEEBOT','cleaning_services',A,'Robot vacuums · Cloud'),row('goodwe','GoodWe solar','solar_power',A,'Inverter, over your network')]},
       {title:'Cameras',rows:[row('nest','Google Nest','videocam',G,'Doorbell and cameras · Cloud')]},
     ];
-    return{addOpen:!!s.adding,openAdd:()=>this.openAdd(),add:{sections,close:()=>kovaClose(()=>this.setState({adding:false}))}};
+    return{addOpen:!!s.adding,openAdd:()=>this.openAdd(),add:{sections,close:()=>kovaClose(()=>{this.setState({adding:false});if(EMBED&&!this.state.ig)toApp('back')})}};
   }
   // ---- speaker groups: any speakers, any brands, as one ----
   openGroup(g){this.setState({sheet:null,gEdit:g?g.id:'new',gDraft:g?{name:g.name,members:[...g.members],room:g.room||''}:{name:'',members:[],room:''}})}
@@ -1089,8 +1097,8 @@ class Component extends DCLogic {
     const SH=[['names','Device and room names','lightbulb','Needed to understand requests'],['rooms','Current device states','toggle_on','On/off, brightness, what’s playing'],['history','Activity history','history','Last 7 days of changes'],['presence','Who’s home','group','Names and arrival times'],['cameras','Cameras','videocam','Never shared']];
     const np=!s.page;
     const pg=s.page;
-    return {tabs,...this.pagesVals(s,H,devs,list,RN),...this.edVals(s,H,devs,RN),...this.devVals(s,H,devs,list,RN),...this.cuVals(s,H,devs,list,RN),...this.addVals(s,H),...this.groupVals(s,H,devs,RN),
-      isNow:np&&s.tab==='now',isDevices:np&&s.tab==='devices',isAsk:np&&s.tab==='ask',isSecurity:(np&&s.tab==='security')||pg==='security',secBack:pg==='security',isMore:(np&&s.tab==='more')||pg==='more',moreBack:pg==='more',
+    return {tabs,showTabs:!EMBED,...this.pagesVals(s,H,devs,list,RN),...this.edVals(s,H,devs,RN),...this.devVals(s,H,devs,list,RN),...this.cuVals(s,H,devs,list,RN),...this.addVals(s,H),...this.groupVals(s,H,devs,RN),
+      isNow:np&&s.tab==='now',isDevices:np&&s.tab==='devices',isAsk:np&&s.tab==='ask',isSecurity:(np&&s.tab==='security')||pg==='security',secBack:pg==='security'||EMBED,isMore:(np&&s.tab==='more')||pg==='more',moreBack:pg==='more',
       isModes:pg==='modes',isActivity:pg==='activity',isCustomise:pg==='customise',goActivity:()=>this.go('activity'),scrollRef:this.scrollRef,
       homeName:H.home.name,avatars:(home.length?home:H.people).slice(0,3).map((x,i)=>({initial:x.name[0],ml:i?'-9px':'0px',op:x.home?1:0.4})),
       dateLine:`${shortDate(H.home.dateLabel)} · ${H.home.clock}${w?` · ${w.temp}° ${w.text.toLowerCase()}`:''}`,

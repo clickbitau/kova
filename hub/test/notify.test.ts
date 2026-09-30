@@ -164,7 +164,7 @@ test('Notify: a 404/410 from the push service removes the subscription', { skip:
     notifier.subscribe(browserSubscription(`${push.base}/gone/old-phone`).subscription);
     assert.equal(notifier.subscriptions().length, 2);
     const r = await notifier.notify({ title: 'Hello', body: 'Test' });
-    assert.deepEqual(r, { push: 1, ntfy: false, removed: 1 });
+    assert.deepEqual(r, { push: 1, ntfy: false, removed: 1, app: 0 });
     assert.deepEqual(notifier.subscriptions().map(s => s.subscription.endpoint), [`${push.base}/push/live`]);
     // Targeted at someone else: a subscription tied to Methel doesn't get it.
     push.got.length = 0;
@@ -248,7 +248,7 @@ test('Notify: rules can be turned off; nothing is logged without a channel', asy
   const t = await testHub(12);
   const bare = new Notifier(t.hub, {}, { dataDir: mkdtempSync(join(tmpdir(), 'kova-notify-')) });
   const r = await bare.notify({ title: 'Nobody listening', body: '' });
-  assert.deepEqual(r, { push: 0, ntfy: false, removed: 0 });
+  assert.deepEqual(r, { push: 0, ntfy: false, removed: 0, app: 0 });
   assert.equal(t.hub.store.feed(10).filter(e => e.what.startsWith('Notified')).length, 0);
   await t.hub.stop();
 });

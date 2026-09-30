@@ -3,6 +3,8 @@
 // Plays once per session, on top of the app while it connects; a tap skips it; honours Reduce Motion.
 (function () {
   try {
+    // Inside the Kova phone app, which has its own launch.
+    if (new URL(location.href).searchParams.get('embed') === '1') return;
     if (sessionStorage.getItem('kova_sting')) return;
     sessionStorage.setItem('kova_sting', '1');
   } catch (e) { /* private mode: play anyway */ }

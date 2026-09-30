@@ -102,6 +102,8 @@ export function snapshot(hub: Hub) {
       // en-AU writes September as "Sept"; the design (and every other month) uses three letters.
       dateLabel: new Date(now).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'short', timeZone: tz }).replace(/\bSept\b/, 'Sep'),
       clock: clock(now, tz),
+      // Where the home is, for the phone app's arriving and leaving (it watches a circle around this).
+      location: { latitude: cfg.latitude, longitude: cfg.longitude },
       // Today's sunrise and sunset as local hours, for day strips.
       sun: (() => { const t = SunCalc.getTimes(new Date(now), cfg.latitude, cfg.longitude); const h = (d: Date) => (isNaN(+d) ? null : localHour(+d, tz)); return { rise: h(t.sunrise), set: h(t.sunset) }; })(),
     },

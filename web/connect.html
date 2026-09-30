@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e0f10">
+<title>Connect the Kova app</title>
+<link rel="icon" href="./assets/logo/kova-favicon.svg">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+  :root{--page:#0e0f10;--card:#16171a;--bone:#f1efea;--stone:#a3a09a;--amber:#f2b14c;--red:#ff6b5e}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100dvh;background:var(--page);color:var(--bone);font-family:Manrope,system-ui,sans-serif;-webkit-font-smoothing:antialiased;display:flex;align-items:center;justify-content:center;padding:24px 16px}
+  main{width:100%;max-width:420px;display:flex;flex-direction:column;gap:18px}
+  h1{margin:0;font-size:28px;font-weight:700;letter-spacing:-0.02em}
+  p{margin:0;color:var(--stone);font-size:14px;line-height:1.5}
+  .card{background:var(--card);border-radius:20px;padding:20px;display:flex;flex-direction:column;align-items:center;gap:14px}
+  .qr{width:100%;max-width:280px;aspect-ratio:1;border-radius:16px;overflow:hidden;background:var(--bone)}
+  .qr svg{width:100%;height:100%;display:block}
+  .addr{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--stone);word-break:break-all;text-align:center}
+  ol{margin:0;padding-left:20px;color:var(--stone);font-size:14px;line-height:1.7}
+  a{color:var(--amber)}
+  .err{color:var(--red)}
+</style>
+</head>
+<body>
+<main>
+  <div style="display:flex;align-items:center;gap:10px">
+    <svg width="28" height="28" viewBox="0 0 48 48"><path d="M8 26L24 11L40 26" fill="none" stroke="#f1efea" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 32L24 24.5L32 32" fill="none" stroke="#f1efea" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="24" cy="38.5" r="3.5" fill="#f2b14c"/></svg>
+    <h1>Kova on your phone</h1>
+  </div>
+  <p>Scan this with the Kova app to connect it to this home. Anyone with this code can control the home, so only show it to people who live here.</p>
+  <div class="card">
+    <div class="qr" id="qr"></div>
+    <div class="addr" id="addr">Loading…</div>
+  </div>
+  <ol>
+    <li>Open the Kova app on your phone.</li>
+    <li>Tap <b>Scan the code</b>.</li>
+    <li>Point it at this screen.</li>
+  </ol>
+  <p><a href="./phone.html">Back to Kova</a></p>
+</main>
+<script>
+(async function () {
+  const addr = document.getElementById('addr');
+  let t = '';
+  try { t = new URL(location.href).searchParams.get('token') || localStorage.getItem('kova_token') || ''; } catch (e) {}
+  try {
+    const r = await fetch('/api/app-link', { headers: t ? { authorization: 'Bearer ' + t } : {} });
+    if (!r.ok) throw new Error(r.status === 401 ? 'Open Kova with its token first, then come back here.' : 'HTTP ' + r.status);
+    const j = await r.json();
+    document.getElementById('qr').innerHTML = j.qrSvg;
+    addr.textContent = j.url + (j.hasToken ? ' · with this home’s token' : '');
+  } catch (e) {
+    addr.textContent = e.message;
+    addr.className = 'addr err';
+  }
+})();
+</script>
+</body>
+</html>
