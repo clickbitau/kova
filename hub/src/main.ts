@@ -7,6 +7,7 @@ import { SonosAdapter } from './adapters/sonos.ts';
 import { adaptersFor, loadIntegrations } from './integrations.ts';
 import { existsSync, readFileSync } from 'node:fs';
 import type { HomeConfig } from './model/types.ts';
+import { MatterAdapter } from './adapters/matter.ts';
 import { Weather } from './services/weather.ts';
 import { HomeKitBridge } from './bridges/homekit.ts';
 import { AirCastBridge } from './bridges/aircast.ts';
@@ -25,6 +26,7 @@ const initialConfig = (): HomeConfig => !demo && existsSync(homeFile) ? JSON.par
 const adapters: Adapter[] = integrations ? adaptersFor(integrations) : [];
 if (demo) adapters.push(new VirtualAdapter(demoDevices()));
 if (env.KOVA_SONOS === '1') adapters.push(new SonosAdapter());
+if (env.KOVA_MATTER === '1' || integrations?.matter) adapters.push(new MatterAdapter({ storageDir: resolve(dataDir, 'matter') }));
 
 const hub = new Hub({
   dbPath: resolve(dataDir, 'kova.db'),

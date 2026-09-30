@@ -21,6 +21,8 @@ export interface Integrations {
   airplay?: AirPlayOptions;
   /** iPhone → Cast speakers: runs AirConnect's aircast. `workDir` defaults to <KOVA_DATA>/aircast. */
   aircast?: Omit<AirCastOptions, 'workDir'> & { workDir?: string };
+  /** Matter controller on or off; its fabric lives in <KOVA_DATA>/matter. Same as KOVA_MATTER=1. */
+  matter?: Record<string, never>;
 }
 
 export function loadIntegrations(path: string): Integrations | null {

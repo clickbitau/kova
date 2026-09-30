@@ -87,7 +87,7 @@ It never makes decisions. See `sdk.ts`.
 | `cast` | Google Cast speakers, displays and TVs over Cast v2 (TLS on port 8009) with mDNS discovery. Plays a source's stream URL, sets volume, stops. **Perfect sync:** commands that arrive together (e.g. a mode starting) and play the same source on several speakers go to the Cast group whose members are exactly those speakers, so the speakers sync themselves. Cast groups are made in the Google Home app; Google offers no API to create them. |
 | `sonos` | Local UPnP. SSDP discovery or `KOVA_SONOS_HOSTS`. Play source / pause / volume. |
 | `airplay` | Kova → AirPlay (Apple TV, HomePod, AirPlay speakers) through an [OwnTone](https://github.com/owntone/owntone-server) server, driven over its JSON API. OwnTone plays one source at a time to any set of AirPlay devices and keeps them in sync; playing the same source on another AirPlay device joins the running stream. OwnTone is GPL, so it runs as its own process (see `docker-compose.yml`). |
-| `matter` | See below. |
+| `matter` | Matter over IP as a controller on Kova's own fabric, built on matter.js (`@matter/main` 0.17). On with `KOVA_MATTER=1`; fabric and paired nodes live in `<KOVA_DATA>/matter`. Add a device with its 11/21-digit pairing code or `MT:` QR payload (`POST /api/integrations/matter/commission`); devices already in Google Home / Apple Home join through multi-admin after opening a pairing window there. No BLE, so a brand-new Wi-Fi/Thread device must first be set up by a phone app. Announces one device per On/Off light (`light`), dimmable light (`dimmer`, + `colorTemp` / `color` from ColorControl) and plug (`plug`); ids `matter_<node>_<endpoint>`, room `unassigned` unless given when adding. Follows changes through a subscription and reports `online:false` when it drops. Needs IPv6 and mDNS on the host network (use host networking in Docker). Tested against a matter.js virtual light on matter.js's simulated network; not yet tried on real hardware. |
 | VeSync, Nest, GoodWe, Samsung TV, Ecovacs | Planned. |
 
 All adapters except `virtual` are tested against fake devices that speak the protocol; none has been tried on real hardware yet.
@@ -122,6 +122,11 @@ Brightness, ColorTemperature and Hue/Saturation when the device has them),
 plugs become Outlets, purifiers become AirPurifiers (`Auto` ↔ AUTO, any other
 mode ↔ MANUAL), and each overlay (Movie, Date, Party…) becomes a Switch that
 starts or ends it. Speakers, TVs, cameras and sensors aren't exposed yet.
+Accessory UUIDs are derived from device ids, and the bridge's MAC, setup code
+and pairings live in `$KOVA_DATA/homekit/`, so restarts keep Home app rooms and
+scenes. `GET /api/integrations/homekit` returns the setup code and the
+`X-HM://` payload for a pairing QR code. mDNS uses ciao (pure JS), so the hub
+needs host networking (or macvlan) for iPhones to find it.
 
 **AirPlay → Cast** (`aircast.ts`) runs AirConnect's `aircast` (MIT) as a
 supervised child process, so every Cast speaker, display and Cast group appears
@@ -140,11 +145,7 @@ Cast through Cast groups, AirPlay with AirPlay through OwnTone). A Cast speaker
 and an AirPlay speaker playing together are started at the same moment but
 drift apart by up to a second or two; no public protocol lets a third party
 sync them sample-accurately.
-Accessory UUIDs are derived from device ids, and the bridge's MAC, setup code
-and pairings live in `$KOVA_DATA/homekit/`, so restarts keep Home app rooms and
-scenes. `GET /api/integrations/homekit` returns the setup code and the
-`X-HM://` payload for a pairing QR code. mDNS uses ciao (pure JS), so the hub
-needs host networking (or macvlan) for iPhones to find it.
+
 
 ## API
 
@@ -156,6 +157,7 @@ needs host networking (or macvlan) for iPhones to find it.
 | WS | `/api/ws` | Pushes `{type:'state'}` on every change |
 | POST | `/api/devices/:id` | Command `{on, bri, k, color, mode, media, vol}` → `{undo}` |
 | POST | `/api/devices/:id/event` | Device event `{type:'person'|'ring'|…}` (webhooks, testing) |
+| POST | `/api/integrations/matter/commission` | Add a Matter device `{code, room?, name?}` → `{ok, devices}` (needs `KOVA_MATTER=1`) |
 | POST | `/api/rooms/:id/off` | Room lights off → `{undo}` |
 | POST | `/api/overlays/:id/start`, `/api/overlays/end` | |
 | POST | `/api/plan/skip` | `{id, skip}`: skip tonight |
