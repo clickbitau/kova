@@ -41,6 +41,14 @@ Or write `data/integrations.json` by hand: see [docs/architecture.md](docs/archi
 | `KOVA_HOMEKIT` | off | `1` to publish an Apple Home (HomeKit) bridge; setup code is in the log and at `/api/integrations/homekit` |
 | `KOVA_HOMEKIT_PORT` | `51826` | TCP port for the HomeKit bridge |
 
+`KOVA_DATA` also holds `push/vapid.json` (Web Push keys, made on first run, 0600).
+
+**Who's home and notifications** (replacing Home Assistant's iPhone app) are set up in `integrations.json`
+under `presence` and `notify`; see [docs/architecture.md](docs/architecture.md#presence-and-notifications).
+In short: give Kova your OPNsense API key and each person's phone MAC, add an iOS Shortcut per person from
+`GET /api/presence/setup`, and either subscribe to an [ntfy](https://ntfy.sh) topic (works over plain HTTP,
+nothing else to set up) or turn on notifications in the Kova phone app (needs HTTPS and the app on the Home Screen).
+
 ## Docker
 
 ```bash

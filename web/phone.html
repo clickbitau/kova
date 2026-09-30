@@ -113,6 +113,7 @@
 
 <sc-if value="{{ isActivity }}" hint-placeholder-val="{{ false }}">
 <span style="font-size:30px;font-weight:700;letter-spacing:-0.02em">Activity</span>
+<div onClick="{{ push.go }}" style="display:flex;gap:12px;align-items:center;padding:12px 14px;border-radius:16px;background:#16171a;border:1px solid rgba(255,255,255,0.05);cursor:pointer"><div style="width:32px;height:32px;border-radius:10px;flex:none;display:flex;align-items:center;justify-content:center;background:{{ push.iconBg }};color:{{ push.iconFg }}"><span style="font-family:'Material Symbols Rounded';font-size:18px">{{ push.icon }}</span></div><div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:13.5px;font-weight:600">{{ push.title }}</span><span style="font-size:12px;color:#a3a09a">{{ push.note }}</span></div><sc-if value="{{ push.hasBtn }}" hint-placeholder-val="{{ true }}"><div style="flex:none;padding:8px 14px;border-radius:999px;font-size:13px;font-weight:600;background:#f1efea;color:#141517">{{ push.btn }}</div></sc-if></div>
 <div style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:-6px -18px 0;padding:0 18px"><sc-for list="{{ actFilters }}" as="af" hint-placeholder-count="4"><div onClick="{{ af.pick }}" style="flex:none;padding:8px 14px;border-radius:999px;font-size:13px;font-weight:600;cursor:pointer;background:{{ af.bg }};color:{{ af.fg }}">{{ af.label }}</div></sc-for></div>
 <div style="display:flex;flex-direction:column">
 <sc-for list="{{ activity }}" as="a" hint-placeholder-count="8"><div style="display:flex;gap:12px;padding:12px 0;border-top:1px solid rgba(255,255,255,0.05)"><div style="width:32px;height:32px;border-radius:10px;flex:none;display:flex;align-items:center;justify-content:center;background:{{ a.iconBg }};color:{{ a.iconFg }}"><span style="font-family:'Material Symbols Rounded';font-size:18px">{{ a.icon }}</span></div><div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:13.5px;font-weight:600">{{ a.what }}</span><span style="font-size:12px;color:#a3a09a">{{ a.why }}</span></div><span style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#a3a09a">{{ a.t }}</span></div></sc-for>
@@ -208,12 +209,28 @@ const isPlayer=d=>d.type==='media'||d.type==='tv';
 const lst=xs=>xs.length<=1?xs.join(''):xs.slice(0,-1).join(', ')+' and '+xs[xs.length-1];
 const FAV_KEY='kova_favs';
 const loadFavs=()=>{try{return JSON.parse(localStorage.getItem(FAV_KEY)||'null')}catch(e){return null}};
+// Push notifications: service worker + Web Push subscription (iOS needs HTTPS and the app on the Home Screen).
+const swReady=(()=>{try{return 'serviceWorker' in navigator&&window.isSecureContext?navigator.serviceWorker.register('/sw.js').then(()=>navigator.serviceWorker.ready):null}catch(e){return null}})();
+const pushBase=()=>{if(!window.isSecureContext)return 'insecure';if(!swReady||!('PushManager' in window)||!('Notification' in window))return /iPhone|iPad/.test(navigator.userAgent)&&!navigator.standalone?'install':'unsupported';return Notification.permission==='denied'?'denied':'off'};
+const b64u=s=>{const p='='.repeat((4-s.length%4)%4);const r=atob((s+p).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from(r,c=>c.charCodeAt(0))};
+const PUSH_UI={insecure:['Notifications need HTTPS','Open Kova over https:// to get alerts here, or use the ntfy app','notifications_off',null],install:['Add Kova to your Home Screen','iPhone only shows alerts for Home Screen apps: Share → Add to Home Screen','add_to_home_screen',null],unsupported:['No notifications in this browser','Use the ntfy app for alerts instead','notifications_off',null],denied:['Notifications are blocked','Allow them for Kova in Settings → Notifications','notifications_off',null],off:['Enable notifications','Doorbell, lights left on, devices not responding','notifications','Enable'],on:['Notifications are on','Doorbell, lights left on, devices not responding','notifications_active','Test']};
 
 class Component extends DCLogic {
   state={hub:BOOT,conn:!!window.KOVA_BOOT,tab:'now',room:(BOOT.rooms[0]||{}).id,sheet:null,modeOpen:BOOT.current.modeId,actF:'all',
     chat:[{from:'kova',text:`Hi. ${BOOT.modes.find(m=>m.id===BOOT.current.modeId)?.name||'Day'} mode, ${BOOT.devices.filter(d=>isLight(d)&&d.state.on).length} lights on.`,src:'Built-in · nothing left your home'}],
-    toast:null,undo:null,draft:'',parse:null,ai:'builtin',aiOpen:false,share:{names:true,rooms:true,history:false,presence:false},favs:loadFavs()};
-  componentDidMount(){this.connect();api('GET','/api/assistant/settings').then(r=>this.setState({ai:r.engine,share:r.share})).catch(()=>{})}
+    toast:null,undo:null,draft:'',parse:null,ai:'builtin',aiOpen:false,share:{names:true,rooms:true,history:false,presence:false},favs:loadFavs(),push:pushBase()};
+  componentDidMount(){this.connect();this.pushCheck();this.deepLink();api('GET','/api/assistant/settings').then(r=>this.setState({ai:r.engine,share:r.share})).catch(()=>{})}
+  async pushCheck(){const b=pushBase();this.setState({push:b});if(b!=='off')return;try{const reg=await swReady;const sub=await reg.pushManager.getSubscription();if(sub){this.setState({push:'on'});api('POST','/api/push/subscribe',{subscription:sub.toJSON()}).catch(()=>{})}}catch(e){}}
+  async pushGo(){const st=this.state.push;
+    if(st==='on'){api('POST','/api/push/test').then(r=>this.toast(r.push||r.ntfy?'Test sent':'Nothing was delivered')).catch(e=>this.err(e));return}
+    if(st!=='off')return;
+    try{const perm=await Notification.requestPermission();if(perm!=='granted'){this.setState({push:perm==='denied'?'denied':'off'});return}
+      const reg=await swReady;const {publicKey}=await api('GET','/api/push/vapid');
+      const sub=(await reg.pushManager.getSubscription())||await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64u(publicKey)});
+      await api('POST','/api/push/subscribe',{subscription:sub.toJSON()});this.setState({push:'on'});this.toast('Notifications are on')}catch(e){this.err(e)}}
+  // Links from notifications, e.g. "Turn them off" on "Everyone's out".
+  deepLink(){try{const u=new URL(location.href);const d=u.searchParams.get('do');if(!d)return;u.searchParams.delete('do');history.replaceState(null,'',u.pathname+u.search+u.hash);
+    if(d==='lights-off')api('POST','/api/lights/off').then(r=>this.toast(`${r.changed.length} light${r.changed.length===1?'':'s'} off`,this.undoFn(r.undo))).catch(e=>this.err(e))}catch(e){}}
   componentWillUnmount(){this._closed=true;try{this._ws&&this._ws.close()}catch(e){}}
   connect(){
     if(this._closed)return;
@@ -294,6 +311,7 @@ class Component extends DCLogic {
       roomTabs:H.rooms.map(r=>({name:r.name,open:()=>this.setState({room:r.id}),bg:room===r.id?'#f1efea':'#16171a',fg:room===r.id?'#141517':'#d8d5cf'})),tiles:rDevs.map(d=>this.tile(d)),roomSummary:`${rDevs.length} devices · ${rDevs.filter(d=>isLight(d)&&d.on).length} lights on`,
       roomAllOff:()=>api('POST',`/api/rooms/${room}/off`,{}).then(r=>this.toast(`${RN[room]} lights off`,this.undoFn(r.undo))).catch(x=>this.err(x)),
       actFilters:AF.map(([id,label])=>({label,pick:()=>this.setState({actF:id}),bg:s.actF===id?'#f1efea':'#16171a',fg:s.actF===id?'#141517':'#d8d5cf'})),
+      push:(()=>{const [title,note,icon,btn]=PUSH_UI[s.push]||PUSH_UI.unsupported;const on=s.push==='on';return{title,note,icon,btn:btn||'',hasBtn:!!btn,iconBg:on?AS.people[0]:AS.system[0],iconFg:on?AS.people[1]:AS.system[1],go:()=>this.pushGo()}})(),
       activity:H.activity.filter(a=>s.actF==='all'||a.type===s.actF).map(a=>({t:a.t,icon:a.icon,what:a.what,why:a.why,iconBg:(AS[a.type]||AS.system)[0],iconFg:(AS[a.type]||AS.system)[1]})),
       chat:s.chat.map(m=>({text:m.text,align:m.from==='you'?'flex-end':'flex-start',bg:m.from==='you'?'#f1efea':'#16171a',fg:m.from==='you'?'#141517':'#f1efea',hasSrc:!!m.src,src:m.src||'',srcIcon:SRC_ICON[m.src]||'lock'})),
       asks:['Turn off the kitchen','Lamp to 30%','Why is the garage light on?','What’s happening tonight?','Who’s home?','I’m leaving'].map(text=>({text,ask:()=>this.ask(text)})),
