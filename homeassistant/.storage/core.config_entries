@@ -1,0 +1,1274 @@
+{
+ "version": 1,
+ "minor_version": 5,
+ "key": "core.config_entries",
+ "data": {
+  "entries": [
+   {
+    "created_at": "2026-02-14T14:21:45.763773+00:00",
+    "data": {},
+    "disabled_by": null,
+    "discovery_keys": {},
+    "domain": "sun",
+    "entry_id": "01KHE8EVX33GNPFBD7GWR77WNQ",
+    "minor_version": 1,
+    "modified_at": "2026-02-14T14:21:45.763776+00:00",
+    "options": {},
+    "pref_disable_new_entities": false,
+    "pref_disable_polling": false,
+    "source": "import",
+    "subentries": [],
+    "title": "Sun",
+    "unique_id": null,
+    "version": 1
+   },
+   {
+    "created_at": "2026-02-14T14:21:46.192226+00:00",
+    "data": {},
+    "disabled_by": null,
+    "discovery_keys": {},
+    "domain": "go2rtc",
+    "entry_id": "01KHE8EWAGDVBXX08ZCT4DHJCD",
+    "minor_version": 1,
+    "modified_at": "2026-02-14T14:21:46.192229+00:00",
+    "options": {},
+    "pref_disable_new_entities": false,
+    "pref_disable_polling": false,
+    "source": "system",
+    "subentries": [],
+    "title": "go2rtc",
+    "unique_id": null,
+    "version": 1
+   },
+   {
+    "created_at": "2026-02-14T14:21:46.208529+00:00",
+    "data": {},
+    "disabled_by": null,
+    "discovery_keys": {},
+    "domain": "backup",
+    "entry_id": "01KHE8EWB0ZP4RBSSF13DJW0T3",
+    "minor_version": 1,
+    "modified_at": "2026-02-14T14:21:46.208532+00:00",
+    "options": {},
+    "pref_disable_new_entities": false,
+    "pref_disable_polling": false,
+    "source": "system",
+    "subentries": [],
+    "title": "Backup",
+    "unique_id": null,
+    "version": 1
+   },
+   {
+    "created_at": "2026-02-14T14:21:46.352312+00:00",
+    "data": {},
+    "disabled_by": null,
+    "discovery_keys": {
+     "zeroconf": [
+      {
+       "domain": "zeroconf",
+       "key": [
+        "_meshcop._udp.local.",
+        "Nest Wifi Mesh #D15C._meshcop._udp.local."
+       ],
+       "version": 1
+      }
+     ]
+    },
+    "domain": "thread",
+    "entry_id": "01KHE8EWFGX1XMDE5WRJTJ1NR2",
+    "minor_version": 1,
+    "modified_at": "2026-02-14T14:21:46.352316+00:00",
+    "options": {},
+    "pref_disable_new_entities": false,
+    "pref_disable_polling": false,
+    "source": "zeroconf",
+    "subentries": [],
+    "title": "Thread",
+    "unique_id": null,
+    "version": 1
+   },
+   {
+    "created_at": "2026-02-14T14:21:48.744759+00:00",
+    "data": {
+     "ignore_cec": [],
+     "known_hosts": [],
+     "user_id": "a743003d6a8a4f2783150e73ad2b8f21",
+     "uuid": []
+    },
+    "disabled_by": null,
+    "discovery_keys": {
+     "zeroconf": [
+      {
+       "domain": "zeroconf",
+       "key": [
+        "_googlecast._tcp.local.",
+        "Nest-Audio-a85a3f07eb7f7436c9efe87fabf56484._googlecast._tcp.local."
+       ],
+       "version": 1
+      }
+     ]
+    },
+    "domain": "cast",
+    "entry_id": "01KHE8EYT87EXEVG1AK6WSA7MJ",
+    "minor_version": 1,
+    "modified_at": "2026-02-14T14:21:48.746215+00:00",
+    "options": {},
+    "pref_disable_new_entities": false,
+    "pref_disable_polling": false,
+    "source": "zeroconf",
+    "subentries": [],
+    "title": "Google Cast",
+    "unique_id": "cast",
+    "version": 1
+   },
+   {
+    "created_at": "2026-02-14T14:25:31.348055+00:00",
+    "data": {},
+    "disabled_by": null,
+    "discovery_keys": {},
+    "domain": "shopping_list",
+    "entry_id": "01KHE8NR6M25VE0RDAB9H0RCZR",
+    "minor_version": 1,
+    "modified_at": "2026-02-14T14:25:31.348064+00:00",
+    "options": {},
+    "pref_disable_new_entities": false,
+    "pref_disable_polling": false,
+    "source": "onboarding",
+    "subentries": [],
+    "title": "Shopping list",
+    "unique_id": "shopping_list",
+    "version": 1
+   },
+   {
+    "created_at": "2026-02-14T14:25:31.661022+00:00",
+    "data": {},
+    "disabled_by": null,
+    "discovery_keys": {},
+    "domain": "radio_browser",
+    "entry_id": "01KHE8NRGCR3GKVSQKGBGWZGBM",
+    "minor_version": 1,
+    "modified_at": "2026-02-14T14:25:31.661030+00:00",
+    "options": {},
+    "pref_disable_new_entities": false,
+    "pref_disable_polling": false,
+    "source": "onboarding",
+    "subentries": [],
+    "title": "Radio Browser",
+    "unique_id": null,
+    "version": 1
+   },
+   {
+    "created_at": "2026-02-14T14:25:31.680368+00:00",
+    "data": {
+     "track_home": true
+    },
+    "disabled_by": null,
+    "discovery_keys": {},
+    "domain": "met",
+    "entry_id": "01KHE8NRH0XCA5TEXQ712M5YG2",
+    "minor_version": 1,
+    "modified_at": "2026-02-14T14:25:31.680376+00:00",
+    "options": {},
+    "pref_disable_new_entities": false,
+    "pref_disable_polling": false,
+    "source": "onboarding",
+    "subentries": [],
+    "title": "Home",
+    "unique_id": null,
+    "version": 1
+   },
+   {
+    "created_at": "2026-02-14T14:25:31.707491+00:00",
+    "data": {
+     "language": "en",
+     "tld": "com"
+    },
+    "disabled_by": null,
+    "discovery_keys": {},
+    "domain": "google_translate",
+    "entry_id": "01KHE8NRHVHG68ABEH3S7VVJ5Y",
+    "minor_version": 1,
+    "modified_at": "2026-02-14T14:25:31.707497+00:00",
+    "options": {},
+    "pref_disable_new_entities": false,
+    "pref_disable_polling": false,
+    "source": "onboarding",
+    "subentries": [],
+    "title": "Google Translate text-to-speech",
+    "unique_id": null,
+    "version": 1
+   },
+   {
+    "created_at": "2026-02-14T14:28:22.331584+00:00",
+    "data": {
+     "host": "10.10.30.100",
+     "mac": "20:15:de:4f:d0:3c",
+     "manufacturer": "Samsung",
+     "method": "websocket",
+     "model": "QA55S90DAWXXY",
+     "port": 8002,
+     "ssdp_main_tv_agent_location": null,
+     "ssdp_rendering_control_location": "http://10.10.54.95:9197/dmr",
+     "token": "REDACTED"
+    },
+    "disabled_by": null,
+    "discovery_keys": {
+     "dhcp": [
+      {
+       "domain": "dhcp",
+       "key": "2015de4fd03c",
+       "version": 1
+      }
+     ],
+     "ssdp": [
+      {
+       "domain": "ssdp",
+       "key": "uuid:d3b3b608-ec61-4f18-8c8d-c968b6f7dc86",
+       "version": 1
+      }
+     ],
+     "zeroconf": [
+      {
+       "domain": "zeroconf",
+       "key": [
+        "_airplay._tcp.local.",
+        "Bedroom Oled._airplay._tcp.local."
+       ],
+       "version": 1
+      }
+     ]
+    },
+    "domain": "samsungtv",
+    "entry_id": "01KHE8TZ5VH52K82QN67CX04H5",
+    "minor_version": 2,
+    "modified_at": "2026-04-23T08:47:37.399388+00:00",
+    "options": {},
+    "pref_disable_new_entities": false,
+    "pref_disable_polling": false,
+    "source": "zeroconf",
+    "subentries": [],
+    "title": "Bedroom Oled (QA55S90DAWXXY)",
+    "unique_id": "16d984a7-fc23-47af-9e28-1248e0d3a0d6",
+    "version": 2
+   },
+   {
+    "created_at": "2026-02-14T14:45:16.138285+00:00",
+    "data": {
+     "name": "Bedroom Oled  QA55S90DAWXXY ",
+     "port": 21065
+    },
+    "disabled_by": null,
+    "discovery_keys": {},
+    "domain": "homekit",
+    "entry_id": "01KHE9SX7AJV00GG9AYJ71JBZA",
+    "minor_version": 1,
+    "modified_at": "2026-02-14T14:45:16.142578+00:00",
+    "options": {
+     "filter": {
+      "exclude_domains": [],
+      "exclude_entities": [],
+      "include_domains": [],
+      "include_entities": [
+       "media_player.bedroom_oled_qa55s90dawxxy"
+      ]
+     },
+     "mode": "accessory"
+    },
+    "pref_disable_new_entities": false,
+    "pref_disable_polling": false,
+    "source": "accessory",
+    "subentries": [],
+    "title": "Bedroom Oled (QA55S90DAWXXY):21065",
+    "unique_id": null,
+    "version": 1
+   },
+   {
+    "created_at": "2026-02-14T14:45:16.139193+00:00",
+    "data": {
+     "exclude_accessory_mode": true,
+     "name": "HASS Bridge",
+     "port": 21064
+    },
+    "disabled_by": null,
+    "discovery_keys": {},
+    "domain": "homekit",
+    "entry_id": "01KHE9SX7BX3M85NZV0A2XP40D",
+    "minor_version": 1,
+    "modified_at": "2026-02-15T06:39:48.148262+00:00",
+    "options": {
+     "devices": [],
+     "filter": {
+      "exclude_domains": [],
+      "exclude_entities": [
+       "media_player.baby_room_speaker",
+       "media_player.music_room_speaker",
+       "media_player.bedroom_oled",
+       "media_player.bedroom_oled_qa55s90dawxxy",
+       "media_player.guest_room_speaker",
+       "media_player.home_speaker_group",
+       "media_player.living_room_display",
+       "media_player.master_room_speaker",
+       "media_player.lounge_room",
+       "remote.lounge_room",
+       "remote.bedroom_oled_qa55s90dawxxy",
+       "media_player.plex_plexamp_macbookpro_lan",
+       "media_player.plex_plex_web_chrome_windows",
+       "media_player.plex_plex_for_apple_tv_apple_tv",
+       "media_player.plex_plexamp_iphone",
+       "media_player.plex_plex_for_ios_iphone",
+       "media_player.plex_plexamp_windowsclickbit",
+       "media_player.plex_plex_for_windows_windowsclickbit"
+      ],
+      "include_domains": [
+       "alarm_control_panel",
+       "climate",
+       "cover",
+       "humidifier",
+       "fan",
+       "light",
+       "lock",
+       "media_player",
+       "remote",
+       "switch",
+       "vacuum",
+       "lawn_mower",
+       "water_heater",
+       "camera"
+      ],
+      "include_entities": []
+     },
+     "mode": "bridge"
+    },
+    "pref_disable_new_entities": false,
+    "pref_disable_polling": false,
+    "source": "user",
+    "subentries": [],
+    "title": "HASS Bridge:21064",
+    "unique_id": null,
+    "version": 1
+   },
+   {
+    "created_at": "2026-02-15T06:34:10.168141+00:00",
+    "data": {},
+    "disabled_by": null,
+    "discovery_keys": {},
+    "domain": "switch_as_x",
+    "entry_id": "01KHG03CVRQEDG5WNCXXCEWMD4",
+    "minor_version": 3,
+    "modified_at": "2026-02-15T06:34:10.168145+00:00",
+    "options": {
+     "entity_id": "switch.1_gang_mini_smart_switch_4_switch_1",
+     "invert": false,
+     "target_domain": "light"
+    },
+    "pref_disable_new_entities": false,
+    "pref_disable_polling": false,
+    "source": "user",
+    "subentries": [],
+    "title": "Garage",
+    "unique_id": null,
+    "version": 1
+   },
+   {
+    "created_at": "2026-02-15T06:35:44.338472+00:00",
+    "data": {},
+    "disabled_by": null,
+    "discovery_keys": {},
+    "domain": "switch_as_x",
+    "entry_id": "01KHG068TJJZW4C0A4Z0WQ8EX8",
+    "minor_version": 3,
+    "modified_at": "2026-02-15T06:35:44.338476+00:00",
+    "options": {
+     "entity_id": "switch.er_lu_zhi_neng_tong_duan_qi_t1_switch_2",
+     "invert": false,
+     "target_domain": "light"
+    },
+    "pref_disable_new_entities": false,
+    "pref_disable_polling": false,
+    "source": "user",
+    "subentries": [],
+    "title": "Lounge",
+    "unique_id": null,
+    "version": 1
+   },
+   {
+    "created_at": "2026-02-15T06:35:55.988519+00:00",
+    "data": {},
+    "disabled_by": null,
+    "discovery_keys": {},
+    "domain": "switch_as_x",
+    "entry_id": "01KHG06M6MAC26ZKBV2TCERYE9",
+    "minor_version": 3,
+    "modified_at": "2026-02-15T06:35:55.988523+00:00",
+    "options": {
+     "entity_id": "switch.er_lu_zhi_neng_tong_duan_qi_t1_switch_1",
+     "invert": false,
+     "target_domain": "light"
+    },
+    "pref_disable_new_entities": false,
+    "pref_disable_polling": false,
+    "source": "user",
+    "subentries": [],
+    "title": "Backyard",
+    "unique_id": null,
+    "version": 1
+   },
+   {
+    "created_at": "2026-02-18T14:07:59.350240+00:00",
+    "data": {
+     "advanced_settings": {
+      "community": "public",
+      "port": 161
+     },
+     "host": "10.10.30.153",
+     "type": "laser"
+    },
+    "disabled_by": null,
+    "discovery_keys": {
+     "zeroconf": [
+      {
+       "domain": "zeroconf",
+       "key": [
+        "_printer._tcp.local.",
+        "Brother MFC-L2730DW series._printer._tcp.local."
+       ],
+       "version": 1
+      }
+     ]
+    },
+    "domain": "brother",
+    "entry_id": "01KHRH8GVPRVAZT094ZCX5W1TN",
+    "minor_version": 2,
+    "modified_at": "2026-03-05T12:58:43.262360+00:00",
+    "options": {},
+    "pref_disable_new_entities": false,
+    "pref_disable_polling": false,
+    "source": "zeroconf",
+    "subentries": [],
+    "title": "MFC-L2730DW E78331M1N171055",
+    "unique_id": "e78331m1n171055",
+    "version": 1
+   },
+   {
+    "created_at": "2026-02-18T14:09:59.260097+00:00",
+    "data": {
+     "password": "REDACTED",
+     "username": "kauserahamedmethel@outlook.com"
+    },
+    "disabled_by": null,
+    "discovery_keys": {},
+    "domain": "vesync",
+    "entry_id": "01KHRHC5YW7GD1HG3Q6HV0X61V",
+    "minor_version": 3,
+    "modified_at": "2026-02-18T14:09:59.260103+00:00",
+    "options": {},
+    "pref_disable_new_entities": false,
+    "pref_disable_polling": false,
+    "source": "user",
+    "subentries": [],
+    "title": "kauserahamedmethel@outlook.com",
+    "unique_id": "14492242",
+    "version": 1
+   },
+   {
+    "created_at": "2026-02-22T03:12:31.175790+00:00",
+    "data": {
+     "endpoint": "https://apigw.tuyaeu.com",
+     "terminal_id": "1771729950954dFYI6L",
+     "token_info": {
+      "access_token": "REDACTED",
+      "expire_time": 7200,
+      "refresh_token": "REDACTED",
+      "t": 1778070899304,
+      "uid": "eu1662037077888UwQLo"
+     },
+     "user_code": "CxUwQLo"
+    },
+    "disabled_by": null,
+    "discovery_keys": {},
+    "domain": "tuya",
+    "entry_id": "01KJ1NB6E7PJ79PTK03BS273W8",
+    "minor_version": 1,
+    "modified_at": "2026-05-06T12:34:59.412987+00:00",
+    "options": {},
+    "pref_disable_new_entities": false,
+    "pref_disable_polling": false,
+    "source": "user",
+    "subentries": [],
+    "title": "kauserahamedmethel@outlook.com",
+    "unique_id": null,
+    "version": 1
+   },
+   {
+    "created_at": "2026-02-26T22:42:11.423107+00:00",
+    "data": {
+     "integration_created_addon": false,
+     "url": "ws://localhost:5580/ws",
+     "use_addon": false
+    },
+    "disabled_by": "user",
+    "discovery_keys": {
+     "zeroconf": [
+      {
+       "domain": "zeroconf",
+       "key": [
+        "_matter._tcp.local.",
+        "375ECBECBE096B34-00000000D4910F18._matter._tcp.local."
+       ],
+       "version": 1
+      }
+     ]
+    },
+    "domain": "matter",
+    "entry_id": "01KJE1VSTZFHP4VJ5VHWRNT17P",
+    "minor_version": 1,
+    "modified_at": "2026-02-26T22:42:11.423116+00:00",
+    "options": {},
+    "pref_disable_new_entities": false,
+    "pref_disable_polling": false,
+    "source": "zeroconf",
+    "subentries": [],
+    "title": "Matter",
+    "unique_id": null,
+    "version": 1
+   },
+   {
+    "created_at": "2026-02-28T13:42:23.812885+00:00",
+    "data": {
+     "token": "REDACTED"
+    },
+    "disabled_by": null,
+    "discovery_keys": {},
+    "domain": "hacs",
+    "entry_id": "01KJJ7RVA4CCSV50008JHSAJBR",
+    "minor_version": 1,
+    "modified_at": "2026-02-28T13:42:23.812889+00:00",
+    "options": {
+     "experimental": true
+    },
+    "pref_disable_new_entities": false,
+    "pref_disable_polling": false,
+    "source": "user",
+    "subentries": [],
+    "title": "",
+    "unique_id": null,
+    "version": 1
+   },
+   {
+    "created_at": "2026-02-28T14:08:46.151186+00:00",
+    "data": {},
+    "disabled_by": null,
+    "discovery_keys": {},
+    "domain": "browser_mod",
+    "entry_id": "01KJJ994J78SEDTVXWD0P50KPP",
+    "minor_version": 1,
+    "modified_at": "2026-02-28T14:08:46.151192+00:00",
+    "options": {},
+    "pref_disable_new_entities": false,
+    "pref_disable_polling": false,
+    "source": "user",
+    "subentries": [],
+    "title": "Browser Mod",
+    "unique_id": null,
+    "version": 2
+   },
+   {
+    "created_at": "2026-02-28T14:54:54.491484+00:00",
+    "data": {
+     "country": "AU",
+     "password": "REDACTED",
+     "username": "dkathel@outlook.com"
+    },
+    "disabled_by": null,
+    "discovery_keys": {},
+    "domain": "ecovacs",
+    "entry_id": "01KJJBXM0VADNYPS70AQE9ZR0E",
+    "minor_version": 1,
+    "modified_at": "2026-02-28T14:54:54.491492+00:00",
+    "options": {},
+    "pref_disable_new_entities": false,
+    "pref_disable_polling": false,
+    "source": "user",
+    "subentries": [],
+    "title": "dkathel@outlook.com",
+    "unique_id": null,
+    "version": 1
+   },
+   {
+    "created_at": "2026-02-28T16:46:17.441746+00:00",
+    "data": {
+     "app_data": {
+      "push_token": "REDACTED",
+      "push_url": "https://mobile-apps.home-assistant.io/api/sendPush/android/v1",
+      "push_websocket_channel": true
+     },
+     "app_id": "io.homeassistant.companion.android",
+     "app_name": "Home Assistant",
+     "app_version": "2026.3.2-full (20802)",
+     "device_id": "c77ce011af49cc05",
+     "device_name": "Galaxy Tab",
+     "manufacturer": "samsung",
+     "model": "SM-X900",
+     "os_name": "Android",
+     "os_version": "36",
+     "supports_encryption": false,
+     "user_id": "dc3bb893490e4943a242a41c81412b08",
+     "webhook_id": "REDACTED"
+    },
+    "disabled_by": null,
+    "discovery_keys": {},
+    "domain": "mobile_app",
+    "entry_id": "01KJJJ9JB1MWZQV2EWJVD12E3T",
+    "minor_version": 1,
+    "modified_at": "2026-03-25T09:27:48.581208+00:00",
+    "options": {},
+    "pref_disable_new_entities": false,
+    "pref_disable_polling": false,
+    "source": "registration",
+    "subentries": [],
+    "title": "Galaxy Tab",
+    "unique_id": "io.homeassistant.companion.android-c77ce011af49cc05",
+    "version": 1
+   },
+   {
+    "created_at": "2026-03-01T02:53:43.615303+00:00",
+    "data": {
+     "client_id": "REDACTED",
+     "client_secret": "REDACTED",
+     "devices": {
+      "bf209b09a9baaec758qwlo": {
+       "device_id": "bf209b09a9baaec758qwlo",
+       "dps_strings": [
+        "1 (value: -1)",
+        "2 (value: -1)",
+        "3 (value: -1)"
+       ],
+       "enable_debug": false,
+       "entities": [
+        {
+         "friendly_name": "Corridor In",
+         "id": 1,
+         "is_passive_entity": false,
+         "platform": "switch",
+         "restore_on_reconnect": false
+        },
+        {
+         "friendly_name": "Kitchen Light",
+         "id": 2,
+         "is_passive_entity": false,
+         "platform": "switch",
+         "restore_on_reconnect": false
+        },
+        {
+         "friendly_name": "Dining Light",
+         "id": 3,
+         "is_passive_entity": false,
+         "platform": "switch",
+         "restore_on_reconnect": false
+        }
+       ],
+       "friendly_name": "Kitchen Switch",
+       "host": "192.168.1.230",
+       "local_key": "REDACTED",
+       "manual_dps_strings": "1,2,3",
+       "protocol_version": "3.3"
+      },
+      "bf56fdd4378de2203en4qd": {
+       "device_id": "bf56fdd4378de2203en4qd",
+       "dps_strings": [
+        "1 (value: -1)"
+       ],
+       "enable_debug": false,
+       "entities": [
+        {
+         "friendly_name": "Master Bed Light",
+         "id": 1,
+         "is_passive_entity": false,
+         "platform": "switch",
+         "restore_on_reconnect": false
+        }
+       ],
+       "friendly_name": "Master Bed Switch",
+       "host": "192.168.1.221",
+       "local_key": "REDACTED",
+       "manual_dps_strings": "1",
+       "protocol_version": "3.3"
+      },
+      "bf611c20c4806d6bb5y4r8": {
+       "device_id": "bf611c20c4806d6bb5y4r8",
+       "dps_strings": [
+        "1 (value: -1)"
+       ],
+       "enable_debug": false,
+       "entities": [
+        {
+         "friendly_name": "Baby Room Light",
+         "id": 1,
+         "is_passive_entity": false,
+         "platform": "switch",
+         "restore_on_reconnect": false
+        }
+       ],
+       "friendly_name": "Baby Room Switch",
+       "host": "192.168.1.228",
+       "local_key": "REDACTED",
+       "manual_dps_strings": "1",
+       "protocol_version": "3.3"
+      },
+      "bf8a1efb494c37c457nyde": {
+       "device_id": "bf8a1efb494c37c457nyde",
+       "dps_strings": [
+        "1 (value: -1)",
+        "2 (value: -1)"
+       ],
+       "enable_debug": false,
+       "entities": [
+        {
+         "friendly_name": "Laundry",
+         "id": 1,
+         "is_passive_entity": false,
+         "platform": "switch",
+         "restore_on_reconnect": false
+        },
+        {
+         "friendly_name": "Side Door",
+         "id": 2,
+         "is_passive_entity": false,
+         "platform": "switch",
+         "restore_on_reconnect": false
+        }
+       ],
+       "friendly_name": "Laundry Switch",
+       "host": "192.168.1.219",
+       "local_key": "REDACTED",
+       "manual_dps_strings": "1,2",
+       "product_key": "keyjnuy4s3kre7m7",
+       "protocol_version": "3.3"
+      },
+      "bfa44a73af184569ec1pyn": {
+       "device_id": "bfa44a73af184569ec1pyn",
+       "dps_strings": [
+        "1 (value: -1)"
+       ],
+       "enable_debug": false,
+       "entities": [
+        {
+         "friendly_name": "Garage Light",
+         "id": 1,
+         "is_passive_entity": false,
+         "platform": "switch",
+         "restore_on_reconnect": false
+        }
+       ],
+       "friendly_name": "Garage Switch",
+       "host": "192.168.1.217",
+       "local_key": "REDACTED",
+       "manual_dps_strings": "1",
+       "protocol_version": "3.3"
+      },
+      "bfa9c39af471d866e2qwlp": {
+       "device_id": "bfa9c39af471d866e2qwlp",
+       "dps_strings": [
+        "1 (value: -1)",
+        "2 (value: -1)"
+       ],
+       "enable_debug": false,
+       "entities": [
+        {
+         "friendly_name": "Corridor Out",
+         "id": 1,
+         "is_passive_entity": false,
+         "platform": "switch",
+         "restore_on_reconnect": false
+        },
+        {
+         "friendly_name": "Front Door",
+         "id": 2,
+         "is_passive_entity": false,
+         "platform": "switch",
+         "restore_on_reconnect": false
+        }
+       ],
+       "friendly_name": "Front Door Switch",
+       "host": "192.168.1.211",
+       "local_key": "REDACTED",
+       "manual_dps_strings": "1,2",
+       "product_key": "keyjnuy4s3kre7m7",
+       "protocol_version": "3.3"
+      },
+      "bfd2a705472d4aba6e1kjc": {
+       "add_entities": false,
+       "device_id": "bfd2a705472d4aba6e1kjc",
+       "dps_strings": [
+        "1 (value: -1)"
+       ],
+       "enable_debug": false,
+       "entities": [
+        {
+         "friendly_name": "Office Switch",
+         "id": 1,
+         "is_passive_entity": false,
+         "platform": "switch",
+         "restore_on_reconnect": false
+        }
+       ],
+       "friendly_name": "Office Switch",
+       "host": "192.168.1.214",
+       "local_key": "REDACTED",
+       "manual_dps_strings": "1",
+       "protocol_version": "3.4"
+      },
+      "bfdcab8db5de48adcczkvx": {
+       "device_id": "bfdcab8db5de48adcczkvx",
+       "dps_strings": [
+        "1 (value: -1)",
+        "2 (value: -1)"
+       ],
+       "enable_debug": false,
+       "entities": [
+        {
+         "friendly_name": "Lounge Switch",
+         "id": 1,
+         "is_passive_entity": false,
+         "platform": "switch",
+         "restore_on_reconnect": false
+        }
+       ],
+       "friendly_name": "Lounge Switch",
+       "host": "192.168.1.231",
+       "local_key": "REDACTED",
+       "manual_dps_strings": "1,2",
+       "protocol_version": "3.3"
+      },
+      "bff48eb639642f4e58o37z": {
+       "device_id": "bff48eb639642f4e58o37z",
+       "dps_strings": [
+        "1 (value: -1)"
+       ],
+       "enable_debug": false,
+       "entities": [
+        {
+         "friendly_name": "Music Room Switch",
+         "id": 1,
+         "is_passive_entity": false,
+         "platform": "switch",
+         "restore_on_reconnect": false
+        }
+       ],
+       "friendly_name": "Music Room Switch",
+       "host": "192.168.1.215",
+       "local_key": "REDACTED",
+       "manual_dps_strings": "1",
+       "protocol_version": "3.3"
+      }
+     },
+     "no_cloud": true,
+     "region": "eu",
+     "updated_at": "1772337047937",
+     "user_id": "",
+     "username": "localtuya"
+    },
+    "disabled_by": "user",
+    "discovery_keys": {},
+    "domain": "localtuya",
+    "entry_id": "01KJKN1T9Z4WMMFRJS7CV9KMQ0",
+    "minor_version": 1,
+    "modified_at": "2026-03-01T03:50:47.937450+00:00",
+    "options": {},
+    "pref_disable_new_entities": false,
+    "pref_disable_polling": false,
+    "source": "user",
+    "subentries": [],
+    "title": "localtuya",
+    "unique_id": "",
+    "version": 2
+   },
+   {
+    "created_at": "2026-03-02T09:52:54.043050+00:00",
+    "data": {
+     "latitude": -32.3270674,
+     "longitude": 115.8226815
+    },
+    "disabled_by": null,
+    "discovery_keys": {},
+    "domain": "islamic_prayer_times",
+    "entry_id": "01KJPT01ISLAMIC01PRAYER",
+    "minor_version": 2,
+    "modified_at": "2026-03-02T09:53:47.648139+00:00",
+    "options": {
+     "calculation_method": "mwl"
+    },
+    "pref_disable_new_entities": false,
+    "pref_disable_polling": false,
+    "source": "user",
+    "subentries": [],
+    "title": "Home",
+    "unique_id": "-32.3270674-115.8226815",
+    "version": 1
+   },
+   {
+    "created_at": "2026-03-05T02:57:25.679711+00:00",
+    "data": {
+     "app_data": {
+      "push_token": "REDACTED",
+      "push_url": "https://mobile-apps.home-assistant.io/api/sendPushNotification"
+     },
+     "app_id": "io.robbie.HomeAssistant",
+     "app_name": "Home Assistant",
+     "app_version": "2026.2.1 (2026.1766)",
+     "device_id": "DF2928E1-7036-4F1A-A462-742D4C7605F8",
+     "device_name": "Brishti iPhone ",
+     "manufacturer": "Apple",
+     "model": "iPhone15,4",
+     "no_legacy_encryption": true,
+     "os_name": "iOS",
+     "os_version": "26.4",
+     "secret": "REDACTED",
+     "supports_encryption": true,
+     "user_id": "694d223969f04a9a9b0c0e04f9ea023b",
+     "webhook_id": "REDACTED"
+    },
+    "disabled_by": null,
+    "discovery_keys": {},
+    "domain": "mobile_app",
+    "entry_id": "01KJXYVF5FFDDG9EYJM8YR96ZW",
+    "minor_version": 1,
+    "modified_at": "2026-03-05T02:57:25.755718+00:00",
+    "options": {},
+    "pref_disable_new_entities": false,
+    "pref_disable_polling": false,
+    "source": "registration",
+    "subentries": [],
+    "title": "Brishti iPhone ",
+    "unique_id": "io.robbie.HomeAssistant-DF2928E1-7036-4F1A-A462-742D4C7605F8",
+    "version": 1
+   },
+   {
+    "created_at": "2026-03-05T07:12:30.669174+00:00",
+    "data": {
+     "device_unique_id": "50_9a_4c_59_74_d6",
+     "firmware_version": "25.7.7_4",
+     "password": "REDACTED",
+     "tracked_macs": [],
+     "url": "https://10.10.0.1",
+     "username": "93acefba4aa708614104bc583de898bf2a60cc117df43f1905d7c2ad5215567b6a65c37bf6d561c9",
+     "verify_ssl": false
+    },
+    "disabled_by": null,
+    "discovery_keys": {},
+    "domain": "opnsense",
+    "entry_id": "7B131349045F491BAC85FDCF9D",
+    "minor_version": 1,
+    "modified_at": "2026-05-07T11:19:06.239154+00:00",
+    "options": {
+     "device_tracker_enabled": true,
+     "device_tracker_scan_interval": 60,
+     "scan_interval": 30
+    },
+    "pref_disable_new_entities": false,
+    "pref_disable_polling": false,
+    "source": "user",
+    "subentries": [],
+    "title": "OPNsense",
+    "unique_id": "50_9a_4c_59_74_d6",
+    "version": 4
+   },
+   {
+    "created_at": "2026-03-05T13:19:13.980539+00:00",
+    "data": {
+     "server": "Kathel-Home",
+     "server_config": {
+      "token": "REDACTED",
+      "url": "http://10.10.10.101:32400"
+     },
+     "server_id": "a40beec53d9e41dbca8b6ce76c8dc39de0923b06"
+    },
+    "disabled_by": null,
+    "discovery_keys": {},
+    "domain": "plex",
+    "entry_id": "01KJZ2E11W8NTP1677QVY11NYW",
+    "minor_version": 1,
+    "modified_at": "2026-03-05T13:19:13.981074+00:00",
+    "options": {
+     "media_player": {}
+    },
+    "pref_disable_new_entities": false,
+    "pref_disable_polling": false,
+    "source": "user",
+    "subentries": [],
+    "title": "http://10.10.10.101:32400",
+    "unique_id": "a40beec53d9e41dbca8b6ce76c8dc39de0923b06",
+    "version": 1
+   },
+   {
+    "created_at": "2026-03-05T13:24:35.086399+00:00",
+    "data": {
+     "password": "REDACTED",
+     "url": "10.10.10.101:8080",
+     "username": "methel",
+     "verify_ssl": true
+    },
+    "disabled_by": null,
+    "discovery_keys": {},
+    "domain": "qbittorrent",
+    "entry_id": "01KJZ2QTME998ZXM4E9KQM1F38",
+    "minor_version": 1,
+    "modified_at": "2026-03-05T13:24:35.086403+00:00",
+    "options": {},
+    "pref_disable_new_entities": false,
+    "pref_disable_polling": false,
+    "source": "user",
+    "subentries": [],
+    "title": "qBittorrent",
+    "unique_id": null,
+    "version": 1
+   },
+   {
+    "created_at": "2026-03-05T14:21:57.131390+00:00",
+    "data": {
+     "app_data": {
+      "push_token": "REDACTED",
+      "push_url": "https://mobile-apps.home-assistant.io/api/sendPushNotification",
+      "start_live_activity_token": "REDACTED"
+     },
+     "app_id": "io.robbie.HomeAssistant",
+     "app_name": "Home Assistant",
+     "app_version": "2026.9.0 (2026.2874)",
+     "device_id": "A66F60EB-F637-4BA4-9E6F-5CE12A489B95",
+     "device_name": "Methel\u2019s Iphone Air",
+     "manufacturer": "Apple",
+     "model": "iPhone18,4",
+     "no_legacy_encryption": true,
+     "os_name": "iOS",
+     "os_version": "27.0",
+     "secret": "REDACTED",
+     "supports_encryption": true,
+     "user_id": "694d223969f04a9a9b0c0e04f9ea023b",
+     "webhook_id": "REDACTED"
+    },
+    "disabled_by": null,
+    "discovery_keys": {},
+    "domain": "mobile_app",
+    "entry_id": "01KJZ60W0BVJ6HYCKWRRNJJN6C",
+    "minor_version": 1,
+    "modified_at": "2026-09-07T04:34:33.895597+00:00",
+    "options": {},
+    "pref_disable_new_entities": false,
+    "pref_disable_polling": false,
+    "source": "registration",
+    "subentries": [],
+    "title": "Methel\u2019s Iphone Air",
+    "unique_id": "io.robbie.HomeAssistant-A66F60EB-F637-4BA4-9E6F-5CE12A489B95",
+    "version": 1
+   },
+   {
+    "created_at": "2026-03-05T14:30:12.094630+00:00",
+    "data": {
+     "base_path": "/ipp/print",
+     "host": "10.10.30.153",
+     "name": "Brother MFC-L2730DW series",
+     "port": 631,
+     "ssl": false,
+     "uuid": "e3248000-80ce-11db-8000-b4220061b980",
+     "verify_ssl": false
+    },
+    "disabled_by": null,
+    "discovery_keys": {
+     "zeroconf": [
+      {
+       "domain": "zeroconf",
+       "key": [
+        "_ipp._tcp.local.",
+        "Brother MFC-L2730DW series._ipp._tcp.local."
+       ],
+       "version": 1
+      }
+     ]
+    },
+    "domain": "ipp",
+    "entry_id": "01KJZ6FZBYCHB0KHZXYJXBZ1CA",
+    "minor_version": 1,
+    "modified_at": "2026-03-05T14:30:12.094633+00:00",
+    "options": {},
+    "pref_disable_new_entities": false,
+    "pref_disable_polling": false,
+    "source": "zeroconf",
+    "subentries": [],
+    "title": "Brother MFC-L2730DW series",
+    "unique_id": "e3248000-80ce-11db-8000-b4220061b980",
+    "version": 1
+   },
+   {
+    "created_at": "2026-03-13T22:01:55.108032+00:00",
+    "data": {
+     "host": "10.10.30.221",
+     "model_family": "DT",
+     "port": 502
+    },
+    "disabled_by": null,
+    "discovery_keys": {},
+    "domain": "goodwe",
+    "entry_id": "01KKMKGV53561HH02VNEK4M7G3",
+    "minor_version": 2,
+    "modified_at": "2026-03-13T22:01:55.108036+00:00",
+    "options": {},
+    "pref_disable_new_entities": false,
+    "pref_disable_polling": false,
+    "source": "user",
+    "subentries": [],
+    "title": "GoodWe",
+    "unique_id": "53000DSC255S0152",
+    "version": 1
+   },
+   {
+    "created_at": "2026-03-14T00:36:04.013417+00:00",
+    "data": {
+     "auth_implementation": "REDACTED",
+     "cloud_project_id": "ha-nest-488905",
+     "project_id": "7a0fb77b-2315-4215-88ab-79f4f2af91ef",
+     "sdm": {},
+     "subscriber_id_imported": true,
+     "subscription_name": "projects/ha-nest-488905/subscriptions/home-assistant-nest-sub",
+     "token": {
+      "access_token": "REDACTED",
+      "expires_at": 1790760047.3033519,
+      "expires_in": 3599,
+      "refresh_token": "REDACTED",
+      "scope": "https://www.googleapis.com/auth/pubsub https://www.googleapis.com/auth/sdm.service",
+      "token_type": "REDACTED"
+     },
+     "topic_name": "projects/ha-nest-488905/topics/home-assistant-nest"
+    },
+    "disabled_by": null,
+    "discovery_keys": {},
+    "domain": "nest",
+    "entry_id": "01KKMWB39D8NF2PX9XAA98J2MB",
+    "minor_version": 1,
+    "modified_at": "2026-09-30T08:20:48.303424+00:00",
+    "options": {},
+    "pref_disable_new_entities": false,
+    "pref_disable_polling": false,
+    "source": "user",
+    "subentries": [],
+    "title": "SEL, The Ahmeds",
+    "unique_id": "7a0fb77b-2315-4215-88ab-79f4f2af91ef",
+    "version": 1
+   },
+   {
+    "created_at": "2026-03-14T02:30:00+00:00",
+    "data": {
+     "hosts": [
+      "10.10.30.253"
+     ]
+    },
+    "disabled_by": null,
+    "discovery_keys": {},
+    "domain": "sonos",
+    "entry_id": "e4bc69fef1c04b1c809ce0c1bf6a5a13",
+    "minor_version": 1,
+    "modified_at": "2026-03-14T02:30:00+00:00",
+    "options": {},
+    "pref_disable_new_entities": false,
+    "pref_disable_polling": false,
+    "source": "user",
+    "subentries": [],
+    "title": "Sonos",
+    "unique_id": "RINCON_F0F6C1F741B101400",
+    "version": 1
+   },
+   {
+    "created_at": "2026-03-14T08:43:11.207860+00:00",
+    "data": {
+     "alias": "Office Plug",
+     "connection_parameters": {
+      "device_family": "SMART.TAPOPLUG",
+      "encryption_type": "KLAP",
+      "http_port": 80,
+      "https": false,
+      "login_version": 2
+     },
+     "credentials_hash": "i0ivG0kR2iSruCeaG+h0HHxommcHIiSLtj8YRBOci0Y=",
+     "host": "10.10.30.125",
+     "model": "P100",
+     "uses_http": true
+    },
+    "disabled_by": null,
+    "discovery_keys": {},
+    "domain": "tplink",
+    "entry_id": "01KKNR71F77893QGAWSQER1N8N",
+    "minor_version": 5,
+    "modified_at": "2026-03-14T08:43:11.207865+00:00",
+    "options": {},
+    "pref_disable_new_entities": false,
+    "pref_disable_polling": false,
+    "source": "user",
+    "subentries": [],
+    "title": "Office Plug P100",
+    "unique_id": "14:eb:b6:40:7c:40",
+    "version": 1
+   },
+   {
+    "created_at": "2026-03-14T08:43:29.885522+00:00",
+    "data": {
+     "alias": "Corridor Plug",
+     "connection_parameters": {
+      "device_family": "SMART.TAPOPLUG",
+      "encryption_type": "KLAP",
+      "http_port": 80,
+      "https": false,
+      "login_version": 2
+     },
+     "credentials_hash": "i0ivG0kR2iSruCeaG+h0HHxommcHIiSLtj8YRBOci0Y=",
+     "host": "10.10.30.112",
+     "model": "P100",
+     "uses_http": true
+    },
+    "disabled_by": null,
+    "discovery_keys": {},
+    "domain": "tplink",
+    "entry_id": "01KKNR7KPX6MNZ45ND6FJ701VX",
+    "minor_version": 5,
+    "modified_at": "2026-03-14T08:43:29.885527+00:00",
+    "options": {},
+    "pref_disable_new_entities": false,
+    "pref_disable_polling": false,
+    "source": "user",
+    "subentries": [],
+    "title": "Corridor Plug P100",
+    "unique_id": "14:eb:b6:40:7c:3c",
+    "version": 1
+   },
+   {
+    "created_at": "2026-03-14T08:43:55.321268+00:00",
+    "data": {
+     "alias": "Lamp",
+     "connection_parameters": {
+      "device_family": "SMART.TAPOBULB",
+      "encryption_type": "KLAP",
+      "http_port": 80,
+      "https": false,
+      "login_version": 2
+     },
+     "credentials_hash": "i0ivG0kR2iSruCeaG+h0HHxommcHIiSLtj8YRBOci0Y=",
+     "host": "10.10.30.218",
+     "model": "L535",
+     "uses_http": true
+    },
+    "disabled_by": null,
+    "discovery_keys": {},
+    "domain": "tplink",
+    "entry_id": "01KKNR8CHS4H4CVDSHNPA20CZ8",
+    "minor_version": 5,
+    "modified_at": "2026-03-14T08:43:55.321273+00:00",
+    "options": {},
+    "pref_disable_new_entities": false,
+    "pref_disable_polling": false,
+    "source": "user",
+    "subentries": [],
+    "title": "Lamp L535",
+    "unique_id": "10:5a:95:25:2f:e2",
+    "version": 1
+   }
+  ]
+ }
+}

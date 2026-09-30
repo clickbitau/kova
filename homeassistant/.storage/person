@@ -1,0 +1,28 @@
+{
+  "version": 2,
+  "minor_version": 1,
+  "key": "person",
+  "data": {
+    "items": [
+      {
+        "id": "kauser_methel",
+        "name": "Kauser Methel",
+        "user_id": "694d223969f04a9a9b0c0e04f9ea023b",
+        "device_trackers": [
+          "device_tracker.methels_iphone_air",
+          "device_tracker.brishti_iphone"
+        ]
+      },
+      {
+        "id": "tablet",
+        "name": "Tablet",
+        "device_trackers": [
+          "device_tracker.galaxy_tab",
+          "device_tracker.brishti_iphone"
+        ],
+        "user_id": "dc3bb893490e4943a242a41c81412b08",
+        "picture": null
+      }
+    ]
+  }
+}

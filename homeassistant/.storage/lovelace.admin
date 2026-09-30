@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "minor_version": 1,
+  "key": "lovelace.admin",
+  "data": {
+    "config": {
+      "title": "Admin"
+    },
+    "views": [
+      {
+        "title": "Overview",
+        "path": "admin",
+        "icon": "mdi:shield-account",
+        "cards": [
+          {
+            "type": "entities",
+            "entities": [
+              "sensor.sun_next_dawn",
+              "sensor.sun_next_dusk",
+              "sensor.sun_next_midnight",
+              "sensor.sun_next_noon",
+              "sensor.sun_next_rising",
+              "sensor.sun_next_setting",
+              "sensor.sun_solar_elevation",
+              "sensor.sun_solar_azimuth",
+              "sensor.backup_backup_manager_state",
+              "sensor.backup_next_scheduled_automatic_backup",
+              "sensor.backup_last_successful_automatic_backup",
+              "sensor.backup_last_attempted_automatic_backup"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

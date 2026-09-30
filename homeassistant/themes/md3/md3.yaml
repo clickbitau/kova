@@ -1,0 +1,41 @@
+md3:
+  # ─── Background (wallpaper) ───
+  lovelace-background: "center / cover no-repeat url('/local/images/md3/blue-portrait.webp') fixed"
+  # ─── Fonts ───
+  primary-font-family: "'Inter', 'Roboto', sans-serif"
+  ha-font-family-body: var(--primary-font-family)
+  ha-card-header-font-family: var(--primary-font-family)
+  # ─── Text Colors ───
+  primary-text-color: "#e2e2e9"
+  secondary-text-color: "#9a9ba6"
+  text-primary-color: "#e2e2e9"
+  # ─── Background Colors ───
+  primary-background-color: "transparent"
+  secondary-background-color: "#141c2e"
+  # ─── Cards ───
+  card-background-color: "rgba(20, 28, 46, 0.55)"
+  ha-card-background: "rgba(20, 28, 46, 0.55)"
+  ha-card-border-radius: "16px"
+  ha-card-border-color: "rgba(255,255,255,0.06)"
+  ha-card-box-shadow: "none"
+  # ─── Sidebar ───
+  sidebar-background-color: "#0a1628"
+  sidebar-icon-color: "#9a9ba6"
+  sidebar-text-color: "#e2e2e9"
+  sidebar-selected-icon-color: "#c8a86e"
+  sidebar-selected-text-color: "#c8a86e"
+  # ─── Header ───
+  app-header-background-color: "transparent"
+  app-header-text-color: "#e2e2e9"
+  # ─── Accent ───
+  accent-color: "#c8a86e"
+  switch-checked-color: "#c8a86e"
+  # ─── Dividers ───
+  divider-color: "rgba(255,255,255,0.06)"
+  # ─── States ───
+  state-active-color: "#c8a86e"
+  state-light-active-color: "#c8a86e"
+  # ─── Misc ───
+  masonry-view-card-margin: "6px"
+  stack-card-gap: "8px"
+  mdc-ripple-color: "transparent"

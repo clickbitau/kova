@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "minor_version": 2,
+  "key": "repairs.issue_registry",
+  "data": {
+    "issues": [
+      {
+        "created": "2026-02-15T06:40:22.125007+00:00",
+        "dismissed_version": null,
+        "domain": "samsungtv",
+        "is_persistent": false,
+        "issue_id": "deprecated_implicit_wake_on_lan_20:15:de:4f:d0:3c"
+      },
+      {
+        "created": "2026-02-28T13:51:51.288585+00:00",
+        "dismissed_version": null,
+        "domain": "hacs",
+        "is_persistent": false,
+        "issue_id": "restart_required_249381778_tags/v5.2.5"
+      },
+      {
+        "created": "2026-02-28T13:52:33.037971+00:00",
+        "dismissed_version": null,
+        "domain": "hacs",
+        "is_persistent": false,
+        "issue_id": "restart_required_194140521_tags/v2.7.4"
+      },
+      {
+        "created": "2026-03-05T07:10:10.849396+00:00",
+        "dismissed_version": null,
+        "domain": "opnsense",
+        "is_persistent": false,
+        "issue_id": "opnsense-10.10.0.1_device_id_mismatched"
+      },
+      {
+        "created": "2026-03-11T15:02:10.332245+00:00",
+        "dismissed_version": "2026.2.2",
+        "domain": "opnsense",
+        "is_persistent": false,
+        "issue_id": "6c_92_bf_5f_16_ae_device_id_mismatched"
+      },
+      {
+        "created": "2026-04-16T15:33:31.799616+00:00",
+        "dismissed_version": null,
+        "domain": "automation",
+        "is_persistent": false,
+        "issue_id": "automation.midnight_sleep_mode_validation_failed_schema"
+      },
+      {
+        "created": "2026-04-16T15:33:31.803201+00:00",
+        "dismissed_version": null,
+        "domain": "automation",
+        "is_persistent": false,
+        "issue_id": "automation.purifiers_night_mode_validation_failed_schema"
+      },
+      {
+        "created": "2026-05-07T11:17:03.241141+00:00",
+        "dismissed_version": null,
+        "domain": "homeassistant",
+        "is_persistent": false,
+        "issue_id": "config_entry_reauth_vesync_01KHRHC5YW7GD1HG3Q6HV0X61V"
+      },
+      {
+        "created": "2026-05-07T12:46:54.328607+00:00",
+        "dismissed_version": null,
+        "domain": "opnsense",
+        "is_persistent": false,
+        "issue_id": "50_9a_4c_59_74_d6_device_id_mismatched"
+      },
+      {
+        "created": "2026-05-07T16:40:57.406616+00:00",
+        "dismissed_version": null,
+        "domain": "homeassistant",
+        "is_persistent": false,
+        "issue_id": "config_entry_reauth_tuya_01KJ1NB6E7PJ79PTK03BS273W8"
+      },
+      {
+        "created": "2026-05-09T16:03:47.255577+00:00",
+        "dismissed_version": null,
+        "domain": "homeassistant",
+        "is_persistent": false,
+        "issue_id": "config_entry_reauth_plex_01KJZ2E11W8NTP1677QVY11NYW"
+      },
+      {
+        "created": "2026-09-25T16:34:37.956956+00:00",
+        "dismissed_version": null,
+        "domain": "homeassistant",
+        "is_persistent": false,
+        "issue_id": "config_entry_reauth_samsungtv_01KHE8TZ5VH52K82QN67CX04H5"
+      }
+    ]
+  }
+}

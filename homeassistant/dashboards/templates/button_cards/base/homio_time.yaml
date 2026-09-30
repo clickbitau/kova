@@ -1,0 +1,23 @@
+homio_time:
+  template:
+    - homio_default
+  name: |
+    [[[ 
+        const now = new Date();
+        let h = now.getHours();
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        h = h % 12;
+        if (h === 0) h = 12;
+        const m = String(now.getMinutes()).padStart(2, '0');
+        return h + ':' + m + ' ' + ampm;
+    ]]]
+  styles:
+    name:
+      - color: var(--primary-text-color)
+      - letter-spacing: 1px
+      - font-size: 16px
+      - font-weight: 500
+      - justify-self: end
+      - opacity: 0.9
+    card:
+      - background: transparent

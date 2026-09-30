@@ -1,0 +1,2 @@
+shell_command:
+  copy_font: "python3 /opt/homeassistant/copy_font.py"

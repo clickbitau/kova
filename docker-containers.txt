@@ -1,0 +1,25 @@
+Home Assistant (CT 105) - Docker containers as of 2026-09-30
+=============================================================
+
+# Main Home Assistant container
+docker run -d --name homeassistant \
+  --restart unless-stopped \
+  --privileged \
+  --network host \
+  -e TZ=Australia/Perth \
+  -v /opt/homeassistant:/config \
+  -v /run/dbus:/run/dbus:ro \
+  ghcr.io/home-assistant/home-assistant:stable
+# Running version: 2026.2.2
+
+# Matter server container
+docker run -d --name matter-server \
+  --restart unless-stopped \
+  --network host \
+  --security-opt apparmor=unconfined \
+  -v /opt/matter-server:/data \
+  -v /run/dbus:/run/dbus:ro \
+  ghcr.io/home-assistant-libs/python-matter-server:stable
+
+# AirConnect (documented in infra notes, image: 1activegeek/airconnect:latest)
+# Not currently running in CT 105.

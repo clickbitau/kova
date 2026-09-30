@@ -1,0 +1,25 @@
+homio_default:
+  styles:
+    card:
+      - "--mdc-ripple-color": transparent
+      - "-webkit-tap-highlight-color": transparent
+      - position: relative
+      - border: none
+      - border-radius: 0
+      - padding: 0
+      - margin: 0
+      - animation: fadeIn 0.3s ease-in forwards
+      - font-family: "'MonumentValley12', sans-serif"
+  extra_styles: |
+    @font-face {
+      font-family: 'MonumentValley12';
+      src: url('/local/fonts/MonumentValley12-X55o.otf') format('opentype');
+    }
+    @keyframes fadeIn {
+      from {
+        opacity: 0
+      }
+      to {
+        opacity: 1
+      }
+    }

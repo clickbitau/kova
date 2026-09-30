@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "minor_version": 1,
+  "key": "frontend.user_data_694d223969f04a9a9b0c0e04f9ea023b",
+  "data": {
+    "language": {
+      "language": "en",
+      "number_format": "language",
+      "time_format": "language",
+      "date_format": "language",
+      "time_zone": "local",
+      "first_weekday": "language"
+    },
+    "core": {
+      "showAdvanced": true,
+      "selectedTheme": {
+        "theme": "dark_modern",
+        "dark": true
+      },
+      "default_panel": "lovelace"
+    }
+  }
+}

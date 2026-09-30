@@ -1,0 +1,60 @@
+- type: custom:button-card
+  template:
+    - homio_nav_button
+  name: Living
+  variables:
+    path: /dashboard-homio/living
+- type: custom:button-card
+  template:
+    - homio_nav_button
+  name: Bedroom
+  variables:
+    path: /dashboard-homio/bedroom
+- type: custom:button-card
+  template:
+    - homio_nav_button
+  name: Kids
+  variables:
+    path: /dashboard-homio/kids
+- type: custom:button-card
+  template:
+    - homio_nav_button
+  name: Kitchen
+  variables:
+    path: /dashboard-homio/kitchen
+- type: custom:button-card
+  template:
+    - homio_nav_button
+  name: Music
+  variables:
+    path: /dashboard-homio/music
+- type: custom:button-card
+  template:
+    - homio_nav_button
+  name: Office
+  variables:
+    path: /dashboard-homio/office
+- type: custom:button-card
+  template:
+    - homio_nav_button
+  name: Outdoor
+  variables:
+    path: /dashboard-homio/outdoor
+- type: custom:button-card
+  template:
+    - homio_nav_button
+  name: Solar
+  variables:
+    path: /dashboard-homio/solar
+- type: custom:button-card
+  template:
+    - homio_nav_button
+  name: Server
+  variables:
+    path: /dashboard-homio/server
+- type: custom:button-card
+  template:
+    - homio_nav_button
+  name: Prayer
+  variables:
+    path: /dashboard-homio/prayer

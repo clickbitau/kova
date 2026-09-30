@@ -1,0 +1,6 @@
+grid-template-columns: 1fr
+grid-column-gap: 0px
+margin: 0
+padding: env(safe-area-inset-top, 35px) 0 0 0
+height: 100vh
+position: relative

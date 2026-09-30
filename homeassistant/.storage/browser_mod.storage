@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "minor_version": 1,
+  "key": "browser_mod.storage",
+  "data": {
+    "browsers": {},
+    "version": "2.7.4",
+    "settings": {
+      "hideSidebar": null,
+      "hideHeader": null,
+      "defaultPanel": null,
+      "defaultAction": null,
+      "sidebarPanelOrder": null,
+      "sidebarHiddenPanels": null,
+      "sidebarTitle": null,
+      "faviconTemplate": null,
+      "titleTemplate": null,
+      "hideInteractIcon": null,
+      "autoRegister": null,
+      "lockRegister": null,
+      "saveScreenState": null,
+      "overlayIcon": null,
+      "fullInteraction": null,
+      "kioskMode": null,
+      "cameraResolution": null
+    },
+    "user_settings": {}
+  }
+}

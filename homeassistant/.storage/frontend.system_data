@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "minor_version": 1,
+  "key": "frontend.system_data",
+  "data": {
+    "core": {
+      "onboarded_version": "2026.2.2",
+      "onboarded_date": "2026-02-14T14:25:41.983Z"
+    },
+    "home": {
+      "favorite_entities": [
+        "sensor.methels_iphone_air_battery_state",
+        "media_player.master_room_speaker"
+      ]
+    }
+  }
+}

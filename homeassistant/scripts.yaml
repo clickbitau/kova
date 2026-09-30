@@ -1,0 +1,211 @@
+good_night:
+  alias: Good Night
+  description: Bedtime routine - ambient lights only, stop all media
+  icon: mdi:weather-night
+  sequence:
+  - target:
+      entity_id:
+      - light.lounge_switch_switch_2
+      - light.kitchen_switch_switch_1
+      - light.kitchen_switch_switch_2
+      - light.kitchen_switch_switch_3
+      - light.office_switch_switch_1
+      - light.smart_lighting_3
+      - light.music_room_switch_switch_1
+      - light.baby_room_switch_switch_1
+      - light.lounge_switch_switch_1
+      - light.front_door_switch_switch_1
+      - light.front_door_switch_switch_2
+      - light.laundry_switch_switch_1
+      - light.laundry_switch_switch_2
+      - light.garage_switch_switch_1
+    action: light.turn_off
+  - target:
+      entity_id: light.lamp
+    data:
+      brightness: 25
+      color_temp_kelvin: 2700
+    action: light.turn_on
+  - target:
+      entity_id: light.smart_lighting_2
+    action: light.turn_off
+  - target:
+      entity_id: light.smart_lighting
+    data:
+      brightness: 10
+    action: light.turn_on
+  # Stop any media playing
+  - target:
+      entity_id:
+      - media_player.living_room_display
+      - media_player.music_room_speaker
+      - media_player.guest_room_speaker
+      - media_player.baby_room_speaker
+    action: media_player.media_stop
+  - target:
+      entity_id:
+      - fan.lounge_purifier
+      - fan.master_bed_purifier
+    data:
+      preset_mode: sleep
+    action: fan.set_preset_mode
+  mode: single
+movie_mode:
+  alias: Movie Mode
+  description: Cinema vibes - dim ambient lighting, TV-ready
+  icon: mdi:movie-open
+  sequence:
+  # Turn off distracting lights
+  - target:
+      entity_id:
+      - light.lounge_switch_switch_2
+      - light.kitchen_switch_switch_2
+      - light.kitchen_switch_switch_3
+      - light.office_switch_switch_1
+      - light.smart_lighting_3
+      - light.kitchen_switch_switch_1
+      - light.front_door_switch_switch_1
+      - light.music_room_switch_switch_1
+    action: light.turn_off
+  # Warm dim lamp for ambient
+  - target:
+      entity_id: light.lamp
+    data:
+      brightness_pct: 8
+      color_temp_kelvin: 2500
+    action: light.turn_on
+  # Soft TV backlight
+  - target:
+      entity_id: light.smart_lighting_2
+    data:
+      brightness_pct: 12
+    action: light.turn_on
+  # Purifiers to quiet
+  - target:
+      entity_id:
+      - fan.lounge_purifier
+      - fan.master_bed_purifier
+    data:
+      preset_mode: sleep
+    action: fan.set_preset_mode
+  mode: single
+  description: ''
+date_mode:
+  alias: Date Mode
+  description: Romantic ambiance - warm lighting + soft music
+  icon: mdi:heart
+  sequence:
+  # Turn off harsh lights
+  - target:
+      entity_id:
+      - light.lounge_switch_switch_2
+      - light.kitchen_switch_switch_2
+      - light.office_switch_switch_1
+      - light.smart_lighting_3
+      - light.kitchen_switch_switch_1
+      - light.front_door_switch_switch_1
+      - light.music_room_switch_switch_1
+    action: light.turn_off
+  # Warm romantic lamp glow
+  - target:
+      entity_id: light.lamp
+    data:
+      brightness_pct: 30
+      rgb_color:
+      - 255
+      - 140
+      - 100
+    action: light.turn_on
+  # Soft TV unit backlight
+  - target:
+      entity_id: light.smart_lighting_2
+    data:
+      brightness_pct: 20
+    action: light.turn_on
+  # Dining light on for dinner
+  - target:
+      entity_id: light.kitchen_switch_switch_3
+    action: light.turn_on
+  # Play romantic/jazz music on living room speaker
+  - target:
+      entity_id: media_player.living_room_display
+    data:
+      media_content_id: https://streams.radio.co/se1a320b47/listen
+      media_content_type: music
+    action: media_player.play_media
+  - delay:
+      seconds: 3
+  - target:
+      entity_id: media_player.living_room_display
+    data:
+      volume_level: 0.25
+    action: media_player.volume_set
+  # Purifiers quiet
+  - target:
+      entity_id:
+      - fan.lounge_purifier
+      - fan.master_bed_purifier
+    data:
+      preset_mode: sleep
+    action: fan.set_preset_mode
+  mode: single
+  description: ''
+party_mode:
+  alias: Party Mode
+  description: Full energy - all lights vibrant colors + upbeat music
+  icon: mdi:party-popper
+  sequence:
+  # All room lights ON
+  - target:
+      entity_id:
+      - light.lounge_switch_switch_2
+      - light.kitchen_switch_switch_2
+      - light.kitchen_switch_switch_3
+      - light.music_room_switch_switch_1
+    action: light.turn_on
+  # Lamp - vibrant blue party color at full
+  - target:
+      entity_id: light.lamp
+    data:
+      brightness_pct: 100
+      rgb_color:
+      - 0
+      - 150
+      - 255
+    action: light.turn_on
+  # TV unit LED strip full brightness
+  - target:
+      entity_id: light.smart_lighting_2
+    data:
+      brightness_pct: 100
+    action: light.turn_on
+  # Office LED strip - purple party accent
+  - target:
+      entity_id: light.smart_lighting_3
+    data:
+      brightness_pct: 100
+    action: light.turn_on
+  # Play upbeat music on ALL speakers
+  - target:
+      entity_id: media_player.home_speaker_group
+    data:
+      media_content_id: https://streams.radio.co/s5c5da6a36/listen
+      media_content_type: music
+    action: media_player.play_media
+  - delay:
+      seconds: 3
+  - target:
+      entity_id: media_player.home_speaker_group
+    data:
+      volume_level: 0.50
+    action: media_player.volume_set
+  # Purifiers to auto (they'll be drowned out by music anyway)
+  - target:
+      entity_id:
+      - fan.lounge_purifier
+      - fan.master_bed_purifier
+    data:
+      preset_mode: auto
+    action: fan.set_preset_mode
+  mode: single
+  description: ''

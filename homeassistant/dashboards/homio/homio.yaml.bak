@@ -1,0 +1,956 @@
+kiosk_mode:
+  admin_settings:
+    hide_header: true
+    hide_sidebar: true
+  non_admin_settings:
+    hide_header: true
+    hide_sidebar: true
+
+button_card_templates: !include_dir_merge_named /config/dashboards/templates/button_cards
+
+views:
+  # ─── LIVING ROOM ───
+  - type: custom:grid-layout
+    title: living
+    path: living
+    theme: homio
+    layout: !include /config/dashboards/templates/includes/homio_screen_layout.yaml
+    cards:
+      - type: custom:button-card
+        variables:
+          image: living
+          image_position: center center
+          show_temp: true
+          temp_sensor: sensor.home_temperature
+          show_humid: true
+          humid_sensor: sensor.home_humidity
+        template:
+          - homio_room
+        name: Living Room
+      - type: custom:layout-card
+        layout_type: custom:grid-layout
+        layout: !include /config/dashboards/templates/includes/homio_entity_layout.yaml
+        cards:
+          - type: custom:button-card
+            variables:
+              icon: pendent
+            template:
+              - homio_light
+            entity: light.lounge_switch_switch_2
+            name: Lounge
+          - type: custom:button-card
+            variables:
+              icon: plug
+            template:
+              - homio_light
+            entity: light.smart_lighting_2
+            name: TV LED
+          - type: custom:button-card
+            variables:
+              icon: plug
+            template:
+              - homio_light
+            entity: light.smart_multicolor_bulb
+            name: Lamp
+          - type: custom:button-card
+            variables:
+              icon: dehumidifier
+            template:
+              - homio_entity
+            entity: fan.lounge_purifier
+            name: Purifier
+            tap_action:
+              action: toggle
+          - type: custom:button-card
+            entity: media_player.bedroom_oled_qa55s90dawxxy
+            name: Samsung TV
+            template:
+              - homio_entity
+            show_entity_picture: false
+            icon: mdi:television
+            tap_action:
+              action: more-info
+            styles:
+              icon:
+                - color: white
+                - width: 30px
+                - height: 30px
+          - type: custom:button-card
+            variables:
+              icon: access_point
+            template:
+              - homio_entity
+            entity: media_player.living_room_display
+            name: Nest Hub
+            tap_action:
+              action: more-info
+          - type: picture-entity
+            entity: camera.living_room
+            name: Nest Hub Cam
+            show_state: false
+            camera_view: live
+            card_mod:
+              style: >
+                ha-card {
+                  width: 260px !important;
+                  height: 170px !important;
+                  border-radius: 20px !important;
+                  overflow: hidden !important;
+                  scroll-snap-align: start;
+                  background: rgba(255,255,255,0.1) !important;
+                  backdrop-filter: blur(12px);
+                }
+                img {
+                  object-fit: cover !important;
+                  height: 100% !important;
+                }
+          - type: picture-entity
+            entity: camera.living_room_camera
+            name: Living Cam
+            show_state: false
+            camera_view: live
+            card_mod:
+              style: >
+                ha-card {
+                  width: 260px !important;
+                  height: 170px !important;
+                  border-radius: 20px !important;
+                  overflow: hidden !important;
+                  scroll-snap-align: start;
+                  background: rgba(255,255,255,0.1) !important;
+                  backdrop-filter: blur(12px);
+                }
+                img {
+                  object-fit: cover !important;
+                  height: 100% !important;
+                }
+
+  # ─── BEDROOM ───
+  - type: custom:grid-layout
+    title: bedroom
+    path: bedroom
+    theme: homio
+    layout: !include /config/dashboards/templates/includes/homio_screen_layout.yaml
+    cards:
+      - type: custom:button-card
+        variables:
+          image: bedroom
+          image_position: center center
+          show_temp: true
+          temp_sensor: sensor.home_temperature
+          show_humid: true
+          humid_sensor: sensor.home_humidity
+        template:
+          - homio_room
+        name: Bedroom
+      - type: custom:layout-card
+        layout_type: custom:grid-layout
+        layout: !include /config/dashboards/templates/includes/homio_entity_layout.yaml
+        cards:
+          - type: custom:button-card
+            variables:
+              icon: pendent
+            template:
+              - homio_light
+            entity: switch.wb01_2_switch_1
+            name: Main Light
+          - type: custom:button-card
+            variables:
+              icon: plug
+            template:
+              - homio_light
+            entity: light.smart_lighting
+            name: Bed LED
+          - type: custom:button-card
+            variables:
+              icon: plug
+            template:
+              - homio_light
+            entity: light.lamp
+            name: Floor Lamp
+          - type: custom:button-card
+            variables:
+              icon: dehumidifier
+            template:
+              - homio_entity
+            entity: fan.master_bed_purifier
+            name: Purifier
+            tap_action:
+              action: toggle
+          - type: custom:button-card
+            variables:
+              icon: access_point
+            template:
+              - homio_entity
+            entity: media_player.master_room_speaker
+            name: Speaker
+            tap_action:
+              action: more-info
+
+  # ─── KIDS ROOM ───
+  - type: custom:grid-layout
+    title: kids
+    path: kids
+    theme: homio
+    layout: !include /config/dashboards/templates/includes/homio_screen_layout.yaml
+    cards:
+      - type: custom:button-card
+        variables:
+          image: kids
+          image_position: center center
+          show_temp: true
+          temp_sensor: sensor.home_temperature
+          show_humid: true
+          humid_sensor: sensor.home_humidity
+        template:
+          - homio_room
+        name: Kids Room
+      - type: custom:layout-card
+        layout_type: custom:grid-layout
+        layout: !include /config/dashboards/templates/includes/homio_entity_layout.yaml
+        cards:
+          - type: custom:button-card
+            variables:
+              icon: pendent
+            template:
+              - homio_light
+            entity: switch.wb01_switch_1
+            name: Kids Light
+          - type: custom:button-card
+            variables:
+              icon: access_point
+            template:
+              - homio_entity
+            entity: media_player.baby_room_speaker
+            name: Speaker
+            tap_action:
+              action: more-info
+
+  # ─── KITCHEN ───
+  - type: custom:grid-layout
+    title: kitchen
+    path: kitchen
+    theme: homio
+    layout: !include /config/dashboards/templates/includes/homio_screen_layout.yaml
+    cards:
+      - type: custom:button-card
+        variables:
+          image: kitchen
+          image_position: center center
+          show_temp: true
+          temp_sensor: sensor.home_temperature
+        template:
+          - homio_room
+        name: Kitchen
+      - type: custom:layout-card
+        layout_type: custom:grid-layout
+        layout: !include /config/dashboards/templates/includes/homio_entity_layout.yaml
+        cards:
+          - type: custom:button-card
+            variables:
+              icon: pendent
+            template:
+              - homio_light
+            entity: switch.smart_switch_switch_2
+            name: Kitchen
+          - type: custom:button-card
+            variables:
+              icon: pendent
+            template:
+              - homio_light
+            entity: switch.smart_switch_switch_3
+            name: Dining
+          - type: custom:button-card
+            variables:
+              icon: door
+            template:
+              - homio_light
+            entity: switch.smart_switch_switch_1
+            name: Corridor In
+          - type: custom:button-card
+            variables:
+              icon: door
+            template:
+              - homio_light
+            entity: switch.2_gang_wi_fi_touch_switch_2_switch_1
+            name: Corridor Out
+          - type: custom:button-card
+            variables:
+              icon: plug
+            template:
+              - homio_entity
+            entity: switch.corridor_plug
+            name: Corridor Plug
+            tap_action:
+              action: toggle
+
+  # ─── MUSIC ROOM ───
+  - type: custom:grid-layout
+    title: music
+    path: music
+    theme: homio
+    layout: !include /config/dashboards/templates/includes/homio_screen_layout.yaml
+    cards:
+      - type: custom:button-card
+        variables:
+          image: music
+          image_position: center center
+          show_temp: true
+          temp_sensor: sensor.home_temperature
+        template:
+          - homio_room
+        name: Music Room
+      - type: custom:layout-card
+        layout_type: custom:grid-layout
+        layout: !include /config/dashboards/templates/includes/homio_entity_layout.yaml
+        cards:
+          - type: custom:button-card
+            variables:
+              icon: pendent
+            template:
+              - homio_light
+            entity: light.music_room_switch_switch_1
+            name: Music Light
+          - type: custom:button-card
+            variables:
+              icon: access_point
+            template:
+              - homio_entity
+            entity: media_player.music_room_speaker
+            name: Speaker
+            tap_action:
+              action: more-info
+          - type: custom:button-card
+            variables:
+              icon: access_point
+            template:
+              - homio_entity
+            entity: media_player.guest_room_speaker
+            name: Guest Speaker
+            tap_action:
+              action: more-info
+          - type: custom:button-card
+            variables:
+              icon: surround_sound
+            template:
+              - homio_entity
+            entity: media_player.office
+            name: Sonos Ray
+            tap_action:
+              action: more-info
+
+  # ─── OFFICE ───
+  - type: custom:grid-layout
+    title: office
+    path: office
+    theme: homio
+    layout: !include /config/dashboards/templates/includes/homio_screen_layout.yaml
+    cards:
+      - type: custom:button-card
+        variables:
+          image: office
+          image_position: center center
+          show_temp: true
+          temp_sensor: sensor.home_temperature
+        template:
+          - homio_room
+        name: Office
+      - type: custom:layout-card
+        layout_type: custom:grid-layout
+        layout: !include /config/dashboards/templates/includes/homio_entity_layout.yaml
+        cards:
+          - type: custom:button-card
+            variables:
+              icon: pendent
+            template:
+              - homio_light
+            entity: light.office_switch_switch_1
+            name: Office Light
+          - type: custom:button-card
+            variables:
+              icon: plug
+            template:
+              - homio_light
+            entity: light.smart_lighting_3
+            name: Desk LED
+          - type: picture-entity
+            entity: camera.office_camera
+            name: Camera
+            show_state: false
+            camera_view: live
+            card_mod:
+              style: >
+                ha-card {
+                  width: 260px !important;
+                  height: 170px !important;
+                  border-radius: 20px !important;
+                  overflow: hidden !important;
+                  scroll-snap-align: start;
+                  background: rgba(255,255,255,0.1) !important;
+                  backdrop-filter: blur(12px);
+                }
+                img {
+                  object-fit: cover !important;
+                  height: 100% !important;
+                }
+
+  # ─── OUTDOOR ───
+  - type: custom:grid-layout
+    title: outdoor
+    path: outdoor
+    theme: homio
+    layout: !include /config/dashboards/templates/includes/homio_screen_layout.yaml
+    cards:
+      - type: custom:button-card
+        variables:
+          image: outdoor
+          image_position: center center
+          show_temp: true
+          temp_sensor: sensor.home_temperature
+          show_humid: true
+          humid_sensor: sensor.home_humidity
+        template:
+          - homio_room
+        name: Outdoor
+      - type: custom:layout-card
+        layout_type: custom:grid-layout
+        layout: !include /config/dashboards/templates/includes/homio_entity_layout.yaml
+        cards:
+          - type: custom:button-card
+            variables:
+              icon: pendent
+            template:
+              - homio_light
+            entity: light.lounge_switch_switch_1
+            name: Backyard
+          - type: custom:button-card
+            variables:
+              icon: door
+            template:
+              - homio_light
+            entity: switch.2_gang_wi_fi_touch_switch_2_switch_2
+            name: Front Door
+          - type: custom:button-card
+            variables:
+              icon: plug
+            template:
+              - homio_light
+            entity: switch.2_gang_wi_fi_touch_switch_switch_1
+            name: Laundry
+          - type: custom:button-card
+            variables:
+              icon: door
+            template:
+              - homio_light
+            entity: light.garage_switch_switch_1
+            name: Garage
+          - type: custom:button-card
+            variables:
+              icon: access_point
+            template:
+              - homio_entity
+            entity: event.front_door_doorbell_chime
+            name: Doorbell
+            icon: mdi:doorbell-video
+            tap_action:
+              action: more-info
+            styles:
+              icon:
+                - color: white
+                - width: 30px
+                - height: 30px
+          - type: picture-entity
+            entity: camera.front_door_doorbell
+            name: Front Door
+            show_state: false
+            camera_view: live
+            card_mod:
+              style: >
+                ha-card {
+                  width: 260px !important;
+                  height: 170px !important;
+                  border-radius: 20px !important;
+                  overflow: hidden !important;
+                  scroll-snap-align: start;
+                  background: rgba(255,255,255,0.1) !important;
+                  backdrop-filter: blur(12px);
+                }
+                img {
+                  object-fit: cover !important;
+                  height: 100% !important;
+                }
+          - type: picture-entity
+            entity: camera.garage_camera
+            name: Garage Cam
+            show_state: false
+            camera_view: live
+            card_mod:
+              style: >
+                ha-card {
+                  width: 260px !important;
+                  height: 170px !important;
+                  border-radius: 20px !important;
+                  overflow: hidden !important;
+                  scroll-snap-align: start;
+                  background: rgba(255,255,255,0.1) !important;
+                  backdrop-filter: blur(12px);
+                }
+                img {
+                  object-fit: cover !important;
+                  height: 100% !important;
+                }
+
+  # ─── SOLAR ───
+  - type: custom:grid-layout
+    title: solar
+    path: solar
+    theme: homio
+    layout: !include /config/dashboards/templates/includes/homio_screen_layout.yaml
+    cards:
+      - type: custom:button-card
+        variables:
+          image: solar
+          image_position: center center
+          show_temp: true
+          temp_sensor: sensor.goodwe_solar_inverter_inverter_temperature
+        template:
+          - homio_room
+        name: Solar
+      - type: custom:layout-card
+        layout_type: custom:grid-layout
+        layout: !include /config/dashboards/templates/includes/homio_entity_layout.yaml
+        cards:
+          # Hero: Current power output with accent styling
+          - type: custom:button-card
+            entity: sensor.goodwe_solar_inverter_active_power
+            name: Power Now
+            show_state: true
+            show_entity_picture: false
+            icon: mdi:flash
+            template:
+              - homio_default
+            tap_action:
+              action: more-info
+            styles:
+              card:
+                - background: "rgba(255,183,0,0.25)"
+                - backdrop-filter: blur(12px)
+                - height: 170px
+                - padding-left: 40px
+                - padding-right: 40px
+                - scroll-snap-align: start
+                - border: "1px solid rgba(255,183,0,0.3)"
+              name:
+                - color: var(--primary-text-color)
+                - font-size: 14px
+                - font-weight: 600
+                - justify-self: start
+                - text-transform: uppercase
+                - letter-spacing: 2px
+                - opacity: 0.7
+              state:
+                - color: "rgba(255,183,0,1)"
+                - font-size: 28px
+                - justify-self: start
+                - font-weight: 700
+              grid:
+                - grid-template-columns: 1fr min-content
+                - grid-column-gap: 20px
+                - grid-template-rows: min-content
+                - grid-template-areas: '"n i" "s i"'
+                - place-content: center
+              icon:
+                - color: "rgba(255,183,0,0.8)"
+                - width: 36px
+                - height: 36px
+          # Today's generation
+          - type: custom:button-card
+            entity: sensor.goodwe_solar_inverter_today_s_pv_generation
+            name: Today
+            template:
+              - homio_entity
+            show_entity_picture: false
+            icon: mdi:solar-power
+            tap_action:
+              action: more-info
+            styles:
+              icon:
+                - color: white
+                - width: 30px
+                - height: 30px
+          # Total generation
+          - type: custom:button-card
+            entity: sensor.goodwe_solar_inverter_total_pv_generation
+            name: Lifetime
+            template:
+              - homio_entity
+            show_entity_picture: false
+            icon: mdi:counter
+            tap_action:
+              action: more-info
+            styles:
+              icon:
+                - color: white
+                - width: 30px
+                - height: 30px
+          # PV1 Power
+          - type: custom:button-card
+            entity: sensor.goodwe_solar_inverter_pv1_power
+            name: "String 1"
+            template:
+              - homio_entity
+            show_entity_picture: false
+            icon: mdi:solar-panel
+            tap_action:
+              action: more-info
+            styles:
+              icon:
+                - color: white
+                - width: 30px
+                - height: 30px
+          # PV2 Power
+          - type: custom:button-card
+            entity: sensor.goodwe_solar_inverter_pv2_power
+            name: "String 2"
+            template:
+              - homio_entity
+            show_entity_picture: false
+            icon: mdi:solar-panel
+            tap_action:
+              action: more-info
+            styles:
+              icon:
+                - color: white
+                - width: 30px
+                - height: 30px
+          # Grid voltage
+          - type: custom:button-card
+            entity: sensor.goodwe_solar_inverter_on_grid_l1_voltage
+            name: Grid V
+            template:
+              - homio_entity
+            show_entity_picture: false
+            icon: mdi:transmission-tower
+            tap_action:
+              action: more-info
+            styles:
+              icon:
+                - color: white
+                - width: 30px
+                - height: 30px
+          # Work mode
+          - type: custom:button-card
+            entity: sensor.goodwe_solar_inverter_work_mode
+            name: Status
+            template:
+              - homio_entity
+            show_entity_picture: false
+            icon: mdi:information-outline
+            tap_action:
+              action: more-info
+            state:
+              - value: "Normal"
+                styles:
+                  card:
+                    - background: "rgba(76,175,80,0.3)"
+            styles:
+              icon:
+                - color: white
+                - width: 30px
+                - height: 30px
+
+  # ─── SERVER ───
+  - type: custom:grid-layout
+    title: server
+    path: server
+    theme: homio
+    layout: !include /config/dashboards/templates/includes/homio_screen_layout.yaml
+    cards:
+      - type: custom:button-card
+        variables:
+          image: server
+          image_position: center center
+        template:
+          - homio_room
+        name: Server
+      - type: custom:layout-card
+        layout_type: custom:grid-layout
+        layout: !include /config/dashboards/templates/includes/homio_entity_layout.yaml
+        cards:
+          # OPNsense CPU - accent styling for primary metric
+          - type: custom:button-card
+            entity: sensor.opnsense_cpu_usage
+            name: CPU
+            show_state: true
+            show_entity_picture: false
+            icon: mdi:cpu-64-bit
+            template:
+              - homio_default
+            tap_action:
+              action: more-info
+            styles:
+              card:
+                - background: "rgba(33,150,243,0.25)"
+                - backdrop-filter: blur(12px)
+                - height: 170px
+                - padding-left: 40px
+                - padding-right: 40px
+                - scroll-snap-align: start
+                - border: "1px solid rgba(33,150,243,0.3)"
+              name:
+                - color: var(--primary-text-color)
+                - font-size: 14px
+                - font-weight: 600
+                - justify-self: start
+                - text-transform: uppercase
+                - letter-spacing: 2px
+                - opacity: 0.7
+              state:
+                - color: "rgba(33,150,243,1)"
+                - font-size: 28px
+                - justify-self: start
+                - font-weight: 700
+              grid:
+                - grid-template-columns: 1fr min-content
+                - grid-column-gap: 20px
+                - grid-template-rows: min-content
+                - grid-template-areas: '"n i" "s i"'
+                - place-content: center
+              icon:
+                - color: "rgba(33,150,243,0.8)"
+                - width: 36px
+                - height: 36px
+          # Memory
+          - type: custom:button-card
+            entity: sensor.opnsense_memory_used_percentage
+            name: Memory
+            template:
+              - homio_entity
+            show_entity_picture: false
+            icon: mdi:memory
+            tap_action:
+              action: more-info
+            styles:
+              icon:
+                - color: white
+                - width: 30px
+                - height: 30px
+          # WAN Down
+          - type: custom:button-card
+            entity: sensor.opnsense_interface_wan_inbytes_kilobytes_per_second
+            name: WAN Down
+            template:
+              - homio_entity
+            show_entity_picture: false
+            icon: mdi:download-network
+            tap_action:
+              action: more-info
+            styles:
+              icon:
+                - color: white
+                - width: 30px
+                - height: 30px
+          # WAN Up
+          - type: custom:button-card
+            entity: sensor.opnsense_interface_wan_outbytes_kilobytes_per_second
+            name: WAN Up
+            template:
+              - homio_entity
+            show_entity_picture: false
+            icon: mdi:upload-network
+            tap_action:
+              action: more-info
+            styles:
+              icon:
+                - color: white
+                - width: 30px
+                - height: 30px
+          # qBittorrent download speed
+          - type: custom:button-card
+            entity: sensor.qbittorrent_download_speed
+            name: Torrents
+            template:
+              - homio_entity
+            show_entity_picture: false
+            icon: mdi:download-circle
+            tap_action:
+              action: more-info
+            styles:
+              icon:
+                - color: white
+                - width: 30px
+                - height: 30px
+          # Active torrents
+          - type: custom:button-card
+            entity: sensor.qbittorrent_active_torrents
+            name: Active
+            template:
+              - homio_entity
+            show_entity_picture: false
+            icon: mdi:progress-download
+            tap_action:
+              action: more-info
+            styles:
+              icon:
+                - color: white
+                - width: 30px
+                - height: 30px
+          # Plex server
+          - type: custom:button-card
+            entity: sensor.kathel_home
+            name: Plex
+            template:
+              - homio_entity
+            show_entity_picture: false
+            icon: mdi:plex
+            tap_action:
+              action: more-info
+            styles:
+              icon:
+                - color: white
+                - width: 30px
+                - height: 30px
+
+  # ─── PRAYER ───
+  - type: custom:grid-layout
+    title: prayer
+    path: prayer
+    theme: homio
+    layout: !include /config/dashboards/templates/includes/homio_screen_layout.yaml
+    cards:
+      - type: custom:button-card
+        variables:
+          image: prayer
+          image_position: center center
+        template:
+          - homio_room
+        name: Prayer
+      - type: custom:layout-card
+        layout_type: custom:grid-layout
+        layout: !include /config/dashboards/templates/includes/homio_entity_layout.yaml
+        cards:
+          # Fajr
+          - type: custom:button-card
+            entity: sensor.islamic_prayer_times_fajr_prayer
+            name: Fajr
+            template:
+              - homio_entity
+            show_entity_picture: false
+            icon: mdi:weather-night
+            tap_action:
+              action: more-info
+            styles:
+              card:
+                - background: >
+                    [[[
+                      const now = new Date();
+                      const t = states['sensor.islamic_prayer_times_fajr_prayer'].state;
+                      const [h,m] = t.split(':');
+                      const prayer = new Date(); prayer.setHours(h,m,0);
+                      const next = states['sensor.islamic_prayer_times_sunrise_time'].state;
+                      const [nh,nm] = next.split(':');
+                      const nextP = new Date(); nextP.setHours(nh,nm,0);
+                      return (now >= prayer && now < nextP) ? "rgba(255,183,0,0.35)" : "rgba(255,255,255,0.1)";
+                    ]]]
+                - backdrop-filter: blur(12px)
+                - height: 170px
+                - padding-left: 40px
+                - padding-right: 40px
+                - scroll-snap-align: start
+              icon:
+                - color: white
+                - width: 30px
+                - height: 30px
+              name:
+                - color: var(--primary-text-color)
+                - font-size: 16px
+                - font-weight: 600
+                - justify-self: start
+                - margin-bottom: 5px
+              state:
+                - color: var(--primary-text-color)
+                - font-size: 22px
+                - justify-self: start
+                - font-weight: 700
+                - opacity: 0.9
+              grid:
+                - grid-template-columns: 1fr min-content
+                - grid-column-gap: 20px
+                - grid-template-rows: min-content
+                - grid-template-areas: '"n i" "s i"'
+                - place-content: center
+          # Sunrise
+          - type: custom:button-card
+            entity: sensor.islamic_prayer_times_sunrise_time
+            name: Sunrise
+            template:
+              - homio_entity
+            show_entity_picture: false
+            icon: mdi:weather-sunset-up
+            tap_action:
+              action: more-info
+            styles:
+              icon:
+                - color: white
+                - width: 30px
+                - height: 30px
+          # Dhuhr
+          - type: custom:button-card
+            entity: sensor.islamic_prayer_times_dhuhr_prayer
+            name: Dhuhr
+            template:
+              - homio_entity
+            show_entity_picture: false
+            icon: mdi:white-balance-sunny
+            tap_action:
+              action: more-info
+            styles:
+              icon:
+                - color: white
+                - width: 30px
+                - height: 30px
+          # Asr
+          - type: custom:button-card
+            entity: sensor.islamic_prayer_times_asr_prayer
+            name: Asr
+            template:
+              - homio_entity
+            show_entity_picture: false
+            icon: mdi:weather-partly-cloudy
+            tap_action:
+              action: more-info
+            styles:
+              icon:
+                - color: white
+                - width: 30px
+                - height: 30px
+          # Maghrib
+          - type: custom:button-card
+            entity: sensor.islamic_prayer_times_maghrib_prayer
+            name: Maghrib
+            template:
+              - homio_entity
+            show_entity_picture: false
+            icon: mdi:weather-sunset-down
+            tap_action:
+              action: more-info
+            styles:
+              icon:
+                - color: white
+                - width: 30px
+                - height: 30px
+          # Isha
+          - type: custom:button-card
+            entity: sensor.islamic_prayer_times_isha_prayer
+            name: Isha
+            template:
+              - homio_entity
+            show_entity_picture: false
+            icon: mdi:moon-waning-crescent
+            tap_action:
+              action: more-info
+            styles:
+              icon:
+                - color: white
+                - width: 30px
+                - height: 30px

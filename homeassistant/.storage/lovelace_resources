@@ -1,0 +1,139 @@
+{
+  "version": 1,
+  "minor_version": 1,
+  "key": "lovelace_resources",
+  "data": {
+    "items": [
+      {
+        "id": "0cef069f47ce4fc39518bb170a846b18",
+        "url": "/hacsfiles/lovelace-mushroom/mushroom.js?hacstag=444350375511",
+        "type": "module"
+      },
+      {
+        "id": "d1c09f7e41a547a2931e610b7b39da29",
+        "url": "/hacsfiles/button-card/button-card.js?hacstag=146194325701",
+        "type": "module"
+      },
+      {
+        "id": "51e725527d8d47eca95ad5cfd40a0db4",
+        "url": "/hacsfiles/kiosk-mode/kiosk-mode.js?hacstag=4973191281001",
+        "type": "module"
+      },
+      {
+        "id": "eb08dd6265394284a958a184a1cd8474",
+        "url": "/hacsfiles/lovelace-card-mod/card-mod.js?hacstag=190927524421",
+        "type": "module"
+      },
+      {
+        "id": "b90e026aea664206a0173fbf4f389fc8",
+        "url": "/hacsfiles/mini-media-player/mini-media-player-bundle.js?hacstag=14852083811611",
+        "type": "module"
+      },
+      {
+        "id": "d97b0f2829344e6ea19813b2e086d9f2",
+        "url": "/hacsfiles/lovelace-auto-entities/auto-entities.js?hacstag=1677445841161",
+        "type": "module"
+      },
+      {
+        "id": "fe1b1768440440a2b2d3dc832a5100e2",
+        "url": "/hacsfiles/lovelace-layout-card/layout-card.js?hacstag=156434866247",
+        "type": "module"
+      },
+      {
+        "id": "08f4f1a3db154d7d9af68d9cae489aef",
+        "url": "/hacsfiles/simple-swipe-card/simple-swipe-card.js?hacstag=970744650282",
+        "type": "module"
+      },
+      {
+        "id": "3e5e2758a7354adea76831729ab50f48",
+        "url": "/browser_mod.js?automatically-added&2.7.4",
+        "type": "module"
+      },
+      {
+        "id": "f37661eb51954f1ea8ef6ddcaa268b3f",
+        "url": "/hacsfiles/Bubble-Card/bubble-card.js?hacstag=680112919314",
+        "type": "module"
+      },
+      {
+        "id": "be4ee4b2d1374c5f812bdfdcd58caf81",
+        "type": "module",
+        "url": "/hacsfiles/stack-in-card/stack-in-card.js"
+      },
+      {
+        "id": "12abf8a91e6b43f5abca4c7f6ca2d2a3",
+        "type": "module",
+        "url": "/hacsfiles/vertical-stack-in-card/vertical-stack-in-card.js"
+      },
+      {
+        "id": "a9e9dba1cc02428491f1166b007b25b5",
+        "type": "module",
+        "url": "/hacsfiles/mini-graph-card/mini-graph-card-bundle.js"
+      },
+      {
+        "id": "339d2aa28c1a4c93b640ff596024395f",
+        "type": "module",
+        "url": "/hacsfiles/streamline-card/streamline-card.js"
+      },
+      {
+        "id": "ecaa3145d38444cb805e9993ec46a013",
+        "type": "module",
+        "url": "/hacsfiles/navbar-card/navbar-card.js"
+      },
+      {
+        "id": "23ac72cfae8a4b62ba8a7939e1fba88b",
+        "type": "module",
+        "url": "/hacsfiles/paper-buttons-row/paper-buttons-row.js"
+      },
+      {
+        "id": "902b352f650c40758233529fb3e02fbe",
+        "type": "module",
+        "url": "/hacsfiles/timer-bar-card/timer-bar-card.js"
+      },
+      {
+        "id": "d57a03552d914c02a929e42be2dba582",
+        "type": "module",
+        "url": "/hacsfiles/simple-tabs/simple-tabs.js"
+      },
+      {
+        "id": "8104ce69e19140659bd487e9e7105b2c",
+        "type": "module",
+        "url": "/hacsfiles/config-template-card/config-template-card.js"
+      },
+      {
+        "id": "c90eb39a97584a6eb508d7e3736e0ee8",
+        "type": "module",
+        "url": "/hacsfiles/my-slider-v2/my-slider-v2.js"
+      },
+      {
+        "id": "eb8eec3237c9432dbcfaaa59ba637d7f",
+        "type": "module",
+        "url": "/hacsfiles/apexcharts-card/apexcharts-card.js"
+      },
+      {
+        "id": "e1cebd7681ef4ebca05abc826853a320",
+        "type": "module",
+        "url": "/hacsfiles/lovelace-material-components/material-components.js"
+      },
+      {
+        "id": "75dcd0131994472286faba95d9d62828",
+        "type": "module",
+        "url": "/hacsfiles/calendar-card-pro/calendar-card-pro.js"
+      },
+      {
+        "id": "9d49b551337746cb9812cfed8e5feff4",
+        "type": "module",
+        "url": "/hacsfiles/mediocre-hass-media-player-cards/mediocre-hass-media-player-cards.js"
+      },
+      {
+        "id": "c89a932538634de09f7b65200f150653",
+        "type": "module",
+        "url": "/hacsfiles/weather-forecast-extended/weather-forecast-extended-card.js"
+      },
+      {
+        "id": "2ef0bc09b26c434690bf56fcba369b4f",
+        "type": "module",
+        "url": "/hacsfiles/material-you-utilities/material-you-utilities.min.js"
+      }
+    ]
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "minor_version": 1,
+  "key": "lovelace_dashboards",
+  "data": {
+    "items": [
+      {
+        "id": "map",
+        "icon": "mdi:map",
+        "title": "Map",
+        "url_path": "map",
+        "require_admin": false,
+        "mode": "storage",
+        "show_in_sidebar": true
+      },
+      {
+        "id": "kiosk_dashboard",
+        "show_in_sidebar": true,
+        "icon": "mdi:tablet-dashboard",
+        "title": "Kiosk Dashboard",
+        "require_admin": false,
+        "mode": "storage",
+        "url_path": "kiosk-dashboard"
+      },
+      {
+        "id": "admin",
+        "icon": "mdi:shield-account",
+        "title": "Admin",
+        "url_path": "admin",
+        "require_admin": true,
+        "mode": "storage",
+        "show_in_sidebar": true
+      }
+    ]
+  }
+}

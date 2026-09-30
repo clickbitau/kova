@@ -1,0 +1,367 @@
+- id: '1772291987909'
+  alias: Sunset - Turn on lights
+  description: 10 min before sunset, turn on key outdoor/corridor/living lights
+  triggers:
+  - event: sunset
+    offset: -00:10:00
+    trigger: sun
+  conditions: []
+  actions:
+  - target:
+      entity_id:
+      - light.kitchen_switch_switch_1
+      - light.front_door_switch_switch_1
+      - light.front_door_switch_switch_2
+      - light.laundry_switch_switch_2
+      - light.lounge_switch_switch_1
+      - light.garage_switch_switch_1
+    action: light.turn_on
+  - target:
+      entity_id: light.lamp
+    data:
+      brightness: 200
+      color_temp_kelvin: 3000
+    action: light.turn_on
+  - target:
+      entity_id: light.smart_lighting_2
+    data:
+      brightness: 80
+    action: light.turn_on
+  mode: single
+- id: '1772292049984'
+  alias: 8PM - Wind down
+  description: Turn off outdoor, music, kitchen, garage. Dim lounge.
+  triggers:
+  - at: '20:00:00'
+    trigger: time
+  conditions: []
+  actions:
+  - target:
+      entity_id:
+      - light.music_room_switch_switch_1
+      - light.kitchen_switch_switch_2
+      - light.kitchen_switch_switch_3
+      - light.lounge_switch_switch_1
+      - light.front_door_switch_switch_2
+      - light.laundry_switch_switch_2
+      - light.front_door_switch_switch_1
+      - light.garage_switch_switch_1
+    action: light.turn_off
+  - target:
+      entity_id: light.lamp
+    data:
+      brightness: 128
+      color_temp_kelvin: 2000
+      brightness_pct: 5
+    action: light.turn_on
+  - target:
+      entity_id: light.smart_lighting_2
+    data:
+      brightness: 40
+    action: light.turn_on
+  mode: single
+- id: '1772292075305'
+  alias: Midnight - Sleep mode
+  enabled: false
+  description: Turn off all non-essential lights, leave minimal ambient
+  triggers:
+  - at: 00:00:00
+    trigger: time
+  conditions: []
+  actions:
+  - target:
+      entity_id:
+      - light.lounge_switch_switch_2
+      - light.smart_lighting_2
+    action: light.turn_off
+  - target:
+      entity_id: light.lamp
+    data:
+      brightness: 25
+      color_temp_kelvin: 2500
+    action: light.turn_on
+  - target:
+      entity_id: light.smart_lighting
+    data:
+      brightness: 10
+    action: light.turn_on
+  mode: single
+- id: '1772292104876'
+  alias: Sunrise - All lights off
+  description: Turn off all lights at sunrise and set purifiers to auto
+  triggers:
+  - event: sunrise
+    trigger: sun
+  conditions: []
+  actions:
+  - target:
+      entity_id: all
+    action: light.turn_off
+  - target:
+      entity_id:
+      - fan.lounge_purifier
+      - fan.master_bed_purifier
+    data:
+      preset_mode: auto
+    action: fan.set_preset_mode
+  mode: single
+- id: '1772292134780'
+  alias: Garage - Auto on arrival
+  description: Garage + front door lights on when arriving after sunset, off in 10
+    min
+  triggers:
+  - entity_id: device_tracker.methels_iphone_air
+    to: home
+    from: not_home
+    trigger: state
+  - entity_id: device_tracker.brishti_iphone
+    to: home
+    from: not_home
+    trigger: state
+  conditions:
+  - condition: sun
+    after: sunset
+  actions:
+  - target:
+      entity_id:
+      - light.garage_switch_switch_1
+      - light.front_door_switch_switch_1
+      - light.front_door_switch_switch_2
+    action: light.turn_on
+  - delay:
+      minutes: 10
+  - target:
+      entity_id:
+      - light.garage_switch_switch_1
+      - light.front_door_switch_switch_1
+      - light.front_door_switch_switch_2
+    action: light.turn_off
+  mode: restart
+- id: '1772346799616'
+  alias: Office - Light on when occupied
+  description: Person detected by office camera after sunset → office lights on, auto-off
+    after 10 min
+  triggers:
+  - entity_id: event.office_camera_motion
+    trigger: state
+  conditions:
+  - condition: sun
+    after: sunset
+  - condition: template
+    value_template: '{{ trigger.to_state.attributes.get("event_type", "") == "camera_person"
+      }}'
+  actions:
+  - target:
+      entity_id:
+      - light.office_switch_switch_1
+      - light.smart_lighting_3
+    action: light.turn_on
+  - delay:
+      minutes: 10
+  - target:
+      entity_id:
+      - light.office_switch_switch_1
+      - light.smart_lighting_3
+    action: light.turn_off
+  mode: restart
+- id: '1772443800001'
+  alias: Quran - Start at 11:30 PM
+  description: Play Quran recitation on all speakers (except master bed) at 11:30
+    PM
+  triggers:
+  - at: '23:30:00'
+    trigger: time
+  conditions: []
+  actions:
+  - target:
+      entity_id:
+      - media_player.living_room_display
+      - media_player.music_room_speaker
+      - media_player.guest_room_speaker
+      - media_player.baby_room_speaker
+    data:
+      media_content_id: https://Qurango.net/radio/tarateel
+      media_content_type: music
+    action: media_player.play_media
+  - delay:
+      seconds: 3
+  - target:
+      entity_id:
+      - media_player.living_room_display
+      - media_player.music_room_speaker
+      - media_player.guest_room_speaker
+      - media_player.baby_room_speaker
+    data:
+      volume_level: 0.15
+    action: media_player.volume_set
+  mode: single
+- id: '1772443800002'
+  alias: Quran - Stop at Fajr
+  description: Stop Quran recitation at Fajr prayer time on all speakers
+  triggers:
+  - at: sensor.islamic_prayer_times_fajr_prayer
+    trigger: time
+  conditions: []
+  actions:
+  - target:
+      entity_id:
+      - media_player.living_room_display
+      - media_player.music_room_speaker
+      - media_player.guest_room_speaker
+      - media_player.baby_room_speaker
+    action: media_player.media_stop
+  mode: single
+- id: '1772443800003'
+  alias: Thunderstorm - Start at 9 PM
+  description: Play thunderstorm sounds on master bed speaker at 9 PM
+  triggers:
+  - at: '21:00:00'
+    trigger: time
+  conditions: []
+  actions:
+  - target:
+      entity_id: media_player.master_room_speaker
+    data:
+      media_content_id: https://rainymood.stream/audio1112/0.mp3
+      media_content_type: music
+    action: media_player.play_media
+  - delay:
+      seconds: 3
+  - target:
+      entity_id: media_player.master_room_speaker
+    data:
+      volume_level: 0.6
+    action: media_player.volume_set
+  mode: single
+- id: '1772443800004'
+  alias: Thunderstorm - Stop at 7 AM
+  description: Stop thunderstorm sounds on master bed speaker at 7 AM
+  triggers:
+  - at: 07:00:00
+    trigger: time
+  conditions: []
+  actions:
+  - target:
+      entity_id: media_player.master_room_speaker
+    action: media_player.media_stop
+  mode: single
+- id: '1772443800005'
+  alias: Doorbell - Notify on ring
+  description: Push notification to both phones on doorbell ring. Turn on front door
+    lights after sunset only.
+  triggers:
+  - entity_id: event.front_door_doorbell_chime
+    trigger: state
+  conditions: []
+  actions:
+  - action: notify.mobile_app_methels_iphone_air
+    data:
+      title: "\U0001F514 Doorbell"
+      message: Someone is at the front door
+      data:
+        entity_id: camera.front_door_doorbell
+        push:
+          sound: default
+        actions:
+        - action: URI
+          title: View Camera
+          uri: /dashboard-homio/outdoor
+  - action: notify.mobile_app_brishti_iphone
+    data:
+      title: "\U0001F514 Doorbell"
+      message: Someone is at the front door
+      data:
+        entity_id: camera.front_door_doorbell
+        push:
+          sound: default
+        actions:
+        - action: URI
+          title: View Camera
+          uri: /dashboard-homio/outdoor
+  - condition: sun
+    after: sunset
+  - target:
+      entity_id:
+      - light.front_door_switch_switch_1
+      - light.front_door_switch_switch_2
+    action: light.turn_on
+  - delay:
+      minutes: 5
+  - target:
+      entity_id:
+      - light.front_door_switch_switch_1
+      - light.front_door_switch_switch_2
+    action: light.turn_off
+  mode: single
+- id: '1772443800006'
+  alias: Garage camera - Light on when person detected
+  description: Person detected by garage camera after sunset → garage light on for
+    10 min
+  triggers:
+  - entity_id: event.garage_camera_motion
+    trigger: state
+  conditions:
+  - condition: sun
+    after: sunset
+  - condition: template
+    value_template: '{{ trigger.to_state.attributes.get("event_type", "") == "camera_person"
+      }}'
+  actions:
+  - target:
+      entity_id: light.garage_switch_switch_1
+    action: light.turn_on
+  - delay:
+      minutes: 10
+  - target:
+      entity_id: light.garage_switch_switch_1
+    action: light.turn_off
+  mode: restart
+- id: '1772443800007'
+  alias: Front door camera - Light on when person detected
+  description: Person detected at front door camera after sunset → front door lights
+    on for 5 min
+  triggers:
+  - entity_id: event.front_door_doorbell_motion
+    trigger: state
+  conditions:
+  - condition: sun
+    after: sunset
+  - condition: template
+    value_template: '{{ trigger.to_state.attributes.get("event_type", "") == "camera_person"
+      }}'
+  actions:
+  - target:
+      entity_id:
+      - light.front_door_switch_switch_1
+      - light.front_door_switch_switch_2
+    action: light.turn_on
+  - delay:
+      minutes: 5
+  - target:
+      entity_id:
+      - light.front_door_switch_switch_1
+      - light.front_door_switch_switch_2
+    action: light.turn_off
+  mode: restart
+- id: '1772443800008'
+  alias: Purifiers - Night mode
+  enabled: false
+  description: Set purifiers to sleep mode and turn off displays at midnight
+  triggers:
+  - at: 00:00:00
+    trigger: time
+  conditions: []
+  actions:
+  - target:
+      entity_id:
+      - fan.lounge_purifier
+      - fan.master_bed_purifier
+    data:
+      preset_mode: sleep
+    action: fan.set_preset_mode
+  - target:
+      entity_id:
+      - switch.lounge_purifier_display
+      - switch.master_bed_purifier_display
+    action: switch.turn_off
+  mode: single
