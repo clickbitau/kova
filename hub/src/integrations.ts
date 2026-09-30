@@ -33,6 +33,11 @@ export interface Integrations {
   homekitBridge?: { port?: number; pincode?: string; exclude?: { adapters?: string[]; devices?: string[] } };
   /** Matter controller on or off; its fabric lives in <KOVA_DATA>/matter. Same as KOVA_MATTER=1. */
   matter?: Record<string, never>;
+  /**
+   * Kova as a Matter bridge, for Google Home, Alexa, SmartThings and Apple Home. Same as KOVA_MATTER_BRIDGE=1.
+   * Its passcode and fabrics live in <KOVA_DATA>/matter-bridge. `exclude.adapters` defaults to ['matter', 'homekit'].
+   */
+  matterBridge?: { port?: number; exclude?: { adapters?: string[]; devices?: string[] } };
   /** Levoit purifiers through the VeSync cloud (needs the VeSync account). */
   vesync?: VeSyncOptions;
   /** Samsung TVs on the local network. Pairing tokens go in `<dataDir>/samsungtv/` unless storageDir is set. */

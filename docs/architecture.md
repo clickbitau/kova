@@ -124,7 +124,7 @@ Real devices are configured in `<KOVA_DATA>/integrations.json` (created with own
 A bridge is the reverse of an adapter: it exposes Kova's devices to another
 ecosystem. It sits on top of the registry, sends every write through
 `engine.command()` (so it's logged, undoable and overlay-aware, with the cause
-"Apple Home"), and pushes registry changes back out.
+"Apple Home", "Google Home", "Alexa"…), and pushes registry changes back out.
 
 **Apple Home** (`homekit.ts`, on `hap-nodejs`; `KOVA_HOMEKIT=1`) publishes one
 HAP bridge named after the home. Lights and dimmers become Lightbulbs (with
@@ -144,6 +144,32 @@ and pairings live in `$KOVA_DATA/homekit/`, so restarts keep Home app rooms and
 scenes. `GET /api/integrations/homekit` returns the setup code and the
 `X-HM://` payload for a pairing QR code. mDNS uses ciao (pure JS), so the hub
 needs host networking (or macvlan) for iPhones to find it.
+
+**Matter bridge: Google Home, Alexa, SmartThings, Apple Home**
+(`matter-bridge.ts`, on matter.js; `KOVA_MATTER_BRIDGE=1` or `"matterBridge": {}`
+in `integrations.json`) is the reverse of the Matter adapter: Kova is the
+Matter device, a bridge with an aggregator, and each Kova device is a bridged
+endpoint, added locally over Matter with the manual pairing code or QR payload.
+Lights become On/Off Lights, dimmers Dimmable / Color Temperature / Extended
+Color Lights (by their capabilities), plugs On/Off Plug-in Units, purifiers Air
+Purifiers (fan mode Off ↔ off, Auto ↔ `Auto`, Low ↔ `Sleep`, High ↔ `Manual`),
+and each overlay an On/Off Plug-in Unit named "Kova Movie" that starts or ends
+it. Names are "<Room> <Device>" (32 characters at most), and a device offline in
+Kova reads as unreachable. Devices Kova got from the `matter` and `homekit`
+adapters are left off by default, since they're already in those ecosystems;
+`"matterBridge": {"exclude": {"adapters": [...], "devices": [...]}}` changes that
+(a given `adapters` list replaces the default). Endpoint numbers are derived
+from device ids and kept by matter.js, so a restart keeps rooms and routines in
+Google Home. The passcode (random, never one the spec forbids), fabrics and
+endpoint numbers live in `$KOVA_DATA/matter-bridge/`. `GET
+/api/integrations/matter-bridge` returns the manual code, the `MT:` QR payload,
+and which ecosystems it's paired with. Kova's changes are written to the
+endpoints as local writes, which the bridge never reads back as a controller's
+command, so nothing echoes. It uses Matter's test vendor id (0xFFF1): Apple Home
+and SmartThings warn about an uncertified device and carry on; Google Home only
+accepts it for accounts that registered that vendor/product id in the Google
+Home Developer Console. Needs IPv6 and mDNS on the host network (UDP 5540,
+`KOVA_MATTER_BRIDGE_PORT`).
 
 **AirPlay → Cast** (`aircast.ts`) runs AirConnect's `aircast` (MIT) as a
 supervised child process, so every Cast speaker, display and Cast group appears
@@ -186,6 +212,7 @@ sync them sample-accurately.
 | GET | `/api/integrations/homekit` | `{enabled, pincode, setupURI, paired}` for the Apple Home bridge |
 | GET | `/api/integrations/homekit-devices/discover` | HomeKit accessories on the network: `{accessories: [{id, name, category, host, port, paired}]}` (browses mDNS for 3 s) |
 | POST | `/api/integrations/homekit-devices/pair` | `{id, code: "123-45-678", room?, name?}` pairs Kova with an accessory and returns its new devices; 400 with a message on a wrong code, an accessory that's already paired elsewhere, or when `homekit` isn't in integrations.json |
+| GET | `/api/integrations/matter-bridge` | `{enabled, manualCode, qrCode, commissioned, fabrics:[{label, vendor}]}` for the Matter bridge |
 
 Set `KOVA_TOKEN` to require `Authorization: Bearer <token>` on every API call.
 Open the UI once with `?token=…` and it remembers the token. This is a stopgap
