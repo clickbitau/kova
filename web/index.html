@@ -362,7 +362,7 @@
 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:16px;align-items:start">
 <div style="display:flex;flex-direction:column;gap:12px">
 <div style="border-radius:18px;overflow:hidden;background:#16171a">
-<div style="aspect-ratio:16/9;background:repeating-linear-gradient(135deg,#1b1c1f 0 12px,#202125 12px 24px);display:flex;align-items:center;justify-content:center;position:relative"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#6f6d69">{{ camMain.slot }}</span><div style="position:absolute;top:12px;left:12px;display:flex;align-items:center;gap:6px;padding:4px 9px;border-radius:999px;background:rgba(0,0,0,0.55);font-size:11px;font-weight:700"><div style="width:6px;height:6px;border-radius:50%;background:#ff6b5e"></div>LIVE</div><div style="position:absolute;bottom:12px;right:12px;display:flex;gap:8px"><div style="width:38px;height:38px;border-radius:50%;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:20px">mic</span></div><div style="width:38px;height:38px;border-radius:50%;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:20px">fullscreen</span></div></div></div>
+<div style="aspect-ratio:16/9;background:repeating-linear-gradient(135deg,#1b1c1f 0 12px,#202125 12px 24px);display:flex;align-items:center;justify-content:center;position:relative"><sc-if value="{{ camMain.streaming }}" hint-placeholder-val="{{ false }}"><video ref="{{ camMain.videoRef }}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000"></video></sc-if><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#6f6d69;padding:0 16px;text-align:center">{{ camMain.slot }}</span><sc-if value="{{ camMain.hasCam }}" hint-placeholder-val="{{ false }}"><div onClick="{{ camMain.liveAct }}" style="position:absolute;bottom:12px;left:12px;display:flex;align-items:center;gap:6px;padding:9px 14px;border-radius:999px;background:rgba(0,0,0,0.55);font-size:12px;font-weight:700;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:18px">{{ camMain.liveIcon }}</span>{{ camMain.liveLabel }}</div></sc-if><div style="position:absolute;top:12px;left:12px;display:flex;align-items:center;gap:6px;padding:4px 9px;border-radius:999px;background:rgba(0,0,0,0.55);font-size:11px;font-weight:700"><div style="width:6px;height:6px;border-radius:50%;background:#ff6b5e"></div>LIVE</div><div style="position:absolute;bottom:12px;right:12px;display:flex;gap:8px"><div style="width:38px;height:38px;border-radius:50%;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:20px">mic</span></div><div style="width:38px;height:38px;border-radius:50%;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:20px">fullscreen</span></div></div></div>
 <div style="padding:12px 16px;display:flex;justify-content:space-between;align-items:center"><span style="font-size:15px;font-weight:700">{{ camMain.name }}</span><span style="font-size:12px;color:#a3a09a">{{ camMain.last }}</span></div>
 </div>
 <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
@@ -583,7 +583,39 @@ const ACT_STYLE={auto:['rgba(242,177,76,0.13)','#f2b14c'],people:['rgba(127,212,
 class Component extends DCLogic {
   state={hub:BOOT,conn:!!window.KOVA_BOOT,screen:this.props.startScreen??'home',room:(BOOT.rooms[0]||{}).id,drawer:null,tab:'simple',advanced:(this.props.depth??'Simple')==='Advanced',sel:'sunset',toast:null,undo:null,merging:false,merged:false,done:{},linked:{},q:'',camSel:null,mediaSel:null,actF:'all',inboxDone:{},iq:'',intF:'All',draft:'',chat:[{from:'kova',text:`Hi. ${BOOT.devices.filter(d=>isLight(d)&&d.state.on).length} lights are on and the home is in ${(BOOT.modes.find(m=>m.id===BOOT.current.modeId)||BOOT.modes[0]).name}. What do you need?`}],preview:null,pv:null,modeSel:null};
   componentDidMount(){this.connect()}
-  componentWillUnmount(){this._closed=true;try{this._ws&&this._ws.close()}catch(e){}}
+  componentWillUnmount(){this._closed=true;try{this._ws&&this._ws.close()}catch(e){}this.stopLive(true)}
+  componentDidUpdate(){if(this._pc&&this.state.screen!=='security')this.stopLive()}
+  // ---- camera live view: WebRTC straight from the camera's cloud (Nest) to this browser; the hub only relays the offer/answer ----
+  videoRef=el=>{if(el&&this._stream&&el.srcObject!==this._stream){el.srcObject=this._stream;el.muted=true;el.playsInline=true;el.autoplay=true;el.play().catch(()=>{})}}
+  async goLive(d){
+    this.stopLive(true);
+    const cam=d.id,NO='Live view isn’t available for this camera yet';
+    if(d.adapter!=='nest'||typeof RTCPeerConnection==='undefined'){this.setState({live:{cam,msg:NO}});return}
+    const pc=new RTCPeerConnection();this._pc=pc;
+    const stream=new MediaStream();this._stream=stream;
+    // SDM wants an offer with audio, then video, then a data channel.
+    pc.addTransceiver('audio',{direction:'recvonly'});pc.addTransceiver('video',{direction:'recvonly'});pc.createDataChannel('dataSendChannel');
+    pc.ontrack=e=>{stream.addTrack(e.track)};
+    pc.onconnectionstatechange=()=>{if(this._pc===pc&&pc.connectionState==='failed'){this.stopLive(true);this.setState({live:{cam,msg:'The live stream dropped'}})}};
+    this.setState({live:{cam,msg:'Connecting…'}});
+    try{
+      const offer=await pc.createOffer();await pc.setLocalDescription(offer);
+      const r=await api('POST',`/api/devices/${encodeURIComponent(cam)}/webrtc`,{offerSdp:offer.sdp});
+      if(this._pc!==pc){api('POST',`/api/devices/${encodeURIComponent(cam)}/webrtc/stop`,{mediaSessionId:r.mediaSessionId}).catch(()=>{});return}
+      this._live={cam,sid:r.mediaSessionId};
+      await pc.setRemoteDescription({type:'answer',sdp:r.answerSdp});
+      // Streams end after about 5 minutes unless extended.
+      this._ext=setInterval(()=>{const l=this._live;if(l)api('POST',`/api/devices/${encodeURIComponent(l.cam)}/webrtc/extend`,{mediaSessionId:l.sid}).then(x=>{if(this._live===l&&x.mediaSessionId)l.sid=x.mediaSessionId}).catch(()=>{})},4*60000);
+      this.setState({live:{cam,streaming:true}});
+    }catch(e){if(this._pc===pc){this.stopLive(true);this.setState({live:{cam,msg:e.message||NO}})}}
+  }
+  stopLive(quiet){
+    clearInterval(this._ext);const l=this._live;this._live=null;
+    if(l&&l.sid)api('POST',`/api/devices/${encodeURIComponent(l.cam)}/webrtc/stop`,{mediaSessionId:l.sid}).catch(()=>{});
+    if(this._pc){try{this._pc.close()}catch(e){}this._pc=null}
+    this._stream=null;
+    if(!quiet)this.setState({live:null});
+  }
   connect(){
     if(this._closed)return;
     const url=`${location.protocol==='https:'?'wss':'ws'}://${location.host}/api/ws${KOVA_TOKEN?'?token='+encodeURIComponent(KOVA_TOKEN):''}`;
@@ -688,8 +720,11 @@ class Component extends DCLogic {
     const cams=list.filter(d=>d.type==='camera');const camId=s.camSel||(cams[0]&&cams[0].id);
     const lastSeen=id=>{const a=H.activity.find(x=>x.what.startsWith((devs[id]||{}).name||'~')&&(x.icon==='person'||x.icon==='doorbell'));return a?`${a.what.includes('rang')?'Rang':'Person'} at ${a.t}`:'No activity today'};
     const cm=devs[camId];
-    const camMain=cm?{name:RN[cm.room]||cm.name,last:lastSeen(cm.id),slot:`${(RN[cm.room]||cm.name).toLowerCase()} stream`}:{name:'No cameras',last:'',slot:'no camera connected'};
-    const camThumbs=cams.map(c=>({name:RN[c.room]||c.name,pick:()=>this.setState({camSel:c.id}),ring:camId===c.id?'2px solid #f2b14c':'none'}));
+    const lv=cm&&s.live&&s.live.cam===cm.id?s.live:null,liveOn=!!(lv&&(lv.streaming||lv.msg==='Connecting…'));
+    const camMain=cm?{name:RN[cm.room]||cm.name,last:lastSeen(cm.id),slot:lv&&lv.msg?lv.msg:`${(RN[cm.room]||cm.name).toLowerCase()} stream`,
+      hasCam:true,streaming:!!(lv&&lv.streaming),videoRef:this.videoRef,liveIcon:liveOn?'stop':'play_arrow',liveLabel:liveOn?'Stop':'Live',liveAct:()=>liveOn?this.stopLive():this.goLive(cm)}
+      :{name:'No cameras',last:'',slot:'no camera connected',hasCam:false,streaming:false,videoRef:null,liveIcon:'',liveLabel:'',liveAct:()=>{}};
+    const camThumbs=cams.map(c=>({name:RN[c.room]||c.name,pick:()=>{if(c.id!==camId&&this._pc)this.stopLive();this.setState({camSel:c.id})},ring:camId===c.id?'2px solid #f2b14c':'none'}));
     const people=H.people.map(p=>({initial:p.name[0],name:p.name,detail:`${p.detail}${p.sinceLabel?` · ${p.home?'home':'left'} since ${p.sinceLabel}`:''}`,status:p.home?'Home':'Away'}));
     const secEvents=H.activity.filter(a=>a.type==='people').slice(0,6).map(a=>({t:a.t,icon:a.icon,fg:a.icon==='doorbell'?'#7cb8f0':a.icon==='person'?'#f2b14c':'#7fd4a0',text:a.what}));
     const pls=list.filter(isPlayer);

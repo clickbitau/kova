@@ -10,6 +10,7 @@ import { GoodWeAdapter, type GoodWeOptions } from './adapters/goodwe.ts';
 import type { AirCastOptions } from './bridges/aircast.ts';
 import { VeSyncAdapter, type VeSyncOptions } from './adapters/vesync.ts';
 import { SamsungTvAdapter, type SamsungTvOptions } from './adapters/samsung-tv.ts';
+import { NestAdapter, type NestOptions } from './adapters/nest.ts';
 
 /**
  * What's connected in this home, and how to reach it. Lives in
@@ -33,6 +34,8 @@ export interface Integrations {
   vesync?: VeSyncOptions;
   /** Samsung TVs on the local network. Pairing tokens go in `<dataDir>/samsungtv/` unless storageDir is set. */
   samsungtv?: Omit<SamsungTvOptions, 'storageDir'> & { storageDir?: string };
+  /** Nest cameras and doorbells through Google's SDM cloud API. Starts once projectId and refreshToken are set. */
+  nest?: NestOptions;
 }
 
 export function loadIntegrations(path: string): Integrations | null {
@@ -50,5 +53,6 @@ export function adaptersFor(i: Integrations, dataDir = resolve(process.env.KOVA_
   if (i.goodwe?.host) out.push(new GoodWeAdapter(i.goodwe));
   if (i.vesync?.email && i.vesync.password) out.push(new VeSyncAdapter(i.vesync));
   if (i.samsungtv?.tvs.length) out.push(new SamsungTvAdapter({ ...i.samsungtv, storageDir: i.samsungtv.storageDir ?? join(dataDir, 'samsungtv') }));
+  if (i.nest?.projectId && i.nest.refreshToken) out.push(new NestAdapter(i.nest));
   return out;
 }

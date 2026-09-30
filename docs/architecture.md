@@ -91,7 +91,8 @@ It never makes decisions. See `sdk.ts`.
 | `vesync` | Levoit Core 200S/300S/400S/600S purifiers through the **VeSync cloud** (these purifiers have no local API, so this one needs the internet). Logs in like the VeSync app (v1 login, MD5 password), lists devices, and relays `getPurifierStatus` / `setSwitch` / `setPurifierMode` / `setLevel` through `bypassV2`. Kova `fan` devices: on/off and mode `Auto` / `Sleep` / `Manual` (Manual = the last fan speed). Polls every 30 s; a purifier the cloud calls offline is `online: false`. Logs in again once when the token is rejected. `region: "eu"` uses smartapi.vesync.eu. |
 | `samsungtv` | Samsung Tizen TVs (2016+) locally. Power state from `http://tv:8001/api/v2/` (`PowerState` on/standby; unreachable = off and offline), polled every 10 s. Keys over the remote-control WebSocket on `wss://tv:8002` (self-signed TLS): the first connection makes the TV ask to allow Kova, and the token it returns is kept in `<KOVA_DATA>/samsungtv/tokens.json` (0600). Off = `KEY_POWER`; on = Wake-on-LAN to the TV's MAC (from config or the info endpoint); volume = DLNA RenderingControl `SetVolume` on port 9197, falling back to `KEY_VOLUP`/`KEY_VOLDOWN` steps from the last volume DLNA reported. Playing sources isn't supported. |
 | `goodwe` | GoodWe solar inverters over Modbus TCP (port 502, unit 247), read-only. Default register map is the DT family (PV strings 30103–30108, energy today 30144); every address can be overridden in `integrations.json` because maps differ between families and firmware. An inverter asleep at night reads as 0 W. Feeds the Energy screen. |
-| Nest, Ecovacs | Planned. |
+| `nest` | Google Nest doorbells and cameras (and the Nest Hub Max) through Google's **Smart Device Management (SDM) cloud API**: there is no local API for these devices. Access tokens come from a stored refresh token (`oauth2.googleapis.com/token`) and are cached until a minute before they expire; a 401 gets a fresh token and one retry. Devices from `GET /v1/enterprises/{project}/devices` become Kova `camera` devices (`events`), named after the Google Home custom name or room, in the room given by `rooms` or the Google Home room name, with ids from `ids` or `nest_<last 12 of the device id>` (both keyed by SDM device name, device id or display name). **Events** come from the Cloud Pub/Sub subscription (REST `:pull` long-poll + `:acknowledge`, retry with backoff up to 5 min): `CameraPerson.Person` → `person`, `DoorbellChime.Chime` → `ring`, `CameraMotion.Motion` → `motion`, `CameraSound.Sound` → `sound`, each with `eventId`, `eventSessionId` and `timestamp`. Each eventId (and each event type per event session) fires once; events older than 2 minutes are ignored; every message is acked. These events drive Light the way. **Live view** over WebRTC for cameras whose `CameraLiveStream` trait lists `WEB_RTC` (`GenerateWebRtcStream` / `Extend…` / `Stop…`); the video goes straight from Google to the browser. `GET /api/devices/:id/snapshot` returns the latest event's image for cameras with `CameraEventImage` (older models only). Device list refreshed every 10 min (`pollMs`). |
+| Ecovacs | Planned. |
 
 All adapters except `virtual` are tested against fake devices that speak the protocol; none has been tried on real hardware yet.
 
@@ -106,13 +107,31 @@ Real devices are configured in `<KOVA_DATA>/integrations.json` (created with own
   "tapo": { "username": "you@example.com", "password": "…", "devices": [{ "host": "10.10.30.218", "room": "lounge", "id": "lamp" }] },
   "cast": { "rooms": { "Music Room Speaker": "music" } },
   "vesync": { "email": "you@example.com", "password": "…", "region": "us", "devices": { "Bedroom Purifier": { "room": "bedroom", "id": "bedroom_purifier" } } },
-  "samsungtv": { "tvs": [{ "host": "10.10.30.40", "mac": "a0:d7:f3:11:22:33", "room": "lounge", "id": "lounge_tv" }] }
+  "samsungtv": { "tvs": [{ "host": "10.10.30.40", "mac": "a0:d7:f3:11:22:33", "room": "lounge", "id": "lounge_tv" }] },
+  "nest": { "projectId": "device-access-project-uuid", "clientId": "….apps.googleusercontent.com", "clientSecret": "GOCSPX-…",
+            "refreshToken": "1//0…", "subscription": "projects/my-gcp-project/subscriptions/kova-nest",
+            "ids": { "Front door doorbell": "doorbell", "Garage camera": "garage_cam" }, "rooms": { "Front door doorbell": "front" } }
 }
 ```
 
 `id` is optional everywhere; giving a device the id your modes already use lets you swap simulated devices for real ones without editing the modes.
 
-`npx tsx src/tools/import-ha.ts <homeassistant/.storage> ../data` (from `hub/`) writes `integrations.json` and `home.json` from a Home Assistant install: rooms from areas, people, location, localtuya devices with their keys, Tapo hosts plus HA's credentials hash, Cast names mapped to rooms, Samsung TV hosts and MACs, and the VeSync account email with purifier rooms. The VeSync password is not imported: add it as `vesync.password` (the adapter stays off until you do). Samsung TVs ask to allow Kova once, since HA's token belongs to HA. It only reads files; Kova never talks to Home Assistant.
+`npx tsx src/tools/import-ha.ts <homeassistant/.storage> ../data` (from `hub/`) writes `integrations.json` and `home.json` from a Home Assistant install: rooms from areas, people, location, localtuya devices with their keys, Tapo hosts plus HA's credentials hash, Cast names mapped to rooms, Samsung TV hosts and MACs, and the VeSync account email with purifier rooms. The VeSync password is not imported: add it as `vesync.password` (the adapter stays off until you do). Samsung TVs ask to allow Kova once, since HA's token belongs to HA. From HA's `nest` entry it takes the Device Access project id (`project_id`), the Pub/Sub subscription (`subscription_name`), and each Nest camera's room and id from the device registry (keyed by the SDM device name HA stores as the device identifier; the doorbell keeps the id `doorbell`, cameras become `<room>_cam`). HA's Google refresh token and OAuth client are imported only if they're stored in plain form (`token.refresh_token`, and `.storage/application_credentials`); otherwise the report tells you to link Nest (below). Secrets never appear in the report. It only reads files; Kova never talks to Home Assistant.
+
+### Linking Google Nest
+
+Nest devices are only reachable through Google's cloud, with your permission. You need, once:
+
+1. **A Device Access project** (one-time US$5 fee) at <https://console.nest.google.com/device-access>. Its **project id** is `nest.projectId`. If you set up Nest in Home Assistant, you already have one, and the importer copied its id.
+2. **An OAuth client** in the Google Cloud console (<https://console.cloud.google.com/apis/credentials>, type *Web application*), in a project with the *Smart Device Management API* and *Cloud Pub/Sub API* enabled. Add `https://www.google.com` to its **Authorized redirect URIs** (or the URI you'll pass as `redirectUri`). Put its id and secret in `nest.clientId` / `nest.clientSecret`, and the same client id in the Device Access project's OAuth client field. The client HA used works if you still have its secret.
+3. **A Pub/Sub subscription** for events: in the Device Access console, enable events for the project (it shows a topic like `projects/sdm-prod/topics/enterprise-<project-id>`), then create a *pull* subscription to that topic in your Cloud project and set `nest.subscription` to `projects/<cloud-project>/subscriptions/<name>`. Don't share HA's subscription while HA is still running: each message goes to only one of them. The Google account you link needs permission to pull from it (it does if it owns the Cloud project).
+4. **Link the account** (the hub must be running with `nest.projectId`, `clientId` and `clientSecret` set):
+   * `GET /api/integrations/nest/auth-url` (optionally `?redirectUri=…`) returns a `url`. Open it, sign in with the Google account that owns the Nest devices, allow Kova to see the cameras and doorbell, and allow both permissions.
+   * Google redirects to `https://www.google.com/?code=4/0Ab…&scope=…`. Copy the `code` value (it's valid for a few minutes, once).
+   * `POST /api/integrations/nest/auth-code` with `{"code": "4/0Ab…", "redirectUri": "https://www.google.com"}` returns `{refreshToken}`.
+   * Save it as `nest.refreshToken` in `integrations.json` and restart Kova. The Nest adapter starts once `projectId` and `refreshToken` are both set.
+
+If Google returns no refresh token, remove the app's access at <https://myaccount.google.com/permissions> and link again. Refresh tokens of OAuth clients left in *Testing* publishing status expire after 7 days; publish the OAuth consent screen (it can stay unverified for personal use) to keep them.
 
 ## Bridges (`hub/src/bridges/`)
 
@@ -172,6 +191,11 @@ sync them sample-accurately.
 | POST | `/api/undo/:id` | |
 | POST | `/api/ask`, `/api/ask/act` | Ask Kova |
 | GET | `/api/integrations/homekit` | `{enabled, pincode, setupURI, paired}` for the Apple Home bridge |
+| POST | `/api/devices/:id/webrtc` | Camera live view: `{offerSdp}` → `{answerSdp, mediaSessionId, expiresAt}`; 400 "Live view isn’t available for this camera yet" for cameras without WebRTC |
+| POST | `/api/devices/:id/webrtc/extend`, `/stop` | `{mediaSessionId}`: keep a live stream going (they last about 5 min) or end it |
+| GET | `/api/devices/:id/snapshot` | Latest event image, where the camera offers one (404 otherwise) |
+| GET | `/api/integrations/nest/auth-url` | `?redirectUri=` → `{url, redirectUri}`: Google's page for linking Nest |
+| POST | `/api/integrations/nest/auth-code` | `{code, redirectUri}` → `{refreshToken}` to save as `nest.refreshToken` |
 
 Set `KOVA_TOKEN` to require `Authorization: Bearer <token>` on every API call.
 Open the UI once with `?token=…` and it remembers the token. This is a stopgap
@@ -181,4 +205,4 @@ until real accounts exist.
 
 | Real (from the hub) | Still sample data |
 |---|---|
-| Now (mode, timeline, just happened, coming up, skip, overlays, rooms, findings, preview), Modes (editor, findings and fixes, Light the way, 14-day squares), Rooms and the device drawer, Media, Activity and inbox, Ask Kova, Integrations, Developer, people and events on Security | Energy numbers (needs an inverter/meter adapter), camera video (needs go2rtc/WebRTC), the Import from HA screen, and the imported-rules list |
+| Now (mode, timeline, just happened, coming up, skip, overlays, rooms, findings, preview), Modes (editor, findings and fixes, Light the way, 14-day squares), Rooms and the device drawer, Media, Activity and inbox, Ask Kova, Integrations, Developer, people and events on Security, live video from Nest cameras that support WebRTC (the *Live* button on Security) | Energy numbers (needs an inverter/meter adapter), camera thumbnails and video from non-WebRTC cameras, the Import from HA screen, and the imported-rules list |
