@@ -1,14 +1,19 @@
 # Kova plus OwnTone (AirPlay output). Host networking so both can see mDNS.
+# Kova runs as uid 1000 inside the image: `sudo chown -R 1000:1000 ./data` before the first start.
 services:
   kova:
     build: .
     network_mode: host
     restart: unless-stopped
+    stop_grace_period: 30s          # time for a clean shutdown (device state flushed, DB closed)
     volumes:
-      - ./data:/data                 # kova.db, integrations.json, home.json
-      - ./airconnect:/opt/airconnect # put aircast-linux-<cpu> here to bridge AirPlay → Cast
+      - ./data:/data                 # kova.db, integrations.json, home.json, pairings, backups/
+      - ./airconnect:/opt/airconnect:ro # put aircast-linux-<cpu> here to bridge AirPlay → Cast
     environment:
       TZ: Australia/Perth
+      # KOVA_TOKEN: change-me        # require a token on the API (recommended)
+      # KOVA_BACKUP_TIME: "03:10"    # nightly backup, home time; "off" to disable
+      # KOVA_BACKUP_KEEP: "14"
 
   owntone:
     image: lscr.io/linuxserver/daapd:latest   # OwnTone

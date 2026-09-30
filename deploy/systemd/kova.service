@@ -1,0 +1,43 @@
+[Unit]
+Description=Kova smart home hub
+Documentation=https://github.com/clickbitau/kova/blob/main/docs/install.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=kova
+Group=kova
+# deploy/install.sh rewrites these two paths if you install somewhere else.
+WorkingDirectory=/opt/kova/hub
+ExecStart=/usr/bin/node --import tsx src/main.ts
+Environment=NODE_ENV=production
+Environment=KOVA_DATA=/var/lib/kova
+# KOVA_PORT, KOVA_TOKEN, KOVA_HOMEKIT, KOVA_MATTER, KOVA_BACKUP_TIME… (root:kova, 0640).
+EnvironmentFile=-/etc/kova/kova.env
+
+# SIGTERM makes Kova flush device state and close its database; give it time.
+KillSignal=SIGTERM
+KillMode=mixed
+TimeoutStopSec=30
+Restart=on-failure
+RestartSec=5
+# Files Kova creates (pairings, backups) are private to it.
+UMask=0077
+
+# Sandboxing. Kova only writes to its data folder. If the unit fails with
+# status=226/NAMESPACE inside an LXC, enable nesting on the container
+# (features: nesting=1), or comment out the Protect*/Private* lines.
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/kova
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+
+[Install]
+WantedBy=multi-user.target

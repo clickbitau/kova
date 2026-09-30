@@ -11,6 +11,7 @@ function feedIcon(e: LogEntry): string {
   if (e.kind === 'device_event') return e.data.type === 'ring' ? 'doorbell' : 'person';
   if (e.kind === 'presence') return e.data.home ? 'person_pin_circle' : 'directions_walk';
   if (e.kind === 'run' && e.cause.kind === 'overlay') return 'layers';
+  if (e.kind === 'system' && 'backup' in e.data) return 'backup';
   return FEED_ICON[e.kind] ?? 'bolt';
 }
 

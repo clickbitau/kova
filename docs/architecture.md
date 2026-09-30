@@ -367,9 +367,12 @@ a row on the Integrations screen ("Router: 2 phones seen").
 | POST | `/api/devices/:id/webrtc/extend`, `/stop` | `{mediaSessionId}`: keep a live stream going (they last about 5 min) or end it |
 | GET | `/api/devices/:id/snapshot` | Latest event image, where the camera offers one (404 otherwise) |
 | GET | `/api/integrations/nest/auth-url` | `?redirectUri=` → `{url, redirectUri}`: Google's page for linking Nest |
-| POST | `/api/integrations/nest/auth-code` | `{code, redirectUri}` → `{refreshToken}` to save as `nest.refreshToken` |
+| POST | `/api/integrations/nest/auth-code` | `{code, redirectUri}` → `{refreshToken}` to save as `nest.refreshToken`; with in-app setup it's saved for you and the answer is `{ok, linked, status}` |
+| GET | `/api/health` | `{ok, version, uptimeS}`; no token needed, no home data (for health checks) |
+| GET, POST | `/api/backups` | List backups / make one now (see [install.md](install.md#backups)) |
+| GET | `/api/backups/:name` | Download a backup (needs `KOVA_TOKEN`, or a request from the machine itself) |
 
-Set `KOVA_TOKEN` to require `Authorization: Bearer <token>` on every API call.
+Set `KOVA_TOKEN` to require `Authorization: Bearer <token>` on every API call except `/api/health`.
 Open the UI once with `?token=…` and it remembers the token. This is a stopgap
 until real accounts exist.
 The one exception: `POST /api/people/:id/presence?key=…` with that person's
