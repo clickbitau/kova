@@ -4,6 +4,7 @@ import type { LogEntry } from '../store/db.ts';
 import { clock, localDate, localHour, atLocal } from '../util/time.ts';
 import { isLight, targetLabel } from '../util/describe.ts';
 import { rhythmLabel } from '../rhythms/rhythms.ts';
+import SunCalc from 'suncalc';
 
 const FEED_ICON: Record<string, string> = { mode: 'routine', run: 'bolt', presence: 'person_pin_circle', state: 'lightbulb', system: 'info', skip: 'event_busy' };
 
@@ -101,8 +102,12 @@ export function snapshot(hub: Hub) {
       // en-AU writes September as "Sept"; the design (and every other month) uses three letters.
       dateLabel: new Date(now).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'short', timeZone: tz }).replace(/\bSept\b/, 'Sep'),
       clock: clock(now, tz),
+      // Today's sunrise and sunset as local hours, for day strips.
+      sun: (() => { const t = SunCalc.getTimes(new Date(now), cfg.latitude, cfg.longitude); const h = (d: Date) => (isNaN(+d) ? null : localHour(+d, tz)); return { rise: h(t.sunrise), set: h(t.sunset) }; })(),
     },
     rooms: cfg.rooms,
+    // The owner's favourites (null until they pick some: the apps then suggest a few).
+    favourites: cfg.favourites ?? null,
     groups: cfg.groups,
     people: cfg.people.map(p => ({ ...p, home: engine.people[p.id]?.home ?? true, since: engine.people[p.id]?.since ?? null, sinceLabel: engine.people[p.id] ? clock(engine.people[p.id].since, tz) : '' })),
     devices: reg.list().map(d => ({ ...d, why: engine.why(d.id), usedIn: engine.usedIn(d.id) })),

@@ -21,6 +21,8 @@ npm test             # engine, findings, assistant, adapters (against fake devic
 
 ### Your own devices
 
+Open **Import** in the app and upload a Home Assistant backup: you get a preview, then switch over. Or from the command line:
+
 ```bash
 cd hub
 npx tsx src/tools/import-ha.ts /path/to/homeassistant/.storage ../data   # one-time import

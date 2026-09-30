@@ -6,6 +6,7 @@ import { VirtualAdapter } from './adapters/virtual.ts';
 import { SonosAdapter } from './adapters/sonos.ts';
 import { adaptersFor, loadIntegrations } from './integrations.ts';
 import { IntegrationsManager } from './integrations-store.ts';
+import { HaImport } from './import/ha-scan.ts';
 import { accessSync, constants, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import type { HomeConfig } from './model/types.ts';
 import { MatterAdapter } from './adapters/matter.ts';
@@ -133,6 +134,8 @@ hub.services.push({ id: 'notify', name: 'Notifications', icon: 'notifications', 
 
 // In-app setup edits integrations.json and restarts one integration at a time.
 const setup = new IntegrationsManager(hub, { path: integrationsFile, dataDir });
+// Import from Home Assistant, in the app (Import screen).
+const haImport = new HaImport(hub, { dataDir, manager: setup });
 
 // Nightly backups of the database, integrations.json, home.json and pairing folders.
 const backups = new Backups({
@@ -152,7 +155,7 @@ hub.services.push({ id: 'backups', name: 'Backups', icon: 'backup', kind: 'Local
 
 const app = await buildServer(hub, {
   webRoot: resolve(here, '../../web'), token: env.KOVA_TOKEN || undefined,
-  homekit, matterBridge, nest: integrations?.nest, presence, notifier, integrationsPath: integrationsFile, integrations: setup, backups,
+  homekit, matterBridge, nest: integrations?.nest, presence, notifier, integrationsPath: integrationsFile, integrations: setup, haImport, backups,
 });
 await app.listen({ port: Number(env.KOVA_PORT ?? 8140), host: env.KOVA_HOST ?? '0.0.0.0' });
 const addr = app.server.address();

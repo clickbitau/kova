@@ -34,7 +34,10 @@ export class Hub extends EventEmitter<{ changed: [] }> {
   readonly engine: Engine;
   readonly checker: Checker;
   readonly assistant: Assistant;
-  readonly demo: boolean;
+  private _demo: boolean;
+  /** Running the virtual demo home (no integrations.json yet). Ends when a real home is imported. */
+  get demo(): boolean { return this._demo; }
+  leaveDemo(): void { this._demo = false; this.emit('changed'); }
   readonly weather?: Weather;
   readonly services: Service[] = [];
   readonly energy: Energy;
@@ -43,12 +46,13 @@ export class Hub extends EventEmitter<{ changed: [] }> {
     super();
     this.store = new Store(opts.dbPath, opts.now);
     this.config = new ConfigStore(this.store, opts.initialConfig);
-    this.reg = new Registry(this.store, name => this.config.get().sources.find(s => s.name === name)?.url);
+    this.reg = new Registry(this.store, name => this.config.get().sources.find(s => s.name === name)?.url, () => this.config.get().devices ?? {});
+    this.config.on('changed', () => this.reg.reapplySettings());
     this.engine = new Engine(this.store, this.reg, this.config, opts.now);
     this.checker = new Checker(this.engine, this.store, this.config, () => this.reg.devices);
     this.assistant = new Assistant(this.engine, this.reg, this.config);
     this.energy = new Energy(this.store, this.reg, () => this.config.get().timezone, opts.now);
-    this.demo = !!opts.demo;
+    this._demo = !!opts.demo;
     this.weather = opts.weather;
     this.engine.on('changed', () => this.emit('changed'));
     this.reg.on('measure', () => this.emit('changed'));

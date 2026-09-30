@@ -50,7 +50,14 @@ export interface Device {
   /** Stable address inside the adapter (IP, Matter node id, HA-style alias…). */
   address: string;
   state: DeviceState;
+  /** Hidden by the owner: kept working, left out of everyday lists. */
+  hidden?: boolean;
+  /** The name and room the integration gave it, when the owner has changed them. */
+  original?: { name: string; room: string };
 }
+
+/** What the owner changed about a device: a better name, the right room, or hidden from lists. */
+export interface DeviceSettings { name?: string; room?: string; hidden?: boolean }
 
 /** A partial state change requested of a device. */
 export type Command = Partial<DeviceState>;
@@ -168,6 +175,10 @@ export interface HomeConfig {
   groups: Record<string, string[]>;
   /** Findings the user chose to keep as they are. */
   dismissedFindings: string[];
+  /** Per-device names, rooms and visibility set by the owner (they win over what integrations report). */
+  devices?: Record<string, DeviceSettings>;
+  /** Devices on the owner's Now screen, in order. */
+  favourites?: string[];
 }
 
 // ------------------------------------------------------------------ plans --

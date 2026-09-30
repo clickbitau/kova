@@ -13,20 +13,21 @@
 <script>(function(){var t="";try{var u=new URL(location.href);t=u.searchParams.get("token")||localStorage.getItem("kova_token")||"";if(u.searchParams.get("token"))localStorage.setItem("kova_token",t)}catch(e){}document.write('<script src="/api/boot.js'+(t?"?token="+encodeURIComponent(t):"")+'"><\/script>')})();</script>
 <script src="./support.js"></script>
 <link rel="stylesheet" href="./motion.css">
+<script src="./motion.js"></script>
 <script src="./sting.js"></script>
 </head>
 <body>
 <x-dc>
-<helmet><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..24,400,0..1,0&display=swap" rel="stylesheet"><style>body{margin:0;background:#0e0f10;-webkit-font-smoothing:antialiased}*{box-sizing:border-box}a{color:#f2b14c}a:hover{color:#f7cb82}input[type=range]{accent-color:#f2b14c}::-webkit-scrollbar{display:none}</style></helmet>
+<helmet><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..24,400,0..1,0&display=swap" rel="stylesheet"><style>body{margin:0;background:#0e0f10;-webkit-font-smoothing:antialiased}*{box-sizing:border-box}a{color:#f2b14c}a:hover{color:#f7cb82}input[type=range]{accent-color:#f2b14c}::-webkit-scrollbar{display:none}[style*="overflow-y: auto"][style*="safe-area-inset-top"]>*{flex-shrink:0}</style></helmet>
 <div style="height:100dvh;display:flex;flex-direction:column;background:#0e0f10;position:relative;overflow:hidden;font-family:Manrope,system-ui,sans-serif;color:#f1efea">
 <div style="position:absolute;top:-160px;left:-80px;width:520px;height:420px;background:radial-gradient(closest-side, {{ mode.glow }}, transparent);pointer-events:none"></div>
 <div ref="{{ scrollRef }}" style="flex:1;overflow-y:auto;scrollbar-width:none;padding:calc(env(safe-area-inset-top, 0px) + 18px) 18px 20px;position:relative;display:flex;flex-direction:column;gap:22px">
 
 <sc-if value="{{ isNow }}" hint-placeholder-val="{{ true }}">
-<div style="display:flex;justify-content:space-between;align-items:center"><div style="display:flex;align-items:center;gap:8px"><svg width="22" height="22" viewBox="0 0 48 48"><path d="M8 26L24 11L40 26" fill="none" stroke="#f1efea" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path><path d="M16 32L24 24.5L32 32" fill="none" stroke="#f1efea" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="24" cy="38.5" r="3.5" fill="#f2b14c"></circle></svg><span style="font-size:13px;font-weight:700;color:#a3a09a">{{ homeName }}</span></div><div style="display:flex;align-items:center;gap:10px"><div style="display:flex"><sc-for list="{{ avatars }}" as="av" hint-placeholder-count="2"><div style="width:30px;height:30px;border-radius:50%;background:#2a2b2f;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;border:2px solid #0e0f10;margin-left:{{ av.ml }};opacity:{{ av.op }}">{{ av.initial }}</div></sc-for></div><div onClick="{{ openMore }}" style="width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,0.07);display:flex;align-items:center;justify-content:center;cursor:pointer;position:relative"><span style="font-family:'Material Symbols Rounded';font-size:20px">apps</span><sc-if value="{{ moreDot }}" hint-placeholder-val="{{ false }}"><div style="position:absolute;top:2px;right:2px;width:8px;height:8px;border-radius:50%;background:#f2b14c;border:2px solid #0e0f10"></div></sc-if></div></div></div>
+<div style="display:flex;justify-content:space-between;align-items:center"><div style="display:flex;align-items:center;gap:8px"><svg width="22" height="22" viewBox="0 0 48 48"><path d="M8 26L24 11L40 26" fill="none" stroke="#f1efea" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path><path d="M16 32L24 24.5L32 32" fill="none" stroke="#f1efea" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="24" cy="38.5" r="3.5" fill="#f2b14c"></circle></svg><span style="font-size:13px;font-weight:700;color:#a3a09a">{{ homeName }}</span></div><div style="display:flex;align-items:center;gap:10px"><div style="display:flex"><sc-for list="{{ avatars }}" as="av" hint-placeholder-count="2"><div style="width:30px;height:30px;border-radius:50%;background:#2a2b2f;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;border:2px solid #0e0f10;margin-left:{{ av.ml }};opacity:{{ av.op }}">{{ av.initial }}</div></sc-for></div></div></div>
 <div style="display:flex;flex-direction:column;gap:6px">
 <span style="font-size:13px;color:#a3a09a">{{ dateLine }}</span>
-<div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Material Symbols Rounded';font-size:34px;font-variation-settings:'FILL' 1;color:{{ mode.color }}">{{ mode.icon }}</span><span style="font-size:38px;font-weight:700;letter-spacing:-0.03em;line-height:1">{{ mode.name }}</span></div>
+<div onClick="{{ goModes }}" style="display:flex;align-items:center;gap:10px;cursor:pointer;align-self:flex-start"><span style="font-family:'Material Symbols Rounded';font-size:34px;font-variation-settings:'FILL' 1;color:{{ mode.color }}">{{ mode.icon }}</span><span style="font-size:38px;font-weight:700;letter-spacing:-0.03em;line-height:1">{{ mode.name }}</span><span style="font-family:'Material Symbols Rounded';font-size:26px;color:#6f6d69">chevron_right</span></div>
 <span style="font-size:14px;color:#c9c6c0">{{ untilLine }} · {{ lightsOn }}</span>
 <sc-if value="{{ overlayOn }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:8px;padding:6px 6px 6px 12px;border-radius:12px;background:#1c1d20;align-self:flex-start;margin-top:4px"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#f2b14c;font-variation-settings:'FILL' 1">{{ ovIcon }}</span><span style="font-size:12.5px;font-weight:600">{{ ovLabel }}</span><div onClick="{{ endOverlay }}" style="padding:5px 10px;border-radius:8px;background:rgba(255,255,255,0.08);font-size:12px;font-weight:700">End</div></div></sc-if>
 </div>
@@ -68,29 +69,35 @@
 <div onClick="{{ goModes }}" style="border-radius:16px;padding:14px 16px;background:#16171a;display:flex;align-items:center;gap:12px;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:22px;color:#7fd4a0">fact_check</span><div style="display:flex;flex-direction:column;gap:2px;flex:1"><span style="font-size:14px;font-weight:700">{{ findingsTitle }}</span><span style="font-size:12px;color:#a3a09a">Kova replayed your modes on the last 14 days</span></div><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#a3a09a">chevron_right</span></div>
 </sc-if>
 <div style="display:flex;flex-direction:column;gap:6px">
-<span style="font-size:16px;font-weight:700">Just happened</span>
+<div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:16px;font-weight:700">Just happened</span><span onClick="{{ goActivity }}" style="font-size:13px;font-weight:600;color:#f2b14c;cursor:pointer">See all</span></div>
 <sc-for list="{{ happened }}" as="h" hint-placeholder-count="3"><div style="display:flex;gap:12px;padding:10px 0;border-top:1px solid rgba(255,255,255,0.05)"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#a3a09a;width:38px;padding-top:1px">{{ h.t }}</span><div style="display:flex;flex-direction:column;gap:2px;flex:1"><span style="font-size:13.5px;font-weight:600">{{ h.what }}</span><span style="font-size:12px;color:#a3a09a">↳ {{ h.why }}</span></div></div></sc-for>
 </div>
 </sc-if>
 
-<sc-if value="{{ isRooms }}" hint-placeholder-val="{{ false }}">
-<span style="font-size:30px;font-weight:700;letter-spacing:-0.02em">Rooms</span>
-<div style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:-6px -18px 0;padding:0 18px">
-<sc-for list="{{ roomTabs }}" as="rt" hint-placeholder-count="10"><div onClick="{{ rt.open }}" style="flex:none;padding:8px 14px;border-radius:999px;font-size:13px;font-weight:600;cursor:pointer;background:{{ rt.bg }};color:{{ rt.fg }}">{{ rt.name }}</div></sc-for>
-</div>
-<div style="display:flex;justify-content:space-between;font-size:13px;color:#a3a09a"><span>{{ roomSummary }}</span><span onClick="{{ roomAllOff }}" style="color:#f2b14c;font-weight:600;cursor:pointer">All lights off</span></div>
+<sc-if value="{{ isDevices }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px"><div style="display:flex;flex-direction:column;gap:4px"><span style="font-size:30px;font-weight:700;letter-spacing:-0.02em">Devices</span><span style="font-size:13px;color:#a3a09a">{{ devSummary }}</span></div><div onClick="{{ goCustomise }}" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:12px;background:rgba(255,255,255,0.07);font-size:13px;font-weight:700;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:18px">tune</span>Customise</div></div>
+<div style="display:flex;align-items:center;gap:8px;padding:0 6px 0 12px;border-radius:14px;background:#16171a;border:1px solid rgba(255,255,255,0.08);margin-top:-8px"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#8a8781">search</span><input value="{{ devQ }}" onChange="{{ setDevQ }}" placeholder="Search devices" autocomplete="off" style="flex:1;min-width:0;background:transparent;border:none;outline:none;color:#f1efea;font-family:Manrope,sans-serif;font-size:16px;padding:11px 0"><sc-if value="{{ hasDevQ }}" hint-placeholder-val="{{ false }}"><span onClick="{{ clearDevQ }}" style="font-family:'Material Symbols Rounded';font-size:19px;color:#8a8781;padding:6px;cursor:pointer">close</span></sc-if></div>
+<div style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:-8px -18px 0;padding:0 18px"><sc-for list="{{ roomPills }}" as="rt" hint-placeholder-count="6"><div onClick="{{ rt.open }}" style="flex:none;padding:8px 14px;border-radius:999px;font-size:13px;font-weight:600;cursor:pointer;background:{{ rt.bg }};color:{{ rt.fg }}">{{ rt.name }}</div></sc-for></div>
+<div style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:-12px -18px 0;padding:0 18px"><sc-for list="{{ typeChips }}" as="tc" hint-placeholder-count="5"><div onClick="{{ tc.pick }}" style="flex:none;display:flex;align-items:center;gap:5px;padding:6px 11px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;background:{{ tc.bg }};color:{{ tc.fg }};border:1px solid {{ tc.border }}"><span style="font-family:'Material Symbols Rounded';font-size:15px">{{ tc.icon }}</span>{{ tc.label }}</div></sc-for></div>
+<sc-for list="{{ devGroups }}" as="g" hint-placeholder-count="3">
+<div style="display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px"><div style="display:flex;align-items:center;gap:8px;min-width:0"><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#8a8781">{{ g.icon }}</span><span style="font-size:16px;font-weight:700">{{ g.name }}</span><span style="font-size:12px;color:#8a8781;white-space:nowrap">{{ g.sub }}</span></div><sc-if value="{{ g.hasOn }}" hint-placeholder-val="{{ false }}"><span onClick="{{ g.allOff }}" style="flex:none;color:#f2b14c;font-size:13px;font-weight:600;cursor:pointer">All off</span></sc-if></div>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-<sc-for list="{{ tiles }}" as="d" hint-placeholder-count="6">
-<div onClick="{{ d.toggle }}" style="border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:16px;cursor:pointer;background:{{ d.bg }};border:1px solid {{ d.border }}">
-<div style="display:flex;justify-content:space-between"><div style="width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:{{ d.iconBg }};color:{{ d.iconFg }}"><span style="font-family:'Material Symbols Rounded';font-size:21px;font-variation-settings:'FILL' 1">{{ d.icon }}</span></div><div onClick="{{ d.open }}" style="width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#a3a09a"><span style="font-family:'Material Symbols Rounded';font-size:20px">more_horiz</span></div></div>
-<div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:14px;font-weight:700">{{ d.name }}</span><span style="font-size:12px;color:{{ d.stateFg }}">{{ d.state }}</span></div>
+<sc-for list="{{ g.tiles }}" as="d" hint-placeholder-count="4">
+<div onClick="{{ d.toggle }}" style="border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:16px;cursor:pointer;background:{{ d.bg }};border:1px solid {{ d.border }};opacity:{{ d.op }}">
+<div style="display:flex;justify-content:space-between"><div style="width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:{{ d.iconBg }};color:{{ d.iconFg }}"><span style="font-family:'Material Symbols Rounded';font-size:21px;font-variation-settings:'FILL' 1">{{ d.icon }}</span></div><div onClick="{{ d.open }}" style="width:34px;height:34px;margin:-4px -6px 0 0;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#a3a09a;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px">more_horiz</span></div></div>
+<div style="display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ d.name }}</span><span style="font-size:12px;color:{{ d.stateFg }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ d.state }}</span></div>
 </div>
 </sc-for>
 </div>
+</div>
+</sc-for>
+<sc-if value="{{ devEmpty }}" hint-placeholder-val="{{ false }}"><div style="padding:28px 16px;border-radius:18px;background:#16171a;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center"><span style="font-family:'Material Symbols Rounded';font-size:28px;color:#6f6d69">search_off</span><span style="font-size:14px;font-weight:700">{{ devEmptyTitle }}</span><span style="font-size:12.5px;color:#a3a09a;line-height:1.45">{{ devEmptyText }}</span></div></sc-if>
+<sc-if value="{{ hasHidden }}" hint-placeholder-val="{{ false }}"><div onClick="{{ toggleHidden }}" style="align-self:center;display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:999px;background:rgba(255,255,255,0.06);font-size:12.5px;font-weight:600;color:#a3a09a;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:17px">{{ hiddenIcon }}</span>{{ hiddenLabel }}</div></sc-if>
 </sc-if>
 
 <sc-if value="{{ isModes }}" hint-placeholder-val="{{ false }}">
-<div style="display:flex;flex-direction:column;gap:4px"><span style="font-size:30px;font-weight:700;letter-spacing:-0.02em">Modes</span><span style="font-size:13px;color:#a3a09a">How your home behaves through the day</span></div>
+<div style="display:flex;align-items:center;gap:10px"><div onClick="{{ back }}" style="width:36px;height:36px;flex:none;border-radius:50%;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px">arrow_back</span></div><div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:12px;color:#a3a09a">How your home behaves through the day</span><span style="font-size:26px;font-weight:700;letter-spacing:-0.02em">Modes</span></div></div>
 <sc-for list="{{ findings }}" as="f" hint-placeholder-count="2">
 <div style="border-radius:16px;padding:14px;background:#16171a;display:flex;flex-direction:column;gap:8px">
 <div style="display:flex;align-items:center;gap:6px"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:{{ f.fg }}">{{ f.icon }}</span><span style="font-size:11px;font-weight:700;color:{{ f.fg }};text-transform:uppercase;letter-spacing:0.06em;flex:1">{{ f.kind }}</span><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:{{ f.modeTint }};color:{{ f.modeColor }}">{{ f.modeName }}</span></div>
@@ -115,7 +122,7 @@
 </sc-if>
 
 <sc-if value="{{ isActivity }}" hint-placeholder-val="{{ false }}">
-<span style="font-size:30px;font-weight:700;letter-spacing:-0.02em">Activity</span>
+<div style="display:flex;align-items:center;gap:10px"><div onClick="{{ back }}" style="width:36px;height:36px;flex:none;border-radius:50%;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px">arrow_back</span></div><div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:12px;color:#a3a09a">Everything that happened, and why</span><span style="font-size:26px;font-weight:700;letter-spacing:-0.02em">Activity</span></div></div>
 <div onClick="{{ push.go }}" style="display:flex;gap:12px;align-items:center;padding:12px 14px;border-radius:16px;background:#16171a;border:1px solid rgba(255,255,255,0.05);cursor:pointer"><div style="width:32px;height:32px;border-radius:10px;flex:none;display:flex;align-items:center;justify-content:center;background:{{ push.iconBg }};color:{{ push.iconFg }}"><span style="font-family:'Material Symbols Rounded';font-size:18px">{{ push.icon }}</span></div><div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:13.5px;font-weight:600">{{ push.title }}</span><span style="font-size:12px;color:#a3a09a">{{ push.note }}</span></div><sc-if value="{{ push.hasBtn }}" hint-placeholder-val="{{ true }}"><div style="flex:none;padding:8px 14px;border-radius:999px;font-size:13px;font-weight:600;background:#f1efea;color:#141517">{{ push.btn }}</div></sc-if></div>
 <div style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:-6px -18px 0;padding:0 18px"><sc-for list="{{ actFilters }}" as="af" hint-placeholder-count="4"><div onClick="{{ af.pick }}" style="flex:none;padding:8px 14px;border-radius:999px;font-size:13px;font-weight:600;cursor:pointer;background:{{ af.bg }};color:{{ af.fg }}">{{ af.label }}</div></sc-for></div>
 <div style="display:flex;flex-direction:column">
@@ -129,8 +136,41 @@
 <div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:11px;font-weight:700;color:#8a8781;text-transform:uppercase;letter-spacing:0.06em">Try</span><div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ asks }}" as="q" hint-placeholder-count="5"><div onClick="{{ q.ask }}" style="padding:8px 12px;border-radius:999px;background:#16171a;border:1px solid rgba(255,255,255,0.08);font-size:12.5px;font-weight:600;cursor:pointer">{{ q.text }}</div></sc-for></div></div>
 </sc-if>
 
+<sc-if value="{{ isCustomise }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;align-items:center;gap:10px"><div onClick="{{ back }}" style="width:36px;height:36px;flex:none;border-radius:50%;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px">arrow_back</span></div><div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:12px;color:#a3a09a">{{ homeName }}</span><span style="font-size:26px;font-weight:700;letter-spacing:-0.02em">Customise home</span></div></div>
+
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">Home name</span><div style="display:flex;gap:8px"><input value="{{ cu.homeDraft }}" onChange="{{ cu.setHome }}" autocomplete="off" style="flex:1;min-width:0;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,0.1);background:#16171a;color:#f1efea;font-family:Manrope,sans-serif;font-size:16px;outline:none"><sc-if value="{{ cu.homeChanged }}" hint-placeholder-val="{{ false }}"><div onClick="{{ cu.saveHome }}" style="padding:10px 14px;border-radius:12px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center">Save</div></sc-if></div></div>
+
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">Rooms</span>
+<div style="border-radius:16px;background:#16171a;overflow:hidden">
+<sc-for list="{{ cu.rooms }}" as="r" hint-placeholder-count="5"><div onClick="{{ r.open }}" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid rgba(255,255,255,0.05);cursor:pointer"><div style="width:34px;height:34px;flex:none;border-radius:10px;background:#232428;display:flex;align-items:center;justify-content:center;color:#d8d5cf"><span style="font-family:'Material Symbols Rounded';font-size:19px">{{ r.icon }}</span></div><div style="display:flex;flex-direction:column;gap:1px;flex:1;min-width:0"><span style="font-size:14px;font-weight:700">{{ r.name }}</span><span style="font-size:12px;color:#a3a09a">{{ r.sub }}</span></div><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#6f6d69">chevron_right</span></div></sc-for>
+</div>
+<div style="display:flex;gap:8px"><input value="{{ cu.newRoom }}" onChange="{{ cu.setNewRoom }}" placeholder="New room, e.g. Hallway" autocomplete="off" style="flex:1;min-width:0;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,0.1);background:#16171a;color:#f1efea;font-family:Manrope,sans-serif;font-size:16px;outline:none"><div onClick="{{ cu.addRoom }}" style="padding:10px 14px;border-radius:12px;background:rgba(255,255,255,0.08);font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center">Add</div></div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">People</span>
+<div style="border-radius:16px;background:#16171a;overflow:hidden">
+<sc-for list="{{ cu.people }}" as="pp" hint-placeholder-count="2"><div onClick="{{ pp.open }}" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid rgba(255,255,255,0.05);cursor:pointer"><div style="width:34px;height:34px;flex:none;border-radius:50%;background:#2a2b2f;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px">{{ pp.initial }}</div><div style="display:flex;flex-direction:column;gap:1px;flex:1;min-width:0"><span style="font-size:14px;font-weight:700">{{ pp.name }}</span><span style="font-size:12px;color:#a3a09a">{{ pp.detail }}</span></div><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#6f6d69">chevron_right</span></div></sc-for>
+</div>
+<div style="display:flex;gap:8px"><input value="{{ cu.newPerson }}" onChange="{{ cu.setNewPerson }}" placeholder="Add someone" autocomplete="off" style="flex:1;min-width:0;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,0.1);background:#16171a;color:#f1efea;font-family:Manrope,sans-serif;font-size:16px;outline:none"><div onClick="{{ cu.addPerson }}" style="padding:10px 14px;border-radius:12px;background:rgba(255,255,255,0.08);font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center">Add</div></div>
+<span style="font-size:11.5px;color:#6f6d69;line-height:1.45">Who’s home comes from their phone: set that up in Integrations → Presence.</span>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">Favourites on Now</span>
+<div style="border-radius:16px;background:#16171a;overflow:hidden">
+<sc-for list="{{ cu.favs }}" as="fv" hint-placeholder-count="3"><div style="display:flex;align-items:center;gap:10px;padding:10px 10px 10px 14px;border-top:1px solid rgba(255,255,255,0.05)"><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#f2b14c;font-variation-settings:'FILL' 1">star</span><div style="display:flex;flex-direction:column;gap:1px;flex:1;min-width:0"><span style="font-size:14px;font-weight:600">{{ fv.name }}</span><span style="font-size:12px;color:#a3a09a">{{ fv.room }}</span></div><span onClick="{{ fv.up }}" style="font-family:'Material Symbols Rounded';font-size:20px;color:{{ fv.upFg }};padding:6px;cursor:pointer">arrow_upward</span><span onClick="{{ fv.remove }}" style="font-family:'Material Symbols Rounded';font-size:20px;color:#8a8781;padding:6px;cursor:pointer">close</span></div></sc-for>
+<sc-if value="{{ cu.noFavs }}" hint-placeholder-val="{{ false }}"><div style="padding:14px;font-size:13px;color:#a3a09a;line-height:1.45">None picked yet, so Now suggests a few. Tap ⋯ on any device and turn on Favourite.</div></sc-if>
+</div>
+</div>
+
+<sc-if value="{{ cu.hasHidden }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">Hidden devices</span>
+<div style="border-radius:16px;background:#16171a;overflow:hidden">
+<sc-for list="{{ cu.hidden }}" as="hd" hint-placeholder-count="2"><div style="display:flex;align-items:center;gap:10px;padding:10px 10px 10px 14px;border-top:1px solid rgba(255,255,255,0.05)"><div style="display:flex;flex-direction:column;gap:1px;flex:1;min-width:0"><span style="font-size:14px;font-weight:600">{{ hd.name }}</span><span style="font-size:12px;color:#a3a09a">{{ hd.room }}</span></div><div onClick="{{ hd.show }}" style="padding:7px 12px;border-radius:9px;background:rgba(255,255,255,0.08);font-size:12.5px;font-weight:700;cursor:pointer">Show</div></div></sc-for>
+</div></div></sc-if>
+</sc-if>
+
 <sc-if value="{{ isMore }}" hint-placeholder-val="{{ false }}">
-<div style="display:flex;align-items:center;gap:10px"><div onClick="{{ back }}" style="width:36px;height:36px;flex:none;border-radius:50%;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px">arrow_back</span></div><div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:12px;color:#a3a09a">{{ homeName }}</span><span style="font-size:26px;font-weight:700;letter-spacing:-0.02em">More</span></div></div>
+<div style="display:flex;align-items:center;gap:10px"><sc-if value="{{ moreBack }}" hint-placeholder-val="{{ false }}"><div onClick="{{ back }}" style="width:36px;height:36px;flex:none;border-radius:50%;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px">arrow_back</span></div></sc-if><div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:12px;color:#a3a09a">{{ homeName }}</span><span style="font-size:26px;font-weight:700;letter-spacing:-0.02em">More</span></div></div>
 <div style="border-radius:18px;background:#16171a;overflow:hidden">
 <sc-for list="{{ moreRows }}" as="mr" hint-placeholder-count="5">
 <div onClick="{{ mr.go }}" style="display:flex;align-items:center;gap:12px;padding:13px 14px;border-top:1px solid rgba(255,255,255,0.05);cursor:pointer"><div style="width:36px;height:36px;border-radius:11px;flex:none;display:flex;align-items:center;justify-content:center;background:{{ mr.iconBg }};color:{{ mr.iconFg }}"><span style="font-family:'Material Symbols Rounded';font-size:20px">{{ mr.icon }}</span></div><div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:14.5px;font-weight:700">{{ mr.name }}</span><span style="font-size:12px;color:{{ mr.subFg }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ mr.sub }}</span></div><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#6f6d69">chevron_right</span></div>
@@ -141,12 +181,21 @@
 </sc-if>
 
 <sc-if value="{{ isSecurity }}" hint-placeholder-val="{{ false }}">
-<div style="display:flex;align-items:center;gap:10px"><div onClick="{{ back }}" style="width:36px;height:36px;flex:none;border-radius:50%;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px">arrow_back</span></div><div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:12px;color:#a3a09a">{{ secSummary }}</span><span style="font-size:26px;font-weight:700;letter-spacing:-0.02em">Security</span></div></div>
-<sc-if value="{{ multiCam }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:-6px -18px 0;padding:0 18px"><sc-for list="{{ camThumbs }}" as="ct" hint-placeholder-count="3"><div onClick="{{ ct.pick }}" style="flex:none;padding:8px 14px;border-radius:999px;font-size:13px;font-weight:600;cursor:pointer;background:{{ ct.bg }};color:{{ ct.fg }}">{{ ct.name }}</div></sc-for></div></sc-if>
+<div style="display:flex;align-items:center;gap:10px"><sc-if value="{{ secBack }}" hint-placeholder-val="{{ false }}"><div onClick="{{ back }}" style="width:36px;height:36px;flex:none;border-radius:50%;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px">arrow_back</span></div></sc-if><div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:12px;color:#a3a09a">{{ secSummary }}</span><span style="font-size:26px;font-weight:700;letter-spacing:-0.02em">Security</span></div></div>
+
 <div style="border-radius:18px;overflow:hidden;background:#16171a">
 <div style="aspect-ratio:16/9;background:repeating-linear-gradient(135deg,#1b1c1f 0 12px,#202125 12px 24px);display:flex;align-items:center;justify-content:center;position:relative"><sc-if value="{{ camMain.streaming }}" hint-placeholder-val="{{ false }}"><video ref="{{ camMain.videoRef }}" playsinline muted autoplay style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000"></video></sc-if><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#6f6d69;padding:0 16px;text-align:center">{{ camMain.slot }}</span><sc-if value="{{ camMain.hasCam }}" hint-placeholder-val="{{ false }}"><div onClick="{{ camMain.liveAct }}" style="position:absolute;bottom:10px;left:10px;display:flex;align-items:center;gap:6px;padding:8px 14px 8px 10px;border-radius:999px;background:rgba(14,15,16,0.78);font-size:13px;font-weight:700;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:19px;font-variation-settings:'FILL' 1;color:#ff6b5e">{{ camMain.liveIcon }}</span>{{ camMain.liveLabel }}</div></sc-if><sc-if value="{{ camMain.canUnmute }}" hint-placeholder-val="{{ false }}"><div onClick="{{ camMain.toggleSound }}" style="position:absolute;bottom:10px;right:10px;width:36px;height:36px;border-radius:50%;background:rgba(14,15,16,0.78);display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:19px">{{ camMain.soundIcon }}</span></div></sc-if></div>
 <div style="padding:12px 14px;display:flex;justify-content:space-between;align-items:center;gap:10px"><span style="font-size:15px;font-weight:700">{{ camMain.name }}</span><span style="font-size:12px;color:#a3a09a">{{ camMain.last }}</span></div>
 </div>
+<sc-if value="{{ multiCam }}" hint-placeholder-val="{{ true }}"><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+<sc-for list="{{ camThumbs }}" as="ct" hint-placeholder-count="3">
+<div onClick="{{ ct.pick }}" style="border-radius:14px;overflow:hidden;background:#16171a;cursor:pointer;outline:{{ ct.ring }};outline-offset:2px">
+<div style="aspect-ratio:16/9;background:repeating-linear-gradient(135deg,#1b1c1f 0 8px,#202125 8px 16px);position:relative;display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:24px;color:#4a4b50">{{ ct.icon }}</span><div style="position:absolute;inset:0;background-image:{{ ct.img }};background-size:cover;background-position:center"></div><div style="position:absolute;top:8px;left:8px;width:8px;height:8px;border-radius:50%;background:{{ ct.dot }};box-shadow:0 0 0 2px rgba(14,15,16,0.7)"></div></div>
+<div style="padding:9px 11px;display:flex;flex-direction:column;gap:2px"><span style="font-size:13px;font-weight:700">{{ ct.name }}</span><span style="font-size:11.5px;color:#a3a09a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ ct.last }}</span></div>
+</div>
+</sc-for>
+</div></sc-if>
+<sc-if value="{{ noCams }}" hint-placeholder-val="{{ false }}"><div style="border-radius:18px;padding:18px;border:1px dashed rgba(255,255,255,0.14);display:flex;align-items:center;gap:14px"><span style="font-family:'Material Symbols Rounded';font-size:24px;color:#a3a09a">videocam</span><div style="display:flex;flex-direction:column;gap:2px;flex:1"><span style="font-size:14px;font-weight:700">No cameras yet</span><span style="font-size:12px;color:#a3a09a;line-height:1.4">Link Google Nest in Integrations to see your doorbell and cameras here.</span></div><div onClick="{{ goNest }}" style="padding:8px 12px;border-radius:10px;background:rgba(255,255,255,0.08);font-size:12.5px;font-weight:700;cursor:pointer">Set up</div></div></sc-if>
 <div style="background:#16171a;border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:12px">
 <span style="font-size:15px;font-weight:700">Who’s home</span>
 <sc-for list="{{ people }}" as="pp" hint-placeholder-count="2">
@@ -263,7 +312,7 @@
 <div style="flex:none;padding:10px 14px 30px;background:rgba(17,18,20,0.96);border-top:1px solid rgba(255,255,255,0.06);display:flex;justify-content:space-around;align-items:center;position:relative">
 <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="5">
 <div onClick="{{ t.go }}" style="display:flex;flex-direction:column;align-items:center;gap:3px;width:60px;cursor:pointer;color:{{ t.fg }}">
-<div style="width:{{ t.size }};height:{{ t.size }};border-radius:50%;display:flex;align-items:center;justify-content:center;background:{{ t.bg }};margin-top:{{ t.mt }}"><span style="font-family:'Material Symbols Rounded';font-size:{{ t.iconSize }};font-variation-settings:'FILL' {{ t.fill }};color:{{ t.iconFg }}">{{ t.icon }}</span></div>
+<div style="width:{{ t.size }};height:{{ t.size }};border-radius:50%;display:flex;align-items:center;justify-content:center;background:{{ t.bg }};margin-top:{{ t.mt }};position:relative"><sc-if value="{{ t.dot }}" hint-placeholder-val="{{ false }}"><div style="position:absolute;top:0;right:-2px;width:8px;height:8px;border-radius:50%;background:#f2b14c;border:2px solid #111214"></div></sc-if><span style="font-family:'Material Symbols Rounded';font-size:{{ t.iconSize }};font-variation-settings:'FILL' {{ t.fill }};color:{{ t.iconFg }}">{{ t.icon }}</span></div>
 <span style="font-size:10.5px;font-weight:700">{{ t.label }}</span>
 </div>
 </sc-for>
@@ -271,18 +320,62 @@
 
 <sc-if value="{{ sheetOpen }}" hint-placeholder-val="{{ false }}">
 <div onClick="{{ closeSheet }}" style="position:absolute;inset:0;background:rgba(0,0,0,0.55)"></div>
-<div style="position:absolute;left:0;right:0;bottom:0;border-radius:28px 28px 0 0;background:#141517;padding:10px 20px 40px;display:flex;flex-direction:column;gap:16px">
-<div style="width:40px;height:5px;border-radius:3px;background:#35363a;align-self:center"></div>
-<div style="display:flex;justify-content:space-between;align-items:center"><div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:12px;color:#a3a09a">{{ sh.room }}</span><span style="font-size:22px;font-weight:700">{{ sh.name }}</span></div><div onClick="{{ sh.toggle }}" style="width:52px;height:32px;border-radius:16px;padding:3px;display:flex;justify-content:flex-start;background:{{ sh.track }};cursor:pointer"><div style="width:26px;height:26px;border-radius:50%;background:#fff;transform:{{ sh.knob }}"></div></div></div>
-<sc-if value="{{ sh.dimmable }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:8px"><div style="display:flex;justify-content:space-between;font-size:13px;font-weight:600"><span>Brightness</span><span style="color:#a3a09a">{{ sh.briLabel }}</span></div><input type="range" min="1" max="100" value="{{ sh.bri }}" onChange="{{ sh.setBri }}" style="width:100%;height:28px"></div></sc-if>
-<div style="display:flex;flex-direction:column;border-radius:14px;background:#1c1d20;overflow:hidden"><div style="display:flex;gap:12px;padding:12px 14px"><span style="font-family:'Material Symbols Rounded';font-size:19px;color:#a3a09a">help</span><div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">Why it’s like this</span><span style="font-size:13px;line-height:1.45">{{ sh.why }}</span></div></div><div style="display:flex;gap:12px;padding:12px 14px;border-top:1px solid rgba(255,255,255,0.05)"><span style="font-family:'Material Symbols Rounded';font-size:19px;color:#f2b14c">schedule</span><div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">What’s next</span><span style="font-size:13px;line-height:1.45">{{ sh.next }}</span></div></div></div>
+<div style="position:absolute;left:0;right:0;bottom:0;max-height:92%;overflow-y:auto;scrollbar-width:none;border-radius:28px 28px 0 0;background:#141517;padding:10px 20px calc(env(safe-area-inset-bottom, 0px) + 34px);display:flex;flex-direction:column;gap:18px">
+<div onClick="{{ closeSheet }}" title="Close" style="align-self:stretch;display:flex;justify-content:center;padding:8px 0 12px;margin:-10px 0 -10px;cursor:pointer;flex:none"><div style="width:40px;height:5px;border-radius:3px;background:#35363a;"></div></div>
+<div style="display:flex;justify-content:space-between;align-items:center;gap:12px"><div style="display:flex;align-items:center;gap:12px;min-width:0"><div style="width:44px;height:44px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;background:{{ sh.iconBg }};color:{{ sh.iconFg }}"><span style="font-family:'Material Symbols Rounded';font-size:23px;font-variation-settings:'FILL' 1">{{ sh.icon }}</span></div><div style="display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font-size:12px;color:#a3a09a">{{ sh.room }}</span><span style="font-size:21px;font-weight:700;line-height:1.2">{{ sh.name }}</span><span style="font-size:12.5px;color:{{ sh.stateFg }}">{{ sh.state }}</span></div></div><sc-if value="{{ sh.hasSwitch }}" hint-placeholder-val="{{ true }}"><div onClick="{{ sh.toggle }}" style="width:52px;height:32px;flex:none;border-radius:16px;padding:3px;display:flex;justify-content:flex-start;background:{{ sh.track }};cursor:pointer"><div style="width:26px;height:26px;border-radius:50%;background:#fff;transform:{{ sh.knob }}"></div></div></sc-if></div>
+<sc-if value="{{ sh.dimmable }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:8px"><div style="display:flex;justify-content:space-between;font-size:13px;font-weight:600"><span>Brightness</span><span style="color:#a3a09a">{{ sh.briLabel }}</span></div><input type="range" min="1" max="100" value="{{ sh.bri }}" onChange="{{ sh.setBri }}" style="width:100%;accent-color:#f2b14c"></div></sc-if>
+<sc-if value="{{ sh.hasWarmth }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:13px;font-weight:600">Warmth</span><div style="display:flex;gap:8px"><sc-for list="{{ sh.temps }}" as="t" hint-placeholder-count="5"><div onClick="{{ t.pick }}" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;cursor:pointer"><div style="width:100%;height:34px;border-radius:10px;background:{{ t.bg }};outline:{{ t.ring }};outline-offset:2px"></div><span style="font-size:11px;color:#a3a09a">{{ t.label }}</span></div></sc-for></div></div></sc-if>
+<sc-if value="{{ sh.hasColor }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:13px;font-weight:600">Colour</span><div style="display:grid;grid-template-columns:repeat(8,1fr);gap:8px"><sc-for list="{{ sh.colors }}" as="c" hint-placeholder-count="8"><div onClick="{{ c.pick }}" style="aspect-ratio:1;border-radius:50%;background:{{ c.bg }};outline:{{ c.ring }};outline-offset:2px;cursor:pointer"></div></sc-for></div></div></sc-if>
+<sc-if value="{{ sh.isPlayer }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:10px"><div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#a3a09a">volume_down</span><input type="range" min="0" max="100" value="{{ sh.vol }}" onChange="{{ sh.setVol }}" style="flex:1;accent-color:#7cb8f0"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#a3a09a;width:36px;text-align:right">{{ sh.volLabel }}</span></div><span style="font-size:13px;font-weight:600">Play</span><div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ sh.sources }}" as="so" hint-placeholder-count="4"><div onClick="{{ so.play }}" style="display:flex;align-items:center;gap:6px;padding:9px 12px;border-radius:10px;background:{{ so.bg }};color:{{ so.fg }};font-size:13px;font-weight:600;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:17px">{{ so.icon }}</span>{{ so.name }}</div></sc-for></div></div></sc-if>
+<sc-if value="{{ sh.hasModes }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:13px;font-weight:600">{{ sh.modesLabel }}</span><div style="display:flex;gap:8px;flex-wrap:wrap"><sc-for list="{{ sh.modes }}" as="mo" hint-placeholder-count="3"><div onClick="{{ mo.pick }}" style="flex:1;min-width:84px;display:flex;align-items:center;justify-content:center;gap:6px;padding:11px 10px;border-radius:12px;background:{{ mo.bg }};color:{{ mo.fg }};font-size:13px;font-weight:700;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:18px">{{ mo.icon }}</span>{{ mo.label }}</div></sc-for></div></div></sc-if>
+<sc-if value="{{ sh.isCamera }}" hint-placeholder-val="{{ false }}"><div onClick="{{ sh.watch }}" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:13px;border-radius:14px;background:#f2b14c;color:#1a1408;font-size:14px;font-weight:700;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px;font-variation-settings:'FILL' 1">play_arrow</span>Watch live</div></sc-if>
+<sc-if value="{{ sh.hasPower }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:10px"><sc-for list="{{ sh.readings }}" as="rd" hint-placeholder-count="2"><div style="flex:1;padding:12px 14px;border-radius:14px;background:#1c1d20;display:flex;flex-direction:column;gap:2px"><span style="font-size:11.5px;color:#a3a09a">{{ rd.k }}</span><span style="font-size:17px;font-weight:700">{{ rd.v }}</span></div></sc-for></div></sc-if>
+<div style="display:flex;flex-direction:column;border-radius:14px;background:#1c1d20;overflow:hidden"><div style="display:flex;gap:12px;padding:12px 14px"><span style="font-family:'Material Symbols Rounded';font-size:19px;color:#a3a09a">help</span><div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">Why it’s like this</span><span style="font-size:13.5px;line-height:1.4">{{ sh.why }}</span></div></div><div style="display:flex;gap:12px;padding:12px 14px;border-top:1px solid rgba(255,255,255,0.05)"><span style="font-family:'Material Symbols Rounded';font-size:19px;color:#f2b14c">schedule</span><div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">What’s next</span><span style="font-size:13.5px;line-height:1.4">{{ sh.next }}</span></div></div></div>
+<div style="display:flex;flex-direction:column;gap:12px">
+<span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">Settings</span>
+<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:600;color:#a3a09a">Name</span><div style="display:flex;gap:8px"><input value="{{ sh.nameDraft }}" onChange="{{ sh.setName }}" placeholder="{{ sh.origName }}" autocomplete="off" style="flex:1;min-width:0;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,0.1);background:#16171a;color:#f1efea;font-family:Manrope,sans-serif;font-size:16px;outline:none"><sc-if value="{{ sh.nameChanged }}" hint-placeholder-val="{{ false }}"><div onClick="{{ sh.saveName }}" style="padding:10px 14px;border-radius:12px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center">Save</div></sc-if></div><sc-if value="{{ sh.renamed }}" hint-placeholder-val="{{ false }}"><span style="font-size:11.5px;color:#6f6d69">{{ sh.origNote }}</span></sc-if></div>
+<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:600;color:#a3a09a">Room</span><select value="{{ sh.roomId }}" onChange="{{ sh.setRoom }}" style="padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,0.1);background:#16171a;color:#f1efea;font-family:Manrope,sans-serif;font-size:16px;outline:none;width:100%"><sc-for list="{{ sh.roomOptions }}" as="ro" hint-placeholder-count="4"><option value="{{ ro.v }}">{{ ro.label }}</option></sc-for></select></div>
+<div style="border-radius:14px;background:#1c1d20;overflow:hidden">
+<div onClick="{{ sh.toggleFav }}" style="display:flex;align-items:center;gap:12px;padding:12px 14px;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#f2b14c;font-variation-settings:'FILL' {{ sh.favFill }}">star</span><div style="display:flex;flex-direction:column;gap:1px;flex:1"><span style="font-size:14px;font-weight:600">Favourite</span><span style="font-size:12px;color:#a3a09a">Show it on Now</span></div><div style="width:46px;height:28px;flex:none;border-radius:14px;padding:3px;display:flex;justify-content:flex-start;background:{{ sh.favTrack }}"><div style="width:22px;height:22px;border-radius:50%;background:#fff;transform:{{ sh.favKnob }}"></div></div></div>
+<div onClick="{{ sh.toggleHidden }}" style="display:flex;align-items:center;gap:12px;padding:12px 14px;cursor:pointer;border-top:1px solid rgba(255,255,255,0.05)"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#a3a09a">visibility_off</span><div style="display:flex;flex-direction:column;gap:1px;flex:1"><span style="font-size:14px;font-weight:600">Hide from lists</span><span style="font-size:12px;color:#a3a09a">It keeps working in modes and automations</span></div><div style="width:46px;height:28px;flex:none;border-radius:14px;padding:3px;display:flex;justify-content:flex-start;background:{{ sh.hidTrack }}"><div style="width:22px;height:22px;border-radius:50%;background:#fff;transform:{{ sh.hidKnob }}"></div></div></div>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:600;color:#a3a09a">Used in</span><div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ sh.usedIn }}" as="u" hint-placeholder-count="2"><div onClick="{{ u.go }}" style="padding:7px 11px;border-radius:9px;background:#1c1d20;font-size:12.5px;font-weight:600;cursor:pointer">{{ u.name }}</div></sc-for><sc-if value="{{ sh.notUsed }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;color:#8a8781">Not in any mode or overlay yet</span></sc-if></div></div>
+<span style="font-size:11.5px;color:#6f6d69;font-family:'JetBrains Mono',monospace;word-break:break-all">{{ sh.foot }}</span>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ rmOpen }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ rm.close }}" style="position:absolute;inset:0;background:rgba(0,0,0,0.55)"></div>
+<div style="position:absolute;left:0;right:0;bottom:0;max-height:92%;overflow-y:auto;scrollbar-width:none;border-radius:28px 28px 0 0;background:#141517;padding:10px 20px calc(env(safe-area-inset-bottom, 0px) + 34px);display:flex;flex-direction:column;gap:16px">
+<div onClick="{{ rm.close }}" title="Close" style="align-self:stretch;display:flex;justify-content:center;padding:8px 0 12px;margin:-10px 0 -10px;cursor:pointer;flex:none"><div style="width:40px;height:5px;border-radius:3px;background:#35363a;"></div></div>
+<div style="display:flex;justify-content:space-between;align-items:center"><div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:12px;color:#a3a09a">{{ rm.sub }}</span><span style="font-size:21px;font-weight:700">{{ rm.title }}</span></div><div onClick="{{ rm.save }}" style="padding:9px 16px;border-radius:12px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;cursor:pointer">Save</div></div>
+<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:600;color:#a3a09a">Name</span><input value="{{ rm.name }}" onChange="{{ rm.setName }}" autocomplete="off" style="flex:1;min-width:0;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,0.1);background:#16171a;color:#f1efea;font-family:Manrope,sans-serif;font-size:16px;outline:none"></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:12px;font-weight:600;color:#a3a09a">Icon</span><div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px"><sc-for list="{{ rm.icons }}" as="ic" hint-placeholder-count="10"><div onClick="{{ ic.pick }}" style="aspect-ratio:1;border-radius:12px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:{{ ic.bg }};color:{{ ic.fg }}"><span style="font-family:'Material Symbols Rounded';font-size:22px">{{ ic.icon }}</span></div></sc-for></div></div>
+<div style="display:flex;gap:8px"><div onClick="{{ rm.up }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:10px;border-radius:12px;background:rgba(255,255,255,0.06);font-size:13px;font-weight:600;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:18px">arrow_upward</span>Move up</div><div onClick="{{ rm.down }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:10px;border-radius:12px;background:rgba(255,255,255,0.06);font-size:13px;font-weight:600;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:18px">arrow_downward</span>Move down</div></div>
+<div style="display:flex;flex-direction:column;gap:8px;padding:14px;border-radius:14px;border:1px solid rgba(255,107,94,0.25)">
+<span style="font-size:13.5px;font-weight:700">Delete this room</span>
+<sc-if value="{{ rm.hasDevices }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;color:#a3a09a">{{ rm.devicesNote }}</span><select value="{{ rm.moveTo }}" onChange="{{ rm.setMoveTo }}" style="padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,0.1);background:#16171a;color:#f1efea;font-family:Manrope,sans-serif;font-size:16px;outline:none;width:100%"><sc-for list="{{ rm.moveOptions }}" as="mo" hint-placeholder-count="3"><option value="{{ mo.v }}">{{ mo.label }}</option></sc-for></select></sc-if>
+<div onClick="{{ rm.remove }}" style="align-self:flex-start;padding:9px 14px;border-radius:10px;background:rgba(255,107,94,0.14);color:#ff6b5e;font-size:13px;font-weight:700;cursor:pointer">Delete room</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ psOpen }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ ps.close }}" style="position:absolute;inset:0;background:rgba(0,0,0,0.55)"></div>
+<div style="position:absolute;left:0;right:0;bottom:0;max-height:92%;overflow-y:auto;scrollbar-width:none;border-radius:28px 28px 0 0;background:#141517;padding:10px 20px calc(env(safe-area-inset-bottom, 0px) + 34px);display:flex;flex-direction:column;gap:16px">
+<div onClick="{{ ps.close }}" title="Close" style="align-self:stretch;display:flex;justify-content:center;padding:8px 0 12px;margin:-10px 0 -10px;cursor:pointer;flex:none"><div style="width:40px;height:5px;border-radius:3px;background:#35363a;"></div></div>
+<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:21px;font-weight:700">{{ ps.title }}</span><div onClick="{{ ps.save }}" style="padding:9px 16px;border-radius:12px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;cursor:pointer">Save</div></div>
+<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:600;color:#a3a09a">Name</span><input value="{{ ps.name }}" onChange="{{ ps.setName }}" autocomplete="off" style="flex:1;min-width:0;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,0.1);background:#16171a;color:#f1efea;font-family:Manrope,sans-serif;font-size:16px;outline:none"></div>
+<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:600;color:#a3a09a">Their phone</span><input value="{{ ps.detail }}" onChange="{{ ps.setDetail }}" placeholder="e.g. iPhone" autocomplete="off" style="flex:1;min-width:0;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,0.1);background:#16171a;color:#f1efea;font-family:Manrope,sans-serif;font-size:16px;outline:none"></div>
+<div onClick="{{ ps.remove }}" style="align-self:flex-start;padding:9px 14px;border-radius:10px;background:rgba(255,107,94,0.14);color:#ff6b5e;font-size:13px;font-weight:700;cursor:pointer">Remove {{ ps.title }}</div>
 </div>
 </sc-if>
 
 <sc-if value="{{ edOpen }}" hint-placeholder-val="{{ false }}">
 <div onClick="{{ ed.close }}" style="position:absolute;inset:0;background:rgba(0,0,0,0.55)"></div>
 <div style="position:absolute;left:0;right:0;bottom:0;max-height:94%;overflow-y:auto;scrollbar-width:none;border-radius:28px 28px 0 0;background:#141517;padding:10px 18px calc(env(safe-area-inset-bottom, 0px) + 32px);display:flex;flex-direction:column;gap:18px">
-<div style="width:40px;height:5px;border-radius:3px;background:#35363a;align-self:center;flex:none"></div>
+<div onClick="{{ ed.close }}" title="Close" style="align-self:stretch;display:flex;justify-content:center;padding:8px 0 12px;margin:-10px 0 -10px;cursor:pointer;flex:none"><div style="width:40px;height:5px;border-radius:3px;background:#35363a;"></div></div>
 <div style="display:flex;align-items:center;gap:12px"><div style="width:40px;height:40px;flex:none;border-radius:12px;display:flex;align-items:center;justify-content:center;background:{{ ed.tint }};color:{{ ed.color }}"><span style="font-family:'Material Symbols Rounded';font-size:22px;font-variation-settings:'FILL' 1">{{ ed.icon }}</span></div><div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:12px;color:#a3a09a">Edit mode</span><span style="font-size:22px;font-weight:700">{{ ed.name }}</span></div><div onClick="{{ ed.close }}" style="padding:8px 14px;border-radius:12px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;cursor:pointer">Done</div></div>
 
 <div style="display:flex;flex-direction:column;gap:8px">
@@ -328,7 +421,7 @@
 <sc-if value="{{ igOpen }}" hint-placeholder-val="{{ false }}">
 <div onClick="{{ ig.close }}" style="position:absolute;inset:0;background:rgba(0,0,0,0.55)"></div>
 <div style="position:absolute;left:0;right:0;bottom:0;max-height:94%;overflow-y:auto;scrollbar-width:none;border-radius:28px 28px 0 0;background:#141517;padding:10px 18px calc(env(safe-area-inset-bottom, 0px) + 32px);display:flex;flex-direction:column;gap:18px">
-<div style="width:40px;height:5px;border-radius:3px;background:#35363a;align-self:center;flex:none"></div>
+<div onClick="{{ ig.close }}" title="Close" style="align-self:stretch;display:flex;justify-content:center;padding:8px 0 12px;margin:-10px 0 -10px;cursor:pointer;flex:none"><div style="width:40px;height:5px;border-radius:3px;background:#35363a;"></div></div>
 <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px"><div style="display:flex;align-items:center;gap:12px;min-width:0"><div style="width:40px;height:40px;flex:none;border-radius:12px;background:#232428;display:flex;align-items:center;justify-content:center;color:#d8d5cf"><span style="font-family:'Material Symbols Rounded';font-size:21px">{{ ig.icon }}</span></div><div style="display:flex;flex-direction:column;gap:3px;min-width:0"><span style="font-size:12px;color:#a3a09a">{{ ig.kicker }}</span><span style="font-size:22px;font-weight:700">{{ ig.name }}</span></div></div><div onClick="{{ ig.close }}" style="width:34px;height:34px;flex:none;border-radius:50%;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px">close</span></div></div>
 <span style="font-size:13px;color:#a3a09a;line-height:1.5;margin-top:-8px">{{ ig.description }}</span>
 <div style="display:flex;align-items:center;gap:8px;padding:12px 14px;border-radius:14px;background:#1c1d20"><div style="width:7px;height:7px;border-radius:50%;background:{{ ig.dot }}"></div><span style="font-size:13px;color:{{ ig.stFg }};flex:1;line-height:1.4">{{ ig.status }}</span></div>
@@ -490,6 +583,7 @@ function resRows(r){if(r==null||typeof r!=='object')return[{k:'Result',v:String(
   return rows.length?rows:[{k:'Done',v:'OK',font:'inherit'}]}
 // "Wednesday 30 Sept" → "Wed 30 Sep", as in the phone design.
 const shortDate=d=>String(d||'').replace(/^(\w{3})\w*/,'$1').replace(/\bSept\b/,'Sep');
+const ROOM_ICONS=['weekend','kitchen','desk','bed','single_bed','crib','music_note','local_laundry_service','garage_home','door_front','yard','bathtub','stairs','meeting_room','chair','tv','deck','balcony','fitness_center','checkroom'];
 const FAV_KEY='kova_favs';
 const loadFavs=()=>{try{return JSON.parse(localStorage.getItem(FAV_KEY)||'null')}catch(e){return null}};
 // Push notifications: service worker + Web Push subscription (iOS needs HTTPS and the app on the Home Screen).
@@ -516,10 +610,10 @@ class Component extends DCLogic {
     ['do','cam','page'].forEach(k=>u.searchParams.delete(k));history.replaceState(null,'',u.pathname+u.search+u.hash);
     if(d==='lights-off')api('POST','/api/lights/off').then(r=>this.toast(`${r.changed.length} light${r.changed.length===1?'':'s'} off`,this.undoFn(r.undo))).catch(e=>this.err(e));
     // "View camera" on a doorbell notification: open Security on that camera and start the live view.
-    if(cam){this.go('security',{camSel:cam});const dv=this.state.hub.devices.find(x=>x.id===cam);if(dv)this.goLive(dv)}
-    else if(['more','security','energy','media','integrations'].includes(page))this.go(page)}catch(e){}}
+    if(cam)this.watch(cam);
+    else if(page==='security'||page==='more')this.tab(page);else if(['modes','activity','energy','media','integrations','customise'].includes(page))this.go(page)}catch(e){}}
   componentWillUnmount(){this._closed=true;try{this._ws&&this._ws.close()}catch(e){}this.stopLive(true)}
-  componentDidUpdate(){if(this._pc&&this.state.page!=='security')this.stopLive(true)}
+  componentDidUpdate(){const s=this.state;if(this._pc&&!(s.page==='security'||(!s.page&&s.tab==='security')))this.stopLive(true)}
   connect(){
     if(this._closed)return;
     let ws;try{ws=new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.host}/api/ws${KOVA_TOKEN?'?token='+encodeURIComponent(KOVA_TOKEN):''}`)}catch(e){setTimeout(()=>this.connect(),3000);return}
@@ -535,14 +629,14 @@ class Component extends DCLogic {
   patch(id,p){clearTimeout(this._pt);this.optimistic(id,p);this._pt=setTimeout(()=>api('POST','/api/devices/'+id,p).catch(e=>this.err(e)),150)}
   devs(){const o={};this.state.hub.devices.forEach(d=>{o[d.id]={...d,...d.state,bri:d.state.bri??100}});return o}
   modeById(id){const H=this.state.hub;return H.modes.find(m=>m.id===id)||H.modes[0]}
-  tog(id){const d=this.devs()[id];if(!d||d.type==='camera'||d.type==='sensor')return;
+  tog(id){const d=this.devs()[id];if(!d||d.type==='sensor')return;if(d.type==='camera'){this.watch(id);return}
     if(d.type==='fan'){this.send(id,{mode:d.mode==='Auto'?'Sleep':'Auto'});return}
     if(d.type==='vacuum'){this.optimistic(id,{activity:d.on?'returning':'cleaning'});this.send(id,{on:!d.on});return}
     if(isPlayer(d)){this.send(id,d.on?{on:false,media:null}:{on:true,media:(this.state.hub.sources[0]||{}).name||'Radio',vol:d.vol??30});return}
     this.send(id,{on:!d.on})}
   st(d){if(d.type==='camera'||d.type==='sensor')return d.online===false?['Offline','#ff6b5e']:['Live','#7fd4a0'];if(d.online===false)return['Not responding','#ff6b5e'];if(d.type==='vacuum'){const a=d.activity||(d.on?'cleaning':'idle');return[`${VAC[a]||'Idle'}${d.battery!=null?' · '+d.battery+'%':''}`,a==='error'?'#ff6b5e':a==='cleaning'?'#f2b14c':'#a3a09a']}if(d.type==='fan')return[d.mode||'Auto','#7cb8f0'];if(isPlayer(d))return d.on?[d.media?`Playing ${d.media}`:'Playing','#7cb8f0']:['Idle','#a3a09a'];if(!d.on)return['Off','#a3a09a'];if(d.type==='dimmer')return[`On · ${d.bri}%`,'#f2b14c'];if(d.type==='plug')return[d.power!=null?`On · ${d.power} W`:'On','#f2b14c'];return['On','#f2b14c']}
   tint(d){const media=isPlayer(d);if(d.type==='camera'||d.type==='sensor')return{bg:'#16171a',border:'rgba(255,255,255,0.05)',iconBg:'rgba(127,212,160,0.15)',iconFg:'#7fd4a0'};if(d.type==='fan'||media)return{bg:d.on&&media?'rgba(124,184,240,0.12)':'#16171a',border:d.on&&media?'rgba(124,184,240,0.3)':'rgba(255,255,255,0.05)',iconBg:d.on?'rgba(124,184,240,0.2)':'#232428',iconFg:d.on?'#7cb8f0':'#8a8781'};return d.on?{bg:'rgba(242,177,76,0.11)',border:'rgba(242,177,76,0.28)',iconBg:d.color||'#f2b14c',iconFg:'#1a1408'}:{bg:'#16171a',border:'rgba(255,255,255,0.05)',iconBg:'#232428',iconFg:'#8a8781'}}
-  tile(d){const [s,f]=this.st(d);return{...d,...this.tint(d),icon:ICON[d.type],state:s,stateFg:f,toggle:()=>this.tog(d.id),open:e=>{e.stopPropagation();this.setState({sheet:d.id})}}}
+  tile(d){const [s,f]=this.st(d);return{...d,...this.tint(d),icon:ICON[d.type],state:s,stateFg:f,toggle:()=>this.tog(d.id),open:e=>{e.stopPropagation();this.setState({sheet:d.id,nameDraft:null})}}}
   // Live "Understood" preview, parsed on the hub as you type.
   setDraft(v){this.setState({draft:v});clearTimeout(this._pp);if(v.trim().length<3){this.setState({parse:null});return}
     this._pp=setTimeout(()=>api('POST','/api/ask/parse',{text:v}).then(r=>{if(this.state.draft===v)this.setState({parse:r})}).catch(()=>{}),180)}
@@ -558,8 +652,13 @@ class Component extends DCLogic {
   saveAi(patch){this.setState(patch);const s={...this.state,...patch};api('PUT','/api/assistant/settings',{engine:s.ai,share:s.share}).catch(e=>this.err(e))}
 
   // ---- pages under More: Security, Energy, Media, Integrations ----
-  go(page,extra){if(this.state.page==='security'&&page!=='security')this.stopLive(true);this.setState({page,igPick:false,...(extra||{})});if(page==='integrations'&&!this.state.igCat)this.loadInteg();try{this._scroll&&this._scroll.scrollTo(0,0)}catch(e){}}
-  back(){const p=this.state.page;this.go(p&&p!=='more'?'more':null,p==='more'?{}:{})}
+  // Pages (Modes, Activity, Energy, Media, Integrations, Customise) open over the current tab; back returns to where you were.
+  go(page,extra){this.setState(p=>({page,pageFrom:page&&p.page&&p.page!==page?p.page:null,igPick:false,...(extra||{})}));if(page==='integrations'&&!this.state.igCat)this.loadInteg();try{this._scroll&&this._scroll.scrollTo(0,0)}catch(e){}}
+  back(){this.go(this.state.pageFrom||null)}
+  tab(id){this.setState({tab:id,page:null,pageFrom:null});try{this._scroll&&this._scroll.scrollTo(0,0)}catch(e){}}
+  /** Open a camera's live view on the Security tab. */
+  watch(id){const d=this.state.hub.devices.find(x=>x.id===id);this.setState({tab:'security',page:null,camSel:id,sheet:null});try{this._scroll&&this._scroll.scrollTo(0,0)}catch(e){}if(d)this.goLive(d)}
+  settings(id,body,msg){return api('PATCH',`/api/devices/${encodeURIComponent(id)}/settings`,body).then(r=>{if(msg)this.toast(msg,this.undoFn(r.undo));return r}).catch(e=>this.err(e))}
   // Camera live view: WebRTC straight from the camera's cloud (Nest) to this phone; the hub only relays the offer/answer.
   videoRef=el=>{if(el&&this._stream&&el.srcObject!==this._stream){el.srcObject=this._stream;el.muted=!this.state.sound;el.playsInline=true;el.autoplay=true;el.play().catch(()=>{})}this._video=el||this._video}
   async goLive(d){
@@ -626,12 +725,15 @@ class Component extends DCLogic {
     const cams=list.filter(d=>d.type==='camera');const pls=list.filter(isPlayer);
     const E=H.energy||{available:false,now:{solar:0,load:null,grid:null},solarKwh:0,usedKwh:null,fromGridKwh:null,exportedKwh:null,hours:[],peak:null,devices:[]};
     const kw=w=>w==null?'—':Math.abs(w)>=1000?(Math.abs(w)/1000).toFixed(1)+' kW':Math.round(Math.abs(w))+' W';
-    const MORE=[['security','Security','shield','rgba(127,212,160,0.14)','#7fd4a0',`${cams.length} camera${cams.length===1?'':'s'} · ${H.people.filter(p=>p.home).length} home`],
+    const acts=H.activity.length;
+    const MORE=[['modes','Modes','routine','rgba(242,177,76,0.14)','#f2b14c',`${H.modes.length} modes · now ${(H.modes.find(m=>m.id===H.current.modeId)||{name:''}).name}${H.findings.length?` · ${H.findings.length} to look at`:''}`],
+      ['activity','Activity','history','rgba(127,212,160,0.14)','#7fd4a0',acts?`Latest: ${H.activity[0].what}`:'Nothing yet'],
       ['energy','Energy','electric_meter','rgba(242,177,76,0.14)','#f2b14c',E.available?`${kw(E.now.solar)} solar now · ${E.solarKwh.toFixed(1)} kWh today`:'No inverter or meter yet'],
       ['media','Media','speaker','rgba(124,184,240,0.14)','#7cb8f0',`${pls.filter(d=>d.on).length} playing · ${pls.length} players`],
+      ['customise','Customise home','tune','#232428','#d8d5cf',`${H.rooms.length} rooms · ${H.people.length} people · names, favourites`],
       ['integrations','Integrations','hub','#232428','#d8d5cf',bad.length?`${bad.length} need${bad.length===1?'s':''} attention: ${bad.map(i=>i.name).join(', ')}`:`${H.integrations.length} connected`],
       ['assistant','Assistant','graphic_eq','#232428','#d8d5cf','How Ask Kova understands you']];
-    const moreRows=MORE.map(([id,name,icon,iconBg,iconFg,sub])=>({name,icon,iconBg,iconFg,sub,subFg:id==='integrations'&&bad.length?'#f2b14c':'#a3a09a',go:()=>id==='assistant'?this.setState({aiOpen:true}):this.go(id)}));
+    const moreRows=MORE.map(([id,name,icon,iconBg,iconFg,sub])=>({name,icon,iconBg,iconFg,sub,subFg:(id==='integrations'&&bad.length)||(id==='modes'&&H.findings.length)?'#f2b14c':'#a3a09a',go:()=>id==='assistant'?this.setState({aiOpen:true}):this.go(id)}));
     // Security
     const camId=s.camSel&&devs[s.camSel]?s.camSel:(cams[0]&&cams[0].id);const cm=devs[camId];
     const lastSeen=id=>{const a=H.activity.find(x=>x.what.startsWith((devs[id]||{}).name||'~')&&(x.icon==='person'||x.icon==='doorbell'));return a?`${a.what.includes('rang')?'Rang':'Person'} at ${a.t}`:'No activity today'};
@@ -640,7 +742,10 @@ class Component extends DCLogic {
       hasCam:true,streaming:!!(lv&&lv.streaming),videoRef:this.videoRef,liveIcon:liveOn?'stop':'play_arrow',liveLabel:liveOn?'Stop':'Live',liveAct:()=>liveOn?this.stopLive():this.goLive(cm),
       canUnmute:!!(lv&&lv.streaming),soundIcon:s.sound?'volume_up':'volume_off',toggleSound:()=>{const on=!s.sound;if(this._video){this._video.muted=!on;this._video.play().catch(()=>{})}this.setState({sound:on})}}
       :{name:'No cameras',last:'',slot:'no camera connected',hasCam:false,streaming:false,videoRef:null,liveIcon:'',liveLabel:'',liveAct:()=>{},canUnmute:false,soundIcon:'',toggleSound:()=>{}};
-    const camThumbs=cams.map(c=>({name:RN[c.room]||c.name,pick:()=>{if(c.id!==camId)this.stopLive(true);this.setState({camSel:c.id})},bg:camId===c.id?'#f1efea':'#16171a',fg:camId===c.id?'#141517':'#d8d5cf'}));
+    const tok=KOVA_TOKEN?'?token='+encodeURIComponent(KOVA_TOKEN):'';
+    const camThumbs=cams.map(c=>{return{name:RN[c.room]||c.name,last:c.online===false?'Offline':lastSeen(c.id),icon:ICON[c.type],dot:c.online===false?'#ff6b5e':'#7fd4a0',ring:camId===c.id?'2px solid #f2b14c':'none',
+      img:c.adapter==='nest'?`url(/api/devices/${encodeURIComponent(c.id)}/snapshot${tok})`:'none',
+      pick:()=>{if(c.id===camId)return;this.stopLive(true);this.setState({camSel:c.id});try{this._scroll&&this._scroll.scrollTo({top:0,behavior:'smooth'})}catch(e){}}}});
     const people=H.people.map(p=>({initial:p.name[0],name:p.name,detail:`${p.detail}${p.sinceLabel?` · ${p.home?'home':'left'} since ${p.sinceLabel}`:''}`,status:p.home?'Home':'Away',bg:p.home?'rgba(127,212,160,0.14)':'#232428',fg:p.home?'#7fd4a0':'#a3a09a'}));
     const secEvents=H.activity.filter(a=>a.type==='people').slice(0,8).map(a=>({t:a.t,icon:a.icon,fg:a.icon==='doorbell'?'#7cb8f0':a.icon==='person'?'#f2b14c':'#7fd4a0',text:a.what}));
     // Energy
@@ -667,8 +772,8 @@ class Component extends DCLogic {
     const INTEG=[...H.integrations,...idle];
     const integrations=INTEG.map(i=>({name:i.name,icon:i.icon,sub:`${i.devices} device${i.devices===1?'':'s'}`,status:i.note||(i.ok?'Connected':'Needs attention'),dot:i.ok?'#7fd4a0':'#f2b14c',stFg:i.ok?'#a3a09a':'#f2b14c',border:i.ok?'rgba(255,255,255,0.05)':'rgba(242,177,76,0.3)',open:()=>{if(!s.igCat)this.loadInteg().then(()=>this.openInteg(i.id));else this.openInteg(i.id)}}));
     return {isMore:pg==='more',isSecurity:pg==='security',isEnergy:pg==='energy',isMedia:pg==='media',isInteg:pg==='integrations',
-      back:()=>this.back(),openMore:()=>this.go('more'),moreRows,hubLine:`Kova hub · ${list.length} devices · ${H.integrations.length} integrations`,
-      secSummary:`${cams.length} camera${cams.length===1?'':'s'} · ${H.people.length} ${H.people.length===1?'person':'people'}`,multiCam:cams.length>1,camMain,camThumbs,people,secEvents,noSecEvents:!secEvents.length,
+      back:()=>this.back(),moreRows,hubLine:`Kova hub · ${list.length} devices · ${H.integrations.length} integrations`,
+      secSummary:`${cams.length} camera${cams.length===1?'':'s'} · ${H.people.filter(p=>p.home).length} of ${H.people.length} home`,multiCam:cams.length>1,noCams:!cams.length,goNest:()=>{this.go('integrations');const open=()=>this.openInteg('nest');if(this.state.igCat)open();else this.loadInteg().then(open)},camMain,camThumbs,people,secEvents,noSecEvents:!secEvents.length,
       enSub:E.available?`Today so far · ${(H.integrations.find(i=>i.id==='goodwe'||i.id==='virtual')||{name:'inverter'}).name}`:'Connect a solar inverter or grid meter',
       enSolarNow:kw(E.now.solar),enSolarFg:E.now.solar>0?'#f2b14c':'#6f6d69',enSolarLabel:E.now.solar>0?'Solar':'Solar · idle',enLoadNow:kw(E.now.load),enGridNow:kw(E.now.grid),enGridLabel:E.now.grid==null?'Grid':E.now.grid<0?'To grid':'From grid',
       enInsight:!E.available?'No energy source connected yet. Add your inverter in Integrations.':E.now.solar>0?`Producing ${kw(E.now.solar)} now${E.now.load!=null&&E.now.solar>E.now.load?', more than the home is using: a good time to run the dishwasher or laundry.':'.'}`:E.solarKwh>0?`Solar made ${E.solarKwh.toFixed(1)} kWh today and has stopped for the day.`:'Solar hasn’t started yet today.',
@@ -704,7 +809,7 @@ class Component extends DCLogic {
         msgBg:G.msg&&G.msg.ok?'rgba(127,212,160,0.12)':'rgba(242,177,76,0.12)',msgFg:G.msg&&G.msg.ok?'#7fd4a0':'#f2b14c',msgIcon:G.msg&&G.msg.ok?'check_circle':'warning',
         hasSave:!!known,saveLabel:G.busy==='save'?'Saving…':G.isNew?(it.fields.length?'Save and connect':'Turn on'):'Save',
         testable:!!it.testable,testLabel:G.busy==='test'?'Testing…':'Test connection',removable:!!known&&cfg[G.id]!==undefined,
-        save:()=>this.igSave(),test:()=>this.igTest(),remove:()=>this.igRemove(),close:()=>this.setState({ig:null}),
+        save:()=>this.igSave(),test:()=>this.igTest(),remove:()=>this.igRemove(),close:()=>kovaClose(()=>this.setState({ig:null})),
         actions:(it.actions||[]).map(a=>{const r=G.actRes[a.id]||{};const inp=G.acts[a.id]||{};
           return{label:a.label,icon:a.icon,help:a.help||'',hasHelp:!!a.help,btn:G.busy===a.id?'Working…':a.opensUrl?'Open Google sign-in':a.method==='GET'?'Show':a.label,run:()=>this.igAct(a),
             fields:(a.fields||[]).map(f=>fvm(f,getP(inp,kp(f))??'',v=>this.igActSet(a.id,kp(f),v))),hasErr:!!r.err,err:r.err||'',hasRows:!!r.rows,rows:r.rows||[]}})}}
@@ -732,7 +837,7 @@ class Component extends DCLogic {
     const mh=SM.start!=null?(SM.start+0.5)%24:21,momentAt=s.momentAt||`${String(Math.floor(mh)).padStart(2,'0')}:${String(Math.round(mh%1*60/5)*5%60).padStart(2,'0')}`;
     const targets=(SM.targets||[]).map(t=>({name:t.name.charAt(0).toUpperCase()+t.name.slice(1),label:t.label,fg:t.missing?'#ff6b5e':'#f1efea',
       remove:()=>put(`/api/modes/${SM.id}/targets/${encodeURIComponent(t.deviceId)}`,{target:null},`Removed from ${SM.name}`)}));
-    return {edOpen:true,ed:{name:SM.name,icon:SM.icon,color:SM.color,tint:SM.color+'24',span:`${SM.startLabel} → ${SM.endLabel}`,close:()=>this.setState({edit:null,edStart:null,momentAt:null}),
+    return {edOpen:true,ed:{name:SM.name,icon:SM.icon,color:SM.color,tint:SM.color+'24',span:`${SM.startLabel} → ${SM.endLabel}`,close:()=>kovaClose(()=>this.setState({edit:null,edStart:null,momentAt:null})),
       startKinds:[['sun:sunrise','Sunrise'],['sun:sunset','Sunset'],['sun:dawn','First light'],['sun:dusk','Dusk'],['prayer:fajr','Fajr'],['prayer:maghrib','Maghrib'],['prayer:isha','Isha'],['time','A clock time']].map(([v,label])=>({v,label})),
       startKind:ek,isClock:ek==='time',hasOffset:ek!=='time',
       startAt:s.edStart?.at??(cur&&cur.kind==='time'?cur.at:'20:00'),startOffset:s.edStart?.offset??(cur&&cur.offsetMin||0),
@@ -755,18 +860,115 @@ class Component extends DCLogic {
         api('POST','/api/moments',{label,what:(stateOptions.find(o=>o[0]===addState)||['',''])[1]+' · '+(AD?AD.name:''),at:{kind:'time',at:momentAt},targets:{[addDev]:JSON.parse(addState)}})
           .then(r=>{this.setState({momentLabel:''});this.toast(`${label} added at ${momentAt}`,this.undoFn(r.undo))}).catch(x=>this.err(x))}}};
   }
+  // ---- Devices tab: every device, by room, with search and type filters ----
+  devVals(s,H,devs,list,RN){
+    const other=d=>!['light','dimmer','media','tv','fan','camera','plug','vacuum'].includes(d.type);
+    const TYPES=[['all','All','apps',()=>true],['lights','Lights','lightbulb',isLight],['media','Speakers & TV','speaker',isPlayer],['air','Air','air_purifier',d=>d.type==='fan'],['cameras','Cameras','videocam',d=>d.type==='camera'],['plugs','Plugs','outlet',d=>d.type==='plug'],['vacuum','Vacuum','cleaning_services',d=>d.type==='vacuum'],['other','Other','category',other]];
+    const q=(s.devQ||'').trim().toLowerCase();
+    const pool=list.filter(d=>s.showHidden||!d.hidden);
+    const present=TYPES.filter(t=>t[0]==='all'||pool.some(t[3]));
+    const tf=present.find(t=>t[0]===s.devType)||present[0];
+    const match=d=>tf[3](d)&&(!q||[d.name,RN[d.room]||'',d.integration||'',d.type].join(' ').toLowerCase().includes(q));
+    const roomIds=[...H.rooms.map(r=>r.id),...[...new Set(list.map(d=>d.room))].filter(id=>!RN[id])];
+    const sel=s.devRoom&&roomIds.includes(s.devRoom)?s.devRoom:'all';
+    const groups=roomIds.filter(id=>sel==='all'||id===sel).map(id=>{
+      const room=H.rooms.find(r=>r.id===id);const ds=pool.filter(d=>d.room===id&&match(d));const onN=ds.filter(d=>isLight(d)&&d.on).length;
+      return{name:room?room.name:'Other',icon:room?room.icon:'category',sub:`${ds.length} device${ds.length===1?'':'s'}${onN?` · ${onN} on`:''}`,hasOn:onN>0,
+        allOff:()=>api('POST',`/api/rooms/${encodeURIComponent(id)}/off`,{}).then(r=>this.toast(`${room?room.name:'Room'} lights off`,this.undoFn(r.undo))).catch(x=>this.err(x)),
+        tiles:ds.map(d=>({...this.tile(d),op:d.hidden?0.5:1}))}}).filter(g=>g.tiles.length);
+    const nHidden=list.filter(d=>d.hidden).length,onAll=pool.filter(d=>isLight(d)&&d.on).length;
+    const pill=(id,name)=>({name,open:()=>this.setState({devRoom:id}),bg:sel===id?'#f1efea':'#16171a',fg:sel===id?'#141517':'#d8d5cf'});
+    return{devSummary:`${pool.length} device${pool.length===1?'':'s'} · ${onAll} light${onAll===1?'':'s'} on`,devQ:s.devQ||'',setDevQ:e=>this.setState({devQ:e.target.value}),hasDevQ:!!q,clearDevQ:()=>this.setState({devQ:''}),
+      roomPills:[pill('all','All rooms'),...roomIds.filter(id=>list.some(d=>d.room===id)).map(id=>pill(id,RN[id]||'Other'))],
+      typeChips:present.map(([id,label,icon])=>{const a=tf[0]===id;return{label,icon,pick:()=>this.setState({devType:id}),bg:a?'rgba(242,177,76,0.14)':'transparent',fg:a?'#f2b14c':'#a3a09a',border:a?'rgba(242,177,76,0.4)':'rgba(255,255,255,0.08)'}}),
+      devGroups:groups,devEmpty:!groups.length,devEmptyTitle:list.length?'Nothing matches':'No devices yet',devEmptyText:list.length?'Try another word, room or type.':'Add an integration in More → Integrations, or import from Home Assistant.',
+      hasHidden:nHidden>0,hiddenLabel:s.showHidden?'Hide hidden devices':`Show ${nHidden} hidden device${nHidden===1?'':'s'}`,hiddenIcon:s.showHidden?'visibility_off':'visibility',toggleHidden:()=>this.setState(p=>({showHidden:!p.showHidden})),
+      goCustomise:()=>this.go('customise')};
+  }
+  // ---- the device panel: every control the device has, why it's like this, and its settings ----
+  sheetVals(s,H,D,RN){
+    const cap=c=>(D.capabilities||[]).includes(c);
+    const [st,sf]=this.st(D),t=this.tint(D);
+    const favList=H.favourites||[],fav=favList.includes(D.id);
+    const KBG={2200:'#ffb56b',2700:'#ffc98a',3000:'#ffd9a8',4000:'#fff1dc',5000:'#f4f7ff'};
+    const COLS=['#ff5a4e','#ff9f43','#ffd93d','#6bd968','#3fd0c9','#4aa3ff','#8b6bff','#ff6bd6'];
+    const draft=s.nameDraft??D.name;
+    const sw=on=>({track:on?'#f2b14c':'#35363a',knob:on?'translateX(18px)':'none'});
+    let modes=[],modesLabel='';
+    if(D.type==='fan'){modesLabel='Mode';modes=[['Auto','auto_mode'],['Sleep','bedtime'],['Manual','tune']].map(([m,icon])=>{const a=D.on!==false&&D.mode===m;return{label:m,icon,bg:a?'rgba(124,184,240,0.2)':'#1c1d20',fg:a?'#7cb8f0':'#d8d5cf',pick:()=>this.send(D.id,{on:true,mode:m})}})}
+    if(D.type==='vacuum'){const act=D.activity||(D.on?'cleaning':'docked');modesLabel='Vacuum';modes=[['Clean','cleaning_services',{on:true},act==='cleaning'],['Dock','home',{on:false},act==='docked'||act==='returning']].map(([label,icon,cmd,a])=>({label,icon,bg:a?'rgba(242,177,76,0.16)':'#1c1d20',fg:a?'#f2b14c':'#d8d5cf',pick:()=>{this.optimistic(D.id,{activity:cmd.on?'cleaning':'returning'});this.send(D.id,cmd)}}))}
+    const kw=w=>w==null?null:Math.abs(w)>=1000?(w/1000).toFixed(1)+' kW':Math.round(w)+' W';
+    const readings=[D.power!=null&&['Using now',kw(D.power)],D.energy!=null&&['Energy',`${D.energy} kWh`],D.battery!=null&&['Battery',`${D.battery}%`]].filter(Boolean).map(([k,v])=>({k,v}));
+    const rooms=H.rooms.some(r=>r.id===D.room)?H.rooms:[...H.rooms,{id:D.room,name:RN[D.room]||D.room}];
+    return{name:D.name,room:RN[D.room]||'',icon:ICON[D.type]||'device_unknown',iconBg:t.iconBg,iconFg:t.iconFg,state:st,stateFg:sf,
+      hasSwitch:!['camera','sensor'].includes(D.type),...sw(!!D.on),toggle:()=>D.type==='fan'?this.send(D.id,{on:!D.on}):this.tog(D.id),
+      dimmable:(D.type==='dimmer'||cap('brightness'))&&!!D.on,bri:D.bri,briLabel:D.bri+'%',setBri:e=>this.patch(D.id,{bri:+e.target.value}),
+      hasWarmth:cap('colorTemp')&&!!D.on,temps:[2200,2700,3000,4000,5000].map(k=>({label:k+'K',bg:KBG[k],ring:D.k===k&&!D.color?'2px solid #f2b14c':'none',pick:()=>this.send(D.id,{on:true,k,color:null})})),
+      hasColor:cap('color')&&!!D.on,colors:COLS.map(c=>({bg:c,ring:(D.color||'').toLowerCase()===c?'2px solid #fff':'none',pick:()=>this.send(D.id,{on:true,color:c})})),
+      isPlayer:isPlayer(D),vol:D.vol??30,volLabel:(D.vol??30)+'%',setVol:e=>this.patch(D.id,{vol:+e.target.value}),
+      sources:H.sources.map(so=>{const a=D.on&&D.media===so.name;return{name:so.name,icon:so.icon,bg:a?'rgba(124,184,240,0.2)':'#1c1d20',fg:a?'#7cb8f0':'#d8d5cf',play:()=>this.send(D.id,{on:true,media:so.name,vol:D.vol??30})}}),
+      hasModes:modes.length>0,modes,modesLabel,isCamera:D.type==='camera',watch:()=>this.watch(D.id),hasPower:readings.length>0,readings,
+      why:D.why?D.why.now:'',next:D.why?D.why.next:'',
+      nameDraft:draft,setName:e=>this.setState({nameDraft:e.target.value}),nameChanged:!!draft.trim()&&draft.trim()!==D.name,origName:D.original?D.original.name:D.name,
+      saveName:()=>this.settings(D.id,{name:draft.trim()},`Renamed to ${draft.trim()}`).then(()=>this.setState({nameDraft:null})),
+      renamed:!!D.original&&D.original.name!==D.name,origNote:D.original?`${D.integration||'The integration'} calls it “${D.original.name}”. Clear the name to use that again.`:'',
+      roomId:D.room,roomOptions:rooms.map(r=>({v:r.id,label:r.name})),setRoom:e=>{const v=e.target.value;this.settings(D.id,{room:v},`Moved to ${RN[v]||v}`)},
+      toggleFav:()=>this.settings(D.id,{favourite:!fav},fav?'Removed from favourites':'Added to favourites'),favFill:fav?1:0,favTrack:sw(fav).track,favKnob:sw(fav).knob,
+      toggleHidden:()=>this.settings(D.id,{hidden:!D.hidden},D.hidden?'Shown in lists again':'Hidden from lists'),hidTrack:sw(!!D.hidden).track,hidKnob:sw(!!D.hidden).knob,
+      usedIn:(D.usedIn||[]).map(u=>({name:u.name,go:()=>{this.setState({sheet:null});if(u.kind==='mode')this.go('modes',{modeOpen:u.id})}})),notUsed:!(D.usedIn||[]).length,
+      foot:[D.integration,D.address].filter(Boolean).join(' · ')};
+  }
+  // ---- Customise home: name, rooms, people, favourites, hidden devices ----
+  cuVals(s,H,devs,list,RN){
+    const put=(m,url,body,msg)=>api(m,url,body).then(r=>{this.toast(msg,this.undoFn(r.undo));return r});
+    const homeDraft=s.homeDraft??H.home.name;
+    const favIds=(H.favourites||[]).filter(id=>devs[id]);
+    const cu={homeDraft,setHome:e=>this.setState({homeDraft:e.target.value}),homeChanged:!!homeDraft.trim()&&homeDraft.trim()!==H.home.name,
+      saveHome:()=>put('PUT','/api/home',{name:homeDraft.trim()},'Home renamed').then(()=>this.setState({homeDraft:null})).catch(e=>this.err(e)),
+      rooms:H.rooms.map(r=>{const n=list.filter(d=>d.room===r.id).length;return{...r,sub:`${n} device${n===1?'':'s'}`,open:()=>this.setState({rmEdit:r.id,rmDraft:{name:r.name,icon:r.icon},rmMove:null})}}),
+      newRoom:s.newRoom||'',setNewRoom:e=>this.setState({newRoom:e.target.value}),
+      addRoom:()=>{const name=(s.newRoom||'').trim();if(!name)return;put('POST','/api/rooms',{name},`${name} added`).then(()=>this.setState({newRoom:''})).catch(e=>this.err(e))},
+      people:H.people.map(p=>({initial:p.name[0],name:p.name,detail:p.detail,open:()=>this.setState({psEdit:p.id,psDraft:{name:p.name,detail:p.detail}})})),
+      newPerson:s.newPerson||'',setNewPerson:e=>this.setState({newPerson:e.target.value}),
+      addPerson:()=>{const name=(s.newPerson||'').trim();if(!name)return;put('POST','/api/people',{name},`${name} added`).then(()=>this.setState({newPerson:''})).catch(e=>this.err(e))},
+      favs:favIds.map((id,i)=>({name:devs[id].name,room:RN[devs[id].room]||'',upFg:i?'#d8d5cf':'#35363a',
+        up:()=>{if(!i)return;const a=[...favIds];[a[i-1],a[i]]=[a[i],a[i-1]];put('PUT','/api/favourites',{ids:a},'Order saved').catch(e=>this.err(e))},
+        remove:()=>this.settings(id,{favourite:false},'Removed from favourites')})),noFavs:!favIds.length,
+      hidden:list.filter(d=>d.hidden).map(d=>({name:d.name,room:RN[d.room]||'',show:()=>this.settings(d.id,{hidden:false},`${d.name} shown again`)})),hasHidden:list.some(d=>d.hidden)};
+    // Room editor
+    const R=s.rmEdit&&H.rooms.find(r=>r.id===s.rmEdit);let rm={close:()=>{}};
+    if(R){const dr=s.rmDraft||{name:R.name,icon:R.icon};const inside=list.filter(d=>d.room===R.id);const others=H.rooms.filter(r=>r.id!==R.id);const moveTo=s.rmMove||(others[0]||{}).id;
+      const order=dir=>{const ids=H.rooms.map(r=>r.id);const i=ids.indexOf(R.id),j=i+dir;if(j<0||j>=ids.length)return;[ids[i],ids[j]]=[ids[j],ids[i]];put('PUT','/api/rooms/order',{ids},'Order saved').catch(e=>this.err(e))};
+      rm={title:R.name,sub:`${inside.length} device${inside.length===1?'':'s'}`,name:dr.name,setName:e=>this.setState({rmDraft:{...dr,name:e.target.value}}),
+        icons:ROOM_ICONS.map(icon=>({icon,bg:dr.icon===icon?'rgba(242,177,76,0.16)':'#1c1d20',fg:dr.icon===icon?'#f2b14c':'#d8d5cf',pick:()=>this.setState({rmDraft:{...dr,icon}})})),
+        save:()=>put('PUT',`/api/rooms/${encodeURIComponent(R.id)}`,{name:dr.name,icon:dr.icon},'Room saved').then(()=>kovaClose(()=>this.setState({rmEdit:null}))).catch(e=>this.err(e)),
+        up:()=>order(-1),down:()=>order(1),hasDevices:inside.length>0,devicesNote:`Its ${inside.length} device${inside.length===1?'':'s'} move to:`,moveTo,
+        moveOptions:others.map(r=>({v:r.id,label:r.name})),setMoveTo:e=>this.setState({rmMove:e.target.value}),
+        remove:()=>{if(!confirm(`Delete ${R.name}?${inside.length?` Its devices move to ${RN[moveTo]}.`:''}`))return;put('DELETE',`/api/rooms/${encodeURIComponent(R.id)}`,inside.length?{moveTo}:{},`${R.name} deleted`).then(()=>kovaClose(()=>this.setState({rmEdit:null}))).catch(e=>this.err(e))},
+        close:()=>kovaClose(()=>this.setState({rmEdit:null}))}}
+    // Person editor
+    const P=s.psEdit&&H.people.find(p=>p.id===s.psEdit);let ps={close:()=>{}};
+    if(P){const dr=s.psDraft||{name:P.name,detail:P.detail};
+      ps={title:P.name,name:dr.name,detail:dr.detail,setName:e=>this.setState({psDraft:{...dr,name:e.target.value}}),setDetail:e=>this.setState({psDraft:{...dr,detail:e.target.value}}),
+        save:()=>put('PUT',`/api/people/${encodeURIComponent(P.id)}`,{name:dr.name,detail:dr.detail},'Saved').then(()=>kovaClose(()=>this.setState({psEdit:null}))).catch(e=>this.err(e)),
+        remove:()=>{if(!confirm(`Remove ${P.name} from Kova?`))return;put('DELETE',`/api/people/${encodeURIComponent(P.id)}`,{},`${P.name} removed`).then(()=>kovaClose(()=>this.setState({psEdit:null}))).catch(e=>this.err(e))},
+        close:()=>kovaClose(()=>this.setState({psEdit:null}))}}
+    return{cu,rm,rmOpen:!!R,ps,psOpen:!!P};
+  }
   scrollRef=el=>{if(el)this._scroll=el}
   renderVals(){
     const s=this.state,H=s.hub,devs=this.devs(),list=Object.values(devs);
     const RN=Object.fromEntries(H.rooms.map(r=>[r.id,r.name]));
     const M=this.modeById(H.current.modeId),nx=this.modeById(H.current.nextId);
     const on=list.filter(d=>isLight(d)&&d.on).length;
-    const TABS=[['now','Now','home'],['rooms','Rooms','meeting_room'],['ask','Ask','graphic_eq'],['modes','Modes','routine'],['activity','Activity','history']];
-    const tabs=TABS.map(([id,label,icon])=>{const a=s.tab===id;const c=id==='ask';return{label,icon,go:()=>{if(this.state.page)this.go(null);this.setState({tab:id})},fg:a?'#f1efea':'#8a8781',size:c?'46px':'28px',mt:c?'-20px':'0px',bg:c?'#f2b14c':'transparent',iconFg:c?'#1a1408':a?(id==='modes'?M.color:'#f2b14c'):'#8a8781',iconSize:c?'24px':'23px',fill:a||c?1:0}});
+    // Now · Devices · Ask · Security · More. Modes and Activity open from Now and More.
+    const TABS=[['now','Now','home'],['devices','Devices','lightbulb'],['ask','Ask','graphic_eq'],['security','Security','shield'],['more','More','apps']];
+    const moreDot=H.integrations.some(i=>!i.ok);
+    const tabs=TABS.map(([id,label,icon])=>{const a=s.tab===id;const c=id==='ask';return{label,icon,go:()=>this.tab(id),dot:id==='more'&&moreDot,fg:a?'#f1efea':'#8a8781',size:c?'46px':'28px',mt:c?'-20px':'0px',bg:c?'#f2b14c':'transparent',iconFg:c?'#1a1408':a?'#f2b14c':'#8a8781',iconSize:c?'24px':'23px',fill:a||c?1:0}});
     const ov=H.current.overlay;
     const upcoming=H.upcoming.map(e=>{const sk=e.skipped;return{t:e.t,label:e.label,what:sk?'Skipped tonight':e.what,color:this.modeById(e.modeId).color,op:sk?0.55:1,deco:sk?'line-through':'none',btn:sk?'Undo':'Skip tonight',skip:()=>api('POST','/api/plan/skip',{id:e.id,skip:!sk}).catch(x=>this.err(x))}});
-    // Favourites: the user's picks (saved on this phone), or the first four lights and plugs.
-    const favIds=(s.favs||list.filter(d=>isLight(d)||d.type==='plug').slice(0,4).map(d=>d.id)).filter(id=>devs[id]);
+    // Favourites: the owner's picks (kept on the hub, the same on every phone), or a few lights and plugs until they pick.
+    const favIds=(H.favourites||s.favs||list.filter(d=>!d.hidden&&(isLight(d)||d.type==='plug')).slice(0,4).map(d=>d.id)).filter(id=>devs[id]);
     const favs=favIds.map(id=>this.tile(devs[id]));
     const overlays=H.overlays.map(o=>{const a=ov&&ov.id===o.id;return{name:o.name,icon:o.icon,bg:a?'rgba(242,177,76,0.12)':'#16171a',border:a?'rgba(242,177,76,0.45)':'rgba(255,255,255,0.05)',
       go:()=>{if(a)return;api('POST',`/api/overlays/${o.id}/start`).then(r=>this.toast(`${o.name} is on · ${o.endsLabel.toLowerCase()}`,this.undoFn(r.undo))).catch(x=>this.err(x))}}});
@@ -780,11 +982,8 @@ class Component extends DCLogic {
     const modeList=H.modes.map(m=>{const open=s.modeOpen===m.id;const chips=[...chipsOf(m),...m.moments.map(x=>`${x.t} ${x.text}`)];
       return{...m,span:`${m.startLabel} → ${m.endLabel}`,chips:chips.length?chips:['Nothing changes'],tint:m.color+'24',now:m.id===H.current.modeId,open,border:open?m.color+'66':'rgba(255,255,255,0.04)',
         days:(m.test.days.length?m.test.days:Array(14).fill('none')).map(c=>({bg:DAYC[c]||m.color})),test:m.test.text,pick:()=>this.setState({modeOpen:open?null:m.id}),edit:e=>{e.stopPropagation();this.setState({edit:m.id,edStart:null,momentAt:null})}}});
-    const room=s.room||(H.rooms[0]||{}).id;
-    const rDevs=list.filter(d=>d.room===room);
     const AF=[['all','All'],['auto','Modes'],['people','People'],['device','Devices']];
-    const D=s.sheet&&devs[s.sheet];let sh={};
-    if(D)sh={name:D.name,room:RN[D.room]||'',justify:D.on?'flex-end':'flex-start',knob:D.on?'translateX(20px)':'none',track:D.on?'#f2b14c':'#35363a',toggle:()=>this.tog(D.id),dimmable:D.type==='dimmer'&&D.on,bri:D.bri,briLabel:D.bri+'%',setBri:e=>this.patch(D.id,{bri:+e.target.value}),why:D.why.now,next:D.why.next};
+    const D=s.sheet&&devs[s.sheet];const sh=D?this.sheetVals(s,H,D,RN):{};
     const home=H.people.filter(p=>p.home);
     const w=H.weather;
     const V='rgba(242,177,76,0.18)',VF='#f2b14c',N='#26272b',NF='#f1efea';
@@ -792,17 +991,17 @@ class Component extends DCLogic {
     const ENG=[['builtin','Built-in','Default','rgba(127,212,160,0.14)','#7fd4a0','Controls devices, rooms and modes, and answers “why”, “what’s next” and “who’s home” from your own data.','Nothing leaves your home.'],['local','Local AI','Private','rgba(124,184,240,0.14)','#7cb8f0','Adds free-form requests and rule drafting with a model running on your own server, e.g. through Dockbit.','Data stays on your network.'],['cloud','Cloud AI','Your API key','rgba(242,177,76,0.14)','#f2b14c','Best understanding, using a provider you choose with your own key.','Only what you allow below is sent.']];
     const SH=[['names','Device and room names','lightbulb','Needed to understand requests'],['rooms','Current device states','toggle_on','On/off, brightness, what’s playing'],['history','Activity history','history','Last 7 days of changes'],['presence','Who’s home','group','Names and arrival times'],['cameras','Cameras','videocam','Never shared']];
     const np=!s.page;
-    return {tabs,isNow:np&&s.tab==='now',isRooms:np&&s.tab==='rooms',isModes:np&&s.tab==='modes',isActivity:np&&s.tab==='activity',isAsk:np&&s.tab==='ask',
-      ...this.pagesVals(s,H,devs,list,RN),...this.edVals(s,H,devs,RN),moreDot:H.integrations.some(i=>!i.ok),scrollRef:this.scrollRef,
+    const pg=s.page;
+    return {tabs,...this.pagesVals(s,H,devs,list,RN),...this.edVals(s,H,devs,RN),...this.devVals(s,H,devs,list,RN),...this.cuVals(s,H,devs,list,RN),
+      isNow:np&&s.tab==='now',isDevices:np&&s.tab==='devices',isAsk:np&&s.tab==='ask',isSecurity:(np&&s.tab==='security')||pg==='security',secBack:pg==='security',isMore:(np&&s.tab==='more')||pg==='more',moreBack:pg==='more',
+      isModes:pg==='modes',isActivity:pg==='activity',isCustomise:pg==='customise',goActivity:()=>this.go('activity'),scrollRef:this.scrollRef,
       homeName:H.home.name,avatars:(home.length?home:H.people).slice(0,3).map((x,i)=>({initial:x.name[0],ml:i?'-9px':'0px',op:x.home?1:0.4})),
       dateLine:`${shortDate(H.home.dateLabel)} · ${H.home.clock}${w?` · ${w.temp}° ${w.text.toLowerCase()}`:''}`,
       untilLine:H.current.waitingForSomeone?`Lights wait until someone’s home`:`Until ${H.current.untilLabel}, then ${nx.name}`,nowLeft:(H.home.nowHour/24*100)+'%',
       mode:{...M,glow:M.color+'33'},lightsOn:`${on} light${on===1?'':'s'} on`,bands:H.day.bands.map(b=>{const m=this.modeById(b.modeId);return{w:((b.end-b.start)/24*100)+'%',bg:m.color+(b.modeId===H.current.modeId?'55':'2a')}}),upcoming,favs,overlays,
       overlayOn:!!ov,ovIcon:ov?ov.icon:'',ovLabel:ov?`${ov.name} · ${ov.endsLabel.toLowerCase()}`:'',endOverlay:()=>api('POST','/api/overlays/end').then(()=>this.toast('Back to '+M.name)).catch(x=>this.err(x)),
-      hasFindings:findings.length>0,findingsTitle:`${findings.length} thing${findings.length===1?'':'s'} worth a look`,goModes:()=>this.setState({tab:'modes'}),findings,modeList,
+      hasFindings:findings.length>0,findingsTitle:`${findings.length} thing${findings.length===1?'':'s'} worth a look`,goModes:()=>this.go('modes'),findings,modeList,
       happened:H.activity.filter(a=>a.type==='auto'||a.type==='people').slice(0,3).map(a=>({t:a.t,what:a.what,why:a.why})),
-      roomTabs:H.rooms.map(r=>({name:r.name,open:()=>this.setState({room:r.id}),bg:room===r.id?'#f1efea':'#16171a',fg:room===r.id?'#141517':'#d8d5cf'})),tiles:rDevs.map(d=>this.tile(d)),roomSummary:`${rDevs.length} devices · ${rDevs.filter(d=>isLight(d)&&d.on).length} lights on`,
-      roomAllOff:()=>api('POST',`/api/rooms/${room}/off`,{}).then(r=>this.toast(`${RN[room]} lights off`,this.undoFn(r.undo))).catch(x=>this.err(x)),
       actFilters:AF.map(([id,label])=>({label,pick:()=>this.setState({actF:id}),bg:s.actF===id?'#f1efea':'#16171a',fg:s.actF===id?'#141517':'#d8d5cf'})),
       push:(()=>{const [title,note,icon,btn]=PUSH_UI[s.push]||PUSH_UI.unsupported;const on=s.push==='on';return{title,note,icon,btn:btn||'',hasBtn:!!btn,iconBg:on?AS.people[0]:AS.system[0],iconFg:on?AS.people[1]:AS.system[1],go:()=>this.pushGo()}})(),
       activity:H.activity.filter(a=>s.actF==='all'||a.type===s.actF).map(a=>({t:a.t,icon:a.icon,what:a.what,why:a.why,iconBg:(AS[a.type]||AS.system)[0],iconFg:(AS[a.type]||AS.system)[1]})),
@@ -811,10 +1010,10 @@ class Component extends DCLogic {
       hasParse:!!(p&&p.understood),parseChips:p&&p.understood?p.chips.map((t,i)=>({t,bg:i===0?V:N,fg:i===0?VF:(p.kind==='unknownLabel'&&i===1?'#ff6b5e':i===2?'#a3a09a':NF)})):[],
       showNoParse:!!(p&&!p.understood),noParseText:s.ai==='builtin'?'Not a built-in command. Kova can still try, or turn on AI for free-form requests.':'Not a built-in command. This will go to '+(s.ai==='local'?'your local AI.':'cloud AI.'),
       draft:s.draft,setDraft:e=>this.setDraft(e.target.value),draftKey:e=>{if(e.key==='Enter'&&s.draft.trim())this.ask(s.draft.trim())},send:()=>{if(s.draft.trim())this.ask(s.draft.trim())},
-      engine:{label:E[0],icon:E[1],bg:E[2],fg:E[3]},openAi:()=>this.setState({aiOpen:true}),closeAi:()=>this.setState({aiOpen:false}),aiOpen:s.aiOpen,isCloud:s.ai==='cloud',usesAi:s.ai!=='builtin',
+      engine:{label:E[0],icon:E[1],bg:E[2],fg:E[3]},openAi:()=>this.setState({aiOpen:true}),closeAi:()=>kovaClose(()=>this.setState({aiOpen:false})),aiOpen:s.aiOpen,isCloud:s.ai==='cloud',usesAi:s.ai!=='builtin',
       engines:ENG.map(([id,name,tag,tagBg,tagFg,body,data])=>{const a=s.ai===id;return{name,tag,tagBg,tagFg,body,data,border:a?tagFg:'transparent',ring:a?tagFg:'#4a4b50',dot:a?tagFg:'transparent',pick:()=>this.saveAi({ai:id})}}),
       shares:SH.map(([id,name,icon,note])=>{const locked=id==='cameras';const a=!locked&&!!s.share[id];return{name,icon,note,op:locked?0.5:1,justify:a?'flex-end':'flex-start',knob:a?'translateX(14px)':'none',track:a?'#f2b14c':'#35363a',toggle:()=>{if(!locked)this.saveAi({share:{...s.share,[id]:!s.share[id]}})}}}),
-      sheetOpen:!!D,sh,closeSheet:()=>this.setState({sheet:null}),toastOn:!!s.toast,toastPos:s.edit||s.ig?'top:calc(env(safe-area-inset-top, 0px) + 12px)':'bottom:104px',toastText:s.toast,canUndo:!!s.undo,undo:()=>{s.undo&&s.undo();this.setState({toast:null,undo:null})}};
+      sheetOpen:!!D,sh,closeSheet:()=>kovaClose(()=>this.setState({sheet:null})),toastOn:!!s.toast,toastPos:s.edit||s.ig||s.sheet||s.rmEdit||s.psEdit||s.aiOpen?'top:calc(env(safe-area-inset-top, 0px) + 12px)':'bottom:104px',toastText:s.toast,canUndo:!!s.undo,undo:()=>{s.undo&&s.undo();this.setState({toast:null,undo:null})}};
   }
 }
 </script>

@@ -25,7 +25,8 @@
     "multicast-dns": "^7.2.5",
     "suncalc": "^1.9.0",
     "tsx": "^4.19.0",
-    "web-push": "^3.6.7"
+    "web-push": "^3.6.7",
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "@types/multicast-dns": "^7.2.4",

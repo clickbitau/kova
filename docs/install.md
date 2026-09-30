@@ -101,8 +101,22 @@ open it once as `http://<ip>:8140/?token=<token>`; the web app remembers it.
 
 ## Importing from Home Assistant
 
-Kova reads Home Assistant's `.storage` folder once and writes `integrations.json`
-and `home.json`. It never talks to Home Assistant.
+Kova reads Home Assistant's configuration once. It never talks to Home Assistant,
+and nothing in Home Assistant changes.
+
+**In the app (easiest):** open **Import** in the sidebar and upload a backup
+(Home Assistant → Settings → System → Backups → download one). Backups from
+2025.1 on are encrypted: paste the backup's encryption key (Backups → ⋮ →
+Encryption key) into the form. Kova keeps only the settings files and streams past
+the history database, so large backups are fine. You get a preview (what moves to
+Kova, what you set up again, what isn't needed, your automations in plain words and
+a list of things that need you, such as the VeSync password), then **Switch over**.
+From the demo home, switching over replaces it with your real home.
+
+The same page can read a config folder already on the hub instead of an upload:
+copy it over as below and give the path (e.g. `/tmp/ha-config`).
+
+**From the command line:**
 
 ```bash
 # On the Proxmox host: copy HA's .storage from CT 105 into the Kova container (106).

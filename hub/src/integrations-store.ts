@@ -130,6 +130,36 @@ export class IntegrationsManager {
     return merged as Obj;
   }
 
+  /**
+   * Bring in sections from an import (Home Assistant). Sections already set up in Kova are kept as they are;
+   * new ones are written as imported, without the setup form's checks (an imported account may still need its
+   * password), and started where they have enough to run.
+   */
+  importSections(values: Integrations): Promise<{ written: string[]; kept: string[]; started: string[] }> {
+    const run = this.queue.then(async () => {
+      const next: IntegrationsData = { ...this.data };
+      const written: string[] = [], kept: string[] = [], started: string[] = [];
+      for (const [k, v] of Object.entries(values)) {
+        if (v === undefined) continue;
+        if (this.data[k] !== undefined) { kept.push(k); continue; }
+        next[k] = v; written.push(k);
+      }
+      saveIntegrations(this.opts.path, next);
+      this.data = next;
+      for (const k of written) {
+        const item = catalogItem(k);
+        if (item?.apply !== 'hot' || !(k in ADAPTER_FACTORIES) || ADAPTER_FACTORIES[k as keyof Integrations] === null) continue;
+        await this.hub.reg.removeAdapter(k);
+        const a = adapterFor(k as keyof Integrations, next, this.opts.dataDir);
+        if (a) { await this.hub.reg.addAdapter(a); started.push(k); }
+      }
+      this.hub.emit('changed');
+      return { written, kept, started };
+    });
+    this.queue = run.catch(() => {});
+    return run;
+  }
+
   /** A section as stored, secrets included. For the hub's own routes only; never send it to a client. */
   raw<K extends keyof Integrations>(section: K): Integrations[K] | undefined {
     return this.data[section] as Integrations[K] | undefined;
