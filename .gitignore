@@ -4,3 +4,4 @@ hub/data/
 *.db
 *.db-*
 dist/
+.claude/worktrees/

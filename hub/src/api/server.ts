@@ -117,6 +117,11 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
   });
 
   app.post<{ Body: { text: string } }>('/api/ask', async req => hub.assistant.ask(String(req.body?.text ?? '')));
+  // What Kova understood, as chips, without running anything (for the live preview while typing).
+  app.post<{ Body: { text: string } }>('/api/ask/parse', async req => {
+    const i = hub.assistant.parse(String(req.body?.text ?? ''));
+    return { understood: !!i, kind: i?.kind ?? null, chips: hub.assistant.chips(i) };
+  });
   app.post<{ Body: { action: AskAction } }>('/api/ask/act', async req => hub.assistant.act(req.body.action));
 
   // ------------------------------------------------------------ realtime --

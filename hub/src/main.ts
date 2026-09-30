@@ -4,6 +4,9 @@ import { Hub } from './hub.ts';
 import { buildServer } from './api/server.ts';
 import { VirtualAdapter } from './adapters/virtual.ts';
 import { SonosAdapter } from './adapters/sonos.ts';
+import { adaptersFor, loadIntegrations } from './integrations.ts';
+import { existsSync, readFileSync } from 'node:fs';
+import type { HomeConfig } from './model/types.ts';
 import { Weather } from './services/weather.ts';
 import { demoConfig, demoDevices } from './seed/demo-home.ts';
 import type { Adapter } from './adapters/sdk.ts';
@@ -11,15 +14,19 @@ import type { Adapter } from './adapters/sdk.ts';
 const here = dirname(fileURLToPath(import.meta.url));
 const env = process.env;
 const dataDir = resolve(env.KOVA_DATA ?? resolve(here, '../../data'));
-const demo = env.KOVA_DEMO !== '0';
+// Real devices come from integrations.json (see src/tools/import-ha.ts). Without one, run the demo home.
+const integrations = loadIntegrations(resolve(dataDir, 'integrations.json'));
+const demo = env.KOVA_DEMO ? env.KOVA_DEMO !== '0' : !integrations;
+const homeFile = resolve(dataDir, 'home.json');
+const initialConfig = (): HomeConfig => !demo && existsSync(homeFile) ? JSON.parse(readFileSync(homeFile, 'utf8')) as HomeConfig : demoConfig();
 
-const adapters: Adapter[] = [];
+const adapters: Adapter[] = integrations ? adaptersFor(integrations) : [];
 if (demo) adapters.push(new VirtualAdapter(demoDevices()));
 if (env.KOVA_SONOS === '1') adapters.push(new SonosAdapter());
 
 const hub = new Hub({
   dbPath: resolve(dataDir, 'kova.db'),
-  initialConfig: demoConfig,
+  initialConfig,
   adapters,
   demo,
   weather: env.KOVA_WEATHER === '0' ? undefined : new Weather(),
