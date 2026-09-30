@@ -15,6 +15,7 @@ import { EcovacsAdapter, type EcovacsOptions } from './adapters/ecovacs.ts';
 import { NestAdapter, type NestOptions } from './adapters/nest.ts';
 import type { PresenceOptions } from './services/presence.ts';
 import type { NotifyOptions } from './services/notify.ts';
+import { MatterAdapter } from './adapters/matter.ts';
 
 /**
  * What's connected in this home, and how to reach it. Lives in
@@ -68,19 +69,46 @@ export function saveIntegrations(path: string, i: Integrations): void {
   chmodSync(path, 0o600);
 }
 
+type Factories = { [K in keyof Integrations]-?: ((cfg: NonNullable<Integrations[K]>, dataDir: string) => Adapter | null) | null };
+
+/**
+ * How each section runs. A device adapter's id is its section name, so in-app
+ * setup can stop and restart one section on its own (see integrations-store.ts).
+ * `null` marks a section that isn't an adapter (the bridges, presence and notifications are services main.ts starts).
+ * Typed over every key of Integrations, so a new section can't be forgotten here.
+ */
+export const ADAPTER_FACTORIES: Factories = {
+  tuya: c => c.devices?.length ? new TuyaAdapter(c) : null,
+  tapo: c => c.devices?.length ? new TapoAdapter(c) : null,
+  cast: c => new CastAdapter(c),
+  sonos: c => new SonosAdapter(c),
+  airplay: c => c.url ? new AirPlayAdapter(c) : null,
+  aircast: null,
+  goodwe: c => c.host ? new GoodWeAdapter(c) : null,
+  matter: (_c, dataDir) => new MatterAdapter({ storageDir: join(dataDir, 'matter') }),
+  vesync: c => c.email && c.password ? new VeSyncAdapter(c) : null,
+  samsungtv: (c, dataDir) => c.tvs?.length ? new SamsungTvAdapter({ ...c, storageDir: c.storageDir ?? join(dataDir, 'samsungtv') }) : null,
+  ecovacs: c => c.email && c.password ? new EcovacsAdapter(c) : null,
+  homekit: (c, dataDir) => new HomeKitControllerAdapter({ storageDir: join(dataDir, 'homekit-controller'), accessories: c.accessories }),
+  nest: c => c.projectId && c.refreshToken ? new NestAdapter(c) : null,
+  homekitBridge: null,
+  matterBridge: null,
+  presence: null,
+  notify: null,
+};
+
+export const INTEGRATION_SECTIONS = Object.keys(ADAPTER_FACTORIES) as (keyof Integrations)[];
+
+const defaultDataDir = () => resolve(process.env.KOVA_DATA ?? 'data');
+
+/** The adapter for one section, or null when the section isn't an adapter or isn't set up enough to run. */
+export function adapterFor(section: keyof Integrations, i: Integrations, dataDir = defaultDataDir()): Adapter | null {
+  const cfg = i[section];
+  const f = ADAPTER_FACTORIES[section] as ((c: unknown, d: string) => Adapter | null) | null;
+  return cfg && f ? f(cfg, dataDir) : null;
+}
+
 /** `dataDir` is where adapters keep what they learn (e.g. TV pairing tokens); defaults to $KOVA_DATA or ./data. */
-export function adaptersFor(i: Integrations, dataDir = resolve(process.env.KOVA_DATA ?? 'data')): Adapter[] {
-  const out: Adapter[] = [];
-  if (i.tuya?.devices.length) out.push(new TuyaAdapter(i.tuya));
-  if (i.tapo?.devices.length) out.push(new TapoAdapter(i.tapo));
-  if (i.cast) out.push(new CastAdapter(i.cast));
-  if (i.sonos) out.push(new SonosAdapter(i.sonos));
-  if (i.airplay?.url) out.push(new AirPlayAdapter(i.airplay));
-  if (i.goodwe?.host) out.push(new GoodWeAdapter(i.goodwe));
-  if (i.vesync?.email && i.vesync.password) out.push(new VeSyncAdapter(i.vesync));
-  if (i.ecovacs?.email && i.ecovacs.password) out.push(new EcovacsAdapter(i.ecovacs));
-  if (i.samsungtv?.tvs.length) out.push(new SamsungTvAdapter({ ...i.samsungtv, storageDir: i.samsungtv.storageDir ?? join(dataDir, 'samsungtv') }));
-  if (i.homekit) out.push(new HomeKitControllerAdapter({ storageDir: join(dataDir, 'homekit-controller'), accessories: i.homekit.accessories }));
-  if (i.nest?.projectId && i.nest.refreshToken) out.push(new NestAdapter(i.nest));
-  return out;
+export function adaptersFor(i: Integrations, dataDir = defaultDataDir()): Adapter[] {
+  return INTEGRATION_SECTIONS.map(k => adapterFor(k, i, dataDir)).filter((a): a is Adapter => !!a);
 }

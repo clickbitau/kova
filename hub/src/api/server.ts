@@ -21,6 +21,9 @@ import type { PushSubscription } from 'web-push';
 import { importFromCloud, type CloudImportOptions } from '../adapters/tuya/cloud.ts';
 import { loadIntegrations, saveIntegrations } from '../integrations.ts';
 
+import { CATALOG } from '../integrations-catalog.ts';
+import { SetupError, type IntegrationsManager } from '../integrations-store.ts';
+
 export interface ServerOptions {
   webRoot: string;
   /** When set, every /api call needs `Authorization: Bearer <token>` (or ?token= for the WebSocket and boot script). */
@@ -41,6 +44,9 @@ export interface ServerOptions {
   integrationsPath?: string;
   /** Tuya cloud import overrides (tests point baseUrl at a fake server and turn discovery off). */
   tuyaCloud?: Pick<CloudImportOptions, 'baseUrl' | 'discoverMs' | 'discoverPorts' | 'now'>;
+
+  /** In-app setup of integrations.json. Without it the setup routes answer 503. */
+  integrations?: IntegrationsManager;
 }
 
 const USER = { kind: 'user' as const, label: 'You' };
@@ -186,20 +192,30 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
   });
 
   // Linking a Google account for Nest, once: open auth-url, approve, copy the code from the address bar, post it to auth-code.
+  // Settings saved in the app win over the ones the hub started with.
+  const nestCfg = () => opts.integrations?.raw('nest') ?? opts.nest;
   app.get<{ Querystring: { redirectUri?: string; projectId?: string; clientId?: string } }>('/api/integrations/nest/auth-url', async (req, reply) => {
-    const projectId = req.query.projectId || opts.nest?.projectId, clientId = req.query.clientId || opts.nest?.clientId;
+    const n = nestCfg();
+    const projectId = req.query.projectId || n?.projectId, clientId = req.query.clientId || n?.clientId;
     if (!projectId || !clientId) return reply.code(400).send({ error: 'Set nest.projectId and nest.clientId in integrations.json first (or pass ?projectId=&clientId=)' });
     const redirectUri = req.query.redirectUri || NEST_DEFAULT_REDIRECT;
     return { url: nestAuthUrl({ projectId, clientId, redirectUri }), redirectUri };
   });
   app.post<{ Body: { code?: string; redirectUri?: string; clientId?: string; clientSecret?: string } }>('/api/integrations/nest/auth-code', async (req, reply) => {
     const code = String(req.body?.code ?? '').trim();
-    const clientId = req.body?.clientId || opts.nest?.clientId, clientSecret = req.body?.clientSecret || opts.nest?.clientSecret;
+    const n = nestCfg();
+    const clientId = req.body?.clientId || n?.clientId, clientSecret = req.body?.clientSecret || n?.clientSecret;
     if (!code) return reply.code(400).send({ error: 'code is required' });
     if (!clientId || !clientSecret) return reply.code(400).send({ error: 'Set nest.clientId and nest.clientSecret in integrations.json first' });
     try {
-      const r = await exchangeNestCode({ code, clientId, clientSecret, redirectUri: req.body?.redirectUri, tokenUrl: opts.nest?.tokenUrl });
+      const r = await exchangeNestCode({ code, clientId, clientSecret, redirectUri: req.body?.redirectUri, tokenUrl: n?.tokenUrl });
       reply.header('cache-control', 'no-store');
+      // Set up in the app: save the token straight away (it never goes back to the browser) and start Nest.
+      const saved = opts.integrations?.raw('nest');
+      if (opts.integrations && saved) {
+        const applied = await opts.integrations.update('nest', { ...saved, refreshToken: r.refreshToken });
+        return { ok: true, linked: true, status: applied.status };
+      }
       return { refreshToken: r.refreshToken, scope: r.scope, next: 'Save this as nest.refreshToken in integrations.json and restart Kova' };
     } catch (e) { return fail(reply, e); }
   });
@@ -207,7 +223,7 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
   // Add a Matter device with its pairing code (for one already in Google Home / Apple Home, open a pairing window there first).
   app.post<{ Body: { code?: string; room?: string; name?: string } }>('/api/integrations/matter/commission', async (req, reply) => {
     const m = hub.reg.adapters.get('matter');
-    if (!(m instanceof MatterAdapter)) return reply.code(400).send({ error: 'Matter is not enabled (set KOVA_MATTER=1)' });
+    if (!(m instanceof MatterAdapter)) return reply.code(400).send({ error: 'Matter is off: add Matter devices in Integrations (or set KOVA_MATTER=1)' });
     const code = String(req.body?.code ?? '').trim();
     if (!code) return reply.code(400).send({ error: 'code is required' });
     try {
@@ -217,7 +233,7 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
   });
 
   // Fetch Tuya local keys (and names, categories, data points) from the Tuya IoT cloud once, and merge them
-  // into integrations.json. Keys are written to the file but never returned. Takes effect on the next restart.
+  // into integrations.json. Keys are written to the file but never returned. With in-app setup, Tuya restarts right away.
   app.post<{ Body: { clientId?: string; secret?: string; region?: string; uid?: string } }>('/api/integrations/tuya/cloud-import', async (req, reply) => {
     const b = req.body ?? {};
     const clientId = String(b.clientId ?? '').trim(), secret = String(b.secret ?? '').trim();
@@ -226,10 +242,27 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
     try {
       const current = loadIntegrations(opts.integrationsPath) ?? {};
       const r = await importFromCloud({ clientId, secret, region: b.region || 'eu', uid: b.uid || undefined, existing: current.tuya, rooms: hub.config.get().rooms, ...opts.tuyaCloud });
+      // Through in-app setup when it's running, so its copy of the file stays current and Tuya restarts live.
+      if (opts.integrations) {
+        const applied = await opts.integrations.update('tuya', r.tuya);
+        return { ok: true, devices: r.devices, restartNeeded: applied.restartRequired };
+      }
       saveIntegrations(opts.integrationsPath, { ...current, tuya: r.tuya });
       return { ok: true, devices: r.devices, restartNeeded: true };
     } catch (e) { return fail(reply, e); }
   });
+
+  // In-app setup. Secrets never leave the hub: GET shows "••••", and sending "••••" back keeps the stored value.
+  app.get('/api/integrations/catalog', async () => CATALOG);
+  const setup = async <T>(reply: { code: (n: number) => { send: (b: unknown) => unknown } }, fn: (m: IntegrationsManager) => Promise<T>) => {
+    if (!opts.integrations) return reply.code(503).send({ error: 'In-app setup isn’t available on this hub' });
+    try { return await fn(opts.integrations); } catch (e) { return reply.code(e instanceof SetupError ? e.statusCode : 400).send({ error: e instanceof Error ? e.message : String(e) }); }
+  };
+  app.get('/api/integrations/config', async (_req, reply) => setup(reply, async m => m.publicConfig()));
+  app.put<{ Params: { section: string }; Body: unknown }>('/api/integrations/config/:section', async (req, reply) => setup(reply, m => m.update(req.params.section, req.body ?? {})));
+  app.delete<{ Params: { section: string } }>('/api/integrations/config/:section', async (req, reply) => setup(reply, m => m.update(req.params.section, null)));
+  // Try settings before saving them: `config` is the unsaved section (with "••••" for unchanged secrets), or omit it to test what's stored.
+  app.post<{ Params: { id: string }; Body: { config?: unknown } }>('/api/integrations/:id/test', async (req, reply) => setup(reply, m => m.test(req.params.id, req.body?.config)));
 
   app.post<{ Params: { id: string }; Body: { what?: 'lights' | 'all' } }>('/api/rooms/:id/off', async req => {
     const room = hub.config.get().rooms.find(r => r.id === req.params.id);
