@@ -31,7 +31,7 @@ Or write `data/integrations.json` by hand: see [docs/architecture.md](docs/archi
 | Env var | Default | |
 |---|---|---|
 | `KOVA_PORT` | `8140` | |
-| `KOVA_DATA` | `./data` | Where `kova.db`, `integrations.json` and pairing data (HomeKit, Samsung TV tokens) live |
+| `KOVA_DATA` | `./data` | Where `kova.db`, `integrations.json` and pairing data (HomeKit, Matter, Samsung TV tokens) live |
 | `KOVA_DEMO` | on when there's no `integrations.json` | Force the virtual demo home on (`1`) or off (`0`) |
 | `KOVA_SONOS` | off | `1` to discover Sonos speakers |
 | `KOVA_SONOS_HOSTS` | | Comma-separated speaker IPs (for speakers on another VLAN) |
@@ -40,6 +40,16 @@ Or write `data/integrations.json` by hand: see [docs/architecture.md](docs/archi
 | `KOVA_WEATHER` | on | `0` to skip Met.no weather |
 | `KOVA_HOMEKIT` | off | `1` to publish an Apple Home (HomeKit) bridge; setup code is in the log and at `/api/integrations/homekit` |
 | `KOVA_HOMEKIT_PORT` | `51826` | TCP port for the HomeKit bridge |
+| `KOVA_MATTER_BRIDGE` | off | `1` to run Kova as a Matter bridge for Google Home, Alexa, SmartThings and Apple Home; pairing code is in the log and at `/api/integrations/matter-bridge` (state in `<KOVA_DATA>/matter-bridge`; needs IPv6 + mDNS) |
+| `KOVA_MATTER_BRIDGE_PORT` | `5540` | UDP port for the Matter bridge |
+
+`KOVA_DATA` also holds `push/vapid.json` (Web Push keys, made on first run, 0600).
+
+**Who's home and notifications** (replacing Home Assistant's iPhone app) are set up in `integrations.json`
+under `presence` and `notify`; see [docs/architecture.md](docs/architecture.md#presence-and-notifications).
+In short: give Kova your OPNsense API key and each person's phone MAC, add an iOS Shortcut per person from
+`GET /api/presence/setup`, and either subscribe to an [ntfy](https://ntfy.sh) topic (works over plain HTTP,
+nothing else to set up) or turn on notifications in the Kova phone app (needs HTTPS and the app on the Home Screen).
 
 ## Docker
 

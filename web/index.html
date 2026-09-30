@@ -144,15 +144,20 @@
 <div style="background:#16171a;border-radius:20px;overflow:hidden;display:flex;flex-direction:column">
 <div style="height:6px;background:{{ sm.color }}"></div>
 <div style="padding:22px;display:flex;flex-direction:column;gap:20px">
-<div style="display:flex;align-items:center;gap:14px"><div style="width:48px;height:48px;border-radius:14px;display:flex;align-items:center;justify-content:center;background:{{ sm.tint }};color:{{ sm.color }}"><span style="font-family:'Material Symbols Rounded';font-size:26px;font-variation-settings:'FILL' 1">{{ sm.icon }}</span></div><div style="display:flex;flex-direction:column;gap:2px;flex:1"><span style="font-size:24px;font-weight:700;letter-spacing:-0.02em">{{ sm.name }}</span><span style="font-size:13px;color:#a3a09a">{{ sm.span }}</span></div><div onClick="{{ sm.preview }}" style="padding:8px 14px;border-radius:10px;background:rgba(255,255,255,0.06);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px"><span style="font-family:'Material Symbols Rounded';font-size:18px">preview</span>Preview</div></div>
+<div style="display:flex;align-items:center;gap:14px"><div style="width:48px;height:48px;border-radius:14px;display:flex;align-items:center;justify-content:center;background:{{ sm.tint }};color:{{ sm.color }}"><span style="font-family:'Material Symbols Rounded';font-size:26px;font-variation-settings:'FILL' 1">{{ sm.icon }}</span></div><div style="display:flex;flex-direction:column;gap:2px;flex:1"><span style="font-size:24px;font-weight:700;letter-spacing:-0.02em">{{ sm.name }}</span><span style="font-size:13px;color:#a3a09a">{{ sm.span }}</span></div><div onClick="{{ sm.preview }}" style="padding:8px 14px;border-radius:10px;background:rgba(255,255,255,0.06);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px"><span style="font-family:'Material Symbols Rounded';font-size:18px">preview</span>Preview</div><div onClick="{{ sm.toggleEdit }}" style="padding:8px 14px;border-radius:10px;background:rgba(255,255,255,0.06);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;background:{{ sm.editBg }};color:{{ sm.editFg }}"><span style="font-family:'Material Symbols Rounded';font-size:18px">edit</span>{{ sm.editLabel }}</div></div>
 <div style="display:flex;flex-wrap:wrap;gap:8px;font-size:13px;font-weight:600;align-items:center"><span style="color:#a3a09a">Starts</span><span style="padding:7px 11px;border-radius:10px;background:{{ sm.color }};color:#141517">{{ sm.starts }}</span><span style="color:#a3a09a">ends</span><span style="padding:7px 11px;border-radius:10px;background:#26272b">{{ sm.ends }}</span></div>
+<sc-if value="{{ sm.editing }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px;border-radius:12px;background:#16171a;border:1px dashed rgba(255,255,255,0.12)"><span style="font-size:13px;color:#a3a09a;font-weight:600">Start at</span><select value="{{ ed.startKind }}" onChange="{{ ed.setStartKind }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px"><sc-for list="{{ ed.startKinds }}" as="k" hint-placeholder-count="8"><option value="{{ k.v }}">{{ k.label }}</option></sc-for></select><sc-if value="{{ ed.isClock }}" hint-placeholder-val="{{ false }}"><input type="time" value="{{ ed.startAt }}" onChange="{{ ed.setStartAt }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px"></sc-if><sc-if value="{{ ed.hasOffset }}" hint-placeholder-val="{{ true }}"><input type="number" step="5" value="{{ ed.startOffset }}" onChange="{{ ed.setStartOffset }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px;width:80px"><span style="font-size:12px;color:#a3a09a">min (− before, + after)</span></sc-if><div onClick="{{ ed.saveStart }}" style="padding:8px 14px;border-radius:10px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;cursor:pointer">Save start</div></div></sc-if>
 <div style="display:flex;flex-direction:column;gap:10px"><span style="font-size:12px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">How the home should be</span>
-<sc-for list="{{ sm.groups }}" as="g" hint-placeholder-count="3"><div style="display:grid;grid-template-columns:110px minmax(0,1fr);gap:12px;align-items:start"><span style="font-size:13px;font-weight:700;padding-top:7px">{{ g.room }}</span><div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ g.chips }}" as="c" hint-placeholder-count="2"><span style="padding:7px 11px;border-radius:10px;background:#1c1d20;font-size:13px;font-weight:600;border:1px solid rgba(255,255,255,0.05)">{{ c }}</span></sc-for></div></div></sc-for>
+<sc-if value="{{ sm.notEditing }}" hint-placeholder-val="{{ true }}"><sc-for list="{{ sm.groups }}" as="g" hint-placeholder-count="3"><div style="display:grid;grid-template-columns:110px minmax(0,1fr);gap:12px;align-items:start"><span style="font-size:13px;font-weight:700;padding-top:7px">{{ g.room }}</span><div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ g.chips }}" as="c" hint-placeholder-count="2"><span style="padding:7px 11px;border-radius:10px;background:#1c1d20;font-size:13px;font-weight:600;border:1px solid rgba(255,255,255,0.05)">{{ c }}</span></sc-for></div></div></sc-for></sc-if>
+<sc-if value="{{ sm.editing }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:6px"><sc-for list="{{ ed.targets }}" as="t" hint-placeholder-count="4"><div style="display:flex;align-items:center;gap:10px;padding:8px 10px 8px 12px;border-radius:10px;background:#1c1d20"><span style="font-size:13px;font-weight:600;flex:1;color:{{ t.fg }}">{{ t.name }}</span><span style="font-size:12.5px;color:#a3a09a">{{ t.label }}</span><div onClick="{{ t.remove }}" style="width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:rgba(255,255,255,0.05)"><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#ff6b5e">close</span></div></div></sc-for>
+<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:4px"><select value="{{ ed.addDevice }}" onChange="{{ ed.setAddDevice }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px;flex:1;min-width:180px"><sc-for list="{{ ed.deviceOptions }}" as="o" hint-placeholder-count="6"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select><select value="{{ ed.addState }}" onChange="{{ ed.setAddState }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px"><sc-for list="{{ ed.stateOptions }}" as="o" hint-placeholder-count="4"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select><div onClick="{{ ed.addTarget }}" style="padding:8px 14px;border-radius:10px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;cursor:pointer">Add</div></div></div></sc-if>
 <sc-if value="{{ sm.hasInherit }}" hint-placeholder-val="{{ false }}"><div style="font-size:12.5px;color:#a3a09a;line-height:1.5;padding:10px 12px;border-radius:10px;background:#1c1d20">{{ sm.inherit }}</div></sc-if>
 </div>
 <div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:12px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">Moments in this mode</span>
 <sc-for list="{{ sm.moments }}" as="mo" hint-placeholder-count="1"><div style="display:flex;gap:12px;align-items:center;padding:10px 12px;border-radius:10px;background:#1c1d20"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:{{ sm.color }}">{{ mo.t }}</span><span style="font-size:13px;font-weight:600">{{ mo.text }}</span></div></sc-for>
 <span style="font-size:12.5px;color:#8a8781">{{ sm.noMoments }}</span>
+<sc-if value="{{ sm.editing }}" hint-placeholder-val="{{ false }}"><sc-for list="{{ ed.moments }}" as="mo" hint-placeholder-count="1"><div style="display:flex;gap:10px;align-items:center;padding:8px 10px 8px 12px;border-radius:10px;background:#1c1d20"><span style="font-size:13px;font-weight:600;flex:1">{{ mo.text }}</span><div onClick="{{ mo.remove }}" style="width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:rgba(255,255,255,0.05)"><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#ff6b5e">delete</span></div></div></sc-for>
+<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center"><input value="{{ ed.momentLabel }}" onChange="{{ ed.setMomentLabel }}" placeholder="New moment, e.g. Porch off" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px;flex:1;min-width:160px"><input type="time" value="{{ ed.momentAt }}" onChange="{{ ed.setMomentAt }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px"><select value="{{ ed.addDevice }}" onChange="{{ ed.setAddDevice }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px"><sc-for list="{{ ed.deviceOptions }}" as="o" hint-placeholder-count="6"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select><select value="{{ ed.addState }}" onChange="{{ ed.setAddState }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px"><sc-for list="{{ ed.stateOptions }}" as="o" hint-placeholder-count="4"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select><div onClick="{{ ed.addMoment }}" style="padding:8px 14px;border-radius:10px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;cursor:pointer">Add moment</div></div></sc-if>
 </div>
 <div onClick="{{ sm.toggleLtw }}" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;background:#1c1d20;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#f2b14c">footprint</span><div style="display:flex;flex-direction:column;gap:2px;flex:1"><span style="font-size:13px;font-weight:700">Light the way in this mode</span><span style="font-size:12px;color:#a3a09a">Lights follow people seen by cameras or arriving home</span></div><div style="width:34px;height:20px;border-radius:10px;padding:2px;display:flex;justify-content:{{ sm.ltwJustify }};background:{{ sm.ltwTrack }}"><div style="width:16px;height:16px;border-radius:50%;background:#fff"></div></div></div>
 <div style="display:flex;flex-direction:column;gap:10px;padding:16px;border-radius:14px;border:1px solid rgba(255,255,255,0.08)">
@@ -362,7 +367,7 @@
 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:16px;align-items:start">
 <div style="display:flex;flex-direction:column;gap:12px">
 <div style="border-radius:18px;overflow:hidden;background:#16171a">
-<div style="aspect-ratio:16/9;background:repeating-linear-gradient(135deg,#1b1c1f 0 12px,#202125 12px 24px);display:flex;align-items:center;justify-content:center;position:relative"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#6f6d69">{{ camMain.slot }}</span><div style="position:absolute;top:12px;left:12px;display:flex;align-items:center;gap:6px;padding:4px 9px;border-radius:999px;background:rgba(0,0,0,0.55);font-size:11px;font-weight:700"><div style="width:6px;height:6px;border-radius:50%;background:#ff6b5e"></div>LIVE</div><div style="position:absolute;bottom:12px;right:12px;display:flex;gap:8px"><div style="width:38px;height:38px;border-radius:50%;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:20px">mic</span></div><div style="width:38px;height:38px;border-radius:50%;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:20px">fullscreen</span></div></div></div>
+<div style="aspect-ratio:16/9;background:repeating-linear-gradient(135deg,#1b1c1f 0 12px,#202125 12px 24px);display:flex;align-items:center;justify-content:center;position:relative"><sc-if value="{{ camMain.streaming }}" hint-placeholder-val="{{ false }}"><video ref="{{ camMain.videoRef }}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000"></video></sc-if><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#6f6d69;padding:0 16px;text-align:center">{{ camMain.slot }}</span><sc-if value="{{ camMain.hasCam }}" hint-placeholder-val="{{ false }}"><div onClick="{{ camMain.liveAct }}" style="position:absolute;bottom:12px;left:12px;display:flex;align-items:center;gap:6px;padding:9px 14px;border-radius:999px;background:rgba(0,0,0,0.55);font-size:12px;font-weight:700;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:18px">{{ camMain.liveIcon }}</span>{{ camMain.liveLabel }}</div></sc-if><div style="position:absolute;top:12px;left:12px;display:flex;align-items:center;gap:6px;padding:4px 9px;border-radius:999px;background:rgba(0,0,0,0.55);font-size:11px;font-weight:700"><div style="width:6px;height:6px;border-radius:50%;background:#ff6b5e"></div>LIVE</div><div style="position:absolute;bottom:12px;right:12px;display:flex;gap:8px"><div style="width:38px;height:38px;border-radius:50%;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:20px">mic</span></div><div style="width:38px;height:38px;border-radius:50%;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:20px">fullscreen</span></div></div></div>
 <div style="padding:12px 16px;display:flex;justify-content:space-between;align-items:center"><span style="font-size:15px;font-weight:700">{{ camMain.name }}</span><span style="font-size:12px;color:#a3a09a">{{ camMain.last }}</span></div>
 </div>
 <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
@@ -405,6 +410,8 @@
 <div style="display:flex;align-items:center;gap:12px"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#a3a09a">volume_down</span><input type="range" min="0" max="100" value="{{ mp.vol }}" onChange="{{ mp.setVol }}" style="flex:1;accent-color:#7cb8f0"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#a3a09a;width:36px;text-align:right">{{ mp.volLabel }}</span></div>
 <div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:12px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">Play here</span>
 <div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ sources }}" as="so" hint-placeholder-count="5"><div onClick="{{ so.play }}" style="padding:8px 12px;border-radius:10px;background:#1c1d20;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px" style-hover="background:#232428"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#7cb8f0">{{ so.icon }}</span>{{ so.name }}</div></sc-for></div>
+<span onClick="{{ toggleSources }}" style="font-size:12.5px;color:#a3a09a;cursor:pointer;font-weight:600">{{ sourcesLink }}</span>
+<sc-if value="{{ editSources }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:6px"><sc-for list="{{ sourceRows }}" as="sr" hint-placeholder-count="3"><div style="display:flex;gap:8px;align-items:center"><span style="font-size:13px;font-weight:600;width:110px;flex:none">{{ sr.name }}</span><input value="{{ sr.url }}" onChange="{{ sr.setUrl }}" placeholder="https://… stream address" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px;flex:1;min-width:0"><div onClick="{{ sr.save }}" style="padding:8px 12px;border-radius:10px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;cursor:pointer">Save</div></div></sc-for></div></sc-if>
 </div>
 </div>
 <div style="background:#16171a;border-radius:18px;overflow:hidden">
@@ -547,7 +554,8 @@ async function api(method,path,body){
 }
 const EMPTY={home:{name:'Kova',timezone:'UTC',now:Date.now(),nowHour:new Date().getHours()+new Date().getMinutes()/60,date:'',dateLabel:'',clock:''},rooms:[],groups:{},people:[],devices:[],modes:[{id:'day',name:'Day',color:'#dcd27e',icon:'light_mode',startLabel:'',endLabel:'',groups:[],inherit:[],moments:[],test:{days:[],text:''},start:null}],current:{modeId:'day',untilLabel:'',nextId:'day',overlay:null},day:{bands:[],items:[],marks:[]},upcoming:[],overlays:[],sources:[],findings:[],activity:[],integrations:[],lightTheWay:[],weather:null,demo:false,offline:true};
 const BOOT=window.KOVA_BOOT||EMPTY;
-const ICON={light:'lightbulb',dimmer:'lightbulb',fan:'air_purifier',media:'speaker',tv:'tv',camera:'videocam',plug:'outlet',sensor:'sensors'};
+const ICON={light:'lightbulb',dimmer:'lightbulb',fan:'air_purifier',media:'speaker',tv:'tv',camera:'videocam',plug:'outlet',sensor:'sensors',vacuum:'cleaning_services'};
+const VAC={cleaning:'Cleaning',returning:'Returning to dock',docked:'Docked',paused:'Paused',idle:'Idle',error:'Needs attention'};
 const fmt=h=>{const m=Math.round(h*60);return String(Math.floor(m/60)%24).padStart(2,'0')+':'+String(m%60).padStart(2,'0')};
 const lst=xs=>xs.length<=1?xs.join(''):xs.slice(0,-1).join(', ')+' and '+xs[xs.length-1];
 const isLight=d=>d.type==='light'||d.type==='dimmer';
@@ -583,7 +591,39 @@ const ACT_STYLE={auto:['rgba(242,177,76,0.13)','#f2b14c'],people:['rgba(127,212,
 class Component extends DCLogic {
   state={hub:BOOT,conn:!!window.KOVA_BOOT,screen:this.props.startScreen??'home',room:(BOOT.rooms[0]||{}).id,drawer:null,tab:'simple',advanced:(this.props.depth??'Simple')==='Advanced',sel:'sunset',toast:null,undo:null,merging:false,merged:false,done:{},linked:{},q:'',camSel:null,mediaSel:null,actF:'all',inboxDone:{},iq:'',intF:'All',draft:'',chat:[{from:'kova',text:`Hi. ${BOOT.devices.filter(d=>isLight(d)&&d.state.on).length} lights are on and the home is in ${(BOOT.modes.find(m=>m.id===BOOT.current.modeId)||BOOT.modes[0]).name}. What do you need?`}],preview:null,pv:null,modeSel:null};
   componentDidMount(){this.connect()}
-  componentWillUnmount(){this._closed=true;try{this._ws&&this._ws.close()}catch(e){}}
+  componentWillUnmount(){this._closed=true;try{this._ws&&this._ws.close()}catch(e){}this.stopLive(true)}
+  componentDidUpdate(){if(this._pc&&this.state.screen!=='security')this.stopLive()}
+  // ---- camera live view: WebRTC straight from the camera's cloud (Nest) to this browser; the hub only relays the offer/answer ----
+  videoRef=el=>{if(el&&this._stream&&el.srcObject!==this._stream){el.srcObject=this._stream;el.muted=true;el.playsInline=true;el.autoplay=true;el.play().catch(()=>{})}}
+  async goLive(d){
+    this.stopLive(true);
+    const cam=d.id,NO='Live view isn’t available for this camera yet';
+    if(d.adapter!=='nest'||typeof RTCPeerConnection==='undefined'){this.setState({live:{cam,msg:NO}});return}
+    const pc=new RTCPeerConnection();this._pc=pc;
+    const stream=new MediaStream();this._stream=stream;
+    // SDM wants an offer with audio, then video, then a data channel.
+    pc.addTransceiver('audio',{direction:'recvonly'});pc.addTransceiver('video',{direction:'recvonly'});pc.createDataChannel('dataSendChannel');
+    pc.ontrack=e=>{stream.addTrack(e.track)};
+    pc.onconnectionstatechange=()=>{if(this._pc===pc&&pc.connectionState==='failed'){this.stopLive(true);this.setState({live:{cam,msg:'The live stream dropped'}})}};
+    this.setState({live:{cam,msg:'Connecting…'}});
+    try{
+      const offer=await pc.createOffer();await pc.setLocalDescription(offer);
+      const r=await api('POST',`/api/devices/${encodeURIComponent(cam)}/webrtc`,{offerSdp:offer.sdp});
+      if(this._pc!==pc){api('POST',`/api/devices/${encodeURIComponent(cam)}/webrtc/stop`,{mediaSessionId:r.mediaSessionId}).catch(()=>{});return}
+      this._live={cam,sid:r.mediaSessionId};
+      await pc.setRemoteDescription({type:'answer',sdp:r.answerSdp});
+      // Streams end after about 5 minutes unless extended.
+      this._ext=setInterval(()=>{const l=this._live;if(l)api('POST',`/api/devices/${encodeURIComponent(l.cam)}/webrtc/extend`,{mediaSessionId:l.sid}).then(x=>{if(this._live===l&&x.mediaSessionId)l.sid=x.mediaSessionId}).catch(()=>{})},4*60000);
+      this.setState({live:{cam,streaming:true}});
+    }catch(e){if(this._pc===pc){this.stopLive(true);this.setState({live:{cam,msg:e.message||NO}})}}
+  }
+  stopLive(quiet){
+    clearInterval(this._ext);const l=this._live;this._live=null;
+    if(l&&l.sid)api('POST',`/api/devices/${encodeURIComponent(l.cam)}/webrtc/stop`,{mediaSessionId:l.sid}).catch(()=>{});
+    if(this._pc){try{this._pc.close()}catch(e){}this._pc=null}
+    this._stream=null;
+    if(!quiet)this.setState({live:null});
+  }
   connect(){
     if(this._closed)return;
     const url=`${location.protocol==='https:'?'wss':'ws'}://${location.host}/api/ws${KOVA_TOKEN?'?token='+encodeURIComponent(KOVA_TOKEN):''}`;
@@ -599,7 +639,7 @@ class Component extends DCLogic {
   optimistic(id,p){this.setState(s=>({hub:{...s.hub,devices:s.hub.devices.map(d=>d.id===id?{...d,state:{...d.state,...p}}:d)}}))}
   async send(id,p,msg){this.optimistic(id,p);try{const r=await api('POST','/api/devices/'+id,p);if(msg)this.toast(msg,this.undoFn(r.undo))}catch(e){this.err(e)}}
   patch(id,p){clearTimeout(this._pt);this.optimistic(id,p);this._pt=setTimeout(()=>api('POST','/api/devices/'+id,p).catch(e=>this.err(e)),150)}
-  toggleDev(id){const d=this.devs()[id];if(!d||d.type==='camera'||d.type==='sensor')return;if(d.type==='fan'){this.send(id,{mode:d.mode==='Auto'?'Sleep':'Auto'});return}if(isPlayer(d)){const src=(this.state.hub.sources[0]||{}).name||'Radio';this.send(id,d.on?{on:false,media:null}:{on:true,media:src,vol:d.vol??30});return}this.send(id,{on:!d.on})}
+  toggleDev(id){const d=this.devs()[id];if(!d||d.type==='camera'||d.type==='sensor')return;if(d.type==='fan'){this.send(id,{mode:d.mode==='Auto'?'Sleep':'Auto'});return}if(d.type==='vacuum'){this.optimistic(id,{activity:d.on?'returning':'cleaning'});this.send(id,{on:!d.on});return}if(isPlayer(d)){const src=(this.state.hub.sources[0]||{}).name||'Radio';this.send(id,d.on?{on:false,media:null}:{on:true,media:src,vol:d.vol??30});return}this.send(id,{on:!d.on})}
   async startOverlay(o){try{const r=await api('POST',`/api/overlays/${o.id}/start`);this.setState({preview:null,pv:null});this.toast(`${o.name} is on`,this.undoFn(r.undo))}catch(e){this.err(e)}}
   async loadPreview(h){try{const r=await api('GET','/api/preview?hour='+h.toFixed(3));if(this.state.preview===h)this.setState({pv:r})}catch(e){}}
   setPreview(h){this.setState({preview:h,pv:null});if(h!=null)this.loadPreview(h)}
@@ -614,7 +654,7 @@ class Component extends DCLogic {
   // ---- derived data ----
   devs(){const o={};this.state.hub.devices.forEach(d=>{o[d.id]=flat(d)});return o}
   modeById(id){const H=this.state.hub;return H.modes.find(m=>m.id===id)||H.modes[0]}
-  stateOf(d){if(d.type==='camera'||d.type==='sensor')return d.online===false?['Offline','#ff6b5e']:['Live','#7fd4a0'];if(d.online===false)return['Not responding','#ff6b5e'];if(d.type==='fan')return[d.mode||'Auto','#7cb8f0'];if(isPlayer(d))return d.on?[`Playing · ${d.media||'Audio'}${d.vol!=null?' · '+d.vol+'%':''}`,'#7cb8f0']:['Idle','#a3a09a'];if(d.type==='plug')return d.on?[`On${d.power!=null?' · '+d.power+' W':''}`,'#f2b14c']:['Off','#a3a09a'];if(!d.on)return['Off','#a3a09a'];if(d.type==='dimmer')return[`On · ${d.bri}%${d.k?' · '+d.k+'K':d.color?' · colour':''}`,'#f2b14c'];return['On','#f2b14c']}
+  stateOf(d){if(d.type==='camera'||d.type==='sensor')return d.online===false?['Offline','#ff6b5e']:['Live','#7fd4a0'];if(d.online===false)return['Not responding','#ff6b5e'];if(d.type==='vacuum'){const a=d.activity||(d.on?'cleaning':'idle');return[`${VAC[a]||'Idle'}${d.battery!=null?' · '+d.battery+'%':''}`,a==='error'?'#ff6b5e':a==='cleaning'?'#f2b14c':'#a3a09a']}if(d.type==='fan')return[d.mode||'Auto','#7cb8f0'];if(isPlayer(d))return d.on?[`Playing · ${d.media||'Audio'}${d.vol!=null?' · '+d.vol+'%':''}`,'#7cb8f0']:['Idle','#a3a09a'];if(d.type==='plug')return d.on?[`On${d.power!=null?' · '+d.power+' W':''}`,'#f2b14c']:['Off','#a3a09a'];if(!d.on)return['Off','#a3a09a'];if(d.type==='dimmer')return[`On · ${d.bri}%${d.k?' · '+d.k+'K':d.color?' · colour':''}`,'#f2b14c'];return['On','#f2b14c']}
   tint(d){if(isPlayer(d)||d.type==='fan')return{bg:d.on&&d.type!=='fan'?'rgba(124,184,240,0.12)':'#16171a',border:d.on&&d.type!=='fan'?'rgba(124,184,240,0.3)':'rgba(255,255,255,0.05)',iconBg:d.on||d.type==='fan'?'rgba(124,184,240,0.2)':'#232428',iconFg:d.on||d.type==='fan'?'#7cb8f0':'#8a8781'};if(d.type==='camera'||d.type==='sensor')return{bg:'#16171a',border:'rgba(255,255,255,0.05)',iconBg:'rgba(127,212,160,0.15)',iconFg:'#7fd4a0'};const c=d.color||'#f2b14c';return d.on?{bg:'rgba(242,177,76,0.11)',border:'rgba(242,177,76,0.28)',iconBg:c,iconFg:'#1a1408'}:{bg:'#16171a',border:'rgba(255,255,255,0.05)',iconBg:'#232428',iconFg:'#8a8781'}}
 
   v3Vals(s,H,devs,go){
@@ -638,17 +678,52 @@ class Component extends DCLogic {
     const overlays=H.overlays.map(o=>{const on=ovOn&&ovOn.id===o.id;return{name:o.name,icon:o.icon,ends:o.endsLabel,bg:on?'rgba(242,177,76,0.1)':'#16171a',border:on?'rgba(242,177,76,0.45)':'rgba(255,255,255,0.05)',iconBg:on?'#f2b14c':'#232428',iconFg:on?'#1a1408':'#f2b14c',go:()=>{if(!on)this.startOverlay(o)}}});
     const roomCards=H.rooms.map(r=>{const ds=vl.filter(d=>d.room===r.id);const on=ds.filter(d=>isLight(d)&&d.on).length;const play=ds.filter(d=>isPlayer(d)&&d.on).length;return{name:r.name,icon:r.icon,pill:on?`${on} on`:play?'Playing':'All off',pillFg:on?'#f2b14c':play?'#7cb8f0':'#8a8781',iconFg:on?'#f2b14c':play?'#7cb8f0':'#8a8781',open:()=>this.setState({screen:'rooms',room:r.id})}});
     const findings=H.findings.map(f=>{const m=this.modeById(f.modeId);return{...f,fg:f.tone==='alert'?'#ff6b5e':'#f2b14c',modeName:m.name,modeColor:m.color,modeTint:m.color+'24',
-      doFix:()=>api('POST',`/api/findings/${encodeURIComponent(f.id)}/fix`).then(r=>{this.setState({modeSel:f.modeId});this.toast(`${m.name} updated`,this.undoFn(r.undo))}).catch(x=>this.err(x)),
+      doFix:()=>api('POST',`/api/findings/${encodeURIComponent(f.id)}/fix`).then(r=>{this.setState({modeSel:f.modeId});this.toast(f.id.startsWith("learn:moment:")?"Added to your day":`${m.name} updated`,this.undoFn(r.undo))}).catch(x=>this.err(x)),
       doAlt:()=>api('POST',`/api/findings/${encodeURIComponent(f.id)}/dismiss`).then(r=>this.toast('Kept as is',this.undoFn(r.undo))).catch(x=>this.err(x))}});
     const SM=this.modeById(s.modeSel||H.current.modeId);const snx=this.modeById(SM.nextId);
     const DAYC={ok:SM.color,problem:'#ff6b5e',skipped:'#26272b',none:'rgba(255,255,255,0.06)'};
+    // ---- Mode editor ----
+    const RK=r=>!r?'sun:sunrise':r.kind==='time'?'time':`${r.kind}:${r.kind==='sun'?r.event:r.prayer}`;
+    const cur=SM.rhythm, ek=s.edStart?.kind??RK(cur);
+    const DEVS=Object.values(devs).filter(d=>d.type!=='camera'&&d.type!=='sensor').sort((a,b)=>(RN[a.room]||'').localeCompare(RN[b.room]||'')||a.name.localeCompare(b.name));
+    const addDev=devs[s.addDevice]?s.addDevice:(DEVS[0]||{}).id;
+    const AD=devs[addDev];
+    const stateOptions=!AD?[]:AD.type==='fan'?[['{"mode":"Auto"}','Auto'],['{"mode":"Sleep"}','Sleep'],['{"on":false}','Off']]
+      :isPlayer(AD)?[['{"on":false,"media":null}','Stop'],...H.sources.map(so=>[JSON.stringify({on:true,media:so.name,vol:30}),`Play ${so.name} at 30%`])]
+      :AD.type==='dimmer'?[['{"on":false}','Off'],...[5,10,25,50,78,100].map(b=>[JSON.stringify({on:true,bri:b}),`On at ${b}%`])]
+      :[['{"on":true}','On'],['{"on":false}','Off']];
+    const addState=stateOptions.some(o=>o[0]===s.addState)?s.addState:(stateOptions[0]||[''])[0];
+    const put=(url,body,msg)=>api('PUT',url,body).then(r=>this.toast(msg,this.undoFn(r.undo))).catch(x=>this.err(x));
+    const ed={
+      startKinds:[['sun:sunrise','Sunrise'],['sun:sunset','Sunset'],['sun:dawn','First light'],['sun:dusk','Dusk'],['prayer:fajr','Fajr'],['prayer:maghrib','Maghrib'],['prayer:isha','Isha'],['time','A clock time']].map(([v,label])=>({v,label})),
+      startKind:ek,isClock:ek==='time',hasOffset:ek!=='time',
+      startAt:s.edStart?.at??(cur&&cur.kind==='time'?cur.at:'20:00'),startOffset:s.edStart?.offset??(cur&&cur.offsetMin||0),
+      setStartKind:e=>this.setState(p=>({edStart:{...(p.edStart||{}),kind:e.target.value}})),
+      setStartAt:e=>this.setState(p=>({edStart:{kind:ek,...(p.edStart||{}),at:e.target.value}})),
+      setStartOffset:e=>this.setState(p=>({edStart:{kind:ek,...(p.edStart||{}),offset:e.target.value}})),
+      saveStart:()=>{const at=s.edStart?.at??(cur&&cur.kind==='time'?cur.at:'20:00');const off=Number(s.edStart?.offset??(cur&&cur.offsetMin||0))||0;
+        const [kind,name]=ek.split(':');const start=kind==='time'?{kind:'time',at}:kind==='sun'?{kind:'sun',event:name,offsetMin:off}:{kind:'prayer',prayer:name,offsetMin:off};
+        put('/api/modes/'+SM.id,{start},`${SM.name} now starts ${kind==='time'?'at '+at:''}`.trim()).then(()=>this.setState({edStart:null}))},
+      targets:(SM.targets||[]).map(t=>({name:t.name.charAt(0).toUpperCase()+t.name.slice(1),label:t.label,fg:t.missing?'#ff6b5e':'#f1efea',
+        remove:()=>put(`/api/modes/${SM.id}/targets/${encodeURIComponent(t.deviceId)}`,{target:null},`Removed from ${SM.name}`)})),
+      deviceOptions:DEVS.map(d=>({v:d.id,label:`${RN[d.room]||d.room} · ${d.name}`})),addDevice:addDev,addState,
+      stateOptions:stateOptions.map(([v,label])=>({v,label})),
+      setAddDevice:e=>this.setState({addDevice:e.target.value,addState:null}),setAddState:e=>this.setState({addState:e.target.value}),
+      addTarget:()=>{if(!addDev)return;put(`/api/modes/${SM.id}/targets/${encodeURIComponent(addDev)}`,{target:JSON.parse(addState)},`${SM.name} updated`)},
+      moments:SM.moments.map(mo=>({text:`${mo.t} · ${mo.text}`,remove:()=>api('DELETE','/api/moments/'+mo.id).then(r=>this.toast('Moment removed',this.undoFn(r.undo))).catch(x=>this.err(x))})),
+      momentLabel:s.momentLabel||'',momentAt:s.momentAt||'21:00',
+      setMomentLabel:e=>this.setState({momentLabel:e.target.value}),setMomentAt:e=>this.setState({momentAt:e.target.value}),
+      addMoment:()=>{const label=(s.momentLabel||'').trim();if(!label||!addDev){this.toast('Give the moment a name and a device');return}
+        api('POST','/api/moments',{label,what:(stateOptions.find(o=>o[0]===addState)||['',''])[1]+' · '+(AD?AD.name:''),at:{kind:'time',at:s.momentAt||'21:00'},targets:{[addDev]:JSON.parse(addState)}})
+          .then(r=>{this.setState({momentLabel:''});this.toast(`${label} added`,this.undoFn(r.undo))}).catch(x=>this.err(x))}};
     const sm={...mk(SM),span:`${SM.startLabel} → ${SM.endLabel}`,starts:SM.onlyWhenSomeoneHome?`${SM.startLabel}, if someone’s home`:SM.startLabel,ends:`${SM.endLabel}, then ${snx.name}`,
       groups:SM.groups.length?SM.groups:[{room:'Everywhere',chips:['Nothing changes']}],hasInherit:SM.inherit.length>0,inherit:`Still on from earlier: ${lst(SM.inherit)}.`,
       moments:SM.moments,noMoments:SM.moments.length?'':'Nothing else happens during this mode.',
       days:(SM.test.days.length?SM.test.days:Array(14).fill('none')).map(c=>({bg:DAYC[c]})),testText:SM.test.text,
       ltwJustify:SM.lightTheWay?'flex-end':'flex-start',ltwTrack:SM.lightTheWay?'#f2b14c':'#35363a',
       toggleLtw:()=>api('PATCH','/api/modes/'+SM.id,{lightTheWay:!SM.lightTheWay}).then(r=>this.toast(`Light the way ${SM.lightTheWay?'off':'on'} in ${SM.name}`,this.undoFn(r.undo))).catch(x=>this.err(x)),
-      preview:()=>{this.setState({screen:'home'});if(SM.start!=null)this.setPreview((SM.start+0.25)%24)}};
+      preview:()=>{this.setState({screen:'home'});if(SM.start!=null)this.setPreview((SM.start+0.25)%24)},
+      editing:!!s.editing,notEditing:!s.editing,toggleEdit:()=>this.setState(p=>({editing:!p.editing,edStart:null})),editLabel:s.editing?'Done':'Edit',editBg:s.editing?'#f2b14c':'rgba(255,255,255,0.06)',editFg:s.editing?'#1a1408':'#f1efea'};
     const modeList=H.modes.map(m=>{const sel=m.id===SM.id;return{...mk(m),span:`${m.startLabel} → ${m.endLabel}`,now:m.id===H.current.modeId,bg:sel?'#1f2024':'#16171a',border:sel?m.color+'66':'rgba(255,255,255,0.04)',pick:()=>this.setState({modeSel:m.id})}});
     const ltwModes=H.modes.filter(m=>m.lightTheWay).map(m=>m.name);
     const mins=H.lightTheWay.map(t=>t.minutes);const range=mins.length?(Math.min(...mins)===Math.max(...mins)?`${mins[0]}`:`${Math.min(...mins)}–${Math.max(...mins)}`):'5';
@@ -661,7 +736,7 @@ class Component extends DCLogic {
       bands,tlEvents,happened,upcoming,overlays,overlayOn:!!ovOn,overlay:ovOn?{icon:ovOn.icon,label:`${ovOn.name} is on · ${ovOn.endsLabel.toLowerCase()}`}:{icon:'',label:''},
       endOverlay:()=>api('POST','/api/overlays/end').then(()=>this.toast('Back to '+this.modeById(H.current.modeId).name)).catch(x=>this.err(x)),
       roomCards,findings,hasFindings:n>0,findingsHeadline:n?`${n} thing${n===1?'':'s'} worth a look: ${H.findings[0].title.charAt(0).toLowerCase()+H.findings[0].title.slice(1)}`:'',
-      modeList,sm,ltwText:`When someone is seen or arrives, light their way for ${range} minutes. On in ${ltwModes.join(', ')||'no modes'}.`,ltwSub:`${H.lightTheWay.length} trigger${H.lightTheWay.length===1?'':'s'}`,
+      modeList,sm,ed,ltwText:`When someone is seen or arrives, light their way for ${range} minutes. On in ${ltwModes.join(', ')||'no modes'}.`,ltwSub:`${H.lightTheWay.length} trigger${H.lightTheWay.length===1?'':'s'}`,
       modesSummary:`${H.modes.length} modes · ${H.overlays.length} overlays · 1 behaviour`,
       isModes:s.screen==='modes',goModes:go('modes'),drWhy:D?D.why:{now:'',next:''}};
   }
@@ -675,7 +750,7 @@ class Component extends DCLogic {
     const maxH=Math.max(0.3,...E.hours.map(x=>Math.max(x.solar,x.use||0)));
     const nowHr=Math.floor(H.home.nowHour);
     const energyBars=(E.hours.length?E.hours:Array(24).fill({solar:0,use:null})).map((x,h)=>({solar:(x.solar/maxH*100)+'%',use:x.use==null?'3%':(x.use/maxH*100)+'%',useBg:x.use==null?'#1f2023':'#4a4b50',op:h>nowHr?0.25:1}));
-    const energyStats=[['Solar made',E.solarKwh.toFixed(1)+' kWh','#f2b14c',E.peak&&E.peak.w>0?`Peak ${kw(E.peak.w)} at ${String(E.peak.hour).padStart(2,'0')}:00`:'No production yet today'],
+    const energyStats=[['Solar made',E.solarKwh.toFixed(1)+' kWh','#f2b14c',E.peak&&E.peak.w>0?`Peak ${kw(E.peak.w)} at ${String(E.peak.hour).padStart(2,'0')}:00`:E.solarKwh>0?'From the inverter’s daily counter':'No production yet today'],
       ['Home used',E.usedKwh==null?'—':E.usedKwh.toFixed(1)+' kWh','#f1efea',E.usedKwh==null?'Needs a grid meter':E.usedKwh>0?Math.round(Math.min(100,(E.solarKwh-(E.exportedKwh||0))/E.usedKwh*100))+'% from your own solar':''],
       ['From grid',E.fromGridKwh==null?'—':E.fromGridKwh.toFixed(1)+' kWh','#f1efea',E.exportedKwh==null?'Needs a grid meter':`Sent back ${E.exportedKwh.toFixed(1)} kWh`],
       ['Right now',kw(E.now.solar),'#f1efea','Solar production']].map(([label,v,fg,sub])=>({label,v,fg,sub}));
@@ -684,25 +759,31 @@ class Component extends DCLogic {
     const env={enSub:E.available?`Today so far · ${(H.integrations.find(i=>i.id==='goodwe'||i.id==='virtual')||{name:'inverter'}).name}`:'Connect a solar inverter or grid meter to see this',
       enSolarNow:kw(E.now.solar),enSolarLabel:E.now.solar>0?'Solar':'Solar · not producing',enLoadNow:kw(E.now.load),enGridNow:kw(E.now.grid),enGridLabel:E.now.grid==null?'Grid':E.now.grid<0?'To grid':'From grid',
       enInsight:!E.available?'No energy source connected yet. Add your inverter in Integrations.':E.now.solar>0?`Producing ${kw(E.now.solar)} now${E.now.load!=null&&E.now.solar>E.now.load?`, more than the home is using: a good time to run the dishwasher or laundry.`:'.'}`:E.solarKwh>0?`Solar made ${E.solarKwh.toFixed(1)} kWh today and has stopped for the day.`:'Solar hasn’t started yet today.',
-      enFoot:E.devices.length?`${E.devices.length} device${E.devices.length===1?'':'s'} report power. Add a whole-home meter or smart plugs to see the rest.`:'Nothing reports its own power yet. Smart plugs with energy monitoring or a whole-home meter fill this in.'};
+      enFoot:E.devices.length?`${E.devices.length===1?'1 device reports':E.devices.length+' devices report'} power. Add a whole-home meter or smart plugs to see the rest.`:'Nothing reports its own power yet. Smart plugs with energy monitoring or a whole-home meter fill this in.'};
     const cams=list.filter(d=>d.type==='camera');const camId=s.camSel||(cams[0]&&cams[0].id);
     const lastSeen=id=>{const a=H.activity.find(x=>x.what.startsWith((devs[id]||{}).name||'~')&&(x.icon==='person'||x.icon==='doorbell'));return a?`${a.what.includes('rang')?'Rang':'Person'} at ${a.t}`:'No activity today'};
     const cm=devs[camId];
-    const camMain=cm?{name:RN[cm.room]||cm.name,last:lastSeen(cm.id),slot:`${(RN[cm.room]||cm.name).toLowerCase()} stream`}:{name:'No cameras',last:'',slot:'no camera connected'};
-    const camThumbs=cams.map(c=>({name:RN[c.room]||c.name,pick:()=>this.setState({camSel:c.id}),ring:camId===c.id?'2px solid #f2b14c':'none'}));
+    const lv=cm&&s.live&&s.live.cam===cm.id?s.live:null,liveOn=!!(lv&&(lv.streaming||lv.msg==='Connecting…'));
+    const camMain=cm?{name:RN[cm.room]||cm.name,last:lastSeen(cm.id),slot:lv&&lv.msg?lv.msg:`${(RN[cm.room]||cm.name).toLowerCase()} stream`,
+      hasCam:true,streaming:!!(lv&&lv.streaming),videoRef:this.videoRef,liveIcon:liveOn?'stop':'play_arrow',liveLabel:liveOn?'Stop':'Live',liveAct:()=>liveOn?this.stopLive():this.goLive(cm)}
+      :{name:'No cameras',last:'',slot:'no camera connected',hasCam:false,streaming:false,videoRef:null,liveIcon:'',liveLabel:'',liveAct:()=>{}};
+    const camThumbs=cams.map(c=>({name:RN[c.room]||c.name,pick:()=>{if(c.id!==camId&&this._pc)this.stopLive();this.setState({camSel:c.id})},ring:camId===c.id?'2px solid #f2b14c':'none'}));
     const people=H.people.map(p=>({initial:p.name[0],name:p.name,detail:`${p.detail}${p.sinceLabel?` · ${p.home?'home':'left'} since ${p.sinceLabel}`:''}`,status:p.home?'Home':'Away'}));
     const secEvents=H.activity.filter(a=>a.type==='people').slice(0,6).map(a=>({t:a.t,icon:a.icon,fg:a.icon==='doorbell'?'#7cb8f0':a.icon==='person'?'#f2b14c':'#7fd4a0',text:a.what}));
     const pls=list.filter(isPlayer);
     const P=devs[s.mediaSel]||pls[0];
     let mp={name:'No speakers yet',room:'',state:'',fg:'#a3a09a',playIcon:'play_arrow',vol:0,volLabel:'',toggle:()=>{},setVol:()=>{}};
     if(P){const [pst,pfg]=this.stateOf(P);mp={name:P.name,room:RN[P.room]||'',state:pst,fg:pfg,playIcon:P.on?'pause':'play_arrow',vol:P.vol??30,volLabel:(P.vol??30)+'%',toggle:()=>this.toggleDev(P.id),setVol:e=>this.patch(P.id,{vol:+e.target.value})}}
+    const missingUrls=H.sources.filter(so=>!so.url).length;
+    const sourceRows=H.sources.map(so=>{const v=(s.srcDraft||{})[so.name]??so.url??'';return{name:so.name,url:v,setUrl:e=>{const t=e.target.value;this.setState(p=>({srcDraft:{...(p.srcDraft||{}),[so.name]:t}}))},
+      save:()=>api('PUT','/api/sources/'+encodeURIComponent(so.name),{url:v}).then(r=>this.toast(`${so.name} saved`,this.undoFn(r.undo))).catch(x=>this.err(x))}});
     const sources=H.sources.map(so=>({name:so.name,icon:so.icon,play:()=>{if(P)this.send(P.id,{on:true,media:so.name,vol:P.vol??30},`Playing ${so.name} on ${P.name}`)}}));
     const players=pls.map(d=>{const [st,fg]=this.stateOf(d);const sel=P&&d.id===P.id;return{name:d.name,room:RN[d.room]||'',state:st,fg,icon:ICON[d.type],playIcon:d.on?'pause':'play_arrow',bg:sel?'#1f2024':'transparent',iconBg:d.on?'rgba(124,184,240,0.2)':'#232428',iconFg:d.on?'#7cb8f0':'#8a8781',pick:()=>this.setState({mediaSel:d.id}),toggle:e=>{e.stopPropagation();this.toggleDev(d.id)}}});
     const AF=[['all','All'],['auto','Automations'],['people','People'],['device','Devices'],['system','System']];
     const actFilters=AF.map(([id,label])=>({label,pick:()=>this.setState({actF:id}),bg:s.actF===id?'#f1efea':'#16171a',fg:s.actF===id?'#141517':'#d8d5cf'}));
     const activity=H.activity.filter(a=>s.actF==='all'||a.type===s.actF).map(a=>({...a,iconBg:(ACT_STYLE[a.type]||ACT_STYLE.system)[0],iconFg:(ACT_STYLE[a.type]||ACT_STYLE.system)[1]}));
     // The inbox: mode findings plus integrations that need attention.
-    const INBOX=[...H.findings.map(f=>({id:'f:'+f.id,icon:f.icon,fg:f.tone==='alert'?'#ff6b5e':'#f2b14c',title:f.title,kind:'Check',body:f.body,btn:'Review',go:'modes'})),
+    const INBOX=[...H.findings.map(f=>({id:'f:'+f.id,icon:f.icon,fg:f.tone==='alert'?'#ff6b5e':'#f2b14c',title:f.title,kind:f.kind||'Check',body:f.body,btn:'Review',go:'modes'})),
       ...H.integrations.filter(i=>!i.ok).map(i=>({id:'i:'+i.id,icon:'build',fg:'#f2b14c',title:`${i.name} needs attention`,kind:'Repair',body:i.note||'Not responding.',btn:'Open',go:'integrations'}))];
     const inbox=INBOX.filter(i=>!s.inboxDone[i.id]).map(i=>({...i,act:()=>this.setState({screen:i.go}),dismiss:()=>this.setState(p=>({inboxDone:{...p.inboxDone,[i.id]:true}}))}));
     const chat=s.chat.map(m=>({text:m.text,justify:m.from==='you'?'flex-end':'flex-start',bg:m.from==='you'?'#f1efea':'#16171a',fg:m.from==='you'?'#141517':'#f1efea',hasAct:!!(m.acts&&m.acts.length),acts:m.acts||[]}));
@@ -711,6 +792,7 @@ class Component extends DCLogic {
     const INTEG=H.integrations.map(i=>({name:i.name,icon:i.icon,sub:`${i.devices} device${i.devices===1?'':'s'}`,st:i.ok?'ok':'attention',kind:i.kind,note:i.note}));
     const integrations=INTEG.filter(i=>(!iq||(i.name+' '+i.sub).toLowerCase().includes(iq))&&(s.intF==='All'||(s.intF==='Needs attention'?i.st==='attention':i.kind===s.intF))).map(i=>({...i,status:i.note||(i.st==='ok'?'Connected':'Needs attention'),dot:i.st==='ok'?'#7fd4a0':'#f2b14c',stFg:i.st==='attention'?'#f2b14c':'#a3a09a',border:i.st==='attention'?'rgba(242,177,76,0.3)':'rgba(255,255,255,0.05)'}));
     return {isEnergy:s.screen==='energy',isSecurity:s.screen==='security',isMedia:s.screen==='media',isActivity:s.screen==='activity',isAssistant:s.screen==='assistant',isIntegrations:s.screen==='integrations',
+      sourceRows,editSources:!!s.editSources,toggleSources:()=>this.setState(p=>({editSources:!p.editSources})),sourcesLink:s.editSources?'Done':missingUrls?`Set stream addresses · ${missingUrls} missing`:'Edit stream addresses',
       energyBars,energyStats,energyDevices,...env,camMain,camThumbs,people,secEvents,mp,sources,players,mediaCount:`${pls.filter(d=>d.on).length} playing · ${pls.length} players`,
       secSummary:`${cams.length} camera${cams.length===1?'':'s'} · ${H.people.length} ${H.people.length===1?'person':'people'}`,
       actFilters,activity,inbox,inboxEmpty:!inbox.length,inboxTitle:inbox.length?`Needs you · ${inbox.length}`:'Needs you',

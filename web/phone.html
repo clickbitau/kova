@@ -113,6 +113,7 @@
 
 <sc-if value="{{ isActivity }}" hint-placeholder-val="{{ false }}">
 <span style="font-size:30px;font-weight:700;letter-spacing:-0.02em">Activity</span>
+<div onClick="{{ push.go }}" style="display:flex;gap:12px;align-items:center;padding:12px 14px;border-radius:16px;background:#16171a;border:1px solid rgba(255,255,255,0.05);cursor:pointer"><div style="width:32px;height:32px;border-radius:10px;flex:none;display:flex;align-items:center;justify-content:center;background:{{ push.iconBg }};color:{{ push.iconFg }}"><span style="font-family:'Material Symbols Rounded';font-size:18px">{{ push.icon }}</span></div><div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:13.5px;font-weight:600">{{ push.title }}</span><span style="font-size:12px;color:#a3a09a">{{ push.note }}</span></div><sc-if value="{{ push.hasBtn }}" hint-placeholder-val="{{ true }}"><div style="flex:none;padding:8px 14px;border-radius:999px;font-size:13px;font-weight:600;background:#f1efea;color:#141517">{{ push.btn }}</div></sc-if></div>
 <div style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:-6px -18px 0;padding:0 18px"><sc-for list="{{ actFilters }}" as="af" hint-placeholder-count="4"><div onClick="{{ af.pick }}" style="flex:none;padding:8px 14px;border-radius:999px;font-size:13px;font-weight:600;cursor:pointer;background:{{ af.bg }};color:{{ af.fg }}">{{ af.label }}</div></sc-for></div>
 <div style="display:flex;flex-direction:column">
 <sc-for list="{{ activity }}" as="a" hint-placeholder-count="8"><div style="display:flex;gap:12px;padding:12px 0;border-top:1px solid rgba(255,255,255,0.05)"><div style="width:32px;height:32px;border-radius:10px;flex:none;display:flex;align-items:center;justify-content:center;background:{{ a.iconBg }};color:{{ a.iconFg }}"><span style="font-family:'Material Symbols Rounded';font-size:18px">{{ a.icon }}</span></div><div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:13.5px;font-weight:600">{{ a.what }}</span><span style="font-size:12px;color:#a3a09a">{{ a.why }}</span></div><span style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#a3a09a">{{ a.t }}</span></div></sc-for>
@@ -200,7 +201,8 @@ async function api(method,path,body){
   return j;
 }
 const BOOT=window.KOVA_BOOT||{home:{name:'Kova',timezone:'UTC',nowHour:12,dateLabel:'',clock:''},rooms:[],groups:{},people:[],devices:[],modes:[{id:'day',name:'Day',color:'#dcd27e',icon:'light_mode',startLabel:'',endLabel:'',groups:[],inherit:[],moments:[],test:{days:[],text:''}}],current:{modeId:'day',untilLabel:'',nextId:'day',overlay:null},day:{bands:[],items:[],marks:[]},upcoming:[],overlays:[],sources:[],findings:[],activity:[],integrations:[],lightTheWay:[],weather:null,offline:true};
-const ICON={light:'lightbulb',dimmer:'lightbulb',fan:'air_purifier',media:'speaker',tv:'tv',camera:'videocam',plug:'outlet',sensor:'sensors'};
+const ICON={light:'lightbulb',dimmer:'lightbulb',fan:'air_purifier',media:'speaker',tv:'tv',camera:'videocam',plug:'outlet',sensor:'sensors',vacuum:'cleaning_services'};
+const VAC={cleaning:'Cleaning',returning:'Returning to dock',docked:'Docked',paused:'Paused',idle:'Idle',error:'Needs attention'};
 const AS={auto:['rgba(242,177,76,0.13)','#f2b14c'],people:['rgba(127,212,160,0.14)','#7fd4a0'],device:['rgba(124,184,240,0.13)','#7cb8f0'],system:['#232428','#a3a09a']};
 const SRC_ICON={'Device control':'toggle_on','From the activity log':'history','From your modes':'routine','Built-in · nothing left your home':'lock'};
 const isLight=d=>d.type==='light'||d.type==='dimmer';
@@ -208,12 +210,28 @@ const isPlayer=d=>d.type==='media'||d.type==='tv';
 const lst=xs=>xs.length<=1?xs.join(''):xs.slice(0,-1).join(', ')+' and '+xs[xs.length-1];
 const FAV_KEY='kova_favs';
 const loadFavs=()=>{try{return JSON.parse(localStorage.getItem(FAV_KEY)||'null')}catch(e){return null}};
+// Push notifications: service worker + Web Push subscription (iOS needs HTTPS and the app on the Home Screen).
+const swReady=(()=>{try{return 'serviceWorker' in navigator&&window.isSecureContext?navigator.serviceWorker.register('/sw.js').then(()=>navigator.serviceWorker.ready):null}catch(e){return null}})();
+const pushBase=()=>{if(!window.isSecureContext)return 'insecure';if(!swReady||!('PushManager' in window)||!('Notification' in window))return /iPhone|iPad/.test(navigator.userAgent)&&!navigator.standalone?'install':'unsupported';return Notification.permission==='denied'?'denied':'off'};
+const b64u=s=>{const p='='.repeat((4-s.length%4)%4);const r=atob((s+p).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from(r,c=>c.charCodeAt(0))};
+const PUSH_UI={insecure:['Notifications need HTTPS','Open Kova over https:// to get alerts here, or use the ntfy app','notifications_off',null],install:['Add Kova to your Home Screen','iPhone only shows alerts for Home Screen apps: Share → Add to Home Screen','add_to_home_screen',null],unsupported:['No notifications in this browser','Use the ntfy app for alerts instead','notifications_off',null],denied:['Notifications are blocked','Allow them for Kova in Settings → Notifications','notifications_off',null],off:['Enable notifications','Doorbell, lights left on, devices not responding','notifications','Enable'],on:['Notifications are on','Doorbell, lights left on, devices not responding','notifications_active','Test']};
 
 class Component extends DCLogic {
   state={hub:BOOT,conn:!!window.KOVA_BOOT,tab:'now',room:(BOOT.rooms[0]||{}).id,sheet:null,modeOpen:BOOT.current.modeId,actF:'all',
     chat:[{from:'kova',text:`Hi. ${BOOT.modes.find(m=>m.id===BOOT.current.modeId)?.name||'Day'} mode, ${BOOT.devices.filter(d=>isLight(d)&&d.state.on).length} lights on.`,src:'Built-in · nothing left your home'}],
-    toast:null,undo:null,draft:'',parse:null,ai:'builtin',aiOpen:false,share:{names:true,rooms:true,history:false,presence:false},favs:loadFavs()};
-  componentDidMount(){this.connect();api('GET','/api/assistant/settings').then(r=>this.setState({ai:r.engine,share:r.share})).catch(()=>{})}
+    toast:null,undo:null,draft:'',parse:null,ai:'builtin',aiOpen:false,share:{names:true,rooms:true,history:false,presence:false},favs:loadFavs(),push:pushBase()};
+  componentDidMount(){this.connect();this.pushCheck();this.deepLink();api('GET','/api/assistant/settings').then(r=>this.setState({ai:r.engine,share:r.share})).catch(()=>{})}
+  async pushCheck(){const b=pushBase();this.setState({push:b});if(b!=='off')return;try{const reg=await swReady;const sub=await reg.pushManager.getSubscription();if(sub){this.setState({push:'on'});api('POST','/api/push/subscribe',{subscription:sub.toJSON()}).catch(()=>{})}}catch(e){}}
+  async pushGo(){const st=this.state.push;
+    if(st==='on'){api('POST','/api/push/test').then(r=>this.toast(r.push||r.ntfy?'Test sent':'Nothing was delivered')).catch(e=>this.err(e));return}
+    if(st!=='off')return;
+    try{const perm=await Notification.requestPermission();if(perm!=='granted'){this.setState({push:perm==='denied'?'denied':'off'});return}
+      const reg=await swReady;const {publicKey}=await api('GET','/api/push/vapid');
+      const sub=(await reg.pushManager.getSubscription())||await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64u(publicKey)});
+      await api('POST','/api/push/subscribe',{subscription:sub.toJSON()});this.setState({push:'on'});this.toast('Notifications are on')}catch(e){this.err(e)}}
+  // Links from notifications, e.g. "Turn them off" on "Everyone's out".
+  deepLink(){try{const u=new URL(location.href);const d=u.searchParams.get('do');if(!d)return;u.searchParams.delete('do');history.replaceState(null,'',u.pathname+u.search+u.hash);
+    if(d==='lights-off')api('POST','/api/lights/off').then(r=>this.toast(`${r.changed.length} light${r.changed.length===1?'':'s'} off`,this.undoFn(r.undo))).catch(e=>this.err(e))}catch(e){}}
   componentWillUnmount(){this._closed=true;try{this._ws&&this._ws.close()}catch(e){}}
   connect(){
     if(this._closed)return;
@@ -232,9 +250,10 @@ class Component extends DCLogic {
   modeById(id){const H=this.state.hub;return H.modes.find(m=>m.id===id)||H.modes[0]}
   tog(id){const d=this.devs()[id];if(!d||d.type==='camera'||d.type==='sensor')return;
     if(d.type==='fan'){this.send(id,{mode:d.mode==='Auto'?'Sleep':'Auto'});return}
+    if(d.type==='vacuum'){this.optimistic(id,{activity:d.on?'returning':'cleaning'});this.send(id,{on:!d.on});return}
     if(isPlayer(d)){this.send(id,d.on?{on:false,media:null}:{on:true,media:(this.state.hub.sources[0]||{}).name||'Radio',vol:d.vol??30});return}
     this.send(id,{on:!d.on})}
-  st(d){if(d.type==='camera'||d.type==='sensor')return d.online===false?['Offline','#ff6b5e']:['Live','#7fd4a0'];if(d.online===false)return['Not responding','#ff6b5e'];if(d.type==='fan')return[d.mode||'Auto','#7cb8f0'];if(isPlayer(d))return d.on?[d.media?`Playing ${d.media}`:'Playing','#7cb8f0']:['Idle','#a3a09a'];if(!d.on)return['Off','#a3a09a'];if(d.type==='dimmer')return[`On · ${d.bri}%`,'#f2b14c'];if(d.type==='plug')return[d.power!=null?`On · ${d.power} W`:'On','#f2b14c'];return['On','#f2b14c']}
+  st(d){if(d.type==='camera'||d.type==='sensor')return d.online===false?['Offline','#ff6b5e']:['Live','#7fd4a0'];if(d.online===false)return['Not responding','#ff6b5e'];if(d.type==='vacuum'){const a=d.activity||(d.on?'cleaning':'idle');return[`${VAC[a]||'Idle'}${d.battery!=null?' · '+d.battery+'%':''}`,a==='error'?'#ff6b5e':a==='cleaning'?'#f2b14c':'#a3a09a']}if(d.type==='fan')return[d.mode||'Auto','#7cb8f0'];if(isPlayer(d))return d.on?[d.media?`Playing ${d.media}`:'Playing','#7cb8f0']:['Idle','#a3a09a'];if(!d.on)return['Off','#a3a09a'];if(d.type==='dimmer')return[`On · ${d.bri}%`,'#f2b14c'];if(d.type==='plug')return[d.power!=null?`On · ${d.power} W`:'On','#f2b14c'];return['On','#f2b14c']}
   tint(d){const media=isPlayer(d);if(d.type==='camera'||d.type==='sensor')return{bg:'#16171a',border:'rgba(255,255,255,0.05)',iconBg:'rgba(127,212,160,0.15)',iconFg:'#7fd4a0'};if(d.type==='fan'||media)return{bg:d.on&&media?'rgba(124,184,240,0.12)':'#16171a',border:d.on&&media?'rgba(124,184,240,0.3)':'rgba(255,255,255,0.05)',iconBg:d.on?'rgba(124,184,240,0.2)':'#232428',iconFg:d.on?'#7cb8f0':'#8a8781'};return d.on?{bg:'rgba(242,177,76,0.11)',border:'rgba(242,177,76,0.28)',iconBg:d.color||'#f2b14c',iconFg:'#1a1408'}:{bg:'#16171a',border:'rgba(255,255,255,0.05)',iconBg:'#232428',iconFg:'#8a8781'}}
   tile(d){const [s,f]=this.st(d);return{...d,...this.tint(d),icon:ICON[d.type],state:s,stateFg:f,toggle:()=>this.tog(d.id),open:e=>{e.stopPropagation();this.setState({sheet:d.id})}}}
   // Live "Understood" preview, parsed on the hub as you type.
@@ -266,7 +285,7 @@ class Component extends DCLogic {
     const overlays=H.overlays.map(o=>{const a=ov&&ov.id===o.id;return{name:o.name,icon:o.icon,bg:a?'rgba(242,177,76,0.12)':'#16171a',border:a?'rgba(242,177,76,0.45)':'rgba(255,255,255,0.05)',
       go:()=>{if(a)return;api('POST',`/api/overlays/${o.id}/start`).then(r=>this.toast(`${o.name} is on · ${o.endsLabel.toLowerCase()}`,this.undoFn(r.undo))).catch(x=>this.err(x))}}});
     const findings=H.findings.map(f=>{const m=this.modeById(f.modeId);return{...f,fg:f.tone==='alert'?'#ff6b5e':'#f2b14c',modeName:m.name,modeColor:m.color,modeTint:m.color+'24',
-      doFix:()=>api('POST',`/api/findings/${encodeURIComponent(f.id)}/fix`).then(r=>{this.setState({modeOpen:f.modeId});this.toast(`${m.name} updated`,this.undoFn(r.undo))}).catch(x=>this.err(x)),
+      doFix:()=>api('POST',`/api/findings/${encodeURIComponent(f.id)}/fix`).then(r=>{this.setState({modeOpen:f.modeId});this.toast(f.id.startsWith("learn:moment:")?"Added to your day":`${m.name} updated`,this.undoFn(r.undo))}).catch(x=>this.err(x)),
       doAlt:()=>api('POST',`/api/findings/${encodeURIComponent(f.id)}/dismiss`).then(r=>this.toast('Kept as is',this.undoFn(r.undo))).catch(x=>this.err(x))}});
     const DAYC={ok:null,problem:'#ff6b5e',skipped:'#26272b',none:'rgba(255,255,255,0.06)'};
     const modeList=H.modes.map(m=>{const open=s.modeOpen===m.id;const chips=[...m.groups.flatMap(g=>g.chips.map(c=>g.room==='Everywhere'?c:`${g.room}: ${c}`)),...m.moments.map(x=>`${x.t} ${x.text}`)];
@@ -294,6 +313,7 @@ class Component extends DCLogic {
       roomTabs:H.rooms.map(r=>({name:r.name,open:()=>this.setState({room:r.id}),bg:room===r.id?'#f1efea':'#16171a',fg:room===r.id?'#141517':'#d8d5cf'})),tiles:rDevs.map(d=>this.tile(d)),roomSummary:`${rDevs.length} devices · ${rDevs.filter(d=>isLight(d)&&d.on).length} lights on`,
       roomAllOff:()=>api('POST',`/api/rooms/${room}/off`,{}).then(r=>this.toast(`${RN[room]} lights off`,this.undoFn(r.undo))).catch(x=>this.err(x)),
       actFilters:AF.map(([id,label])=>({label,pick:()=>this.setState({actF:id}),bg:s.actF===id?'#f1efea':'#16171a',fg:s.actF===id?'#141517':'#d8d5cf'})),
+      push:(()=>{const [title,note,icon,btn]=PUSH_UI[s.push]||PUSH_UI.unsupported;const on=s.push==='on';return{title,note,icon,btn:btn||'',hasBtn:!!btn,iconBg:on?AS.people[0]:AS.system[0],iconFg:on?AS.people[1]:AS.system[1],go:()=>this.pushGo()}})(),
       activity:H.activity.filter(a=>s.actF==='all'||a.type===s.actF).map(a=>({t:a.t,icon:a.icon,what:a.what,why:a.why,iconBg:(AS[a.type]||AS.system)[0],iconFg:(AS[a.type]||AS.system)[1]})),
       chat:s.chat.map(m=>({text:m.text,align:m.from==='you'?'flex-end':'flex-start',bg:m.from==='you'?'#f1efea':'#16171a',fg:m.from==='you'?'#141517':'#f1efea',hasSrc:!!m.src,src:m.src||'',srcIcon:SRC_ICON[m.src]||'lock'})),
       asks:['Turn off the kitchen','Lamp to 30%','Why is the garage light on?','What’s happening tonight?','Who’s home?','I’m leaving'].map(text=>({text,ask:()=>this.ask(text)})),

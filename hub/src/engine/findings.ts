@@ -4,6 +4,7 @@ import type { ConfigStore } from './config.ts';
 import type { Command, Device, Mode } from '../model/types.ts';
 import { isLight } from '../util/describe.ts';
 import { addDays } from '../util/time.ts';
+import { Learner } from './learn.ts';
 
 export interface Finding {
   id: string;
@@ -30,11 +31,32 @@ const DAYS = 14;
  *  - Against real history in the event log (a mode lit an empty house).
  */
 export class Checker {
-  constructor(private engine: Engine, private store: Store, private config: ConfigStore, private devices: () => Map<string, Device>) {}
+  readonly learner: Learner;
+
+  constructor(private engine: Engine, private store: Store, private config: ConfigStore, private devices: () => Map<string, Device>) {
+    this.learner = new Learner(engine, store, config, devices);
+  }
 
   findings(): Finding[] {
     const dismissed = new Set(this.config.get().dismissedFindings);
-    return [...this.emptyHouse(), ...this.staysOn()].filter(f => !dismissed.has(f.id));
+    const learned = this.learner.suggestions().map(s => s.finding);
+    return [...this.missing(), ...this.emptyHouse(), ...this.staysOn(), ...learned].filter(f => !dismissed.has(f.id));
+  }
+
+  /** Modes pointing at devices Kova doesn't have (e.g. after swapping the demo for a real home). */
+  private missing(): Finding[] {
+    const devices = this.devices();
+    if (!devices.size) return [];
+    return this.config.get().modes.flatMap(m => {
+      const gone = Object.keys(m.targets).filter(id => !devices.has(id));
+      if (!gone.length) return [];
+      return [{
+        id: `missing:${m.id}`, modeId: m.id, kind: 'Check', icon: 'link_off', tone: 'alert' as const,
+        title: `${m.name} uses ${gone.length} device${gone.length === 1 ? '' : 's'} Kova can’t find`,
+        body: `${gone.slice(0, 4).join(', ')}${gone.length > 4 ? '…' : ''}. They may have been renamed or removed. Pick the right devices in the mode, or remove these.`,
+        fix: 'Remove them', alt: 'Keep for now',
+      }];
+    });
   }
 
   /** Lights left on across a mode that never mentions them, into a later mode. */
@@ -126,8 +148,10 @@ export class Checker {
 
   /** Apply a finding's fix. Returns a function that undoes it. */
   fix(id: string): () => void {
+    if (id.startsWith('learn:')) return this.learner.apply(id);
     const [kind, a, b] = id.split(':');
     if (kind === 'empty-house') return this.config.update(c => { const m = c.modes.find(x => x.id === a); if (m) m.onlyWhenSomeoneHome = true; });
+    if (kind === 'missing') return this.config.update(c => { const m = c.modes.find(x => x.id === a); const devices = this.devices(); if (m) for (const id of Object.keys(m.targets)) if (!devices.has(id)) delete m.targets[id]; });
     if (kind === 'stays-on') return this.config.update(c => { const m = c.modes.find(x => x.id === b); if (m) m.targets[a] = { on: false }; });
     throw new Error(`Unknown finding ${id}`);
   }

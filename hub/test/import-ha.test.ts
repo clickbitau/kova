@@ -7,7 +7,7 @@ import { importHomeAssistant } from '../src/tools/import-ha.ts';
 import { adaptersFor } from '../src/integrations.ts';
 
 // A synthetic Home Assistant .storage folder (no real keys).
-function fixture() {
+function fixture(nest: { token?: string; creds?: boolean } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'ha-'));
   const w = (f: string, data: unknown) => writeFileSync(join(dir, f), JSON.stringify({ version: 1, data }));
   w('core.config', { location_name: 'Test Home', latitude: -31.9, longitude: 115.8, time_zone: 'Australia/Perth' });
@@ -19,12 +19,23 @@ function fixture() {
     { entry_id: 'c', domain: 'cast', title: 'Google Cast', data: {} },
     { entry_id: 'tv', domain: 'samsungtv', title: 'Living Room TV', data: { host: '10.0.0.20', mac: 'aa:bb:cc:dd:ee:ff', method: 'websocket', port: 8002, token: 'ha-token' } },
     { entry_id: 'vs', domain: 'vesync', title: 'VeSync', data: { username: 'me@example.com', password: 'not-imported' } },
+    { entry_id: 'ev', domain: 'ecovacs', title: 'me@example.com', data: { username: 'me@example.com', password: 'not-imported', country: 'AU', mode: 'cloud' } },
+    { entry_id: 'nest', domain: 'nest', title: 'Test Home', data: {
+      auth_implementation: 'nest_cred', cloud_project_id: 'my-gcp', project_id: '11111111-2222-3333-4444-555555555555',
+      subscription_name: 'projects/my-gcp/subscriptions/home-assistant-sub', topic_name: 'projects/my-gcp/topics/home-assistant',
+      token: { access_token: 'REDACTED', refresh_token: nest.token ?? 'REDACTED', expires_at: 1790760047, scope: 'https://www.googleapis.com/auth/sdm.service https://www.googleapis.com/auth/pubsub' },
+    } },
   ] });
+  if (nest.creds) w('application_credentials', { items: [{ id: 'nest_cred', domain: 'nest', client_id: '1234-abc.apps.googleusercontent.com', client_secret: 'GOCSPX-plain-client-secret', auth_domain: 'nest', name: 'Nest' }] });
   w('core.device_registry', { devices: [
     { name: 'Lamp', area_id: 'living_room', config_entries: ['tp1'] },
     { name: 'Music Room Speaker', area_id: null, config_entries: ['c'], model: 'Nest Audio' },
     { name: 'Home Speaker Group', area_id: null, config_entries: ['c'], model: 'Google Cast Group' },
     { name: 'Bedroom Purifier', area_id: 'living_room', config_entries: ['vs'], model: 'Core300S' },
+    { name: 'Deebot', area_id: 'living_room', config_entries: ['ev'], model: 'DEEBOT T50 OMNI' },
+    { name: 'Front door doorbell', area_id: null, config_entries: ['nest'], model: 'Doorbell', identifiers: [['nest', 'enterprises/11111111-2222-3333-4444-555555555555/devices/DOORBELL1']] },
+    { name: 'Garage camera', area_id: null, config_entries: ['nest'], model: 'Camera', identifiers: [['nest', 'enterprises/11111111-2222-3333-4444-555555555555/devices/GARAGE1']] },
+    { name: 'Office camera', area_id: null, config_entries: ['nest'], model: 'Camera' },
   ] });
   return dir;
 }
@@ -48,6 +59,30 @@ test('imports rooms, people and local device details from a Home Assistant folde
   assert.equal(r.integrations.vesync!.password, '', 'the password is never imported');
   assert.deepEqual(r.integrations.vesync!.devices, { 'Bedroom Purifier': { room: 'living_room' } });
   assert.ok(r.report.some(l => l.includes('VeSync') && l.includes('password')));
-  // VeSync waits for a password; everything else starts.
+  assert.deepEqual(r.integrations.ecovacs, { email: 'me@example.com', password: '', country: 'au', rooms: { Deebot: 'living_room' } });
+  assert.ok(r.report.some(l => l.includes('Ecovacs') && l.includes('password')));
+  assert.ok(!r.report.some(l => l.includes('ecovacs: not imported')));
+  // Nest: project, subscription and camera ids/rooms; HA's redacted token isn't a token.
+  const n = r.integrations.nest!;
+  const sdm = (id: string) => `enterprises/11111111-2222-3333-4444-555555555555/devices/${id}`;
+  assert.equal(n.projectId, '11111111-2222-3333-4444-555555555555');
+  assert.equal(n.subscription, 'projects/my-gcp/subscriptions/home-assistant-sub');
+  assert.equal(n.refreshToken, '');
+  assert.deepEqual(n.ids, { [sdm('DOORBELL1')]: 'doorbell', [sdm('GARAGE1')]: 'garage_cam', 'Office camera': 'office_cam' });
+  assert.deepEqual(n.rooms, { [sdm('DOORBELL1')]: 'front_door', [sdm('GARAGE1')]: 'garage', 'Office camera': 'office' });
+  assert.ok(r.report.some(l => l.startsWith('Google Nest') && l.includes('3 cameras') && l.includes('/api/integrations/nest/auth-url')));
+  assert.ok(!r.report.some(l => l.includes('nest: not imported')));
+  // VeSync and Ecovacs wait for a password and Nest for a linked account; everything else starts.
   assert.deepEqual(adaptersFor(r.integrations, tmpdir()).map(a => a.id), ['tuya', 'tapo', 'cast', 'samsungtv']);
+});
+
+test('imports a Nest sign-in only when it is stored in plain form, and never prints it', () => {
+  const r = importHomeAssistant(fixture({ token: '1//0plain-refresh-token-abcdefghijklmnop', creds: true }));
+  const n = r.integrations.nest!;
+  assert.equal(n.refreshToken, '1//0plain-refresh-token-abcdefghijklmnop');
+  assert.equal(n.clientId, '1234-abc.apps.googleusercontent.com');
+  assert.equal(n.clientSecret, 'GOCSPX-plain-client-secret');
+  const text = r.report.join('\n');
+  assert.ok(!text.includes('plain-refresh-token') && !text.includes('GOCSPX') && !text.includes('1234-abc'), 'no secrets in the report');
+  assert.ok(adaptersFor(r.integrations, tmpdir()).some(a => a.id === 'nest'));
 });

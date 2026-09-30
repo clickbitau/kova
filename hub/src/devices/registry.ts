@@ -4,8 +4,11 @@ import type { Cause, Command, Device, DeviceState, Targets } from '../model/type
 import type { Store } from '../store/db.ts';
 import { CAPS, changeSentence, fitCommand } from '../util/describe.ts';
 
-/** Readings that update silently: they're not "changes" anyone made. */
-const MEASUREMENTS = new Set(['online', 'power', 'energy', 'grid', 'load']);
+/**
+ * Readings that update silently: they're not "changes" anyone made. A vacuum's
+ * activity rides along with `on`, which is what gets logged.
+ */
+const MEASUREMENTS = new Set(['online', 'power', 'energy', 'grid', 'load', 'battery', 'activity']);
 
 export interface ChangeEvent { device: Device; prev: DeviceState; patch: Command; cause: Cause }
 export interface DeviceEvent { device: Device; type: string; data: Record<string, unknown> }

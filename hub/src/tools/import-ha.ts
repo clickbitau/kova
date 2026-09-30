@@ -6,13 +6,14 @@ import { defaultHome } from '../seed/default-home.ts';
 
 // One-way import from a Home Assistant `.storage` folder: rooms, people,
 // location, the local connection details for Tuya, TP-Link Tapo, Cast and
-// Samsung TVs, and the VeSync account email (not its password).
+// Samsung TVs, the VeSync and Ecovacs account emails (not their passwords), and the
+// Google Nest project, Pub/Sub subscription and camera rooms.
 // Kova never talks to Home Assistant; this only reads its files once.
 //
 //   npx tsx src/tools/import-ha.ts /path/to/homeassistant/.storage [out-dir]
 
 interface Entry { domain: string; title: string; data: Record<string, unknown>; entry_id: string }
-interface HaDevice { name?: string; name_by_user?: string; area_id?: string | null; config_entries: string[]; manufacturer?: string; model?: string }
+interface HaDevice { name?: string; name_by_user?: string; area_id?: string | null; config_entries: string[]; manufacturer?: string; model?: string; identifiers?: [string, string][] }
 
 const read = <T>(dir: string, file: string): T | undefined => {
   const p = join(dir, file);
@@ -141,7 +142,62 @@ export function importHomeAssistant(storageDir: string): ImportResult {
     report.push(`GoodWe solar: ${gw.data.host}${gw.data.model_family && gw.data.model_family !== 'DT' ? ` (family ${gw.data.model_family}: check the register map)` : ''}`);
   }
 
-  for (const d of ['sonos', 'matter', 'nest', 'ecovacs']) {
+  // Ecovacs (DEEBOT vacuums): cloud-only. Take the account email, country and vacuum rooms; the password stays with you.
+  const ev = entries.find(e => e.domain === 'ecovacs');
+  if (ev?.data.username) {
+    const rooms2: Record<string, string> = {};
+    for (const d of devices.filter(d => d.config_entries.includes(ev.entry_id))) {
+      const name = d.name ?? '';
+      if (name) rooms2[name] = roomFor(d.name_by_user ?? name, d.area_id);
+    }
+    const country = String(ev.data.country ?? '').toLowerCase();
+    integrations.ecovacs = {
+      email: String(ev.data.username), password: '', country: country || 'us',
+      ...(ev.data.continent ? { continent: String(ev.data.continent).toLowerCase() } : {}),
+      ...(Object.keys(rooms2).length ? { rooms: rooms2 } : {}),
+    };
+    report.push(`Ecovacs (cloud): account ${String(ev.data.username)}${country ? ` (${country})` : ' (no country found: set ecovacs.country)'}${Object.keys(rooms2).length ? `, ${Object.keys(rooms2).length} vacuums` : ''}. Enter your Ecovacs password as ecovacs.password in integrations.json: it isn't imported`);
+  }
+
+  // Google Nest (SDM cloud): the Device Access project, the Pub/Sub subscription HA created, and camera rooms.
+  // HA's OAuth token was issued to your own OAuth client, so it's reused only when both it and that client are stored in plain form.
+  const nest = entries.find(e => e.domain === 'nest' && e.data.project_id);
+  if (nest) {
+    const plain = (v: unknown): v is string => typeof v === 'string' && v.length >= 20 && !/redacted|\*\*\*/i.test(v);
+    const tok = (nest.data.token ?? {}) as Record<string, unknown>;
+    const creds = read<{ items?: { domain?: string; id?: string; client_id?: string; client_secret?: string }[] }>(storageDir, 'application_credentials')?.items ?? [];
+    const cred = creds.find(c => c.domain === 'nest' && (!nest.data.auth_implementation || c.id === nest.data.auth_implementation)) ?? creds.find(c => c.domain === 'nest');
+    const clientId = typeof cred?.client_id === 'string' && /\.apps\.googleusercontent\.com$/.test(cred.client_id) ? cred.client_id : '';
+    const clientSecret = typeof cred?.client_secret === 'string' && cred.client_secret.length >= 16 && !/redacted/i.test(cred.client_secret) ? cred.client_secret : '';
+    const refreshToken = plain(tok.refresh_token) ? tok.refresh_token : '';
+    const rooms2: Record<string, string> = {}, ids: Record<string, string> = {};
+    const kinds: Record<string, number> = {};
+    for (const d of devices.filter(d => d.config_entries.includes(nest.entry_id) && /doorbell|camera|display/i.test(d.model ?? ''))) {
+      const name = d.name_by_user ?? d.name ?? '';
+      if (!name) continue;
+      // HA identifies Nest devices by their SDM name (enterprises/…/devices/…): the most reliable key. Fall back to the name.
+      const sdm = d.identifiers?.find(i => i[0] === 'nest' && /^enterprises\/.+\/devices\//.test(String(i[1])))?.[1];
+      const key = sdm ?? name;
+      const room = roomFor(name.replace(/\b(doorbell|camera|cam|display)\b/gi, '').trim() || name, d.area_id);
+      const kind = /doorbell/i.test(d.model ?? '') ? 'doorbell' : /display/i.test(d.model ?? '') ? 'display' : 'cam';
+      kinds[kind] = (kinds[kind] ?? 0) + 1;
+      rooms2[key] = room;
+      // The first doorbell keeps the id "doorbell" so Light the way triggers written for it keep working.
+      const id = kind === 'doorbell' && !Object.values(ids).includes('doorbell') ? 'doorbell' : `${room}_${kind}`;
+      ids[key] = Object.values(ids).includes(id) ? `${id}_${Object.keys(ids).length + 1}` : id;
+    }
+    integrations.nest = {
+      projectId: String(nest.data.project_id), clientId, clientSecret, refreshToken,
+      ...(typeof nest.data.subscription_name === 'string' ? { subscription: nest.data.subscription_name } : {}),
+      ...(Object.keys(ids).length ? { rooms: rooms2, ids } : {}),
+    };
+    const linked = !!(refreshToken && clientId && clientSecret);
+    report.push(`Google Nest (cloud): ${Object.keys(ids).length} camera${Object.keys(ids).length === 1 ? '' : 's'}, Device Access project${integrations.nest.subscription ? ' and Pub/Sub subscription' : ' (no Pub/Sub subscription: events won’t arrive until you add one)'} imported. ${linked
+      ? 'Your Google sign-in was imported too.'
+      : `Link your Google account: ${clientId ? '' : 'add your OAuth client as nest.clientId and nest.clientSecret, then '}open GET /api/integrations/nest/auth-url, approve, and POST the code to /api/integrations/nest/auth-code; save the refresh token it returns as nest.refreshToken (see docs/architecture.md)`}`);
+  }
+
+  for (const d of ['sonos', 'matter']) {
     if (entries.some(e => e.domain === d)) report.push(`${d}: not imported yet`);
   }
 

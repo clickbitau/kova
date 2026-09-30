@@ -7,10 +7,17 @@ import type { Command } from '../model/types.ts';
 import type { AskAction } from '../assistant/assistant.ts';
 import { VirtualAdapter } from '../adapters/virtual.ts';
 import { MatterAdapter } from '../adapters/matter.ts';
+import { HomeKitControllerAdapter } from '../adapters/homekit-controller.ts';
 import { snapshot } from './snapshot.ts';
+import { registerEditRoutes } from './edit-routes.ts';
 import { AiAssistant, loadSettings, publicSettings, saveSettings, type AiOptions, type SettingsPatch } from '../assistant/ai.ts';
 import { isLight, isPlayer } from '../util/describe.ts';
 import type { HomeKitBridge } from '../bridges/homekit.ts';
+import type { MatterBridge } from '../bridges/matter-bridge.ts';
+import { LiveViewUnavailable, NEST_DEFAULT_REDIRECT, exchangeNestCode, nestAuthUrl, type NestOptions } from '../adapters/nest.ts';
+import type { Presence } from '../services/presence.ts';
+import type { Notifier } from '../services/notify.ts';
+import type { PushSubscription } from 'web-push';
 
 export interface ServerOptions {
   webRoot: string;
@@ -18,11 +25,21 @@ export interface ServerOptions {
   token?: string;
   /** The Apple Home bridge, when KOVA_HOMEKIT=1. */
   homekit?: HomeKitBridge;
+  /** The Matter bridge (Google Home, Alexa, SmartThings, Apple Home), when KOVA_MATTER_BRIDGE=1. */
+  matterBridge?: MatterBridge;
   /** Optional AI engine options, e.g. the Anthropic base URL (tests point it at a fake server). */
   ai?: AiOptions;
+  /** Nest settings from integrations.json, for the one-time account linking routes (no refresh token needed yet). */
+  nest?: Partial<Pick<NestOptions, 'projectId' | 'clientId' | 'clientSecret' | 'tokenUrl'>>;
+  /** Presence sources and per-person keys for phone automations. */
+  presence?: Presence;
+  /** Web Push / ntfy notifications. */
+  notifier?: Notifier;
 }
 
 const USER = { kind: 'user' as const, label: 'You' };
+
+const asBool = (v: unknown): boolean => typeof v === 'string' ? /^(1|true|yes|on|home|arrived?)$/i.test(v.trim()) : !!v;
 
 function tokenOk(req: FastifyRequest, token: string): boolean {
   const h = req.headers.authorization?.replace(/^Bearer\s+/i, '') ?? (req.query as Record<string, string>)?.token ?? '';
@@ -35,11 +52,21 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
   await app.register(fastifyWebsocket);
   await app.register(fastifyStatic, { root: opts.webRoot, index: ['index.html'] });
 
+  // A phone automation may report its own person's presence with that person's key instead of the master token.
+  const personKeyOk = (req: FastifyRequest): boolean => {
+    const m = req.method === 'POST' && /^\/api\/people\/([^/?]+)\/presence(?:\?|$)/.exec(req.url);
+    const key = (req.query as Record<string, string> | undefined)?.key;
+    return !!m && !!opts.presence && opts.presence.checkKey(decodeURIComponent(m[1]), key);
+  };
+
   if (opts.token) {
     app.addHook('onRequest', async (req, reply) => {
-      if (req.url.startsWith('/api/') && !tokenOk(req, opts.token!)) return reply.code(401).send({ error: 'unauthorised' });
+      if (req.url.startsWith('/api/') && !tokenOk(req, opts.token!) && !personKeyOk(req)) return reply.code(401).send({ error: 'unauthorised' });
     });
   }
+
+  // iOS Shortcuts' "Form" request body.
+  app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_req, body, done) => done(null, Object.fromEntries(new URLSearchParams(String(body)))));
 
   const fail = (reply: { code: (n: number) => { send: (b: unknown) => unknown } }, err: unknown) => reply.code(400).send({ error: err instanceof Error ? err.message : String(err) });
 
@@ -57,6 +84,30 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
     const hk = opts.homekit;
     if (!hk) return { enabled: false };
     return { enabled: true, ...hk.setupInfo(), paired: hk.paired };
+  });
+
+  // HomeKit accessories Kova controls (the reverse of the bridge above): find them, then pair with the code on the label.
+  const hkc = () => {
+    const a = hub.reg.adapters.get('homekit');
+    if (!(a instanceof HomeKitControllerAdapter)) throw new Error('HomeKit devices aren’t set up: add "homekit": {} to integrations.json');
+    return a;
+  };
+  app.get('/api/integrations/homekit-devices/discover', async (_req, reply) => {
+    try { return { accessories: await hkc().discover() }; } catch (e) { return fail(reply, e); }
+  });
+  app.post<{ Body: { id?: string; code?: string; room?: string; name?: string } }>('/api/integrations/homekit-devices/pair', async (req, reply) => {
+    try {
+      const { id, code, room, name } = req.body ?? {};
+      if (!id || !code) throw new Error('id and code are required');
+      return { ok: true, devices: await hkc().pair(id, code, { room, name }) };
+    } catch (e) { return fail(reply, e); }
+  });
+
+  // Pairing info for the Matter bridge (manual code, MT: payload for a QR code, and who it's paired with).
+  app.get('/api/integrations/matter-bridge', async () => {
+    const mb = opts.matterBridge;
+    if (!mb) return { enabled: false };
+    return { enabled: true, ...mb.pairingInfo() };
   });
 
   app.get<{ Querystring: { at?: string; hour?: string } }>('/api/preview', async req => {
@@ -88,6 +139,63 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
     if (!(v instanceof VirtualAdapter) || hub.reg.get(req.params.id)?.adapter !== 'virtual') return reply.code(400).send({ error: 'not a virtual device' });
     v.physical(req.params.id, req.body);
     return { ok: true };
+  });
+
+  // Camera live view over WebRTC: the browser's offer goes to the camera's adapter (e.g. Nest's cloud), its answer comes back.
+  const NO_LIVE = 'Live view isn’t available for this camera yet';
+  const liveFor = (id: string) => {
+    const d = hub.reg.get(id);
+    return { d, lv: d ? hub.reg.adapters.get(d.adapter)?.liveView : undefined };
+  };
+  const liveFail = (reply: { code: (n: number) => { send: (b: unknown) => unknown } }, e: unknown) =>
+    e instanceof LiveViewUnavailable ? reply.code(400).send({ error: NO_LIVE }) : reply.code(502).send({ error: e instanceof Error ? e.message : String(e) });
+  app.post<{ Params: { id: string }; Body: { offerSdp?: string } }>('/api/devices/:id/webrtc', async (req, reply) => {
+    const { d, lv } = liveFor(req.params.id);
+    if (!d) return reply.code(404).send({ error: 'unknown device' });
+    if (!lv) return reply.code(400).send({ error: NO_LIVE });
+    if (!req.body?.offerSdp) return reply.code(400).send({ error: 'offerSdp is required' });
+    try { return await lv.offer(d, req.body.offerSdp); } catch (e) { return liveFail(reply, e); }
+  });
+  // Live streams expire after a few minutes unless extended; stop ends one early.
+  app.post<{ Params: { id: string; op: string }; Body: { mediaSessionId?: string } }>('/api/devices/:id/webrtc/:op', async (req, reply) => {
+    const { d, lv } = liveFor(req.params.id);
+    if (!d) return reply.code(404).send({ error: 'unknown device' });
+    if (!lv) return reply.code(400).send({ error: NO_LIVE });
+    const sid = String(req.body?.mediaSessionId ?? '');
+    if (!sid) return reply.code(400).send({ error: 'mediaSessionId is required' });
+    try {
+      if (req.params.op === 'extend') return await lv.extend(d, sid);
+      if (req.params.op === 'stop') { await lv.stop(d, sid); return { ok: true }; }
+      return reply.code(404).send({ error: 'unknown operation' });
+    } catch (e) { return liveFail(reply, e); }
+  });
+  app.get<{ Params: { id: string } }>('/api/devices/:id/snapshot', async (req, reply) => {
+    const d = hub.reg.get(req.params.id);
+    const a = d && hub.reg.adapters.get(d.adapter);
+    if (!d || !a?.snapshot) return reply.code(404).send({ error: 'no snapshot for this device' });
+    try {
+      const s = await a.snapshot(d);
+      return reply.type(s.contentType).header('cache-control', 'no-store').send(s.body);
+    } catch (e) { return reply.code(404).send({ error: e instanceof Error ? e.message : String(e) }); }
+  });
+
+  // Linking a Google account for Nest, once: open auth-url, approve, copy the code from the address bar, post it to auth-code.
+  app.get<{ Querystring: { redirectUri?: string; projectId?: string; clientId?: string } }>('/api/integrations/nest/auth-url', async (req, reply) => {
+    const projectId = req.query.projectId || opts.nest?.projectId, clientId = req.query.clientId || opts.nest?.clientId;
+    if (!projectId || !clientId) return reply.code(400).send({ error: 'Set nest.projectId and nest.clientId in integrations.json first (or pass ?projectId=&clientId=)' });
+    const redirectUri = req.query.redirectUri || NEST_DEFAULT_REDIRECT;
+    return { url: nestAuthUrl({ projectId, clientId, redirectUri }), redirectUri };
+  });
+  app.post<{ Body: { code?: string; redirectUri?: string; clientId?: string; clientSecret?: string } }>('/api/integrations/nest/auth-code', async (req, reply) => {
+    const code = String(req.body?.code ?? '').trim();
+    const clientId = req.body?.clientId || opts.nest?.clientId, clientSecret = req.body?.clientSecret || opts.nest?.clientSecret;
+    if (!code) return reply.code(400).send({ error: 'code is required' });
+    if (!clientId || !clientSecret) return reply.code(400).send({ error: 'Set nest.clientId and nest.clientSecret in integrations.json first' });
+    try {
+      const r = await exchangeNestCode({ code, clientId, clientSecret, redirectUri: req.body?.redirectUri, tokenUrl: opts.nest?.tokenUrl });
+      reply.header('cache-control', 'no-store');
+      return { refreshToken: r.refreshToken, scope: r.scope, next: 'Save this as nest.refreshToken in integrations.json and restart Kova' };
+    } catch (e) { return fail(reply, e); }
   });
 
   // Add a Matter device with its pairing code (for one already in Google Home / Apple Home, open a pairing window there first).
@@ -133,9 +241,54 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
     return { undo: hub.engine.registerUndo(undo) };
   });
 
-  // Presence from a phone: the Kova app, or an iOS Shortcut / Android automation until the app ships.
-  app.post<{ Params: { id: string }; Body: { home: boolean; source?: string } }>('/api/people/:id/presence', async (req, reply) => {
-    try { await hub.engine.setPresence(req.params.id, !!req.body.home, req.body.source); return { ok: true }; } catch (e) { return fail(reply, e); }
+  registerEditRoutes(app, hub);
+
+  // Presence from a phone: the Kova app, or an iOS Shortcut / Android automation ("When I arrive home → Get contents of URL").
+  // `home` can be in the body or the query (?home=1), so a Shortcut needs no request body. `?key=` is the person's own key.
+  app.post<{ Params: { id: string }; Body: { home?: boolean | string; source?: string } | undefined; Querystring: { key?: string; home?: string; source?: string } }>('/api/people/:id/presence', async (req, reply) => {
+    const { id } = req.params;
+    if (req.query.key !== undefined && !opts.presence?.checkKey(id, req.query.key)) return reply.code(401).send({ error: 'wrong key for this person' });
+    const home = asBool(req.body?.home ?? req.query.home);
+    const source = req.body?.source ?? req.query.source;
+    try {
+      if (opts.presence) await opts.presence.report(id, home, source || undefined);
+      else await hub.engine.setPresence(id, home, source);
+      return { ok: true, home };
+    } catch (e) { return fail(reply, e); }
+  });
+
+  // Per-person URLs (with keys) for iOS Shortcuts / Android automations. Needs the master token when KOVA_TOKEN is set.
+  app.get('/api/presence/setup', async (req, reply) => {
+    if (!opts.presence) return reply.code(404).send({ error: 'presence is not running' });
+    const proto = (req.headers['x-forwarded-proto'] as string | undefined)?.split(',')[0] ?? req.protocol;
+    const host = (req.headers['x-forwarded-host'] as string | undefined) ?? req.headers.host ?? 'localhost';
+    return opts.presence.setup(`${proto}://${host}`);
+  });
+
+  // ------------------------------------------------------ notifications --
+  app.get('/api/push/vapid', async (_req, reply) => {
+    if (!opts.notifier) return reply.code(404).send({ error: 'notifications are not running' });
+    return { publicKey: opts.notifier.vapid.publicKey };
+  });
+  app.post<{ Body: { subscription?: PushSubscription; personId?: string } }>('/api/push/subscribe', async (req, reply) => {
+    if (!opts.notifier) return reply.code(404).send({ error: 'notifications are not running' });
+    const personId = req.body?.personId;
+    if (personId && !hub.config.get().people.some(p => p.id === personId)) return reply.code(400).send({ error: 'unknown person' });
+    try { opts.notifier.subscribe(req.body?.subscription as PushSubscription, personId); hub.emit('changed'); return { ok: true }; } catch (e) { return fail(reply, e); }
+  });
+  app.post<{ Body: { endpoint?: string } }>('/api/push/unsubscribe', async (req, reply) => {
+    if (!opts.notifier) return reply.code(404).send({ error: 'notifications are not running' });
+    return { ok: opts.notifier.unsubscribe(String(req.body?.endpoint ?? '')) };
+  });
+  app.post('/api/push/test', async (_req, reply) => {
+    if (!opts.notifier) return reply.code(404).send({ error: 'notifications are not running' });
+    return opts.notifier.notify({ title: 'Kova notifications work', body: 'This is how Kova will tell you about the doorbell and things left on.', tag: 'test' });
+  });
+
+  // Every light off (the "Turn them off" action on "Everyone's out").
+  app.post('/api/lights/off', async () => {
+    const ds = hub.reg.list().filter(d => isLight(d) && d.state.on);
+    return hub.engine.applyMany(Object.fromEntries(ds.map(d => [d.id, { on: false }])), { ...USER, label: 'All lights off' });
   });
 
   app.post<{ Params: { id: string } }>('/api/undo/:id', async (req, reply) => {

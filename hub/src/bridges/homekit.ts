@@ -147,11 +147,12 @@ export const deviceUUID = (id: string) => uuid.generate(`kova:device:${id}`);
 export const overlayUUID = (id: string) => uuid.generate(`kova:overlay:${id}`);
 
 /** Whether (and how) a Kova device is exposed. */
-export function homeKitKind(d: Pick<Device, 'type'>): 'lightbulb' | 'outlet' | 'purifier' | null {
+export function homeKitKind(d: Pick<Device, 'type'>): 'lightbulb' | 'outlet' | 'purifier' | 'tv' | null {
   switch (d.type) {
     case 'light': case 'dimmer': return 'lightbulb';
     case 'plug': return 'outlet';
     case 'fan': return 'purifier';
+    case 'tv': return 'tv';
     default: return null;
   }
 }
@@ -169,6 +170,19 @@ export interface HomeKitOptions {
   name?: string;
   /** mDNS advertiser. Default ciao (pure JS); Avahi suits hosts that already run avahi-daemon. */
   advertiser?: MDNSAdvertiser;
+  /**
+   * What not to hand to Apple Home. By default devices Kova got from HomeKit or
+   * Matter are left out: they're already in Apple Home, and would show up twice.
+   */
+  exclude?: { adapters?: string[]; devices?: string[] };
+}
+
+export const DEFAULT_EXCLUDED_ADAPTERS = ['homekit', 'matter'];
+
+/** A TV's own HomeKit identity: TVs must be published as separate accessories to show up properly. */
+export function tvUsername(bridgeUsername: string, deviceId: string): string {
+  const h = uuid.generate(`kova:tv:${bridgeUsername}:${deviceId}`).replace(/-/g, '').toUpperCase();
+  return h.slice(0, 12).match(/../g)!.join(':');
 }
 
 interface Identity { username: string; pincode: string; setupID: string }
@@ -182,6 +196,8 @@ export class HomeKitBridge {
   /** Bridged accessories by Kova device id / overlay id. */
   readonly devices = new Map<string, Entry>();
   readonly overlays = new Map<string, Entry>();
+  /** TVs, published as their own accessories (HomeKit shows bridged TVs poorly, and only one per bridge). */
+  readonly tvs = new Map<string, Entry>();
   private published = false;
   private readonly unsubs: (() => void)[] = [];
 
@@ -196,7 +212,7 @@ export class HomeKitBridge {
       .setCharacteristic(Characteristic.FirmwareRevision, '0.1.0');
     this.reconcile();
 
-    const onChange = ({ device }: { device: Device }) => this.push(this.devices.get(device.id));
+    const onChange = ({ device }: { device: Device }) => this.push(this.devices.get(device.id) ?? this.tvs.get(device.id));
     const onDevices = () => this.reconcile();
     const onEngine = () => { for (const e of this.overlays.values()) this.push(e); };
     const onConfig = () => this.reconcile();
@@ -225,12 +241,24 @@ export class HomeKitBridge {
       advertiser: this.opts.advertiser ?? MDNSAdvertiser.CIAO,
     });
     this.published = true;
+    for (const [id, e] of this.tvs) await this.publishTv(id, e);
+  }
+
+  private async publishTv(id: string, e: Entry): Promise<void> {
+    await e.accessory.publish({
+      username: tvUsername(this.identity.username, id), pincode: this.identity.pincode, port: 0,
+      category: Categories.TELEVISION, advertiser: this.opts.advertiser ?? MDNSAdvertiser.CIAO,
+    });
   }
 
   /** Unpublish and stop listening to the hub. Pairings stay on disk for the next start. */
   async stop(): Promise<void> {
     for (const u of this.unsubs.splice(0)) u();
-    if (this.published) { this.published = false; await this.bridge.unpublish(); }
+    if (this.published) {
+      this.published = false;
+      await this.bridge.unpublish();
+      for (const e of this.tvs.values()) await e.accessory.unpublish();
+    }
   }
 
   setupInfo(): { pincode: string; setupURI: string } {
@@ -273,7 +301,18 @@ export class HomeKitBridge {
   reconcile(): void {
     const add: Accessory[] = [];
     const remove: Accessory[] = [];
-    const wantDevices = new Set(this.hub.reg.list().filter(d => homeKitKind(d)).map(d => d.id));
+    const ex = this.opts.exclude ?? {};
+    const exAdapters = new Set(ex.adapters ?? DEFAULT_EXCLUDED_ADAPTERS), exDevices = new Set(ex.devices ?? []);
+    const shared = this.hub.reg.list().filter(d => homeKitKind(d) && !exAdapters.has(d.adapter) && !exDevices.has(d.id));
+    const wantTvs = new Set(shared.filter(d => homeKitKind(d) === 'tv').map(d => d.id));
+    const wantDevices = new Set(shared.filter(d => homeKitKind(d) !== 'tv').map(d => d.id));
+    for (const [id, e] of this.tvs) if (!wantTvs.has(id)) { this.tvs.delete(id); if (this.published) void e.accessory.unpublish(); }
+    for (const d of shared) {
+      if (!wantTvs.has(d.id) || this.tvs.has(d.id)) continue;
+      const e = this.tvAccessory(d);
+      this.tvs.set(d.id, e);
+      if (this.published) void this.publishTv(d.id, e).catch(err => console.warn(`[homekit] TV ${d.id}: ${err.message}`));
+    }
     const wantOverlays = new Set(this.hub.config.get().overlays.map(o => o.id));
     for (const [id, e] of this.devices) if (!wantDevices.has(id)) { remove.push(e.accessory); this.devices.delete(id); }
     for (const [id, e] of this.overlays) if (!wantOverlays.has(id)) { remove.push(e.accessory); this.overlays.delete(id); }
@@ -366,6 +405,38 @@ export class HomeKitBridge {
         this.bind(b, s, Characteristic.TargetAirPurifierState, id, st => fanModeToTarget(st.mode), (v, st) => ({ mode: targetToFanMode(Number(v), st.mode) }));
         break;
       }
+    }
+    const e = { accessory: acc, bindings: b };
+    this.push(e);
+    return e;
+  }
+
+  /** A TV: power, and volume through its speaker when the TV reports volume. */
+  private tvAccessory(d: Device): Entry {
+    const name = this.name(d);
+    const acc = new Accessory(name, deviceUUID(d.id));
+    acc.category = Categories.TELEVISION;
+    this.info(acc, d.integration, d.id);
+    const b: Binding[] = [];
+    const id = d.id;
+    const tv = acc.addService(Service.Television, name);
+    tv.setCharacteristic(Characteristic.ConfiguredName, name);
+    tv.setCharacteristic(Characteristic.SleepDiscoveryMode, Characteristic.SleepDiscoveryMode.ALWAYS_DISCOVERABLE);
+    tv.setCharacteristic(Characteristic.ActiveIdentifier, 1);
+    const A = Characteristic.Active;
+    this.bind(b, tv, A, id, st => st.on ? A.ACTIVE : A.INACTIVE, v => ({ on: v === A.ACTIVE }));
+    // Remote keys aren't in Kova's device model yet; accept them so the Remote screen doesn't error.
+    tv.getCharacteristic(Characteristic.RemoteKey).onSet(() => {});
+    if (d.capabilities.includes('volume')) {
+      const sp = acc.addService(Service.TelevisionSpeaker, `${name} Speaker`);
+      sp.setCharacteristic(Characteristic.VolumeControlType, Characteristic.VolumeControlType.ABSOLUTE);
+      this.bind(b, sp, Characteristic.Mute, id, () => false);
+      this.bind(b, sp, Characteristic.Volume, id, st => Math.max(0, Math.min(100, Math.round(st.vol ?? 0))), v => ({ vol: Number(v) }));
+      sp.getCharacteristic(Characteristic.VolumeSelector).onSet(async v => {
+        const cur = this.state(id).vol ?? 0;
+        await this.send(id, { vol: Math.max(0, Math.min(100, cur + (v === Characteristic.VolumeSelector.INCREMENT ? 5 : -5))) });
+      });
+      tv.addLinkedService(sp);
     }
     const e = { accessory: acc, bindings: b };
     this.push(e);
