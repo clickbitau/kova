@@ -12,6 +12,7 @@
 <link rel="apple-touch-icon" href="./assets/logo/kova-app-icon.svg">
 <script>(function(){var t="";try{var u=new URL(location.href);t=u.searchParams.get("token")||localStorage.getItem("kova_token")||"";if(u.searchParams.get("token"))localStorage.setItem("kova_token",t)}catch(e){}document.write('<script src="/api/boot.js'+(t?"?token="+encodeURIComponent(t):"")+'"><\/script>')})();</script>
 <script src="./support.js"></script>
+<link rel="stylesheet" href="./motion.css">
 <script src="./sting.js"></script>
 </head>
 <body>
@@ -272,7 +273,7 @@
 <div onClick="{{ closeSheet }}" style="position:absolute;inset:0;background:rgba(0,0,0,0.55)"></div>
 <div style="position:absolute;left:0;right:0;bottom:0;border-radius:28px 28px 0 0;background:#141517;padding:10px 20px 40px;display:flex;flex-direction:column;gap:16px">
 <div style="width:40px;height:5px;border-radius:3px;background:#35363a;align-self:center"></div>
-<div style="display:flex;justify-content:space-between;align-items:center"><div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:12px;color:#a3a09a">{{ sh.room }}</span><span style="font-size:22px;font-weight:700">{{ sh.name }}</span></div><div onClick="{{ sh.toggle }}" style="width:52px;height:32px;border-radius:16px;padding:3px;display:flex;justify-content:{{ sh.justify }};background:{{ sh.track }};cursor:pointer"><div style="width:26px;height:26px;border-radius:50%;background:#fff"></div></div></div>
+<div style="display:flex;justify-content:space-between;align-items:center"><div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:12px;color:#a3a09a">{{ sh.room }}</span><span style="font-size:22px;font-weight:700">{{ sh.name }}</span></div><div onClick="{{ sh.toggle }}" style="width:52px;height:32px;border-radius:16px;padding:3px;display:flex;justify-content:flex-start;background:{{ sh.track }};cursor:pointer"><div style="width:26px;height:26px;border-radius:50%;background:#fff;transform:{{ sh.knob }}"></div></div></div>
 <sc-if value="{{ sh.dimmable }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:8px"><div style="display:flex;justify-content:space-between;font-size:13px;font-weight:600"><span>Brightness</span><span style="color:#a3a09a">{{ sh.briLabel }}</span></div><input type="range" min="1" max="100" value="{{ sh.bri }}" onChange="{{ sh.setBri }}" style="width:100%;height:28px"></div></sc-if>
 <div style="display:flex;flex-direction:column;border-radius:14px;background:#1c1d20;overflow:hidden"><div style="display:flex;gap:12px;padding:12px 14px"><span style="font-family:'Material Symbols Rounded';font-size:19px;color:#a3a09a">help</span><div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">Why it’s like this</span><span style="font-size:13px;line-height:1.45">{{ sh.why }}</span></div></div><div style="display:flex;gap:12px;padding:12px 14px;border-top:1px solid rgba(255,255,255,0.05)"><span style="font-family:'Material Symbols Rounded';font-size:19px;color:#f2b14c">schedule</span><div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">What’s next</span><span style="font-size:13px;line-height:1.45">{{ sh.next }}</span></div></div></div>
 </div>
@@ -295,7 +296,7 @@
 </div>
 </div>
 
-<div onClick="{{ ed.toggleLtw }}" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;background:#1c1d20;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#f2b14c">directions_walk</span><div style="display:flex;flex-direction:column;gap:2px;flex:1"><span style="font-size:14px;font-weight:700">Light the way</span><span style="font-size:12px;color:#a3a09a">Light people’s way when they’re seen or arrive</span></div><div style="width:46px;height:28px;flex:none;border-radius:14px;padding:3px;display:flex;justify-content:{{ ed.ltwJustify }};background:{{ ed.ltwTrack }}"><div style="width:22px;height:22px;border-radius:50%;background:#fff"></div></div></div>
+<div onClick="{{ ed.toggleLtw }}" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;background:#1c1d20;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#f2b14c">directions_walk</span><div style="display:flex;flex-direction:column;gap:2px;flex:1"><span style="font-size:14px;font-weight:700">Light the way</span><span style="font-size:12px;color:#a3a09a">Light people’s way when they’re seen or arrive</span></div><div style="width:46px;height:28px;flex:none;border-radius:14px;padding:3px;display:flex;justify-content:flex-start;background:{{ ed.ltwTrack }}"><div style="width:22px;height:22px;border-radius:50%;background:#fff;transform:{{ ed.ltwKnob }}"></div></div></div>
 
 <div style="display:flex;flex-direction:column;gap:8px">
 <span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">When it starts</span>
@@ -432,7 +433,7 @@
 <sc-if value="{{ usesAi }}" hint-placeholder-val="{{ false }}">
 <div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:12px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">What the AI can see</span>
 <div style="border-radius:16px;background:#1c1d20;overflow:hidden">
-<sc-for list="{{ shares }}" as="sh2" hint-placeholder-count="5"><div onClick="{{ sh2.toggle }}" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid rgba(255,255,255,0.05);cursor:pointer;opacity:{{ sh2.op }}"><span style="font-family:'Material Symbols Rounded';font-size:19px;color:#a3a09a">{{ sh2.icon }}</span><div style="display:flex;flex-direction:column;gap:2px;flex:1"><span style="font-size:13.5px;font-weight:600">{{ sh2.name }}</span><span style="font-size:11.5px;color:#8a8781">{{ sh2.note }}</span></div><div style="width:34px;height:20px;border-radius:10px;padding:2px;display:flex;justify-content:{{ sh2.justify }};background:{{ sh2.track }}"><div style="width:16px;height:16px;border-radius:50%;background:#fff"></div></div></div></sc-for>
+<sc-for list="{{ shares }}" as="sh2" hint-placeholder-count="5"><div onClick="{{ sh2.toggle }}" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid rgba(255,255,255,0.05);cursor:pointer;opacity:{{ sh2.op }}"><span style="font-family:'Material Symbols Rounded';font-size:19px;color:#a3a09a">{{ sh2.icon }}</span><div style="display:flex;flex-direction:column;gap:2px;flex:1"><span style="font-size:13.5px;font-weight:600">{{ sh2.name }}</span><span style="font-size:11.5px;color:#8a8781">{{ sh2.note }}</span></div><div style="width:34px;height:20px;border-radius:10px;padding:2px;display:flex;justify-content:flex-start;background:{{ sh2.track }}"><div style="width:16px;height:16px;border-radius:50%;background:#fff;transform:{{ sh2.knob }}"></div></div></div></sc-for>
 </div>
 <span style="font-size:11.5px;color:#8a8781;line-height:1.45">Built-in commands never go to the AI. Only requests Kova can’t understand are sent, and each one shows up in Activity.</span>
 </div>
@@ -741,7 +742,7 @@ class Component extends DCLogic {
       saveStart:()=>{const at=s.edStart?.at??(cur&&cur.kind==='time'?cur.at:'20:00');const off=Number(s.edStart?.offset??(cur&&cur.offsetMin||0))||0;
         const [kind,name]=ek.split(':');const start=kind==='time'?{kind:'time',at}:kind==='sun'?{kind:'sun',event:name,offsetMin:off}:{kind:'prayer',prayer:name,offsetMin:off};
         put('/api/modes/'+SM.id,{start},`${SM.name} start saved`).then(()=>this.setState({edStart:null}))},
-      ltwJustify:SM.lightTheWay?'flex-end':'flex-start',ltwTrack:SM.lightTheWay?'#f2b14c':'#35363a',
+      ltwJustify:SM.lightTheWay?'flex-end':'flex-start',ltwKnob:SM.lightTheWay?'translateX(18px)':'none',ltwTrack:SM.lightTheWay?'#f2b14c':'#35363a',
       toggleLtw:()=>api('PATCH','/api/modes/'+SM.id,{lightTheWay:!SM.lightTheWay}).then(r=>this.toast(`Light the way ${SM.lightTheWay?'off':'on'} in ${SM.name}`,this.undoFn(r.undo))).catch(x=>this.err(x)),
       targets,noTargets:!targets.length,
       deviceOptions:DEVS.map(d=>({v:d.id,label:`${RN[d.room]||d.room} · ${d.name}`})),addDevice:addDev,addState,stateOptions:stateOptions.map(([v,label])=>({v,label})),
@@ -783,7 +784,7 @@ class Component extends DCLogic {
     const rDevs=list.filter(d=>d.room===room);
     const AF=[['all','All'],['auto','Modes'],['people','People'],['device','Devices']];
     const D=s.sheet&&devs[s.sheet];let sh={};
-    if(D)sh={name:D.name,room:RN[D.room]||'',justify:D.on?'flex-end':'flex-start',track:D.on?'#f2b14c':'#35363a',toggle:()=>this.tog(D.id),dimmable:D.type==='dimmer'&&D.on,bri:D.bri,briLabel:D.bri+'%',setBri:e=>this.patch(D.id,{bri:+e.target.value}),why:D.why.now,next:D.why.next};
+    if(D)sh={name:D.name,room:RN[D.room]||'',justify:D.on?'flex-end':'flex-start',knob:D.on?'translateX(20px)':'none',track:D.on?'#f2b14c':'#35363a',toggle:()=>this.tog(D.id),dimmable:D.type==='dimmer'&&D.on,bri:D.bri,briLabel:D.bri+'%',setBri:e=>this.patch(D.id,{bri:+e.target.value}),why:D.why.now,next:D.why.next};
     const home=H.people.filter(p=>p.home);
     const w=H.weather;
     const V='rgba(242,177,76,0.18)',VF='#f2b14c',N='#26272b',NF='#f1efea';
@@ -812,7 +813,7 @@ class Component extends DCLogic {
       draft:s.draft,setDraft:e=>this.setDraft(e.target.value),draftKey:e=>{if(e.key==='Enter'&&s.draft.trim())this.ask(s.draft.trim())},send:()=>{if(s.draft.trim())this.ask(s.draft.trim())},
       engine:{label:E[0],icon:E[1],bg:E[2],fg:E[3]},openAi:()=>this.setState({aiOpen:true}),closeAi:()=>this.setState({aiOpen:false}),aiOpen:s.aiOpen,isCloud:s.ai==='cloud',usesAi:s.ai!=='builtin',
       engines:ENG.map(([id,name,tag,tagBg,tagFg,body,data])=>{const a=s.ai===id;return{name,tag,tagBg,tagFg,body,data,border:a?tagFg:'transparent',ring:a?tagFg:'#4a4b50',dot:a?tagFg:'transparent',pick:()=>this.saveAi({ai:id})}}),
-      shares:SH.map(([id,name,icon,note])=>{const locked=id==='cameras';const a=!locked&&!!s.share[id];return{name,icon,note,op:locked?0.5:1,justify:a?'flex-end':'flex-start',track:a?'#f2b14c':'#35363a',toggle:()=>{if(!locked)this.saveAi({share:{...s.share,[id]:!s.share[id]}})}}}),
+      shares:SH.map(([id,name,icon,note])=>{const locked=id==='cameras';const a=!locked&&!!s.share[id];return{name,icon,note,op:locked?0.5:1,justify:a?'flex-end':'flex-start',knob:a?'translateX(14px)':'none',track:a?'#f2b14c':'#35363a',toggle:()=>{if(!locked)this.saveAi({share:{...s.share,[id]:!s.share[id]}})}}}),
       sheetOpen:!!D,sh,closeSheet:()=>this.setState({sheet:null}),toastOn:!!s.toast,toastPos:s.edit||s.ig?'top:calc(env(safe-area-inset-top, 0px) + 12px)':'bottom:104px',toastText:s.toast,canUndo:!!s.undo,undo:()=>{s.undo&&s.undo();this.setState({toast:null,undo:null})}};
   }
 }

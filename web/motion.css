@@ -1,0 +1,62 @@
+/*
+ * Kova motion: the Design Language's rules (docs/design/Kova Design Language.dc.html → Motion),
+ * shared by the desktop and phone apps.
+ *
+ *   120ms   hover, press. Buttons scale to 0.97 on press.
+ *   200ms   state changes, easing out: a tile turns on, a switch slides, a tint fades in.
+ *   280ms   drawers slide from the right, sheets rise from the bottom.
+ *   pop     scene run, success tick, logo dot: a slight overshoot.
+ *   never   looping or decorative motion on control screens.
+ *
+ * The apps are rendered from design templates with inline styles, so these rules target
+ * the design's own style signatures (a sheet is the thing with 28px top corners, etc.), written the way
+ * the browser serialises inline styles ("cursor: pointer", colours as rgb()).
+ */
+:root {
+  --k-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --k-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --k-pop: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* 200ms out: colours, tints and borders change smoothly (tiles turning on, chips selected, rows highlighted). */
+div, span, input, select {
+  transition: background-color 0.2s var(--k-out), border-color 0.2s var(--k-out), color 0.2s var(--k-out),
+    opacity 0.2s var(--k-out), box-shadow 0.2s var(--k-out), transform 0.12s var(--k-out);
+}
+
+/* 120ms press: anything tappable gives a little. (Elements that position themselves with transform keep it.) */
+[style*="cursor: pointer"]:active { transform: scale(0.97); }
+@media (hover: hover) { [style*="cursor: pointer"]:hover { filter: brightness(1.08); } }
+
+/* Switch knobs slide (they move with translateX set by the app). */
+[style*="border-radius: 50%; background: rgb(255, 255, 255); transform"] { transition: transform 0.2s var(--k-out); }
+
+/* 280ms: phone sheets rise from the bottom; desktop drawers slide in from the right; their scrims fade. */
+[style*="border-radius: 28px 28px 0px 0px"] { animation: k-rise 0.28s var(--k-out); }
+[style*="position: fixed"][style*="right: 0px"][style*="width: min("] { animation: k-slide 0.28s var(--k-out); }
+[style*="background: rgba(0, 0, 0, 0.55)"] { animation: k-fade 0.28s var(--k-out); }
+
+/* Screens: new content eases in (tab or page change, a card appearing). 200ms, a few pixels. */
+main > *, [style*="overflow-y: auto"][style*="safe-area-inset-top"] > * { animation: k-in 0.2s var(--k-out); }
+/* …but the mode glow behind the header just fades. */
+main > [style*="radial-gradient"] { animation: k-fade 0.4s var(--k-out); }
+
+/* Pop: confirmations (the toast after an action, with its Undo). */
+[style*="position: fixed"][style*="left: 50%"][style*="bottom: 28px"] { animation: k-toast-desk 0.32s var(--k-pop); }
+[style*="position: absolute"][style*="border-radius: 14px"][style*="background: rgb(241, 239, 234)"] { animation: k-toast 0.32s var(--k-pop); }
+/* Pop: the NOW badge on the current mode. */
+[style*="font-weight: 800"][style*="padding: 3px 8px"][style*="border-radius: 999px"] { animation: k-pop 0.32s var(--k-pop); }
+
+@keyframes k-rise { from { transform: translateY(100%); } to { transform: none; } }
+@keyframes k-slide { from { transform: translateX(100%); } to { transform: none; } }
+@keyframes k-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes k-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes k-pop { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: none; } }
+@keyframes k-toast { from { opacity: 0; transform: translateY(10px) scale(0.96); } to { opacity: 1; transform: none; } }
+@keyframes k-toast-desk { from { opacity: 0; transform: translateX(-50%) translateY(10px) scale(0.96); } to { opacity: 1; transform: translateX(-50%); } }
+
+/* Reduce Motion: no movement, instant state changes. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  [style*="cursor: pointer"]:active { transform: none; }
+}
