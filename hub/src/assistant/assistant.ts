@@ -10,7 +10,9 @@ import { clock } from '../util/time.ts';
 // which the UI can show as "Understood" chips before anything runs.
 
 /** Where an answer came from, shown under every reply. */
-export type Source = 'Device control' | 'From the activity log' | 'From your modes' | 'Built-in · nothing left your home';
+export type Source = 'Device control' | 'From the activity log' | 'From your modes' | 'Built-in · nothing left your home'
+  /** Optional AI engines (see ai.ts). The cloud tag says what context was sent. */
+  | 'Local AI on your server' | `Cloud AI · sent ${string}`;
 
 export type Intent =
   | { kind: 'power'; on: boolean; label: string; devices: string[] }

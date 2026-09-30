@@ -7,6 +7,7 @@ import type { Command } from '../model/types.ts';
 import type { AskAction } from '../assistant/assistant.ts';
 import { VirtualAdapter } from '../adapters/virtual.ts';
 import { snapshot } from './snapshot.ts';
+import { AiAssistant, loadSettings, publicSettings, saveSettings, type AiOptions, type SettingsPatch } from '../assistant/ai.ts';
 import { isLight, isPlayer } from '../util/describe.ts';
 import type { HomeKitBridge } from '../bridges/homekit.ts';
 
@@ -16,6 +17,8 @@ export interface ServerOptions {
   token?: string;
   /** The Apple Home bridge, when KOVA_HOMEKIT=1. */
   homekit?: HomeKitBridge;
+  /** Optional AI engine options, e.g. the Anthropic base URL (tests point it at a fake server). */
+  ai?: AiOptions;
 }
 
 const USER = { kind: 'user' as const, label: 'You' };
@@ -127,26 +130,19 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
   });
 
   // Assistant engine settings. Built-in is the default; AI engines only ever see requests the built-in parser can't handle.
-  type AiSettings = { engine: 'builtin' | 'local' | 'cloud'; share: Record<string, boolean> };
-  const aiSettings = (): AiSettings => hub.store.get<AiSettings>('assistant') ?? { engine: 'builtin', share: { names: true, rooms: true, history: false, presence: false } };
-  app.get('/api/assistant/settings', async () => aiSettings());
-  app.put<{ Body: Partial<AiSettings> }>('/api/assistant/settings', async (req, reply) => {
-    const cur = aiSettings();
-    const engine = req.body.engine ?? cur.engine;
-    if (!['builtin', 'local', 'cloud'].includes(engine)) return reply.code(400).send({ error: 'unknown engine' });
-    // Cameras are never shared, whatever is sent.
-    const next = { engine, share: { ...cur.share, ...(req.body.share ?? {}), cameras: false } };
-    hub.store.set('assistant', next);
-    return next;
+  // API keys are write-only: GET reports hasKey, never the key. Cameras are never shared, whatever is sent.
+  const ai = new AiAssistant(hub.engine, hub.reg, hub.config, hub.store, opts.ai);
+  app.get('/api/assistant/settings', async () => publicSettings(loadSettings(hub.store)));
+  app.put<{ Body: SettingsPatch }>('/api/assistant/settings', async (req, reply) => {
+    try { return publicSettings(saveSettings(hub.store, req.body ?? {})); } catch (e) { return fail(reply, e); }
   });
 
   app.post<{ Body: { text: string } }>('/api/ask', async req => {
-    const r = await hub.assistant.ask(String(req.body?.text ?? ''));
-    const engine = aiSettings().engine;
-    if (!r.understood && engine !== 'builtin') {
-      // AI engines are the next step; say so rather than pretending.
-      return { ...r, text: `That isn’t a built-in command, and the ${engine === 'local' ? 'local' : 'cloud'} AI engine isn’t connected yet. Built-in commands still work.` };
-    }
+    const text = String(req.body?.text ?? '');
+    const r = await hub.assistant.ask(text);
+    const settings = loadSettings(hub.store);
+    // Only what the built-in parser couldn't handle goes to an AI engine.
+    if (!r.understood && settings.engine !== 'builtin' && text.trim()) return ai.ask(text, settings);
     return r;
   });
   // What Kova understood, as chips, without running anything (for the live preview while typing).
