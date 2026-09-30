@@ -14,6 +14,7 @@ import { AiAssistant, loadSettings, publicSettings, saveSettings, type AiOptions
 import { isLight, isPlayer } from '../util/describe.ts';
 import type { HomeKitBridge } from '../bridges/homekit.ts';
 import type { MatterBridge } from '../bridges/matter-bridge.ts';
+import { LiveViewUnavailable, NEST_DEFAULT_REDIRECT, exchangeNestCode, nestAuthUrl, type NestOptions } from '../adapters/nest.ts';
 
 export interface ServerOptions {
   webRoot: string;
@@ -25,6 +26,8 @@ export interface ServerOptions {
   matterBridge?: MatterBridge;
   /** Optional AI engine options, e.g. the Anthropic base URL (tests point it at a fake server). */
   ai?: AiOptions;
+  /** Nest settings from integrations.json, for the one-time account linking routes (no refresh token needed yet). */
+  nest?: Partial<Pick<NestOptions, 'projectId' | 'clientId' | 'clientSecret' | 'tokenUrl'>>;
 }
 
 const USER = { kind: 'user' as const, label: 'You' };
@@ -117,6 +120,63 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
     if (!(v instanceof VirtualAdapter) || hub.reg.get(req.params.id)?.adapter !== 'virtual') return reply.code(400).send({ error: 'not a virtual device' });
     v.physical(req.params.id, req.body);
     return { ok: true };
+  });
+
+  // Camera live view over WebRTC: the browser's offer goes to the camera's adapter (e.g. Nest's cloud), its answer comes back.
+  const NO_LIVE = 'Live view isn’t available for this camera yet';
+  const liveFor = (id: string) => {
+    const d = hub.reg.get(id);
+    return { d, lv: d ? hub.reg.adapters.get(d.adapter)?.liveView : undefined };
+  };
+  const liveFail = (reply: { code: (n: number) => { send: (b: unknown) => unknown } }, e: unknown) =>
+    e instanceof LiveViewUnavailable ? reply.code(400).send({ error: NO_LIVE }) : reply.code(502).send({ error: e instanceof Error ? e.message : String(e) });
+  app.post<{ Params: { id: string }; Body: { offerSdp?: string } }>('/api/devices/:id/webrtc', async (req, reply) => {
+    const { d, lv } = liveFor(req.params.id);
+    if (!d) return reply.code(404).send({ error: 'unknown device' });
+    if (!lv) return reply.code(400).send({ error: NO_LIVE });
+    if (!req.body?.offerSdp) return reply.code(400).send({ error: 'offerSdp is required' });
+    try { return await lv.offer(d, req.body.offerSdp); } catch (e) { return liveFail(reply, e); }
+  });
+  // Live streams expire after a few minutes unless extended; stop ends one early.
+  app.post<{ Params: { id: string; op: string }; Body: { mediaSessionId?: string } }>('/api/devices/:id/webrtc/:op', async (req, reply) => {
+    const { d, lv } = liveFor(req.params.id);
+    if (!d) return reply.code(404).send({ error: 'unknown device' });
+    if (!lv) return reply.code(400).send({ error: NO_LIVE });
+    const sid = String(req.body?.mediaSessionId ?? '');
+    if (!sid) return reply.code(400).send({ error: 'mediaSessionId is required' });
+    try {
+      if (req.params.op === 'extend') return await lv.extend(d, sid);
+      if (req.params.op === 'stop') { await lv.stop(d, sid); return { ok: true }; }
+      return reply.code(404).send({ error: 'unknown operation' });
+    } catch (e) { return liveFail(reply, e); }
+  });
+  app.get<{ Params: { id: string } }>('/api/devices/:id/snapshot', async (req, reply) => {
+    const d = hub.reg.get(req.params.id);
+    const a = d && hub.reg.adapters.get(d.adapter);
+    if (!d || !a?.snapshot) return reply.code(404).send({ error: 'no snapshot for this device' });
+    try {
+      const s = await a.snapshot(d);
+      return reply.type(s.contentType).header('cache-control', 'no-store').send(s.body);
+    } catch (e) { return reply.code(404).send({ error: e instanceof Error ? e.message : String(e) }); }
+  });
+
+  // Linking a Google account for Nest, once: open auth-url, approve, copy the code from the address bar, post it to auth-code.
+  app.get<{ Querystring: { redirectUri?: string; projectId?: string; clientId?: string } }>('/api/integrations/nest/auth-url', async (req, reply) => {
+    const projectId = req.query.projectId || opts.nest?.projectId, clientId = req.query.clientId || opts.nest?.clientId;
+    if (!projectId || !clientId) return reply.code(400).send({ error: 'Set nest.projectId and nest.clientId in integrations.json first (or pass ?projectId=&clientId=)' });
+    const redirectUri = req.query.redirectUri || NEST_DEFAULT_REDIRECT;
+    return { url: nestAuthUrl({ projectId, clientId, redirectUri }), redirectUri };
+  });
+  app.post<{ Body: { code?: string; redirectUri?: string; clientId?: string; clientSecret?: string } }>('/api/integrations/nest/auth-code', async (req, reply) => {
+    const code = String(req.body?.code ?? '').trim();
+    const clientId = req.body?.clientId || opts.nest?.clientId, clientSecret = req.body?.clientSecret || opts.nest?.clientSecret;
+    if (!code) return reply.code(400).send({ error: 'code is required' });
+    if (!clientId || !clientSecret) return reply.code(400).send({ error: 'Set nest.clientId and nest.clientSecret in integrations.json first' });
+    try {
+      const r = await exchangeNestCode({ code, clientId, clientSecret, redirectUri: req.body?.redirectUri, tokenUrl: opts.nest?.tokenUrl });
+      reply.header('cache-control', 'no-store');
+      return { refreshToken: r.refreshToken, scope: r.scope, next: 'Save this as nest.refreshToken in integrations.json and restart Kova' };
+    } catch (e) { return fail(reply, e); }
   });
 
   // Add a Matter device with its pairing code (for one already in Google Home / Apple Home, open a pairing window there first).

@@ -40,4 +40,18 @@ export interface Adapter {
   /** Apply a partial state. Resolve once the device accepted it. */
   command(device: Device, cmd: Command): Promise<void>;
   status(): AdapterStatus;
+  /** Optional: live camera video over WebRTC, negotiated with the browser through the hub. */
+  liveView?: LiveView;
+  /** Optional: a still image from a camera (e.g. of its latest event). */
+  snapshot?(device: Device): Promise<Snapshot>;
 }
+
+/** WebRTC signalling for cameras whose cloud or device speaks WebRTC to the browser directly. */
+export interface LiveView {
+  /** Browser's SDP offer → the camera's answer. The session ends at `expiresAt` unless extended. */
+  offer(device: Device, offerSdp: string): Promise<{ answerSdp: string; mediaSessionId: string; expiresAt: string }>;
+  extend(device: Device, mediaSessionId: string): Promise<{ mediaSessionId: string; expiresAt: string }>;
+  stop(device: Device, mediaSessionId: string): Promise<void>;
+}
+
+export interface Snapshot { contentType: string; body: Buffer }

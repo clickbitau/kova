@@ -96,7 +96,7 @@ if (env.KOVA_MATTER_BRIDGE === '1' || integrations?.matterBridge) {
   }
 }
 
-const app = await buildServer(hub, { webRoot: resolve(here, '../../web'), token: env.KOVA_TOKEN || undefined, homekit, matterBridge });
+const app = await buildServer(hub, { webRoot: resolve(here, '../../web'), token: env.KOVA_TOKEN || undefined, homekit, matterBridge, nest: integrations?.nest });
 const port = Number(env.KOVA_PORT ?? 8140);
 await app.listen({ port, host: env.KOVA_HOST ?? '0.0.0.0' });
 console.log(`Kova hub listening on http://localhost:${port}${demo ? ' (demo home)' : ''}`);

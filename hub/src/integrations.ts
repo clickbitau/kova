@@ -12,6 +12,7 @@ import { VeSyncAdapter, type VeSyncOptions } from './adapters/vesync.ts';
 import { SamsungTvAdapter, type SamsungTvOptions } from './adapters/samsung-tv.ts';
 import { HomeKitControllerAdapter, type HomeKitAccessoryConfig } from './adapters/homekit-controller.ts';
 import { EcovacsAdapter, type EcovacsOptions } from './adapters/ecovacs.ts';
+import { NestAdapter, type NestOptions } from './adapters/nest.ts';
 
 /**
  * What's connected in this home, and how to reach it. Lives in
@@ -46,6 +47,8 @@ export interface Integrations {
   homekit?: { accessories?: HomeKitAccessoryConfig[] };
   /** DEEBOT robot vacuums through the Ecovacs cloud (needs the Ecovacs account). */
   ecovacs?: EcovacsOptions;
+  /** Nest cameras and doorbells through Google's SDM cloud API. Starts once projectId and refreshToken are set. */
+  nest?: NestOptions;
 }
 
 export function loadIntegrations(path: string): Integrations | null {
@@ -65,5 +68,6 @@ export function adaptersFor(i: Integrations, dataDir = resolve(process.env.KOVA_
   if (i.ecovacs?.email && i.ecovacs.password) out.push(new EcovacsAdapter(i.ecovacs));
   if (i.samsungtv?.tvs.length) out.push(new SamsungTvAdapter({ ...i.samsungtv, storageDir: i.samsungtv.storageDir ?? join(dataDir, 'samsungtv') }));
   if (i.homekit) out.push(new HomeKitControllerAdapter({ storageDir: join(dataDir, 'homekit-controller'), accessories: i.homekit.accessories }));
+  if (i.nest?.projectId && i.nest.refreshToken) out.push(new NestAdapter(i.nest));
   return out;
 }
