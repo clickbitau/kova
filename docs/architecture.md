@@ -86,6 +86,7 @@ It never makes decisions. See `sdk.ts`.
 | `tapo` | TP-Link Tapo plugs and bulbs over KLAP v2 (local HTTP, AES). On/off, brightness, warmth and colour. Needs the TP-Link account credentials, or the credentials hash Home Assistant stored. Polls every 10 s. |
 | `cast` | Google Cast speakers, displays and TVs over Cast v2 (TLS on port 8009) with mDNS discovery. Plays a source's stream URL, sets volume, stops. **Perfect sync:** commands that arrive together (e.g. a mode starting) and play the same source on several speakers go to the Cast group whose members are exactly those speakers, so the speakers sync themselves. Cast groups are made in the Google Home app; Google offers no API to create them. |
 | `sonos` | Local UPnP. SSDP discovery or `KOVA_SONOS_HOSTS`. Play source / pause / volume. |
+| `airplay` | Kova → AirPlay (Apple TV, HomePod, AirPlay speakers) through an [OwnTone](https://github.com/owntone/owntone-server) server, driven over its JSON API. OwnTone plays one source at a time to any set of AirPlay devices and keeps them in sync; playing the same source on another AirPlay device joins the running stream. OwnTone is GPL, so it runs as its own process (see `docker-compose.yml`). |
 | `matter` | See below. |
 | VeSync, Nest, GoodWe, Samsung TV, Ecovacs | Planned. |
 
@@ -121,6 +122,24 @@ Brightness, ColorTemperature and Hue/Saturation when the device has them),
 plugs become Outlets, purifiers become AirPurifiers (`Auto` ↔ AUTO, any other
 mode ↔ MANUAL), and each overlay (Movie, Date, Party…) becomes a Switch that
 starts or ends it. Speakers, TVs, cameras and sensors aren't exposed yet.
+
+**AirPlay → Cast** (`aircast.ts`) runs AirConnect's `aircast` (MIT) as a
+supervised child process, so every Cast speaker, display and Cast group appears
+as an AirPlay speaker on iPhones, iPads and Macs. Pick a Cast group in AirPlay
+and its speakers play in perfect sync. Kova writes aircast's config, restarts it
+with backoff if it dies, and shows its status on the Integrations screen.
+Configure it in `integrations.json`:
+
+```json
+"aircast": { "binary": "/opt/airconnect/aircast-linux-x86_64", "bind": "eth0", "exclude": ["Bedroom Oled"] },
+"airplay": { "url": "http://localhost:3689", "rooms": { "Apple TV": "lounge" } }
+```
+
+Sync across brands: speakers of one ecosystem sync with each other (Cast with
+Cast through Cast groups, AirPlay with AirPlay through OwnTone). A Cast speaker
+and an AirPlay speaker playing together are started at the same moment but
+drift apart by up to a second or two; no public protocol lets a third party
+sync them sample-accurately.
 Accessory UUIDs are derived from device ids, and the bridge's MAC, setup code
 and pairings live in `$KOVA_DATA/homekit/`, so restarts keep Home app rooms and
 scenes. `GET /api/integrations/homekit` returns the setup code and the

@@ -111,7 +111,10 @@ export function snapshot(hub: Hub) {
     sources: cfg.sources,
     findings,
     activity,
-    integrations: [...reg.adapters.values()].map(a => ({ id: a.id, name: a.name, icon: a.icon, kind: a.kind, ...a.status(), devices: reg.list().filter(d => d.adapter === a.id).length })),
+    integrations: [
+      ...[...reg.adapters.values()].map(a => ({ id: a.id, name: a.name, icon: a.icon, kind: a.kind, ...a.status(), devices: reg.list().filter(d => d.adapter === a.id).length })),
+      ...hub.services.map(x => ({ id: x.id, name: x.name, icon: x.icon, kind: x.kind, ...x.status(), devices: x.devices ?? 0 })),
+    ],
     weather: hub.weather?.current ?? null,
     demo: hub.demo,
   };

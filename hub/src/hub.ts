@@ -21,6 +21,9 @@ export interface HubOptions {
 }
 
 /** Wires the hub's parts together. One per home. */
+/** Something shown on the Integrations screen that isn't a device adapter (e.g. a bridge). */
+export interface Service { id: string; name: string; icon: string; kind: 'Local' | 'Cloud'; devices?: number; status(): { ok: boolean; note?: string } }
+
 export class Hub extends EventEmitter<{ changed: [] }> {
   readonly store: Store;
   readonly config: ConfigStore;
@@ -30,6 +33,7 @@ export class Hub extends EventEmitter<{ changed: [] }> {
   readonly assistant: Assistant;
   readonly demo: boolean;
   readonly weather?: Weather;
+  readonly services: Service[] = [];
 
   constructor(private opts: HubOptions) {
     super();

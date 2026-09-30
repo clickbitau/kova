@@ -9,6 +9,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import type { HomeConfig } from './model/types.ts';
 import { Weather } from './services/weather.ts';
 import { HomeKitBridge } from './bridges/homekit.ts';
+import { AirCastBridge } from './bridges/aircast.ts';
 import { demoConfig, demoDevices } from './seed/demo-home.ts';
 import type { Adapter } from './adapters/sdk.ts';
 
@@ -43,6 +44,19 @@ if (demo && !hub.store.get('seeded')) {
   hub.store.set('seeded', true);
 }
 
+// iPhone → Cast speakers: AirConnect's aircast, supervised by Kova.
+let aircast: AirCastBridge | undefined;
+if (integrations?.aircast?.binary) {
+  aircast = new AirCastBridge({ ...integrations.aircast, workDir: integrations.aircast.workDir ?? resolve(dataDir, 'aircast') });
+  aircast.on('status', () => hub.emit('changed'));
+  aircast.start();
+  const ac = aircast;
+  hub.services.push({
+    id: 'aircast', name: 'AirPlay to Cast speakers', icon: 'airplay', kind: 'Local',
+    status: () => { const st = ac.status(); return st.running ? { ok: true, note: 'Your Cast speakers and groups appear in AirPlay' } : { ok: false, note: st.error ?? 'Starting…' }; },
+  });
+}
+
 let homekit: HomeKitBridge | undefined;
 if (env.KOVA_HOMEKIT === '1') {
   homekit = new HomeKitBridge(hub, { storageDir: resolve(dataDir, 'homekit'), port: Number(env.KOVA_HOMEKIT_PORT ?? 51826) });
@@ -55,6 +69,6 @@ const port = Number(env.KOVA_PORT ?? 8140);
 await app.listen({ port, host: env.KOVA_HOST ?? '0.0.0.0' });
 console.log(`Kova hub listening on http://localhost:${port}${demo ? ' (demo home)' : ''}`);
 
-const shutdown = async () => { await app.close(); await homekit?.stop(); await hub.stop(); process.exit(0); };
+const shutdown = async () => { await app.close(); await homekit?.stop(); await aircast?.stop(); await hub.stop(); process.exit(0); };
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
