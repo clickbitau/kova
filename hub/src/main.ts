@@ -11,7 +11,7 @@ import { MatterAdapter } from './adapters/matter.ts';
 import { Weather } from './services/weather.ts';
 import { HomeKitBridge } from './bridges/homekit.ts';
 import { AirCastBridge } from './bridges/aircast.ts';
-import { demoConfig, demoDevices } from './seed/demo-home.ts';
+import { demoConfig, demoDevices, DEMO_SOLAR } from './seed/demo-home.ts';
 import type { Adapter } from './adapters/sdk.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -24,7 +24,7 @@ const homeFile = resolve(dataDir, 'home.json');
 const initialConfig = (): HomeConfig => !demo && existsSync(homeFile) ? JSON.parse(readFileSync(homeFile, 'utf8')) as HomeConfig : demoConfig();
 
 const adapters: Adapter[] = integrations ? adaptersFor(integrations) : [];
-if (demo) adapters.push(new VirtualAdapter(demoDevices()));
+if (demo) adapters.push(new VirtualAdapter(demoDevices(), DEMO_SOLAR));
 if (env.KOVA_SONOS === '1') adapters.push(new SonosAdapter());
 if (env.KOVA_MATTER === '1' || integrations?.matter) adapters.push(new MatterAdapter({ storageDir: resolve(dataDir, 'matter') }));
 

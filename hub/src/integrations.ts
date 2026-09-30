@@ -5,6 +5,7 @@ import { TapoAdapter, type TapoOptions } from './adapters/tapo.ts';
 import { CastAdapter, type CastOptions } from './adapters/cast/index.ts';
 import { SonosAdapter, type SonosOptions } from './adapters/sonos.ts';
 import { AirPlayAdapter, type AirPlayOptions } from './adapters/airplay.ts';
+import { GoodWeAdapter, type GoodWeOptions } from './adapters/goodwe.ts';
 import type { AirCastOptions } from './bridges/aircast.ts';
 
 /**
@@ -21,6 +22,8 @@ export interface Integrations {
   airplay?: AirPlayOptions;
   /** iPhone → Cast speakers: runs AirConnect's aircast. `workDir` defaults to <KOVA_DATA>/aircast. */
   aircast?: Omit<AirCastOptions, 'workDir'> & { workDir?: string };
+  /** Solar inverter(s) over Modbus TCP. */
+  goodwe?: GoodWeOptions;
   /** Matter controller on or off; its fabric lives in <KOVA_DATA>/matter. Same as KOVA_MATTER=1. */
   matter?: Record<string, never>;
 }
@@ -36,5 +39,6 @@ export function adaptersFor(i: Integrations): Adapter[] {
   if (i.cast) out.push(new CastAdapter(i.cast));
   if (i.sonos) out.push(new SonosAdapter(i.sonos));
   if (i.airplay?.url) out.push(new AirPlayAdapter(i.airplay));
+  if (i.goodwe?.host) out.push(new GoodWeAdapter(i.goodwe));
   return out;
 }

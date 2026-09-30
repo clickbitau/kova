@@ -116,6 +116,7 @@ export function snapshot(hub: Hub) {
       ...hub.services.map(x => ({ id: x.id, name: x.name, icon: x.icon, kind: x.kind, ...x.status(), devices: x.devices ?? 0 })),
     ],
     weather: hub.weather?.current ?? null,
+    energy: hub.energy.today(),
     demo: hub.demo,
   };
 }

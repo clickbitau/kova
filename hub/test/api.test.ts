@@ -13,7 +13,8 @@ test('API: state, commands, undo, overlays, preview', async () => {
 
   const s = (await app.inject({ url: '/api/state' })).json();
   assert.equal(s.current.modeId, 'evening');
-  assert.equal(s.devices.length, 28);
+  assert.equal(s.devices.length, 29, '28 home devices + the simulated inverter');
+  assert.equal(s.energy.available, true);
   assert.equal(s.modes.length, 5);
   assert.ok(s.findings.some((f: { id: string }) => f.id === 'stays-on:kitchen_ceiling:wind'));
 

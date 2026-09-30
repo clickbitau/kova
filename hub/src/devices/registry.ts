@@ -4,6 +4,9 @@ import type { Cause, Command, Device, DeviceState, Targets } from '../model/type
 import type { Store } from '../store/db.ts';
 import { CAPS, changeSentence, fitCommand } from '../util/describe.ts';
 
+/** Readings that update silently: they're not "changes" anyone made. */
+const MEASUREMENTS = new Set(['online', 'power', 'energy', 'grid', 'load']);
+
 export interface ChangeEvent { device: Device; prev: DeviceState; patch: Command; cause: Cause }
 export interface DeviceEvent { device: Device; type: string; data: Record<string, unknown> }
 
@@ -11,7 +14,7 @@ export interface DeviceEvent { device: Device; type: string; data: Record<string
  * Holds every device and its live state. All changes go through here so each
  * one is written to the event log with its cause.
  */
-export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [DeviceEvent]; devices: [] }> {
+export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [DeviceEvent]; devices: []; measure: [] }> {
   readonly devices = new Map<string, Device>();
   readonly adapters = new Map<string, Adapter>();
 
@@ -134,8 +137,8 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
     if (!d) return;
     const patch = this.diff(d, state);
     if (!Object.keys(patch).length) return;
-    const onlyOnline = Object.keys(patch).every(k => k === 'online' || k === 'power');
-    if (onlyOnline) { d.state = { ...d.state, ...patch }; this.emit('devices'); return; }
+    const onlyOnline = Object.keys(patch).every(k => MEASUREMENTS.has(k));
+    if (onlyOnline) { d.state = { ...d.state, ...patch }; this.emit('measure'); return; }
     this.apply(d, patch, { kind: 'device', label: `${d.integration}`, detail: 'changed at the device or in another app' });
   }
 
