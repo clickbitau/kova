@@ -14,6 +14,8 @@ import { MatterBridge } from './bridges/matter-bridge.ts';
 import { AirCastBridge } from './bridges/aircast.ts';
 import { demoConfig, demoDevices, DEMO_SOLAR } from './seed/demo-home.ts';
 import type { Adapter } from './adapters/sdk.ts';
+import { Presence } from './services/presence.ts';
+import { Notifier } from './services/notify.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const env = process.env;
@@ -96,11 +98,24 @@ if (env.KOVA_MATTER_BRIDGE === '1' || integrations?.matterBridge) {
   }
 }
 
-const app = await buildServer(hub, { webRoot: resolve(here, '../../web'), token: env.KOVA_TOKEN || undefined, homekit, matterBridge, nest: integrations?.nest });
+
+// Who's home (router, ping, phone automations). Always on so phone automations get per-person keys;
+// the router and ping sources only run when configured.
+const presence = new Presence(hub, integrations?.presence ?? {});
+presence.start();
+hub.services.push({ id: 'presence', name: 'Presence', icon: 'person_pin_circle', kind: 'Local', status: () => presence.status() });
+
+// Notifications: Web Push to the phone app needs no config (VAPID keys are made on first run); ntfy when configured.
+const notifier = new Notifier(hub, integrations?.notify ?? {}, { dataDir });
+notifier.start();
+// Cloud: Web Push is delivered by Apple's / Google's push service (and ntfy.sh unless self-hosted).
+hub.services.push({ id: 'notify', name: 'Notifications', icon: 'notifications', kind: 'Cloud', status: () => notifier.status() });
+
+const app = await buildServer(hub, { webRoot: resolve(here, '../../web'), token: env.KOVA_TOKEN || undefined, homekit, matterBridge, nest: integrations?.nest, presence, notifier });
 const port = Number(env.KOVA_PORT ?? 8140);
 await app.listen({ port, host: env.KOVA_HOST ?? '0.0.0.0' });
 console.log(`Kova hub listening on http://localhost:${port}${demo ? ' (demo home)' : ''}`);
 
-const shutdown = async () => { await app.close(); await homekit?.stop(); await matterBridge?.stop(); await aircast?.stop(); await hub.stop(); process.exit(0); };
+const shutdown = async () => { presence.stop(); await notifier.stop(); await app.close(); await homekit?.stop(); await matterBridge?.stop(); await aircast?.stop(); await hub.stop(); process.exit(0); };
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);

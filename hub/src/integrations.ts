@@ -13,6 +13,8 @@ import { SamsungTvAdapter, type SamsungTvOptions } from './adapters/samsung-tv.t
 import { HomeKitControllerAdapter, type HomeKitAccessoryConfig } from './adapters/homekit-controller.ts';
 import { EcovacsAdapter, type EcovacsOptions } from './adapters/ecovacs.ts';
 import { NestAdapter, type NestOptions } from './adapters/nest.ts';
+import type { PresenceOptions } from './services/presence.ts';
+import type { NotifyOptions } from './services/notify.ts';
 
 /**
  * What's connected in this home, and how to reach it. Lives in
@@ -49,6 +51,10 @@ export interface Integrations {
   ecovacs?: EcovacsOptions;
   /** Nest cameras and doorbells through Google's SDM cloud API. Starts once projectId and refreshToken are set. */
   nest?: NestOptions;
+  /** Who's home: phone MACs from the router (OPNsense), a TCP ping, and phone automations. */
+  presence?: PresenceOptions;
+  /** Push notifications: Web Push to the phone app (no config needed) and/or ntfy, plus which built-in rules run. */
+  notify?: NotifyOptions;
 }
 
 export function loadIntegrations(path: string): Integrations | null {

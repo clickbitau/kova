@@ -26,8 +26,11 @@ add-on: nothing in Kova depends on HA. The design reference lives in
   unchanged from the design. The logic block at the bottom now reads from the
   hub (`/api/boot.js` for the first paint, `/api/ws` for live updates) and sends
   every action to the API.
-* **Later:** Kova Cloud (accounts, remote access relay, push, backups, updates)
-  and a mobile app (presence, notifications). Neither exists yet.
+* **Phone app** (`web/phone.html`): the same, sized for a phone and installable
+  from Safari (Add to Home Screen). Its service worker (`web/sw.js`) shows push
+  notifications.
+* **Later:** Kova Cloud (accounts, remote access relay, backups, updates) and a
+  native mobile app. Neither exists yet.
 
 ## Domain model (`hub/src/model/types.ts`)
 
@@ -209,6 +212,97 @@ drift apart by up to a second or two; no public protocol lets a third party
 sync them sample-accurately.
 
 
+## Presence and notifications (`hub/src/services/`)
+
+These replace what Home Assistant's iPhone app did: knowing who's home (garage
+lights on arrival, Away ending when someone comes home, "only when someone's
+home" modes) and doorbell notifications.
+
+### Presence (`presence.ts`)
+
+Several optional sources per person, combined into one home/away that goes to
+`engine.setPresence(person, home, source)` (the source shows in Activity):
+
+* **Router (OPNsense)**: every 30 s Kova reads the ARP (and NDP) table from
+  `/api/diagnostics/interface/getArp` with the API key/secret as basic auth. A
+  person is home when any of their phone MACs is there. Home is immediate; away
+  only after the phone has been gone `awayAfterMin` (default 10) minutes, since
+  iPhones drop off Wi-Fi while asleep. Expired entries don't count. Source label
+  "Router (OPNsense)".
+* **Ping**: for phones with a fixed IP, a TCP connect to port 62078 (iPhone
+  lockdownd). Accepted or refused = something is there; timeout = absent. ICMP
+  isn't used because containers often can't send it. Same away debounce.
+* **Phone automations**: `POST /api/people/:id/presence` from an iOS Shortcut
+  ("Arrive"/"Leave" at Home → Get Contents of URL, method POST) or an Android
+  automation. Each person has their own key (`?key=`), so a phone doesn't need
+  the master token and can only report for that person. `GET
+  /api/presence/setup` (master token) lists every person's arrive/leave URLs.
+  Keys are generated once and kept in the database (or set `key` per person).
+  Source label "Phone automation".
+
+Conflicts: an "arrived" from any source wins at once. A phone automation's
+"left" beats the router for 15 minutes (a phone stays on Wi-Fi while you drive
+off), and after that the router only brings someone back once their phone has
+dropped off and reappeared, so a stale ARP entry never says someone came home.
+
+For router presence, turn off **Private Wi-Fi Address** (or set it to Fixed) for
+the home network on each iPhone, and use that MAC. ARP entries can linger on the
+router for up to ~20 minutes after a phone leaves, which the debounce and the
+Shortcut "left" cover.
+
+### Notifications (`notify.ts`)
+
+`Notifier.notify({title, body, url?, tag?, people?, actions?})` sends to every
+channel and logs the notification to Activity (`kind: 'system'`, feed `system`).
+
+* **Web Push** to the phone app, with the `web-push` package (MPL-2.0, used
+  unmodified). VAPID keys are made on first run and kept in
+  `<KOVA_DATA>/push/vapid.json` (0600). The app's Activity screen has an
+  "Enable notifications" row: it asks permission, subscribes with the hub's
+  public key (`GET /api/push/vapid`) and sends the subscription to
+  `POST /api/push/subscribe`. Subscriptions the push service reports as gone
+  (404/410) are removed. **iPhone needs iOS 16.4+, the app added to the Home
+  Screen, and HTTPS**: Safari won't register a service worker on plain
+  `http://10.x.x.x:8140`. Put Kova behind a reverse proxy with a real
+  certificate (e.g. Caddy or Nginx Proxy Manager with a DNS-challenge Let's
+  Encrypt cert for `kova.yourdomain`, resolved to the hub on your LAN), then open
+  that address and add it to the Home Screen.
+* **ntfy**: a JSON POST to an [ntfy](https://ntfy.sh) server (ntfy.sh or
+  self-hosted). Install the ntfy app and subscribe to the topic. It works with
+  Kova on plain HTTP, so it's the zero-setup option. Pick a long random topic
+  name on ntfy.sh (anyone who knows it can read it), or use a token.
+
+Built-in rules (each can be turned off in `notify.rules`):
+
+| Rule | When | Notification |
+|---|---|---|
+| `doorbell` | a device event `ring` | "Someone's at the front door", plus which lights Light the way turned on |
+| `everyoneOut` | the last person leaves and, after `everyoneOutGraceSec` (60), lights are still on | "Everyone's out, N lights are on" with a *Turn them off* action (`/phone.html?do=lights-off` → `POST /api/lights/off`). Lights Light the way is holding don't count; they turn off by themselves. |
+| `offline` | a device reports `online: false` for `offlineAfterMin` (10) | "X isn't responding", once per outage |
+
+The action links open the Kova app, so from outside the home they only work
+if the app is reachable from outside (reverse proxy or VPN).
+
+```json
+"presence": {
+  "opnsense": { "url": "https://10.10.0.1", "key": "…", "secret": "…", "insecureTls": true },
+  "people": { "methel": { "phones": ["aa:bb:cc:dd:ee:01"] }, "brishti": { "phones": ["aa:bb:cc:dd:ee:02"] } },
+  "pingHosts": { "brishti": "10.10.30.21" },
+  "awayAfterMin": 10
+},
+"notify": {
+  "ntfy": { "url": "https://ntfy.sh", "topic": "kova-7f3k2q9x", "token": "tk_…" },
+  "publicUrl": "https://kova.example.com",
+  "push": { "subject": "mailto:you@example.com" },
+  "rules": { "doorbell": true, "everyoneOut": true, "offline": true }
+}
+```
+
+The OPNsense key needs only the *Diagnostics: ARP Table* (and *NDP Table*)
+privileges: create a dedicated user under System → Access → Users.
+`insecureTls` accepts the router's self-signed certificate. Both services show
+a row on the Integrations screen ("Router: 2 phones seen").
+
 ## API
 
 | Method | Path | |
@@ -225,7 +319,12 @@ sync them sample-accurately.
 | POST | `/api/plan/skip` | `{id, skip}`: skip tonight |
 | POST | `/api/findings/:id/fix`, `/dismiss` | → `{undo}` |
 | PATCH | `/api/modes/:id` | `{lightTheWay, onlyWhenSomeoneHome}` → `{undo}` |
-| POST | `/api/people/:id/presence` | `{home, source}`, e.g. from an iOS Shortcut until the app exists |
+| POST | `/api/people/:id/presence` | `{home, source}` (or `?home=1`), e.g. from an iOS Shortcut. `?key=<person key>` works without the master token |
+| GET | `/api/presence/setup` | Per-person keys and arrive/leave URLs for Shortcuts |
+| GET | `/api/push/vapid` | `{publicKey}` for `pushManager.subscribe` |
+| POST | `/api/push/subscribe`, `/api/push/unsubscribe` | `{subscription, personId?}` / `{endpoint}` |
+| POST | `/api/push/test` | Send a test notification to every channel |
+| POST | `/api/lights/off` | Every light off → `{undo}` |
 | POST | `/api/undo/:id` | |
 | POST | `/api/ask`, `/api/ask/act` | Ask Kova |
 | GET | `/api/integrations/homekit` | `{enabled, pincode, setupURI, paired}` for the Apple Home bridge |
@@ -241,6 +340,8 @@ sync them sample-accurately.
 Set `KOVA_TOKEN` to require `Authorization: Bearer <token>` on every API call.
 Open the UI once with `?token=…` and it remembers the token. This is a stopgap
 until real accounts exist.
+The one exception: `POST /api/people/:id/presence?key=…` with that person's
+own presence key.
 
 ## What's real and what's sample data in the UI
 

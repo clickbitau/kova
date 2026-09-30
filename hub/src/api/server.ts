@@ -15,6 +15,9 @@ import { isLight, isPlayer } from '../util/describe.ts';
 import type { HomeKitBridge } from '../bridges/homekit.ts';
 import type { MatterBridge } from '../bridges/matter-bridge.ts';
 import { LiveViewUnavailable, NEST_DEFAULT_REDIRECT, exchangeNestCode, nestAuthUrl, type NestOptions } from '../adapters/nest.ts';
+import type { Presence } from '../services/presence.ts';
+import type { Notifier } from '../services/notify.ts';
+import type { PushSubscription } from 'web-push';
 
 export interface ServerOptions {
   webRoot: string;
@@ -28,9 +31,15 @@ export interface ServerOptions {
   ai?: AiOptions;
   /** Nest settings from integrations.json, for the one-time account linking routes (no refresh token needed yet). */
   nest?: Partial<Pick<NestOptions, 'projectId' | 'clientId' | 'clientSecret' | 'tokenUrl'>>;
+  /** Presence sources and per-person keys for phone automations. */
+  presence?: Presence;
+  /** Web Push / ntfy notifications. */
+  notifier?: Notifier;
 }
 
 const USER = { kind: 'user' as const, label: 'You' };
+
+const asBool = (v: unknown): boolean => typeof v === 'string' ? /^(1|true|yes|on|home|arrived?)$/i.test(v.trim()) : !!v;
 
 function tokenOk(req: FastifyRequest, token: string): boolean {
   const h = req.headers.authorization?.replace(/^Bearer\s+/i, '') ?? (req.query as Record<string, string>)?.token ?? '';
@@ -43,11 +52,21 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
   await app.register(fastifyWebsocket);
   await app.register(fastifyStatic, { root: opts.webRoot, index: ['index.html'] });
 
+  // A phone automation may report its own person's presence with that person's key instead of the master token.
+  const personKeyOk = (req: FastifyRequest): boolean => {
+    const m = req.method === 'POST' && /^\/api\/people\/([^/?]+)\/presence(?:\?|$)/.exec(req.url);
+    const key = (req.query as Record<string, string> | undefined)?.key;
+    return !!m && !!opts.presence && opts.presence.checkKey(decodeURIComponent(m[1]), key);
+  };
+
   if (opts.token) {
     app.addHook('onRequest', async (req, reply) => {
-      if (req.url.startsWith('/api/') && !tokenOk(req, opts.token!)) return reply.code(401).send({ error: 'unauthorised' });
+      if (req.url.startsWith('/api/') && !tokenOk(req, opts.token!) && !personKeyOk(req)) return reply.code(401).send({ error: 'unauthorised' });
     });
   }
+
+  // iOS Shortcuts' "Form" request body.
+  app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_req, body, done) => done(null, Object.fromEntries(new URLSearchParams(String(body)))));
 
   const fail = (reply: { code: (n: number) => { send: (b: unknown) => unknown } }, err: unknown) => reply.code(400).send({ error: err instanceof Error ? err.message : String(err) });
 
@@ -224,9 +243,52 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
 
   registerEditRoutes(app, hub);
 
-  // Presence from a phone: the Kova app, or an iOS Shortcut / Android automation until the app ships.
-  app.post<{ Params: { id: string }; Body: { home: boolean; source?: string } }>('/api/people/:id/presence', async (req, reply) => {
-    try { await hub.engine.setPresence(req.params.id, !!req.body.home, req.body.source); return { ok: true }; } catch (e) { return fail(reply, e); }
+  // Presence from a phone: the Kova app, or an iOS Shortcut / Android automation ("When I arrive home → Get contents of URL").
+  // `home` can be in the body or the query (?home=1), so a Shortcut needs no request body. `?key=` is the person's own key.
+  app.post<{ Params: { id: string }; Body: { home?: boolean | string; source?: string } | undefined; Querystring: { key?: string; home?: string; source?: string } }>('/api/people/:id/presence', async (req, reply) => {
+    const { id } = req.params;
+    if (req.query.key !== undefined && !opts.presence?.checkKey(id, req.query.key)) return reply.code(401).send({ error: 'wrong key for this person' });
+    const home = asBool(req.body?.home ?? req.query.home);
+    const source = req.body?.source ?? req.query.source;
+    try {
+      if (opts.presence) await opts.presence.report(id, home, source || undefined);
+      else await hub.engine.setPresence(id, home, source);
+      return { ok: true, home };
+    } catch (e) { return fail(reply, e); }
+  });
+
+  // Per-person URLs (with keys) for iOS Shortcuts / Android automations. Needs the master token when KOVA_TOKEN is set.
+  app.get('/api/presence/setup', async (req, reply) => {
+    if (!opts.presence) return reply.code(404).send({ error: 'presence is not running' });
+    const proto = (req.headers['x-forwarded-proto'] as string | undefined)?.split(',')[0] ?? req.protocol;
+    const host = (req.headers['x-forwarded-host'] as string | undefined) ?? req.headers.host ?? 'localhost';
+    return opts.presence.setup(`${proto}://${host}`);
+  });
+
+  // ------------------------------------------------------ notifications --
+  app.get('/api/push/vapid', async (_req, reply) => {
+    if (!opts.notifier) return reply.code(404).send({ error: 'notifications are not running' });
+    return { publicKey: opts.notifier.vapid.publicKey };
+  });
+  app.post<{ Body: { subscription?: PushSubscription; personId?: string } }>('/api/push/subscribe', async (req, reply) => {
+    if (!opts.notifier) return reply.code(404).send({ error: 'notifications are not running' });
+    const personId = req.body?.personId;
+    if (personId && !hub.config.get().people.some(p => p.id === personId)) return reply.code(400).send({ error: 'unknown person' });
+    try { opts.notifier.subscribe(req.body?.subscription as PushSubscription, personId); hub.emit('changed'); return { ok: true }; } catch (e) { return fail(reply, e); }
+  });
+  app.post<{ Body: { endpoint?: string } }>('/api/push/unsubscribe', async (req, reply) => {
+    if (!opts.notifier) return reply.code(404).send({ error: 'notifications are not running' });
+    return { ok: opts.notifier.unsubscribe(String(req.body?.endpoint ?? '')) };
+  });
+  app.post('/api/push/test', async (_req, reply) => {
+    if (!opts.notifier) return reply.code(404).send({ error: 'notifications are not running' });
+    return opts.notifier.notify({ title: 'Kova notifications work', body: 'This is how Kova will tell you about the doorbell and things left on.', tag: 'test' });
+  });
+
+  // Every light off (the "Turn them off" action on "Everyone's out").
+  app.post('/api/lights/off', async () => {
+    const ds = hub.reg.list().filter(d => isLight(d) && d.state.on);
+    return hub.engine.applyMany(Object.fromEntries(ds.map(d => [d.id, { on: false }])), { ...USER, label: 'All lights off' });
   });
 
   app.post<{ Params: { id: string } }>('/api/undo/:id', async (req, reply) => {
