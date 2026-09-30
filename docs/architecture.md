@@ -130,7 +130,14 @@ HAP bridge named after the home. Lights and dimmers become Lightbulbs (with
 Brightness, ColorTemperature and Hue/Saturation when the device has them),
 plugs become Outlets, purifiers become AirPurifiers (`Auto` ↔ AUTO, any other
 mode ↔ MANUAL), and each overlay (Movie, Date, Party…) becomes a Switch that
-starts or ends it. Speakers, TVs, cameras and sensors aren't exposed yet.
+starts or ends it. TVs (Samsung, Cast TVs) are published as their own
+Television accessories with power and volume, because HomeKit only shows one
+bridged TV per bridge and shows it badly; add each TV in the Home app with the
+same setup code. Speakers, cameras and sensors aren't exposed.
+Devices Kova got from HomeKit or Matter are left out by default (they're
+already in Apple Home), and `"homekitBridge": { "exclude": { "devices": [...] } }`
+in `integrations.json` leaves out more. `"homekitBridge": {}` turns the bridge
+on, like `KOVA_HOMEKIT=1`.
 Accessory UUIDs are derived from device ids, and the bridge's MAC, setup code
 and pairings live in `$KOVA_DATA/homekit/`, so restarts keep Home app rooms and
 scenes. `GET /api/integrations/homekit` returns the setup code and the

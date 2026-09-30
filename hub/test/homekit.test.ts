@@ -191,3 +191,35 @@ test('HomeKit bridge uses a given pincode and rejects trivial ones', async () =>
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('HomeKit bridge: TVs as their own accessories, and no duplicates of Apple/Matter devices', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'kova-homekit-'));
+  const { hub, dev } = await testHub(12);
+  // Pretend the lamp came from HomeKit: it's already in Apple Home, so the bridge must leave it out.
+  hub.reg.get('lamp')!.adapter = 'homekit';
+  const hk = new HomeKitBridge(hub, { storageDir: dir, exclude: { devices: ['dining'] } });
+  try {
+    assert.ok(!hk.devices.has('lamp'), 'HomeKit-sourced device not re-exported');
+    assert.ok(!hk.devices.has('dining'), 'explicitly excluded');
+    assert.ok(hk.devices.has('kitchen_ceiling'));
+
+    const tv = hk.tvs.get('bedroom_tv')!;
+    assert.ok(tv, 'the TV is exposed');
+    assert.ok(!hk.bridge.bridgedAccessories.includes(tv.accessory), 'TVs are published on their own, not bridged');
+    assert.equal(tv.accessory.category, Categories.TELEVISION);
+    const svc = tv.accessory.getService(Service.Television)!;
+    await svc.getCharacteristic(Characteristic.Active).handleSetRequest(Characteristic.Active.ACTIVE);
+    assert.equal(dev('bedroom_tv').on, true);
+    const speaker = tv.accessory.getService(Service.TelevisionSpeaker)!;
+    await speaker.getCharacteristic(Characteristic.Volume).handleSetRequest(22);
+    assert.equal(dev('bedroom_tv').vol, 22);
+    await speaker.getCharacteristic(Characteristic.VolumeSelector).handleSetRequest(Characteristic.VolumeSelector.INCREMENT);
+    assert.equal(dev('bedroom_tv').vol, 27);
+    await hub.engine.command('bedroom_tv', { on: false });
+    assert.equal(svc.getCharacteristic(Characteristic.Active).value, Characteristic.Active.INACTIVE, 'Kova changes reach the Home app');
+  } finally {
+    await hk.stop();
+    await hub.stop();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

@@ -60,8 +60,9 @@ if (integrations?.aircast?.binary) {
 }
 
 let homekit: HomeKitBridge | undefined;
-if (env.KOVA_HOMEKIT === '1') {
-  homekit = new HomeKitBridge(hub, { storageDir: resolve(dataDir, 'homekit'), port: Number(env.KOVA_HOMEKIT_PORT ?? 51826) });
+if (env.KOVA_HOMEKIT === '1' || integrations?.homekitBridge) {
+  const hk = integrations?.homekitBridge ?? {};
+  homekit = new HomeKitBridge(hub, { storageDir: resolve(dataDir, 'homekit'), port: Number(env.KOVA_HOMEKIT_PORT ?? hk.port ?? 51826), pincode: hk.pincode, exclude: hk.exclude });
   await homekit.start();
   console.log(`Apple Home bridge published · setup code ${homekit.setupInfo().pincode}`);
 }

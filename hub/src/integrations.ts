@@ -28,6 +28,8 @@ export interface Integrations {
   aircast?: Omit<AirCastOptions, 'workDir'> & { workDir?: string };
   /** Solar inverter(s) over Modbus TCP. */
   goodwe?: GoodWeOptions;
+  /** Hand Kova's devices to Apple Home (same as KOVA_HOMEKIT=1). */
+  homekitBridge?: { port?: number; pincode?: string; exclude?: { adapters?: string[]; devices?: string[] } };
   /** Matter controller on or off; its fabric lives in <KOVA_DATA>/matter. Same as KOVA_MATTER=1. */
   matter?: Record<string, never>;
   /** Levoit purifiers through the VeSync cloud (needs the VeSync account). */
