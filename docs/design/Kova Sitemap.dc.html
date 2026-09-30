@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..24,400,0..1,0&display=swap" rel="stylesheet"><style>body{margin:0;background:#0e0f10;-webkit-font-smoothing:antialiased}*{box-sizing:border-box}a{color:#f2b14c}a:hover{color:#f7cb82}</style></helmet>
+<div style="min-height:100vh;background:#0e0f10;color:#f1efea;font-family:Manrope,system-ui,sans-serif;padding:44px 44px 80px;display:flex;flex-direction:column;gap:32px">
+
+<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:20px">
+<div style="display:flex;flex-direction:column;gap:10px;max-width:720px">
+<div style="display:flex;align-items:center;gap:10px"><svg width="28" height="28" viewBox="0 0 48 48"><path d="M8 26L24 11L40 26" fill="none" stroke="#f1efea" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path><path d="M16 32L24 24.5L32 32" fill="none" stroke="#f1efea" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="24" cy="38.5" r="3.5" fill="#f2b14c"></circle></svg><span style="font-size:14px;font-weight:700;color:#a3a09a">Kova · Sitemap v1</span></div>
+<h1 style="margin:0;font-size:36px;font-weight:700;letter-spacing:-0.025em;text-wrap:pretty">Every Home Assistant capability, mapped to a Kova page</h1>
+<p style="margin:0;font-size:15px;line-height:1.55;color:#a3a09a;text-wrap:pretty">Eight top-level areas plus Settings. Pages marked L1–L4 show when they become visible: L1 for everyone, L4 only in Advanced mode. Filter to see what a new user, a family member or a power user sees.</p>
+</div>
+<div style="display:flex;gap:4px;padding:4px;border-radius:12px;background:#16171a">
+<sc-for list="{{ filters }}" as="f" hint-placeholder-count="4">
+<div onClick="{{ f.pick }}" style="padding:8px 14px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;background:{{ f.bg }};color:{{ f.fg }}">{{ f.label }}</div>
+</sc-for>
+</div>
+</div>
+
+<div style="display:flex;flex-wrap:wrap;gap:18px;font-size:12px;color:#a3a09a">
+<sc-for list="{{ legend }}" as="l" hint-placeholder-count="4">
+<div style="display:flex;align-items:center;gap:8px"><span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500;padding:2px 6px;border-radius:5px;background:{{ l.bg }};color:{{ l.fg }}">{{ l.k }}</span>{{ l.v }}</div>
+</sc-for>
+<div style="display:flex;align-items:center;gap:8px"><div style="width:8px;height:8px;border-radius:50%;background:#7fd4a0"></div>In prototype</div>
+<div style="display:flex;align-items:center;gap:8px"><div style="width:8px;height:8px;border-radius:50%;border:1.5px solid #6f6d69"></div>To design</div>
+<span style="margin-left:auto">{{ countLabel }}</span>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:16px;align-items:start">
+<sc-for list="{{ sections }}" as="s" hint-placeholder-count="9">
+<div style="background:#16171a;border-radius:18px;padding:18px;display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px">
+<div style="width:38px;height:38px;border-radius:11px;background:rgba(242,177,76,0.13);color:#f2b14c;display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:21px">{{ s.icon }}</span></div>
+<div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:17px;font-weight:700">{{ s.name }}</span><span style="font-size:12px;color:#a3a09a;line-height:1.35">{{ s.job }}</span></div>
+</div>
+<div style="display:flex;flex-direction:column;gap:2px">
+<sc-for list="{{ s.pages }}" as="p" hint-placeholder-count="4">
+<div style="display:flex;gap:10px;padding:10px;border-radius:10px;background:#1c1d20;opacity:{{ p.op }}">
+<div style="width:8px;height:8px;border-radius:50%;margin-top:6px;flex:none;background:{{ p.dotBg }};border:{{ p.dotBorder }}"></div>
+<div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:0">
+<div style="display:flex;align-items:center;gap:8px"><span style="font-size:14px;font-weight:700;flex:1">{{ p.name }}</span><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;padding:2px 6px;border-radius:5px;background:{{ p.lvlBg }};color:{{ p.lvlFg }}">{{ p.lvl }}</span></div>
+<span style="font-size:12.5px;color:#c9c6c0;line-height:1.4">{{ p.what }}</span>
+<span style="font-size:11px;color:#8a8781;line-height:1.35">HA: {{ p.ha }}</span>
+</div>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-for>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:12px">
+<h2 style="margin:0;font-size:19px;font-weight:700">Across every page</h2>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px">
+<sc-for list="{{ cross }}" as="c" hint-placeholder-count="6">
+<div style="background:#16171a;border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:8px"><span style="font-family:'Material Symbols Rounded';font-size:22px;color:#7cb8f0">{{ c.icon }}</span><span style="font-size:14px;font-weight:700">{{ c.name }}</span><span style="font-size:12.5px;color:#a3a09a;line-height:1.45">{{ c.what }}</span></div>
+</sc-for>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:12px">
+<h2 style="margin:0;font-size:19px;font-weight:700">Navigation per device</h2>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px">
+<sc-for list="{{ devicesNav }}" as="d" hint-placeholder-count="4">
+<div style="background:#16171a;border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:8px"><div style="display:flex;align-items:center;gap:8px"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#a3a09a">{{ d.icon }}</span><span style="font-size:14px;font-weight:700">{{ d.name }}</span></div><span style="font-size:12.5px;color:#a3a09a;line-height:1.45">{{ d.what }}</span></div>
+</sc-for>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const P=(name,lvl,what,ha,done)=>({name,lvl,what,ha,done:!!done});
+const SECTIONS=[
+{name:'Home',icon:'home',job:'Control and glance. The page everyone lands on.',pages:[
+P('Home dashboard','L1','Status, scenes, rooms, tonight, cameras. Auto-built on day one.','Overview (default dashboard)',1),
+P('Dashboard editor','L2','Drag, resize, add cards. Per-person and per-device layouts.','Edit dashboard, sections view, badges'),
+P('Card library','L2','Built-in cards plus community cards, all themeable.','Lovelace cards, custom cards via HACS'),
+P('Extra dashboards','L2','Kiosk, wall panel, TV and guest dashboards.','Multiple dashboards, kiosk mode, browser_mod'),
+P('Themes','L2','Colour, density, typography. Light and dark per dashboard.','Themes folder, card-mod')]},
+{name:'Rooms',icon:'meeting_room',job:'Where things are. Floors, rooms and every device in them.',pages:[
+P('Rooms overview','L1','Room cards with live state. Tap in for devices.','Areas',1),
+P('Room detail','L1','Device tiles, room scenes, sensors, and automations used here.','Area page',1),
+P('Device detail','L1','Simple / Details / Code tabs, history, used in.','Device page, entity more-info dialog',1),
+P('Floors and floorplan','L2','Floors, and an optional drawn or uploaded floorplan.','Floors (plus picture-elements card)'),
+P('Labels and groups','L3','Group anything across rooms: “Outdoor lights”, “Kids”.','Labels, groups, light/switch groups')]},
+{name:'Automations',icon:'bolt',job:'Things the home does by itself.',pages:[
+P('Automations list and day view','L3','24-hour strip, schedule and event groups, on/off.','Automations list',1),
+P('Automation editor','L3','Sentence builder, flow view for branches, code view.','Automation editor (UI + YAML)',1),
+P('Scenes','L1','Run, preview what changes, undo. Capture current state.','Scenes, scripts used as scenes',1),
+P('Routines','L3','Ordered steps with waits, loops and choices.','Scripts'),
+P('Templates','L3','Reusable automations with fill-in fields. Share and import.','Blueprints'),
+P('Run history','L3','Every run, step by step, with why it did or didn’t fire.','Traces'),
+P('Schedules and timers','L2','Weekly schedules, countdowns, holiday modes.','Schedule, timer helpers')]},
+{name:'Energy',icon:'electric_meter',job:'Where power comes from and where it goes.',pages:[
+P('Energy overview','L1','Today’s flow: solar, grid, battery, home.','Energy dashboard'),
+P('Device usage','L2','Per-device and per-room consumption and cost.','Individual devices in Energy'),
+P('Tariffs and meters','L3','Rates, peak times, utility meters, gas and water.','Energy config, utility meter helper')]},
+{name:'Security',icon:'shield',job:'Cameras, doors, alarm and who is home.',pages:[
+P('Cameras','L1','Live grid, events timeline, person detection clips.','Camera entities, picture-glance, go2rtc'),
+P('Alarm and locks','L1','Arm, disarm, lock status, entry log.','Alarm panel, lock entities'),
+P('People and presence','L1','Who is home, map, arrival and leave history.','Person, zones, map')]},
+{name:'Activity',icon:'history',job:'What happened, and what needs attention.',pages:[
+P('Timeline','L1','One feed of events, each with the cause: person, automation, device.','Logbook'),
+P('History and charts','L2','Graphs for any sensor, compare periods.','History, statistics'),
+P('Notifications','L1','Alerts, repairs and suggestions in one inbox.','Persistent notifications, repairs'),
+P('Calendar and lists','L1','Shared calendar, shopping and to-do lists.','Calendar, to-do, shopping list')]},
+{name:'Media',icon:'play_circle',job:'Speakers, TVs and what’s playing.',pages:[
+P('Now playing','L1','Every speaker and TV, group them, move audio between rooms.','Media players, media browser'),
+P('Sources','L2','Radio, streams, local media, TTS announcements.','Media browser, radio browser, TTS')]},
+{name:'Assistant',icon:'graphic_eq',job:'Talk to the home, in any room.',pages:[
+P('Ask Kova','L1','Chat or voice. “Turn off downstairs”, “Why is the garage on?”','Assist'),
+P('Voice setup','L3','Wake word, speech engines, satellites per room, exposed devices.','Voice assistants, Assist pipelines')]},
+{name:'Settings',icon:'settings',job:'Set up once, rarely visited.',pages:[
+P('Integrations','L2','Add, fix and update integrations. Discovered ones show first.','Devices & services → Integrations'),
+P('Store','L3','Integrations, cards, themes and templates from the community.','HACS, add-on store'),
+P('Protocols','L3','Matter, Thread, Zigbee, Z-Wave, Bluetooth, ESPHome in one place.','Matter / Thread / ZHA / Z-Wave panels'),
+P('People and access','L2','Members, guests with expiry, roles and what they can see.','People, users, admin flag'),
+P('Virtual devices','L3','Toggles, numbers, counters, template sensors, switch-as-light.','Helpers'),
+P('Import from Home Assistant','L2','Connect, review, mirror, switch over.','n/a',1),
+P('Backups and updates','L2','Scheduled backups, one-click restore, staged updates.','Backups, updates'),
+P('Remote access','L2','Secure access away from home, no port forwarding.','Nabu Casa / Home Assistant Cloud'),
+P('System','L3','Health, storage, network, hardware, logs.','System, system health, logs, hardware')]},
+{name:'Developer',icon:'code',job:'Only visible in Advanced mode.',pages:[
+P('Entities','L4','Every capability, its alias, raw state and attributes.','Developer tools → States',1),
+P('Actions console','L4','Call any action with a form or raw payload.','Developer tools → Actions'),
+P('Template playground','L4','Live template editor with the real home as data.','Developer tools → Template'),
+P('Events','L4','Listen to and fire events.','Developer tools → Events'),
+P('Code workspace','L4','All automations, routines and dashboards as files. Git sync.','YAML files, packages, file editor add-on'),
+P('API and tokens','L4','Long-lived tokens, webhooks, API docs.','Profile → Security, REST/WebSocket API'),
+P('Plugin SDK','L4','Build and test integrations and cards.','Custom components')]}];
+const CROSS=[
+{icon:'search',name:'Command bar (⌘K)',what:'Find any device, page or setting, or run an action by typing.'},
+{icon:'undo',name:'Undo everywhere',what:'Every scene, bulk change and automation edit can be undone.'},
+{icon:'help',name:'“Why?” on any state',what:'Tap a device state to see what changed it and when.'},
+{icon:'tune',name:'Depth dial',what:'Simple, Details and Code tabs on every object. Advanced mode reveals L4.'},
+{icon:'auto_awesome',name:'Suggestions',what:'Kova spots patterns and offers automations or clean-ups. Never blocking.'},
+{icon:'badge',name:'Roles',what:'Owner, member, guest and kiosk each cap which levels are visible.'}];
+const NAVS=[
+{icon:'desktop_windows',name:'Desktop web',what:'Left sidebar with all areas. Settings and Developer at the bottom.'},
+{icon:'smartphone',name:'Phone',what:'Bottom bar: Home, Rooms, Automations, Activity, More. Widgets and watch.'},
+{icon:'tablet',name:'Tablet / wall panel',what:'Kiosk dashboard, big targets, ambient mode when idle. No settings.'},
+{icon:'tv',name:'Smart display / TV',what:'Remote-friendly grid: scenes, cameras, now playing.'}];
+const LV={L1:['#7fd4a0','rgba(127,212,160,0.14)','Everyone'],L2:['#7cb8f0','rgba(124,184,240,0.14)','Personalise'],L3:['#f2b14c','rgba(242,177,76,0.14)','Automate'],L4:['#d9a3f0','rgba(217,163,240,0.14)','Build (Advanced)']};
+const FILTERS=[['all','All pages',4],['new','New user',1],['family','Family',2],['power','Power user',4]];
+class Component extends DCLogic {
+  state={f:'all'};
+  renderVals(){
+    const max=FILTERS.find(x=>x[0]===this.state.f)[2];const cap=this.state.f==='family'?2:max;
+    let shown=0,total=0,done=0;
+    const sections=SECTIONS.map(s=>({...s,pages:s.pages.map(p=>{const n=+p.lvl[1];const vis=n<=cap;total++;if(vis)shown++;if(p.done)done++;const [fg,bg]=LV[p.lvl];return{...p,op:vis?1:0.28,lvlFg:fg,lvlBg:bg,dotBg:p.done?'#7fd4a0':'transparent',dotBorder:p.done?'none':'1.5px solid #6f6d69'}})}));
+    return {sections,cross:CROSS,devicesNav:NAVS,
+      legend:Object.entries(LV).map(([k,[fg,bg,v]])=>({k,v,fg,bg})),
+      countLabel:`${shown} of ${total} pages visible · ${done} in prototype`,
+      filters:FILTERS.map(([id,label])=>({label,pick:()=>this.setState({f:id}),bg:this.state.f===id?'#f2b14c':'transparent',fg:this.state.f===id?'#1a1408':'#d8d5cf'}))};
+  }
+}
+</script>
+</body>
+</html>

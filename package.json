@@ -1,0 +1,11 @@
+{
+  "name": "kova",
+  "private": true,
+  "workspaces": ["hub"],
+  "scripts": {
+    "dev": "npm run dev -w hub",
+    "start": "npm start -w hub",
+    "test": "npm test -w hub",
+    "typecheck": "npm run typecheck -w hub"
+  }
+}
