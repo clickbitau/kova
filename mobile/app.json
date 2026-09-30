@@ -28,7 +28,13 @@
           "location",
           "remote-notification"
         ],
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSSupportsLiveActivities": true
+      },
+      "entitlements": {
+        "com.apple.security.application-groups": [
+          "group.au.clickbit.kova"
+        ]
       }
     },
     "android": {
@@ -90,7 +96,31 @@
         {
           "android": {
             "usesCleartextTraffic": true
+          },
+          "ios": {
+            "deploymentTarget": "17.0"
           }
+        }
+      ],
+      "@bacons/apple-targets",
+      "./plugins/withSiriShortcuts",
+      "expo-quick-actions",
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "KovaHome",
+              "label": "Kova",
+              "description": "The mode, lights on, and four favourites to tap.",
+              "minWidth": "250dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal|vertical",
+              "updatePeriodMillis": 1800000
+            }
+          ]
         }
       ]
     ]

@@ -61,7 +61,7 @@ export interface Snapshot {
   people: Person[];
   devices: Device[];
   modes: ModeView[];
-  current: { modeId: string; untilLabel: string; nextId: string; overlay: { id: string; name: string; icon: string; endsLabel: string } | null };
+  current: { modeId: string; since?: number; until?: number; untilLabel: string; nextId: string; overlay: { id: string; name: string; icon: string; endsLabel: string } | null };
   day: { bands: { modeId: string; start: number; end: number }[] };
   upcoming: { id: string; t: string; label: string; what: string; modeId: string | null; skipped: boolean }[];
   overlays: { id: string; name: string; icon: string; endsLabel: string }[];
