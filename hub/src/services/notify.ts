@@ -129,7 +129,9 @@ export class Notifier {
     const body = names.length
       ? `${e.device.name} rang. Light the way turned on ${list(names)}.`
       : `${e.device.name} rang.`;
-    await this.notify({ title: `Someone’s at the ${where}`, body, tag: `ring-${e.device.id}`, url: '/phone.html' });
+    // Tapping it (or "View camera") opens the phone app on the doorbell's live view.
+    const cam = `/phone.html?cam=${encodeURIComponent(e.device.id)}`;
+    await this.notify({ title: `Someone’s at the ${where}`, body, tag: `ring-${e.device.id}`, url: cam, actions: [{ action: 'view-camera', title: 'View camera', url: cam }] });
   }
 
   private onPresence(): void {

@@ -18,10 +18,10 @@
 <helmet><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..24,400,0..1,0&display=swap" rel="stylesheet"><style>body{margin:0;background:#0e0f10;-webkit-font-smoothing:antialiased}*{box-sizing:border-box}a{color:#f2b14c}a:hover{color:#f7cb82}input[type=range]{accent-color:#f2b14c}::-webkit-scrollbar{display:none}</style></helmet>
 <div style="height:100dvh;display:flex;flex-direction:column;background:#0e0f10;position:relative;overflow:hidden;font-family:Manrope,system-ui,sans-serif;color:#f1efea">
 <div style="position:absolute;top:-160px;left:-80px;width:520px;height:420px;background:radial-gradient(closest-side, {{ mode.glow }}, transparent);pointer-events:none"></div>
-<div style="flex:1;overflow-y:auto;scrollbar-width:none;padding:calc(env(safe-area-inset-top, 0px) + 18px) 18px 20px;position:relative;display:flex;flex-direction:column;gap:22px">
+<div ref="{{ scrollRef }}" style="flex:1;overflow-y:auto;scrollbar-width:none;padding:calc(env(safe-area-inset-top, 0px) + 18px) 18px 20px;position:relative;display:flex;flex-direction:column;gap:22px">
 
 <sc-if value="{{ isNow }}" hint-placeholder-val="{{ true }}">
-<div style="display:flex;justify-content:space-between;align-items:center"><div style="display:flex;align-items:center;gap:8px"><svg width="22" height="22" viewBox="0 0 48 48"><path d="M8 26L24 11L40 26" fill="none" stroke="#f1efea" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path><path d="M16 32L24 24.5L32 32" fill="none" stroke="#f1efea" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="24" cy="38.5" r="3.5" fill="#f2b14c"></circle></svg><span style="font-size:13px;font-weight:700;color:#a3a09a">{{ homeName }}</span></div><div style="display:flex"><sc-for list="{{ avatars }}" as="av" hint-placeholder-count="2"><div style="width:30px;height:30px;border-radius:50%;background:#2a2b2f;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;border:2px solid #0e0f10;margin-left:{{ av.ml }};opacity:{{ av.op }}">{{ av.initial }}</div></sc-for></div></div>
+<div style="display:flex;justify-content:space-between;align-items:center"><div style="display:flex;align-items:center;gap:8px"><svg width="22" height="22" viewBox="0 0 48 48"><path d="M8 26L24 11L40 26" fill="none" stroke="#f1efea" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path><path d="M16 32L24 24.5L32 32" fill="none" stroke="#f1efea" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="24" cy="38.5" r="3.5" fill="#f2b14c"></circle></svg><span style="font-size:13px;font-weight:700;color:#a3a09a">{{ homeName }}</span></div><div style="display:flex;align-items:center;gap:10px"><div style="display:flex"><sc-for list="{{ avatars }}" as="av" hint-placeholder-count="2"><div style="width:30px;height:30px;border-radius:50%;background:#2a2b2f;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;border:2px solid #0e0f10;margin-left:{{ av.ml }};opacity:{{ av.op }}">{{ av.initial }}</div></sc-for></div><div onClick="{{ openMore }}" style="width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,0.07);display:flex;align-items:center;justify-content:center;cursor:pointer;position:relative"><span style="font-family:'Material Symbols Rounded';font-size:20px">apps</span><sc-if value="{{ moreDot }}" hint-placeholder-val="{{ false }}"><div style="position:absolute;top:2px;right:2px;width:8px;height:8px;border-radius:50%;background:#f2b14c;border:2px solid #0e0f10"></div></sc-if></div></div></div>
 <div style="display:flex;flex-direction:column;gap:6px">
 <span style="font-size:13px;color:#a3a09a">{{ dateLine }}</span>
 <div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Material Symbols Rounded';font-size:34px;font-variation-settings:'FILL' 1;color:{{ mode.color }}">{{ mode.icon }}</span><span style="font-size:38px;font-weight:700;letter-spacing:-0.03em;line-height:1">{{ mode.name }}</span></div>
@@ -102,6 +102,7 @@
 <div style="display:flex;align-items:center;gap:12px;padding:14px 16px"><div style="width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:{{ m.tint }};color:{{ m.color }}"><span style="font-family:'Material Symbols Rounded';font-size:21px;font-variation-settings:'FILL' 1">{{ m.icon }}</span></div><div style="display:flex;flex-direction:column;gap:2px;flex:1"><span style="font-size:15px;font-weight:700">{{ m.name }}</span><span style="font-size:12px;color:#a3a09a">{{ m.span }}</span></div><sc-if value="{{ m.now }}" hint-placeholder-val="{{ false }}"><span style="font-size:10.5px;font-weight:800;padding:3px 8px;border-radius:999px;background:{{ m.color }};color:#141517">NOW</span></sc-if></div>
 <sc-if value="{{ m.open }}" hint-placeholder-val="{{ false }}">
 <div style="padding:0 16px 16px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;gap:8px"><div onClick="{{ m.edit }}" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:10px;background:rgba(255,255,255,0.07);font-size:12.5px;font-weight:700;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:17px">edit</span>Edit mode</div></div>
 <div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ m.chips }}" as="c" hint-placeholder-count="3"><span style="padding:7px 10px;border-radius:9px;background:#1c1d20;font-size:12.5px;font-weight:600">{{ c }}</span></sc-for></div>
 <div style="display:flex;flex-direction:column;gap:6px"><div style="display:grid;grid-template-columns:repeat(14,1fr);gap:4px"><sc-for list="{{ m.days }}" as="d" hint-placeholder-count="14"><div style="aspect-ratio:1;border-radius:4px;background:{{ d.bg }}"></div></sc-for></div><span style="font-size:12px;color:#a3a09a;line-height:1.45">{{ m.test }}</span></div>
 </div>
@@ -124,6 +125,121 @@
 <div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:30px;font-weight:700;letter-spacing:-0.02em">Ask Kova</span><div style="display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:{{ engine.bg }};align-self:flex-start"><span style="font-family:'Material Symbols Rounded';font-size:15px;color:{{ engine.fg }}">{{ engine.icon }}</span><span style="font-size:12px;font-weight:700;color:{{ engine.fg }}">{{ engine.label }}</span></div></div><div onClick="{{ openAi }}" style="width:38px;height:38px;border-radius:50%;background:#16171a;display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px">tune</span></div></div>
 <sc-for list="{{ chat }}" as="m" hint-placeholder-count="2"><div style="display:flex;flex-direction:column;align-items:{{ m.align }};gap:4px"><div style="max-width:86%;padding:11px 14px;border-radius:16px;font-size:14px;line-height:1.5;background:{{ m.bg }};color:{{ m.fg }}">{{ m.text }}</div><sc-if value="{{ m.hasSrc }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;color:#8a8781;display:flex;align-items:center;gap:4px;padding:0 4px"><span style="font-family:'Material Symbols Rounded';font-size:13px">{{ m.srcIcon }}</span>{{ m.src }}</span></sc-if></div></sc-for>
 <div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:11px;font-weight:700;color:#8a8781;text-transform:uppercase;letter-spacing:0.06em">Try</span><div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ asks }}" as="q" hint-placeholder-count="5"><div onClick="{{ q.ask }}" style="padding:8px 12px;border-radius:999px;background:#16171a;border:1px solid rgba(255,255,255,0.08);font-size:12.5px;font-weight:600;cursor:pointer">{{ q.text }}</div></sc-for></div></div>
+</sc-if>
+
+<sc-if value="{{ isMore }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;align-items:center;gap:10px"><div onClick="{{ back }}" style="width:36px;height:36px;flex:none;border-radius:50%;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px">arrow_back</span></div><div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:12px;color:#a3a09a">{{ homeName }}</span><span style="font-size:26px;font-weight:700;letter-spacing:-0.02em">More</span></div></div>
+<div style="border-radius:18px;background:#16171a;overflow:hidden">
+<sc-for list="{{ moreRows }}" as="mr" hint-placeholder-count="5">
+<div onClick="{{ mr.go }}" style="display:flex;align-items:center;gap:12px;padding:13px 14px;border-top:1px solid rgba(255,255,255,0.05);cursor:pointer"><div style="width:36px;height:36px;border-radius:11px;flex:none;display:flex;align-items:center;justify-content:center;background:{{ mr.iconBg }};color:{{ mr.iconFg }}"><span style="font-family:'Material Symbols Rounded';font-size:20px">{{ mr.icon }}</span></div><div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:14.5px;font-weight:700">{{ mr.name }}</span><span style="font-size:12px;color:{{ mr.subFg }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ mr.sub }}</span></div><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#6f6d69">chevron_right</span></div>
+</sc-for>
+</div>
+<div onClick="{{ push.go }}" style="display:flex;gap:12px;align-items:center;padding:12px 14px;border-radius:16px;background:#16171a;border:1px solid rgba(255,255,255,0.05);cursor:pointer"><div style="width:32px;height:32px;border-radius:10px;flex:none;display:flex;align-items:center;justify-content:center;background:{{ push.iconBg }};color:{{ push.iconFg }}"><span style="font-family:'Material Symbols Rounded';font-size:18px">{{ push.icon }}</span></div><div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:13.5px;font-weight:600">{{ push.title }}</span><span style="font-size:12px;color:#a3a09a">{{ push.note }}</span></div><sc-if value="{{ push.hasBtn }}" hint-placeholder-val="{{ true }}"><div style="flex:none;padding:8px 14px;border-radius:999px;font-size:13px;font-weight:600;background:#f1efea;color:#141517">{{ push.btn }}</div></sc-if></div>
+<span style="font-size:11.5px;color:#6f6d69;text-align:center">{{ hubLine }}</span>
+</sc-if>
+
+<sc-if value="{{ isSecurity }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;align-items:center;gap:10px"><div onClick="{{ back }}" style="width:36px;height:36px;flex:none;border-radius:50%;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px">arrow_back</span></div><div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:12px;color:#a3a09a">{{ secSummary }}</span><span style="font-size:26px;font-weight:700;letter-spacing:-0.02em">Security</span></div></div>
+<sc-if value="{{ multiCam }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:-6px -18px 0;padding:0 18px"><sc-for list="{{ camThumbs }}" as="ct" hint-placeholder-count="3"><div onClick="{{ ct.pick }}" style="flex:none;padding:8px 14px;border-radius:999px;font-size:13px;font-weight:600;cursor:pointer;background:{{ ct.bg }};color:{{ ct.fg }}">{{ ct.name }}</div></sc-for></div></sc-if>
+<div style="border-radius:18px;overflow:hidden;background:#16171a">
+<div style="aspect-ratio:16/9;background:repeating-linear-gradient(135deg,#1b1c1f 0 12px,#202125 12px 24px);display:flex;align-items:center;justify-content:center;position:relative"><sc-if value="{{ camMain.streaming }}" hint-placeholder-val="{{ false }}"><video ref="{{ camMain.videoRef }}" playsinline muted autoplay style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000"></video></sc-if><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#6f6d69;padding:0 16px;text-align:center">{{ camMain.slot }}</span><sc-if value="{{ camMain.hasCam }}" hint-placeholder-val="{{ false }}"><div onClick="{{ camMain.liveAct }}" style="position:absolute;bottom:10px;left:10px;display:flex;align-items:center;gap:6px;padding:8px 14px 8px 10px;border-radius:999px;background:rgba(14,15,16,0.78);font-size:13px;font-weight:700;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:19px;font-variation-settings:'FILL' 1;color:#ff6b5e">{{ camMain.liveIcon }}</span>{{ camMain.liveLabel }}</div></sc-if><sc-if value="{{ camMain.canUnmute }}" hint-placeholder-val="{{ false }}"><div onClick="{{ camMain.toggleSound }}" style="position:absolute;bottom:10px;right:10px;width:36px;height:36px;border-radius:50%;background:rgba(14,15,16,0.78);display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:19px">{{ camMain.soundIcon }}</span></div></sc-if></div>
+<div style="padding:12px 14px;display:flex;justify-content:space-between;align-items:center;gap:10px"><span style="font-size:15px;font-weight:700">{{ camMain.name }}</span><span style="font-size:12px;color:#a3a09a">{{ camMain.last }}</span></div>
+</div>
+<div style="background:#16171a;border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:12px">
+<span style="font-size:15px;font-weight:700">Who’s home</span>
+<sc-for list="{{ people }}" as="pp" hint-placeholder-count="2">
+<div style="display:flex;align-items:center;gap:12px"><div style="width:38px;height:38px;border-radius:50%;background:#2a2b2f;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px">{{ pp.initial }}</div><div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:14px;font-weight:700">{{ pp.name }}</span><span style="font-size:12px;color:#a3a09a">{{ pp.detail }}</span></div><span style="font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px;background:{{ pp.bg }};color:{{ pp.fg }}">{{ pp.status }}</span></div>
+</sc-for>
+</div>
+<div style="background:#16171a;border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:4px">
+<span style="font-size:15px;font-weight:700;margin-bottom:6px">Today’s events</span>
+<sc-for list="{{ secEvents }}" as="se" hint-placeholder-count="4">
+<div style="display:flex;gap:12px;padding:9px 0;border-top:1px solid rgba(255,255,255,0.05);align-items:center"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#a3a09a;width:40px;flex:none">{{ se.t }}</span><span style="font-family:'Material Symbols Rounded';font-size:18px;color:{{ se.fg }}">{{ se.icon }}</span><span style="font-size:13px;flex:1">{{ se.text }}</span></div>
+</sc-for>
+<sc-if value="{{ noSecEvents }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;color:#a3a09a">Nothing yet today.</span></sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{ isEnergy }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;align-items:center;gap:10px"><div onClick="{{ back }}" style="width:36px;height:36px;flex:none;border-radius:50%;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px">arrow_back</span></div><div style="display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font-size:12px;color:#a3a09a">{{ enSub }}</span><span style="font-size:26px;font-weight:700;letter-spacing:-0.02em">Energy</span></div></div>
+<div style="background:#16171a;border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:14px">
+<div style="display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:center;gap:4px">
+<div style="display:flex;flex-direction:column;align-items:center;gap:6px"><div style="width:52px;height:52px;border-radius:50%;background:#1c1d20;display:flex;align-items:center;justify-content:center;color:{{ enSolarFg }}"><span style="font-family:'Material Symbols Rounded';font-size:24px">solar_power</span></div><span style="font-size:13px;font-weight:700">{{ enSolarNow }}</span><span style="font-size:11px;color:#a3a09a;text-align:center">{{ enSolarLabel }}</span></div>
+<span style="font-family:'Material Symbols Rounded';font-size:18px;color:#35363a">arrow_forward</span>
+<div style="display:flex;flex-direction:column;align-items:center;gap:6px"><div style="width:62px;height:62px;border-radius:50%;background:rgba(242,177,76,0.13);border:1px solid rgba(242,177,76,0.35);display:flex;align-items:center;justify-content:center;color:#f2b14c"><span style="font-family:'Material Symbols Rounded';font-size:28px;font-variation-settings:'FILL' 1">home</span></div><span style="font-size:14px;font-weight:700">{{ enLoadNow }}</span><span style="font-size:11px;color:#a3a09a">Home</span></div>
+<span style="font-family:'Material Symbols Rounded';font-size:18px;color:#a3a09a">arrow_back</span>
+<div style="display:flex;flex-direction:column;align-items:center;gap:6px"><div style="width:52px;height:52px;border-radius:50%;background:#1c1d20;display:flex;align-items:center;justify-content:center;color:#d8d5cf"><span style="font-family:'Material Symbols Rounded';font-size:24px">electrical_services</span></div><span style="font-size:13px;font-weight:700">{{ enGridNow }}</span><span style="font-size:11px;color:#a3a09a">{{ enGridLabel }}</span></div>
+</div>
+<div style="font-size:13px;color:#a3a09a;line-height:1.5;padding:12px;border-radius:12px;background:#1c1d20">{{ enInsight }}</div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+<sc-for list="{{ energyStats }}" as="es" hint-placeholder-count="4">
+<div style="background:#16171a;border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:4px;min-width:0"><span style="font-size:12px;color:#a3a09a;font-weight:600">{{ es.label }}</span><span style="font-size:22px;font-weight:700;letter-spacing:-0.02em;color:{{ es.fg }}">{{ es.v }}</span><span style="font-size:11.5px;color:#8a8781;line-height:1.35">{{ es.sub }}</span></div>
+</sc-for>
+</div>
+<div style="background:#16171a;border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:15px;font-weight:700">Hour by hour</span><div style="display:flex;gap:12px;font-size:11.5px;color:#a3a09a"><div style="display:flex;align-items:center;gap:5px"><div style="width:9px;height:9px;border-radius:3px;background:#f2b14c"></div>Solar</div><div style="display:flex;align-items:center;gap:5px"><div style="width:9px;height:9px;border-radius:3px;background:#4a4b50"></div>Use</div></div></div>
+<div style="display:grid;grid-template-columns:repeat(24,1fr);gap:2px;align-items:end;height:130px">
+<sc-for list="{{ energyBars }}" as="b" hint-placeholder-count="24">
+<div style="position:relative;height:100%"><div style="position:absolute;bottom:0;left:0;right:0;border-radius:3px 3px 0 0;height:{{ b.use }};background:{{ b.useBg }}"></div><div style="position:absolute;bottom:0;left:18%;right:18%;border-radius:2px 2px 0 0;height:{{ b.solar }};background:#f2b14c;opacity:{{ b.op }}"></div></div>
+</sc-for>
+</div>
+<div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:10px;color:#6f6d69"><span>00</span><span>06</span><span>12</span><span>18</span><span>23</span></div>
+</div>
+<div style="background:#16171a;border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:12px">
+<span style="font-size:15px;font-weight:700">What’s measured</span>
+<sc-for list="{{ energyDevices }}" as="ed" hint-placeholder-count="3">
+<div style="display:grid;grid-template-columns:minmax(0,1.1fr) 1.4fr 58px;gap:10px;align-items:center;font-size:13px"><span style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ ed.name }}</span><div style="height:8px;border-radius:4px;background:#232428;overflow:hidden"><div style="height:100%;border-radius:4px;width:{{ ed.w }};background:{{ ed.bg }}"></div></div><span style="text-align:right;color:#a3a09a;font-family:'JetBrains Mono',monospace;font-size:12px">{{ ed.v }}</span></div>
+</sc-for>
+<span style="font-size:12px;color:#8a8781;line-height:1.45">{{ enFoot }}</span>
+</div>
+</sc-if>
+
+<sc-if value="{{ isMedia }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;align-items:center;gap:10px"><div onClick="{{ back }}" style="width:36px;height:36px;flex:none;border-radius:50%;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px">arrow_back</span></div><div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:12px;color:#a3a09a">{{ mediaCount }}</span><span style="font-size:26px;font-weight:700;letter-spacing:-0.02em">Media</span></div></div>
+<div style="background:#16171a;border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:16px">
+<div style="display:flex;gap:14px;align-items:center">
+<div style="width:72px;height:72px;border-radius:14px;flex:none;background:repeating-linear-gradient(135deg,#1f2a3a 0 8px,#243142 8px 16px);display:flex;align-items:center;justify-content:center;color:#7cb8f0"><span style="font-family:'Material Symbols Rounded';font-size:28px;font-variation-settings:'FILL' 1">{{ mp.icon }}</span></div>
+<div style="display:flex;flex-direction:column;gap:3px;min-width:0;flex:1"><span style="font-size:12px;color:#a3a09a">{{ mp.room }}</span><span style="font-size:19px;font-weight:700">{{ mp.name }}</span><span style="font-size:13px;color:{{ mp.fg }}">{{ mp.state }}</span></div>
+<sc-if value="{{ mp.has }}" hint-placeholder-val="{{ true }}"><div onClick="{{ mp.toggle }}" style="width:54px;height:54px;flex:none;border-radius:50%;background:#7cb8f0;color:#0e1520;display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:30px;font-variation-settings:'FILL' 1">{{ mp.playIcon }}</span></div></sc-if>
+</div>
+<sc-if value="{{ mp.has }}" hint-placeholder-val="{{ true }}"><div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#a3a09a">volume_down</span><input type="range" min="0" max="100" value="{{ mp.vol }}" onChange="{{ mp.setVol }}" style="flex:1;accent-color:#7cb8f0"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#a3a09a;width:36px;text-align:right">{{ mp.volLabel }}</span></div></sc-if>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">Play here</span>
+<div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ sources }}" as="so" hint-placeholder-count="4"><div onClick="{{ so.play }}" style="padding:9px 12px;border-radius:10px;background:#1c1d20;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#7cb8f0">{{ so.icon }}</span>{{ so.name }}</div></sc-for></div>
+<span onClick="{{ toggleSources }}" style="font-size:12.5px;color:#a3a09a;cursor:pointer;font-weight:600;padding:4px 0">{{ sourcesLink }}</span>
+<sc-if value="{{ editSources }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:10px"><sc-for list="{{ sourceRows }}" as="sr" hint-placeholder-count="2"><div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:600;color:#a3a09a">{{ sr.name }}</span><div style="display:flex;gap:8px"><input value="{{ sr.url }}" onChange="{{ sr.setUrl }}" placeholder="https://… stream address" inputmode="url" autocapitalize="off" style="padding:10px 12px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font-family:Manrope,sans-serif;font-size:16px;flex:1;min-width:0;outline:none"><div onClick="{{ sr.save }}" style="padding:10px 14px;border-radius:10px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center">Save</div></div></div></sc-for></div></sc-if>
+</div>
+</div>
+<div style="background:#16171a;border-radius:18px;overflow:hidden">
+<sc-for list="{{ players }}" as="pl" hint-placeholder-count="4">
+<div onClick="{{ pl.pick }}" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid rgba(255,255,255,0.05);cursor:pointer;background:{{ pl.bg }}">
+<div style="width:36px;height:36px;border-radius:10px;flex:none;display:flex;align-items:center;justify-content:center;background:{{ pl.iconBg }};color:{{ pl.iconFg }}"><span style="font-family:'Material Symbols Rounded';font-size:20px;font-variation-settings:'FILL' 1">{{ pl.icon }}</span></div>
+<div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:14px;font-weight:700">{{ pl.name }}</span><span style="font-size:12px;color:{{ pl.fg }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ pl.room }} · {{ pl.state }}</span></div>
+<div onClick="{{ pl.toggle }}" style="width:36px;height:36px;flex:none;border-radius:50%;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px;font-variation-settings:'FILL' 1">{{ pl.playIcon }}</span></div>
+</div>
+</sc-for>
+<sc-if value="{{ noPlayers }}" hint-placeholder-val="{{ false }}"><div style="padding:16px;font-size:13px;color:#a3a09a">No speakers or TVs yet. Add Cast, Sonos or AirPlay in Integrations.</div></sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{ isInteg }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;align-items:center;gap:10px"><div onClick="{{ back }}" style="width:36px;height:36px;flex:none;border-radius:50%;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px">arrow_back</span></div><div style="display:flex;flex-direction:column;gap:2px;flex:1"><span style="font-size:12px;color:#a3a09a">{{ integCount }}</span><span style="font-size:26px;font-weight:700;letter-spacing:-0.02em">Integrations</span></div><div onClick="{{ addInteg }}" style="display:flex;align-items:center;gap:4px;padding:8px 12px 8px 8px;border-radius:12px;background:{{ addBg }};color:{{ addFg }};font-size:13px;font-weight:700;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:18px">{{ addIcon }}</span>{{ addLabel }}</div></div>
+<sc-if value="{{ hasIgLoadErr }}" hint-placeholder-val="{{ false }}"><div style="padding:12px 14px;border-radius:12px;background:rgba(255,107,94,0.1);color:#ff6b5e;font-size:13px;line-height:1.45">{{ igLoadErr }}</div></sc-if>
+<sc-if value="{{ igPicking }}" hint-placeholder-val="{{ false }}">
+<span style="font-size:13px;color:#a3a09a">{{ pickSub }}</span>
+<div style="display:flex;flex-direction:column;gap:8px">
+<sc-for list="{{ pickItems }}" as="pk" hint-placeholder-count="4">
+<div onClick="{{ pk.open }}" style="display:flex;gap:12px;align-items:center;padding:13px 14px;border-radius:16px;background:#16171a;cursor:pointer"><div style="width:38px;height:38px;flex:none;border-radius:11px;background:#232428;display:flex;align-items:center;justify-content:center;color:#d8d5cf"><span style="font-family:'Material Symbols Rounded';font-size:20px">{{ pk.icon }}</span></div><div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:14px;font-weight:700">{{ pk.name }} <span style="font-size:11px;font-weight:600;color:#8a8781">· {{ pk.kind }}</span></span><span style="font-size:12px;color:#a3a09a;line-height:1.35">{{ pk.description }}</span></div></div>
+</sc-for>
+</div>
+</sc-if>
+<sc-if value="{{ igListOn }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-direction:column;gap:8px">
+<sc-for list="{{ integrations }}" as="it" hint-placeholder-count="5">
+<div onClick="{{ it.open }}" style="display:flex;gap:12px;align-items:center;padding:13px 14px;border-radius:16px;background:#16171a;border:1px solid {{ it.border }};cursor:pointer"><div style="width:38px;height:38px;flex:none;border-radius:11px;background:#232428;display:flex;align-items:center;justify-content:center;color:#d8d5cf"><span style="font-family:'Material Symbols Rounded';font-size:20px">{{ it.icon }}</span></div><div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:0"><span style="font-size:14px;font-weight:700">{{ it.name }}</span><div style="display:flex;align-items:center;gap:6px;min-width:0"><div style="width:6px;height:6px;flex:none;border-radius:50%;background:{{ it.dot }}"></div><span style="font-size:12px;color:{{ it.stFg }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ it.sub }} · {{ it.status }}</span></div></div><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#6f6d69">chevron_right</span></div>
+</sc-for>
+</div>
+</sc-if>
 </sc-if>
 </div>
 
@@ -161,6 +277,141 @@
 </div>
 </sc-if>
 
+<sc-if value="{{ edOpen }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ ed.close }}" style="position:absolute;inset:0;background:rgba(0,0,0,0.55)"></div>
+<div style="position:absolute;left:0;right:0;bottom:0;max-height:94%;overflow-y:auto;scrollbar-width:none;border-radius:28px 28px 0 0;background:#141517;padding:10px 18px calc(env(safe-area-inset-bottom, 0px) + 32px);display:flex;flex-direction:column;gap:18px">
+<div style="width:40px;height:5px;border-radius:3px;background:#35363a;align-self:center;flex:none"></div>
+<div style="display:flex;align-items:center;gap:12px"><div style="width:40px;height:40px;flex:none;border-radius:12px;display:flex;align-items:center;justify-content:center;background:{{ ed.tint }};color:{{ ed.color }}"><span style="font-family:'Material Symbols Rounded';font-size:22px;font-variation-settings:'FILL' 1">{{ ed.icon }}</span></div><div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:12px;color:#a3a09a">Edit mode</span><span style="font-size:22px;font-weight:700">{{ ed.name }}</span></div><div onClick="{{ ed.close }}" style="padding:8px 14px;border-radius:12px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;cursor:pointer">Done</div></div>
+
+<div style="display:flex;flex-direction:column;gap:8px">
+<span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">Starts</span>
+<span style="font-size:13px;color:#d8d5cf">{{ ed.span }}</span>
+<select value="{{ ed.startKind }}" onChange="{{ ed.setStartKind }}" style="padding:11px 14px;border-radius:12px;border:1px solid rgba(255,255,255,0.1);background:#16171a;color:#f1efea;font-family:Manrope,sans-serif;font-size:16px;outline:none;width:100%"><sc-for list="{{ ed.startKinds }}" as="k" hint-placeholder-count="3"><option value="{{ k.v }}">{{ k.label }}</option></sc-for></select>
+<div style="display:flex;gap:8px;align-items:center">
+<sc-if value="{{ ed.isClock }}" hint-placeholder-val="{{ true }}"><input type="time" value="{{ ed.startAt }}" onChange="{{ ed.setStartAt }}" style="flex:1;min-width:0;padding:10px 14px;border-radius:12px;border:1px solid rgba(255,255,255,0.1);background:#16171a;color:#f1efea;font-family:Manrope,sans-serif;font-size:16px;outline:none"></sc-if>
+<sc-if value="{{ ed.hasOffset }}" hint-placeholder-val="{{ false }}"><div style="flex:1;min-width:0;display:flex;align-items:center;gap:8px"><input type="number" inputmode="numeric" value="{{ ed.startOffset }}" onChange="{{ ed.setStartOffset }}" style="width:90px;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,0.1);background:#16171a;color:#f1efea;font-family:Manrope,sans-serif;font-size:16px;outline:none"><span style="font-size:12.5px;color:#a3a09a">minutes after (use − for before)</span></div></sc-if>
+<div onClick="{{ ed.saveStart }}" style="padding:11px 16px;border-radius:12px;background:rgba(255,255,255,0.08);font-size:13px;font-weight:700;cursor:pointer">Save</div>
+</div>
+</div>
+
+<div onClick="{{ ed.toggleLtw }}" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;background:#1c1d20;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#f2b14c">directions_walk</span><div style="display:flex;flex-direction:column;gap:2px;flex:1"><span style="font-size:14px;font-weight:700">Light the way</span><span style="font-size:12px;color:#a3a09a">Light people’s way when they’re seen or arrive</span></div><div style="width:46px;height:28px;flex:none;border-radius:14px;padding:3px;display:flex;justify-content:{{ ed.ltwJustify }};background:{{ ed.ltwTrack }}"><div style="width:22px;height:22px;border-radius:50%;background:#fff"></div></div></div>
+
+<div style="display:flex;flex-direction:column;gap:8px">
+<span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">When it starts</span>
+<div style="border-radius:14px;background:#1c1d20;overflow:hidden">
+<sc-for list="{{ ed.targets }}" as="t" hint-placeholder-count="3"><div style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-top:1px solid rgba(255,255,255,0.05)"><div style="display:flex;flex-direction:column;gap:1px;flex:1;min-width:0"><span style="font-size:13.5px;font-weight:700;color:{{ t.fg }}">{{ t.name }}</span><span style="font-size:12px;color:#a3a09a">{{ t.label }}</span></div><span onClick="{{ t.remove }}" style="font-family:'Material Symbols Rounded';font-size:20px;color:#8a8781;cursor:pointer;padding:4px">remove_circle</span></div></sc-for>
+<sc-if value="{{ ed.noTargets }}" hint-placeholder-val="{{ false }}"><div style="padding:12px 14px;font-size:13px;color:#a3a09a">Nothing changes when this mode starts.</div></sc-if>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:14px;border:1px dashed rgba(255,255,255,0.14)">
+<select value="{{ ed.addDevice }}" onChange="{{ ed.setAddDevice }}" style="padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:#16171a;color:#f1efea;font-family:Manrope,sans-serif;font-size:16px;outline:none;width:100%"><sc-for list="{{ ed.deviceOptions }}" as="o" hint-placeholder-count="3"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select>
+<div style="display:flex;gap:8px"><select value="{{ ed.addState }}" onChange="{{ ed.setAddState }}" style="flex:1;min-width:0;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:#16171a;color:#f1efea;font-family:Manrope,sans-serif;font-size:16px;outline:none"><sc-for list="{{ ed.stateOptions }}" as="o" hint-placeholder-count="3"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select><div onClick="{{ ed.addTarget }}" style="padding:10px 14px;border-radius:10px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center">Add</div></div>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:8px">
+<span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">Moments during this mode</span>
+<div style="border-radius:14px;background:#1c1d20;overflow:hidden">
+<sc-for list="{{ ed.moments }}" as="mo" hint-placeholder-count="1"><div style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-top:1px solid rgba(255,255,255,0.05)"><span style="font-size:13px;flex:1">{{ mo.text }}</span><span onClick="{{ mo.remove }}" style="font-family:'Material Symbols Rounded';font-size:20px;color:#8a8781;cursor:pointer;padding:4px">remove_circle</span></div></sc-for>
+<sc-if value="{{ ed.noMoments }}" hint-placeholder-val="{{ false }}"><div style="padding:12px 14px;font-size:13px;color:#a3a09a">Nothing else happens during this mode.</div></sc-if>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:14px;border:1px dashed rgba(255,255,255,0.14)">
+<input value="{{ ed.momentLabel }}" onChange="{{ ed.setMomentLabel }}" placeholder="New moment, e.g. Porch off" style="padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:#16171a;color:#f1efea;font-family:Manrope,sans-serif;font-size:16px;outline:none;width:100%;box-sizing:border-box">
+<div style="display:flex;gap:8px;align-items:center"><input type="time" value="{{ ed.momentAt }}" onChange="{{ ed.setMomentAt }}" style="flex:1;min-width:0;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:#16171a;color:#f1efea;font-family:Manrope,sans-serif;font-size:16px;outline:none"><div onClick="{{ ed.addMoment }}" style="padding:10px 14px;border-radius:10px;background:rgba(255,255,255,0.08);font-size:13px;font-weight:700;cursor:pointer">Add moment</div></div>
+<span style="font-size:11.5px;color:#6f6d69;line-height:1.4">Does what’s picked above: {{ ed.pickedLabel }}</span>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ igOpen }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ ig.close }}" style="position:absolute;inset:0;background:rgba(0,0,0,0.55)"></div>
+<div style="position:absolute;left:0;right:0;bottom:0;max-height:94%;overflow-y:auto;scrollbar-width:none;border-radius:28px 28px 0 0;background:#141517;padding:10px 18px calc(env(safe-area-inset-bottom, 0px) + 32px);display:flex;flex-direction:column;gap:18px">
+<div style="width:40px;height:5px;border-radius:3px;background:#35363a;align-self:center;flex:none"></div>
+<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px"><div style="display:flex;align-items:center;gap:12px;min-width:0"><div style="width:40px;height:40px;flex:none;border-radius:12px;background:#232428;display:flex;align-items:center;justify-content:center;color:#d8d5cf"><span style="font-family:'Material Symbols Rounded';font-size:21px">{{ ig.icon }}</span></div><div style="display:flex;flex-direction:column;gap:3px;min-width:0"><span style="font-size:12px;color:#a3a09a">{{ ig.kicker }}</span><span style="font-size:22px;font-weight:700">{{ ig.name }}</span></div></div><div onClick="{{ ig.close }}" style="width:34px;height:34px;flex:none;border-radius:50%;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px">close</span></div></div>
+<span style="font-size:13px;color:#a3a09a;line-height:1.5;margin-top:-8px">{{ ig.description }}</span>
+<div style="display:flex;align-items:center;gap:8px;padding:12px 14px;border-radius:14px;background:#1c1d20"><div style="width:7px;height:7px;border-radius:50%;background:{{ ig.dot }}"></div><span style="font-size:13px;color:{{ ig.stFg }};flex:1;line-height:1.4">{{ ig.status }}</span></div>
+
+<sc-for list="{{ ig.fields }}" as="f" hint-placeholder-count="2">
+<sc-if value="{{ f.isScalar }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-direction:column;gap:6px;min-width:0"><span style="font-size:12px;font-weight:600;color:#a3a09a">{{ f.label }}</span>
+<sc-if value="{{ f.isInput }}" hint-placeholder-val="{{ true }}"><input type="{{ f.type }}" value="{{ f.value }}" onChange="{{ f.set }}" placeholder="{{ f.ph }}" autocomplete="off" style="padding:11px 14px;border-radius:12px;border:1px solid rgba(255,255,255,0.1);background:#16171a;color:#f1efea;font-family:Manrope,sans-serif;font-size:16px;outline:none;width:100%;min-width:0"></sc-if>
+<sc-if value="{{ f.isSelect }}" hint-placeholder-val="{{ false }}"><select value="{{ f.value }}" onChange="{{ f.set }}" style="padding:11px 14px;border-radius:12px;border:1px solid rgba(255,255,255,0.1);background:#16171a;color:#f1efea;font-family:Manrope,sans-serif;font-size:16px;outline:none;width:100%;min-width:0"><sc-for list="{{ f.options }}" as="o" hint-placeholder-count="2"><option value="{{ o.value }}">{{ o.label }}</option></sc-for></select></sc-if>
+<sc-if value="{{ f.isSecret }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:12px;border:1px solid rgba(255,255,255,0.1);background:#16171a"><span style="flex:1;font-family:'JetBrains Mono',monospace;font-size:13px;color:#a3a09a">••••••••</span><span onClick="{{ f.change }}" style="font-size:12.5px;font-weight:700;color:#f2b14c;cursor:pointer">Change</span></div></sc-if>
+<sc-if value="{{ f.hasHelp }}" hint-placeholder-val="{{ false }}"><span style="font-size:11.5px;color:#6f6d69;line-height:1.45">{{ f.help }}</span></sc-if>
+</div>
+</sc-if>
+<sc-if value="{{ f.isList }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">{{ f.label }}</span><sc-if value="{{ f.hasHelp }}" hint-placeholder-val="{{ false }}"><span style="font-size:11.5px;color:#6f6d69;line-height:1.45">{{ f.help }}</span></sc-if></div>
+<sc-for list="{{ f.rows }}" as="r" hint-placeholder-count="1">
+<div style="display:flex;flex-direction:column;gap:12px;padding:14px;border-radius:14px;background:#1c1d20">
+<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px;font-weight:700">{{ r.title }}</span><span onClick="{{ r.remove }}" style="font-family:'Material Symbols Rounded';font-size:19px;color:#8a8781;cursor:pointer" style-hover="color:#ff6b5e">delete</span></div>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px">
+<sc-for list="{{ r.fields }}" as="rf" hint-placeholder-count="3">
+<div style="display:flex;flex-direction:column;gap:6px;min-width:0"><span style="font-size:12px;font-weight:600;color:#a3a09a">{{ rf.label }}</span>
+<sc-if value="{{ rf.isInput }}" hint-placeholder-val="{{ true }}"><input type="{{ rf.type }}" value="{{ rf.value }}" onChange="{{ rf.set }}" placeholder="{{ rf.ph }}" autocomplete="off" style="padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:#16171a;color:#f1efea;font-family:Manrope,sans-serif;font-size:16px;outline:none;width:100%;min-width:0"></sc-if>
+<sc-if value="{{ rf.isSelect }}" hint-placeholder-val="{{ false }}"><select value="{{ rf.value }}" onChange="{{ rf.set }}" style="padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:#16171a;color:#f1efea;font-family:Manrope,sans-serif;font-size:16px;outline:none;width:100%;min-width:0"><sc-for list="{{ rf.options }}" as="o" hint-placeholder-count="2"><option value="{{ o.value }}">{{ o.label }}</option></sc-for></select></sc-if>
+<sc-if value="{{ rf.isSecret }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:#16171a"><span style="flex:1;font-family:'JetBrains Mono',monospace;font-size:13px;color:#a3a09a">••••••••</span><span onClick="{{ rf.change }}" style="font-size:12.5px;font-weight:700;color:#f2b14c;cursor:pointer">Change</span></div></sc-if>
+</div>
+</sc-for>
+</div>
+<sc-for list="{{ r.subs }}" as="sb" hint-placeholder-count="0">
+<div style="display:flex;flex-direction:column;gap:8px">
+<span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">{{ sb.label }}</span>
+<sc-for list="{{ sb.rows }}" as="sr" hint-placeholder-count="1">
+<div style="display:flex;gap:8px;align-items:flex-end;padding:10px;border-radius:12px;border:1px solid rgba(255,255,255,0.06)">
+<div style="flex:1;min-width:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px">
+<sc-for list="{{ sr.fields }}" as="sf" hint-placeholder-count="3">
+<div style="display:flex;flex-direction:column;gap:5px;min-width:0"><span style="font-size:11px;font-weight:600;color:#8a8781">{{ sf.label }}</span>
+<sc-if value="{{ sf.isInput }}" hint-placeholder-val="{{ true }}"><input type="{{ sf.type }}" value="{{ sf.value }}" onChange="{{ sf.set }}" placeholder="{{ sf.ph }}" autocomplete="off" style="padding:8px 10px;border-radius:9px;border:1px solid rgba(255,255,255,0.1);background:#16171a;color:#f1efea;font-family:Manrope,sans-serif;font-size:16px;outline:none;width:100%;min-width:0"></sc-if>
+<sc-if value="{{ sf.isSelect }}" hint-placeholder-val="{{ false }}"><select value="{{ sf.value }}" onChange="{{ sf.set }}" style="padding:8px 10px;border-radius:9px;border:1px solid rgba(255,255,255,0.1);background:#16171a;color:#f1efea;font-family:Manrope,sans-serif;font-size:16px;outline:none;width:100%;min-width:0"><sc-for list="{{ sf.options }}" as="o" hint-placeholder-count="2"><option value="{{ o.value }}">{{ o.label }}</option></sc-for></select></sc-if>
+</div>
+</sc-for>
+</div>
+<span onClick="{{ sr.remove }}" style="font-family:'Material Symbols Rounded';font-size:18px;color:#8a8781;cursor:pointer;padding:8px 2px" style-hover="color:#ff6b5e">close</span>
+</div>
+</sc-for>
+<div onClick="{{ sb.add }}" style="align-self:flex-start;padding:7px 12px;border-radius:9px;background:rgba(255,255,255,0.06);font-size:12.5px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px"><span style="font-family:'Material Symbols Rounded';font-size:16px">add</span>{{ sb.addLabel }}</div>
+</div>
+</sc-for>
+</div>
+</sc-for>
+<div onClick="{{ f.add }}" style="align-self:flex-start;padding:8px 14px;border-radius:10px;background:rgba(255,255,255,0.08);font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px"><span style="font-family:'Material Symbols Rounded';font-size:17px">add</span>{{ f.addLabel }}</div>
+</div>
+</sc-if>
+</sc-for>
+
+<sc-if value="{{ ig.hasErr }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:10px;padding:12px 14px;border-radius:12px;background:rgba(255,107,94,0.1);color:#ff6b5e;font-size:13px;line-height:1.5"><span style="font-family:'Material Symbols Rounded';font-size:19px">error</span><span style="white-space:pre-line">{{ ig.err }}</span></div></sc-if>
+<sc-if value="{{ ig.hasMsg }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:10px;padding:12px 14px;border-radius:12px;background:{{ ig.msgBg }};color:{{ ig.msgFg }};font-size:13px;line-height:1.5"><span style="font-family:'Material Symbols Rounded';font-size:19px">{{ ig.msgIcon }}</span><span>{{ ig.msg }}</span></div></sc-if>
+<sc-if value="{{ ig.hasSave }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+<div onClick="{{ ig.save }}" style="padding:9px 18px;border-radius:12px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;cursor:pointer">{{ ig.saveLabel }}</div>
+<sc-if value="{{ ig.testable }}" hint-placeholder-val="{{ false }}"><div onClick="{{ ig.test }}" style="padding:9px 16px;border-radius:12px;background:rgba(255,255,255,0.08);color:#f1efea;font-size:13px;font-weight:700;cursor:pointer">{{ ig.testLabel }}</div></sc-if>
+<div style="flex:1"></div>
+<sc-if value="{{ ig.removable }}" hint-placeholder-val="{{ false }}"><div onClick="{{ ig.remove }}" style="padding:9px 4px;font-size:13px;font-weight:700;color:#a3a09a;cursor:pointer" style-hover="color:#ff6b5e">Remove</div></sc-if>
+</div>
+</sc-if>
+
+<sc-for list="{{ ig.actions }}" as="ac" hint-placeholder-count="0">
+<div style="display:flex;flex-direction:column;gap:10px;padding:14px;border-radius:14px;background:#1c1d20">
+<div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#f2b14c">{{ ac.icon }}</span><span style="font-size:14px;font-weight:700;flex:1">{{ ac.label }}</span></div>
+<sc-if value="{{ ac.hasHelp }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;color:#a3a09a;line-height:1.45">{{ ac.help }}</span></sc-if>
+<sc-for list="{{ ac.fields }}" as="af" hint-placeholder-count="0">
+<div style="display:flex;flex-direction:column;gap:6px;min-width:0"><span style="font-size:12px;font-weight:600;color:#a3a09a">{{ af.label }}</span>
+<sc-if value="{{ af.isInput }}" hint-placeholder-val="{{ true }}"><input type="{{ af.type }}" value="{{ af.value }}" onChange="{{ af.set }}" placeholder="{{ af.ph }}" autocomplete="off" style="padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:#16171a;color:#f1efea;font-family:Manrope,sans-serif;font-size:16px;outline:none;width:100%;min-width:0"></sc-if>
+<sc-if value="{{ af.isSelect }}" hint-placeholder-val="{{ false }}"><select value="{{ af.value }}" onChange="{{ af.set }}" style="padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:#16171a;color:#f1efea;font-family:Manrope,sans-serif;font-size:16px;outline:none;width:100%;min-width:0"><sc-for list="{{ af.options }}" as="o" hint-placeholder-count="2"><option value="{{ o.value }}">{{ o.label }}</option></sc-for></select></sc-if>
+</div>
+</sc-for>
+<div onClick="{{ ac.run }}" style="align-self:flex-start;padding:8px 14px;border-radius:10px;background:rgba(255,255,255,0.08);font-size:13px;font-weight:700;cursor:pointer">{{ ac.btn }}</div>
+<sc-if value="{{ ac.hasErr }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;color:#ff6b5e;line-height:1.45">{{ ac.err }}</span></sc-if>
+<sc-if value="{{ ac.hasRows }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;background:#141517;border-radius:10px;overflow:hidden">
+<sc-for list="{{ ac.rows }}" as="rr" hint-placeholder-count="2"><div style="display:flex;justify-content:space-between;gap:12px;padding:10px 12px;border-top:1px solid rgba(255,255,255,0.05);font-size:12.5px"><span style="color:#a3a09a;flex:none">{{ rr.k }}</span><span style="font-weight:600;text-align:right;word-break:break-all;white-space:pre-line;font-family:{{ rr.font }}">{{ rr.v }}</span></div></sc-for>
+</div></sc-if>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
 <sc-if value="{{ aiOpen }}" hint-placeholder-val="{{ false }}">
 <div onClick="{{ closeAi }}" style="position:absolute;inset:0;background:rgba(0,0,0,0.55)"></div>
 <div style="position:absolute;left:0;right:0;bottom:0;max-height:92%;overflow-y:auto;scrollbar-width:none;border-radius:28px 28px 0 0;background:#141517;padding:10px 18px 40px;display:flex;flex-direction:column;gap:16px">
@@ -188,7 +439,7 @@
 </div>
 </sc-if>
 
-<sc-if value="{{ toastOn }}" hint-placeholder-val="{{ false }}"><div style="position:absolute;left:16px;right:16px;bottom:104px;display:flex;align-items:center;gap:12px;padding:12px 12px 12px 16px;border-radius:14px;background:#f1efea;color:#141517;font-size:13.5px;font-weight:600;box-shadow:0 10px 30px rgba(0,0,0,0.4)"><span style="flex:1">{{ toastText }}</span><sc-if value="{{ canUndo }}" hint-placeholder-val="{{ false }}"><div onClick="{{ undo }}" style="padding:6px 12px;border-radius:9px;background:#141517;color:#f1efea;font-size:12.5px;cursor:pointer">Undo</div></sc-if></div></sc-if>
+<sc-if value="{{ toastOn }}" hint-placeholder-val="{{ false }}"><div style="position:absolute;left:16px;right:16px;{{ toastPos }};display:flex;align-items:center;gap:12px;padding:12px 12px 12px 16px;border-radius:14px;background:#f1efea;color:#141517;font-size:13.5px;font-weight:600;box-shadow:0 10px 30px rgba(0,0,0,0.4)"><span style="flex:1">{{ toastText }}</span><sc-if value="{{ canUndo }}" hint-placeholder-val="{{ false }}"><div onClick="{{ undo }}" style="padding:6px 12px;border-radius:9px;background:#141517;color:#f1efea;font-size:12.5px;cursor:pointer">Undo</div></sc-if></div></sc-if>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script>
@@ -208,6 +459,33 @@ const SRC_ICON={'Device control':'toggle_on','From the activity log':'history','
 const isLight=d=>d.type==='light'||d.type==='dimmer';
 const isPlayer=d=>d.type==='media'||d.type==='tv';
 const lst=xs=>xs.length<=1?xs.join(''):xs.slice(0,-1).join(', ')+' and '+xs[xs.length-1];
+// ---- Integration setup: the hub's catalog describes each section's fields; these turn a section into an editable form and back (same as the desktop app). ----
+const SECRET='••••';
+const getP=(o,path)=>path.reduce((v,k)=>v!=null&&typeof v==='object'?v[k]:undefined,o);
+const clone=v=>v==null?v:JSON.parse(JSON.stringify(v));
+const delP=(o,path)=>{const p=getP(o,path.slice(0,-1));if(p&&typeof p==='object')delete p[path[path.length-1]]};
+const setP=(o,path,v)=>{let x=o;for(let i=0;i<path.length-1;i++){if(x[path[i]]==null||typeof x[path[i]]!=='object')x[path[i]]=typeof path[i+1]==='number'?[]:{};x=x[path[i]]}x[path[path.length-1]]=v};
+const kp=f=>f.key.split('.');
+function toForm(fields,obj){const o=clone(obj)||{};for(const f of fields){const v=getP(o,kp(f));
+  if(f.type==='list'){let rows=f.shape==='map'?Object.entries(v&&typeof v==='object'?v:{}).map(([k,x])=>f.mapValue?{[f.mapKey]:k,[f.mapValue]:x}:{...x,[f.mapKey]:k}):Array.isArray(v)?v:[];setP(o,kp(f),rows.map(r=>toForm(f.item,r)))}
+  else if(f.multiple)setP(o,kp(f),Array.isArray(v)?v.join(', '):v??'');
+  else setP(o,kp(f),v==null?'':String(v))}
+  return o}
+function fromForm(fields,form){const o=clone(form)||{};for(const f of fields){const path=kp(f),v=getP(o,path);
+  if(f.type==='list'){const rows=(Array.isArray(v)?v:[]).map(r=>fromForm(f.item,r));
+    if(f.shape==='map'){const m={};for(const r of rows){const k=r[f.mapKey];if(k==null||k==='')continue;const rest={...r};delete rest[f.mapKey];m[String(k)]=f.mapValue?r[f.mapValue]:rest}Object.keys(m).length?setP(o,path,m):delP(o,path)}
+    else rows.length||f.required?setP(o,path,rows):delP(o,path)}
+  else if(f.multiple){const xs=String(v??'').split(',').map(x=>x.trim()).filter(Boolean);xs.length?setP(o,path,xs):delP(o,path)}
+  else if(v===''||v==null)delP(o,path);
+  else if(f.type==='number'){const n=Number(v);setP(o,path,Number.isFinite(n)?n:v)}}
+  return o}
+const nounOf=f=>{const n=(f.addLabel||'Row').replace(/^Add /,'');return n[0].toUpperCase()+n.slice(1)};
+const human=k=>k.replace(/([A-Z])/g,' $1').replace(/^./,c=>c.toUpperCase());
+function resRows(r){if(r==null||typeof r!=='object')return[{k:'Result',v:String(r)}];
+  if(r.enabled===false)return[{k:'Status',v:'Not running on this hub yet'}];
+  const show=v=>Array.isArray(v)?(v.length?v.map(x=>x&&typeof x==='object'?(x.name||x.id||JSON.stringify(x)):String(x)).join('\n'):'None'):v&&typeof v==='object'?Object.entries(v).map(([a,b])=>`${human(a)}: ${b&&typeof b==='object'?JSON.stringify(b):b}`).join('\n'):String(v);
+  const rows=Object.entries(r).filter(([k])=>k!=='ok'&&k!=='enabled').map(([k,v])=>({k:human(k),v:show(v),font:/code|payload|pin|url/i.test(k)?"'JetBrains Mono',monospace":'inherit'}));
+  return rows.length?rows:[{k:'Done',v:'OK',font:'inherit'}]}
 const FAV_KEY='kova_favs';
 const loadFavs=()=>{try{return JSON.parse(localStorage.getItem(FAV_KEY)||'null')}catch(e){return null}};
 // Push notifications: service worker + Web Push subscription (iOS needs HTTPS and the app on the Home Screen).
@@ -219,7 +497,7 @@ const PUSH_UI={insecure:['Notifications need HTTPS','Open Kova over https:// to 
 class Component extends DCLogic {
   state={hub:BOOT,conn:!!window.KOVA_BOOT,tab:'now',room:(BOOT.rooms[0]||{}).id,sheet:null,modeOpen:BOOT.current.modeId,actF:'all',
     chat:[{from:'kova',text:`Hi. ${BOOT.modes.find(m=>m.id===BOOT.current.modeId)?.name||'Day'} mode, ${BOOT.devices.filter(d=>isLight(d)&&d.state.on).length} lights on.`,src:'Built-in · nothing left your home'}],
-    toast:null,undo:null,draft:'',parse:null,ai:'builtin',aiOpen:false,share:{names:true,rooms:true,history:false,presence:false},favs:loadFavs(),push:pushBase()};
+    toast:null,undo:null,draft:'',parse:null,ai:'builtin',aiOpen:false,share:{names:true,rooms:true,history:false,presence:false},favs:loadFavs(),push:pushBase(),page:null,igCat:null,igCfg:null,igPick:false,ig:null,igLoadErr:null,live:null,sound:false,edit:null};
   componentDidMount(){this.connect();this.pushCheck();this.deepLink();api('GET','/api/assistant/settings').then(r=>this.setState({ai:r.engine,share:r.share})).catch(()=>{})}
   async pushCheck(){const b=pushBase();this.setState({push:b});if(b!=='off')return;try{const reg=await swReady;const sub=await reg.pushManager.getSubscription();if(sub){this.setState({push:'on'});api('POST','/api/push/subscribe',{subscription:sub.toJSON()}).catch(()=>{})}}catch(e){}}
   async pushGo(){const st=this.state.push;
@@ -230,9 +508,14 @@ class Component extends DCLogic {
       const sub=(await reg.pushManager.getSubscription())||await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64u(publicKey)});
       await api('POST','/api/push/subscribe',{subscription:sub.toJSON()});this.setState({push:'on'});this.toast('Notifications are on')}catch(e){this.err(e)}}
   // Links from notifications, e.g. "Turn them off" on "Everyone's out".
-  deepLink(){try{const u=new URL(location.href);const d=u.searchParams.get('do');if(!d)return;u.searchParams.delete('do');history.replaceState(null,'',u.pathname+u.search+u.hash);
-    if(d==='lights-off')api('POST','/api/lights/off').then(r=>this.toast(`${r.changed.length} light${r.changed.length===1?'':'s'} off`,this.undoFn(r.undo))).catch(e=>this.err(e))}catch(e){}}
-  componentWillUnmount(){this._closed=true;try{this._ws&&this._ws.close()}catch(e){}}
+  deepLink(){try{const u=new URL(location.href);const d=u.searchParams.get('do'),cam=u.searchParams.get('cam'),page=u.searchParams.get('page');if(!d&&!cam&&!page)return;
+    ['do','cam','page'].forEach(k=>u.searchParams.delete(k));history.replaceState(null,'',u.pathname+u.search+u.hash);
+    if(d==='lights-off')api('POST','/api/lights/off').then(r=>this.toast(`${r.changed.length} light${r.changed.length===1?'':'s'} off`,this.undoFn(r.undo))).catch(e=>this.err(e));
+    // "View camera" on a doorbell notification: open Security on that camera and start the live view.
+    if(cam){this.go('security',{camSel:cam});const dv=this.state.hub.devices.find(x=>x.id===cam);if(dv)this.goLive(dv)}
+    else if(['more','security','energy','media','integrations'].includes(page))this.go(page)}catch(e){}}
+  componentWillUnmount(){this._closed=true;try{this._ws&&this._ws.close()}catch(e){}this.stopLive(true)}
+  componentDidUpdate(){if(this._pc&&this.state.page!=='security')this.stopLive(true)}
   connect(){
     if(this._closed)return;
     let ws;try{ws=new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.host}/api/ws${KOVA_TOKEN?'?token='+encodeURIComponent(KOVA_TOKEN):''}`)}catch(e){setTimeout(()=>this.connect(),3000);return}
@@ -270,13 +553,212 @@ class Component extends DCLogic {
   }
   saveAi(patch){this.setState(patch);const s={...this.state,...patch};api('PUT','/api/assistant/settings',{engine:s.ai,share:s.share}).catch(e=>this.err(e))}
 
+  // ---- pages under More: Security, Energy, Media, Integrations ----
+  go(page,extra){if(this.state.page==='security'&&page!=='security')this.stopLive(true);this.setState({page,igPick:false,...(extra||{})});if(page==='integrations'&&!this.state.igCat)this.loadInteg();try{this._scroll&&this._scroll.scrollTo(0,0)}catch(e){}}
+  back(){const p=this.state.page;this.go(p&&p!=='more'?'more':null,p==='more'?{}:{})}
+  // Camera live view: WebRTC straight from the camera's cloud (Nest) to this phone; the hub only relays the offer/answer.
+  videoRef=el=>{if(el&&this._stream&&el.srcObject!==this._stream){el.srcObject=this._stream;el.muted=!this.state.sound;el.playsInline=true;el.autoplay=true;el.play().catch(()=>{})}this._video=el||this._video}
+  async goLive(d){
+    this.stopLive(true);
+    const cam=d.id,NO='Live view isn’t available for this camera yet';
+    if(d.adapter!=='nest'||typeof RTCPeerConnection==='undefined'){this.setState({live:{cam,msg:NO}});return}
+    const pc=new RTCPeerConnection();this._pc=pc;
+    const stream=new MediaStream();this._stream=stream;
+    pc.addTransceiver('audio',{direction:'recvonly'});pc.addTransceiver('video',{direction:'recvonly'});pc.createDataChannel('dataSendChannel');
+    pc.ontrack=e=>{stream.addTrack(e.track)};
+    pc.onconnectionstatechange=()=>{if(this._pc===pc&&pc.connectionState==='failed'){this.stopLive(true);this.setState({live:{cam,msg:'The live stream dropped'}})}};
+    this.setState({live:{cam,msg:'Connecting…'},sound:false});
+    try{
+      const offer=await pc.createOffer();await pc.setLocalDescription(offer);
+      const r=await api('POST',`/api/devices/${encodeURIComponent(cam)}/webrtc`,{offerSdp:offer.sdp});
+      if(this._pc!==pc){api('POST',`/api/devices/${encodeURIComponent(cam)}/webrtc/stop`,{mediaSessionId:r.mediaSessionId}).catch(()=>{});return}
+      this._live={cam,sid:r.mediaSessionId};
+      await pc.setRemoteDescription({type:'answer',sdp:r.answerSdp});
+      this._ext=setInterval(()=>{const l=this._live;if(l)api('POST',`/api/devices/${encodeURIComponent(l.cam)}/webrtc/extend`,{mediaSessionId:l.sid}).then(x=>{if(this._live===l&&x.mediaSessionId)l.sid=x.mediaSessionId}).catch(()=>{})},4*60000);
+      this.setState({live:{cam,streaming:true}});
+    }catch(e){if(this._pc===pc){this.stopLive(true);this.setState({live:{cam,msg:e.message||NO}})}}
+  }
+  stopLive(quiet){
+    clearInterval(this._ext);const l=this._live;this._live=null;
+    if(l&&l.sid)api('POST',`/api/devices/${encodeURIComponent(l.cam)}/webrtc/stop`,{mediaSessionId:l.sid}).catch(()=>{});
+    if(this._pc){try{this._pc.close()}catch(e){}this._pc=null}
+    this._stream=null;
+    if(!quiet)this.setState({live:null});else if(this.state.live)this.setState({live:null});
+  }
+  // ---- integration setup (same hub routes as the desktop drawer) ----
+  async loadInteg(){try{const [cat,cfg]=await Promise.all([api('GET','/api/integrations/catalog'),api('GET','/api/integrations/config')]);this.setState({igCat:cat,igCfg:cfg,igLoadErr:null});return cfg}catch(e){this.setState({igLoadErr:`Couldn’t load integration settings: ${e.message}`});return null}}
+  igItem(id){return(this.state.igCat||[]).find(c=>c.id===id)}
+  openInteg(id){const it=this.igItem(id);const cur=(this.state.igCfg||{})[id];const live=this.state.hub.integrations.some(i=>i.id===id);this.setState({igPick:false,ig:{id,form:it?toForm(it.fields,cur||{}):{},isNew:cur===undefined&&!live,err:null,msg:null,busy:null,acts:{},actRes:{}}})}
+  igPatch(p){this.setState(s=>s.ig?{ig:{...s.ig,...p}}:{})}
+  igSet(path,v){this.setState(s=>{if(!s.ig)return{};const form=clone(s.ig.form);setP(form,path,v);return{ig:{...s.ig,form,err:null}}})}
+  igActSet(aid,path,v){this.setState(s=>{if(!s.ig)return{};const acts=clone(s.ig.acts);acts[aid]=acts[aid]||{};setP(acts[aid],path,v);return{ig:{...s.ig,acts}}})}
+  async igSave(){const ig=this.state.ig,it=ig&&this.igItem(ig.id);if(!it||ig.busy)return;
+    this.igPatch({busy:'save',err:null,msg:null});
+    try{const r=await api('PUT','/api/integrations/config/'+ig.id,fromForm(it.fields,ig.form));const cfg=await this.loadInteg();const st=r.status;
+      const text=r.applied?(st?`Saved and restarted. ${st.note||(st.ok?'Connected.':'')}`:'Saved.'):`Saved. Restart the hub to ${ig.isNew?'start':'apply'} it.`;
+      this.setState(s=>s.ig&&s.ig.id===ig.id?{ig:{...s.ig,busy:null,isNew:false,form:toForm(it.fields,(cfg||{})[ig.id]||{}),msg:{ok:!st||st.ok||!r.applied,text}}}:{});
+      this.toast(`${it.name} saved`)}
+    catch(e){this.igPatch({busy:null,err:e.message})}}
+  async igTest(){const ig=this.state.ig,it=ig&&this.igItem(ig.id);if(!it||ig.busy)return;
+    this.igPatch({busy:'test',err:null,msg:null});
+    try{const r=await api('POST',`/api/integrations/${ig.id}/test`,{config:fromForm(it.fields,ig.form)});this.igPatch({busy:null,msg:{ok:r.ok,text:r.message}})}
+    catch(e){this.igPatch({busy:null,err:e.message})}}
+  async igRemove(){const ig=this.state.ig,it=ig&&this.igItem(ig.id);if(!it)return;
+    if(!confirm(`Remove ${it.name}? Its settings are deleted and its devices disappear from Kova.`))return;
+    try{await api('DELETE','/api/integrations/config/'+ig.id);await this.loadInteg();this.setState({ig:null});this.toast(`${it.name} removed`)}catch(e){this.igPatch({err:e.message})}}
+  async igAct(a){const ig=this.state.ig;if(!ig||ig.busy)return;
+    const res=v=>this.setState(s=>s.ig?{ig:{...s.ig,busy:null,actRes:{...s.ig.actRes,[a.id]:v}}}:{});
+    // Open the sign-in window now, while the tap still counts as a user action (iOS blocks window.open after an await).
+    const win=a.opensUrl?window.open('about:blank','_blank'):null;
+    this.igPatch({busy:a.id});
+    try{const r=await api(a.method,a.path,a.method==='POST'?fromForm(a.fields||[],ig.acts[a.id]||{}):undefined);
+      if(a.opensUrl&&r&&r.url){if(win)win.location.href=r.url;else location.href=r.url}else if(win)win.close();
+      res({rows:a.opensUrl&&r&&r.url?[{k:'Opened',v:'Google sign-in, in a new tab. When it sends you to google.com, copy the code= value from the address and paste it below.',font:'inherit'}]:resRows(r)})}
+    catch(e){if(win)win.close();res({err:e.message})}}
+  pagesVals(s,H,devs,list,RN){
+    const pg=s.page;
+    // More
+    const bad=H.integrations.filter(i=>!i.ok);
+    const cams=list.filter(d=>d.type==='camera');const pls=list.filter(isPlayer);
+    const E=H.energy||{available:false,now:{solar:0,load:null,grid:null},solarKwh:0,usedKwh:null,fromGridKwh:null,exportedKwh:null,hours:[],peak:null,devices:[]};
+    const kw=w=>w==null?'—':Math.abs(w)>=1000?(Math.abs(w)/1000).toFixed(1)+' kW':Math.round(Math.abs(w))+' W';
+    const MORE=[['security','Security','shield','rgba(127,212,160,0.14)','#7fd4a0',`${cams.length} camera${cams.length===1?'':'s'} · ${H.people.filter(p=>p.home).length} home`],
+      ['energy','Energy','electric_meter','rgba(242,177,76,0.14)','#f2b14c',E.available?`${kw(E.now.solar)} solar now · ${E.solarKwh.toFixed(1)} kWh today`:'No inverter or meter yet'],
+      ['media','Media','speaker','rgba(124,184,240,0.14)','#7cb8f0',`${pls.filter(d=>d.on).length} playing · ${pls.length} players`],
+      ['integrations','Integrations','hub','#232428','#d8d5cf',bad.length?`${bad.length} need${bad.length===1?'s':''} attention: ${bad.map(i=>i.name).join(', ')}`:`${H.integrations.length} connected`],
+      ['assistant','Assistant','graphic_eq','#232428','#d8d5cf','How Ask Kova understands you']];
+    const moreRows=MORE.map(([id,name,icon,iconBg,iconFg,sub])=>({name,icon,iconBg,iconFg,sub,subFg:id==='integrations'&&bad.length?'#f2b14c':'#a3a09a',go:()=>id==='assistant'?this.setState({aiOpen:true}):this.go(id)}));
+    // Security
+    const camId=s.camSel&&devs[s.camSel]?s.camSel:(cams[0]&&cams[0].id);const cm=devs[camId];
+    const lastSeen=id=>{const a=H.activity.find(x=>x.what.startsWith((devs[id]||{}).name||'~')&&(x.icon==='person'||x.icon==='doorbell'));return a?`${a.what.includes('rang')?'Rang':'Person'} at ${a.t}`:'No activity today'};
+    const lv=cm&&s.live&&s.live.cam===cm.id?s.live:null,liveOn=!!(lv&&(lv.streaming||lv.msg==='Connecting…'));
+    const camMain=cm?{name:RN[cm.room]||cm.name,last:lastSeen(cm.id),slot:lv&&lv.msg?lv.msg:cm.online===false?'camera offline':`${(RN[cm.room]||cm.name).toLowerCase()} camera`,
+      hasCam:true,streaming:!!(lv&&lv.streaming),videoRef:this.videoRef,liveIcon:liveOn?'stop':'play_arrow',liveLabel:liveOn?'Stop':'Live',liveAct:()=>liveOn?this.stopLive():this.goLive(cm),
+      canUnmute:!!(lv&&lv.streaming),soundIcon:s.sound?'volume_up':'volume_off',toggleSound:()=>{const on=!s.sound;if(this._video){this._video.muted=!on;this._video.play().catch(()=>{})}this.setState({sound:on})}}
+      :{name:'No cameras',last:'',slot:'no camera connected',hasCam:false,streaming:false,videoRef:null,liveIcon:'',liveLabel:'',liveAct:()=>{},canUnmute:false,soundIcon:'',toggleSound:()=>{}};
+    const camThumbs=cams.map(c=>({name:RN[c.room]||c.name,pick:()=>{if(c.id!==camId)this.stopLive(true);this.setState({camSel:c.id})},bg:camId===c.id?'#f1efea':'#16171a',fg:camId===c.id?'#141517':'#d8d5cf'}));
+    const people=H.people.map(p=>({initial:p.name[0],name:p.name,detail:`${p.detail}${p.sinceLabel?` · ${p.home?'home':'left'} since ${p.sinceLabel}`:''}`,status:p.home?'Home':'Away',bg:p.home?'rgba(127,212,160,0.14)':'#232428',fg:p.home?'#7fd4a0':'#a3a09a'}));
+    const secEvents=H.activity.filter(a=>a.type==='people').slice(0,8).map(a=>({t:a.t,icon:a.icon,fg:a.icon==='doorbell'?'#7cb8f0':a.icon==='person'?'#f2b14c':'#7fd4a0',text:a.what}));
+    // Energy
+    const maxH=Math.max(0.3,...E.hours.map(x=>Math.max(x.solar,x.use||0)));const nowHr=Math.floor(H.home.nowHour);
+    const energyBars=(E.hours.length?E.hours:Array(24).fill({solar:0,use:null})).map((x,h)=>({solar:(x.solar/maxH*100)+'%',use:x.use==null?'3%':(x.use/maxH*100)+'%',useBg:x.use==null?'#1f2023':'#4a4b50',op:h>nowHr?0.25:1}));
+    const energyStats=[['Solar made',E.solarKwh.toFixed(1)+' kWh','#f2b14c',E.peak&&E.peak.w>0?`Peak ${kw(E.peak.w)} at ${String(E.peak.hour).padStart(2,'0')}:00`:E.solarKwh>0?'From the inverter’s daily counter':'No production yet today'],
+      ['Home used',E.usedKwh==null?'—':E.usedKwh.toFixed(1)+' kWh','#f1efea',E.usedKwh==null?'Needs a grid meter':E.usedKwh>0?Math.round(Math.min(100,(E.solarKwh-(E.exportedKwh||0))/E.usedKwh*100))+'% from your own solar':''],
+      ['From grid',E.fromGridKwh==null?'—':E.fromGridKwh.toFixed(1)+' kWh','#f1efea',E.exportedKwh==null?'Needs a grid meter':`Sent back ${E.exportedKwh.toFixed(1)} kWh`],
+      ['Right now',kw(E.now.solar),'#f1efea','Solar production']].map(([label,v,fg,sub])=>({label,v,fg,sub}));
+    const maxP=Math.max(1,...E.devices.map(d=>d.w));
+    const energyDevices=E.devices.slice(0,8).map((d,i)=>({name:d.name,v:kw(d.w),w:(d.w/maxP*100)+'%',bg:i===0?'#f2b14c':'#6f6d69'}));
+    // Media
+    const P=devs[s.mediaSel]||pls.find(d=>d.on)||pls[0];
+    let mp={has:false,name:'No speakers yet',room:'',state:'',fg:'#a3a09a',icon:'speaker',playIcon:'play_arrow',vol:0,volLabel:'',toggle:()=>{},setVol:()=>{}};
+    if(P){const [pst,pfg]=this.st(P);mp={has:true,name:P.name,room:RN[P.room]||'',state:pst,fg:pfg,icon:ICON[P.type],playIcon:P.on?'pause':'play_arrow',vol:P.vol??30,volLabel:(P.vol??30)+'%',toggle:()=>this.tog(P.id),setVol:e=>this.patch(P.id,{vol:+e.target.value})}}
+    const missingUrls=H.sources.filter(so=>!so.url).length;
+    const sourceRows=H.sources.map(so=>{const v=(s.srcDraft||{})[so.name]??so.url??'';return{name:so.name,url:v,setUrl:e=>{const t=e.target.value;this.setState(p=>({srcDraft:{...(p.srcDraft||{}),[so.name]:t}}))},
+      save:()=>api('PUT','/api/sources/'+encodeURIComponent(so.name),{url:v}).then(r=>this.toast(`${so.name} saved`,this.undoFn(r.undo))).catch(x=>this.err(x))}});
+    const sources=H.sources.map(so=>({name:so.name,icon:so.icon,play:()=>{if(P)this.send(P.id,{on:true,media:so.name,vol:P.vol??30}).then(()=>this.toast(`Playing ${so.name} on ${P.name}`))}}));
+    const players=pls.map(d=>{const [st,fg]=this.st(d);const sel=P&&d.id===P.id;return{name:d.name,room:RN[d.room]||'',state:st,fg,icon:ICON[d.type],playIcon:d.on?'pause':'play_arrow',bg:sel?'#1f2024':'transparent',iconBg:d.on?'rgba(124,184,240,0.2)':'#232428',iconFg:d.on?'#7cb8f0':'#8a8781',pick:()=>this.setState({mediaSel:d.id}),toggle:e=>{e.stopPropagation();this.tog(d.id)}}});
+    // Integrations
+    const RUN=new Set(H.integrations.map(i=>i.id));
+    const idle=Object.keys(s.igCfg||{}).filter(id=>!RUN.has(id)).map(id=>{const c=this.igItem(id)||{name:id,icon:'extension',kind:'Local'};return{id,name:c.name,icon:c.icon,kind:c.kind,devices:0,ok:false,note:c.apply==='restart'?'Starts when the hub restarts':'Not running · check its settings'}});
+    const INTEG=[...H.integrations,...idle];
+    const integrations=INTEG.map(i=>({name:i.name,icon:i.icon,sub:`${i.devices} device${i.devices===1?'':'s'}`,status:i.note||(i.ok?'Connected':'Needs attention'),dot:i.ok?'#7fd4a0':'#f2b14c',stFg:i.ok?'#a3a09a':'#f2b14c',border:i.ok?'rgba(255,255,255,0.05)':'rgba(242,177,76,0.3)',open:()=>{if(!s.igCat)this.loadInteg().then(()=>this.openInteg(i.id));else this.openInteg(i.id)}}));
+    return {isMore:pg==='more',isSecurity:pg==='security',isEnergy:pg==='energy',isMedia:pg==='media',isInteg:pg==='integrations',
+      back:()=>this.back(),openMore:()=>this.go('more'),moreRows,hubLine:`Kova hub · ${list.length} devices · ${H.integrations.length} integrations`,
+      secSummary:`${cams.length} camera${cams.length===1?'':'s'} · ${H.people.length} ${H.people.length===1?'person':'people'}`,multiCam:cams.length>1,camMain,camThumbs,people,secEvents,noSecEvents:!secEvents.length,
+      enSub:E.available?`Today so far · ${(H.integrations.find(i=>i.id==='goodwe'||i.id==='virtual')||{name:'inverter'}).name}`:'Connect a solar inverter or grid meter',
+      enSolarNow:kw(E.now.solar),enSolarFg:E.now.solar>0?'#f2b14c':'#6f6d69',enSolarLabel:E.now.solar>0?'Solar':'Solar · idle',enLoadNow:kw(E.now.load),enGridNow:kw(E.now.grid),enGridLabel:E.now.grid==null?'Grid':E.now.grid<0?'To grid':'From grid',
+      enInsight:!E.available?'No energy source connected yet. Add your inverter in Integrations.':E.now.solar>0?`Producing ${kw(E.now.solar)} now${E.now.load!=null&&E.now.solar>E.now.load?', more than the home is using: a good time to run the dishwasher or laundry.':'.'}`:E.solarKwh>0?`Solar made ${E.solarKwh.toFixed(1)} kWh today and has stopped for the day.`:'Solar hasn’t started yet today.',
+      enFoot:E.devices.length?`${E.devices.length===1?'1 device reports':E.devices.length+' devices report'} power. Add a whole-home meter or smart plugs to see the rest.`:'Nothing reports its own power yet. Smart plugs with energy monitoring or a whole-home meter fill this in.',
+      energyBars,energyStats,energyDevices,
+      mediaCount:`${pls.filter(d=>d.on).length} playing · ${pls.length} players`,mp,sources,players,noPlayers:!pls.length,sourceRows,editSources:!!s.editSources,
+      toggleSources:()=>this.setState(p=>({editSources:!p.editSources})),sourcesLink:s.editSources?'Done':missingUrls?`Set stream addresses · ${missingUrls} missing`:'Edit stream addresses',
+      integCount:`${INTEG.length} connected`,integrations,...this.igVals(s,H)};
+  }
+  igVals(s,H){
+    const cat=s.igCat||[],cfg=s.igCfg||{};
+    const running=Object.fromEntries(H.integrations.map(i=>[i.id,i]));
+    const opts=f=>f.options==='rooms'?H.rooms.map(r=>({value:r.id,label:r.name})):f.options==='people'?H.people.map(p=>({value:p.id,label:p.name})):(f.options||[]);
+    const fvm=(f,v,set)=>{const locked=f.type==='password'&&v===SECRET;return{isScalar:true,isList:false,label:f.label,help:f.help||'',hasHelp:!!f.help,isInput:f.type!=='select'&&!locked,isSelect:f.type==='select',isSecret:locked,
+      type:f.type==='password'?'password':f.type==='number'?'number':'text',value:v??'',ph:f.placeholder||'',set:e=>set(e.target.value),change:()=>set(''),options:[{value:'',label:f.required?'Choose…':'—'},...opts(f)]}};
+    const lvm=(f,rows,path,set)=>({isScalar:false,isList:true,label:f.label,help:f.help||'',hasHelp:!!f.help,addLabel:f.addLabel||'Add',
+      add:()=>set(path,[...rows,toForm(f.item,{})]),
+      rows:rows.map((r,i)=>({title:`${nounOf(f)} ${i+1}`,remove:()=>set(path,rows.filter((_,j)=>j!==i)),
+        fields:f.item.filter(x=>x.type!=='list').map(x=>fvm(x,getP(r,kp(x)),v=>set([...path,i,...kp(x)],v))),
+        subs:f.item.filter(x=>x.type==='list').map(x=>lvm(x,getP(r,kp(x))||[],[...path,i,...kp(x)],set))}))});
+    const pickItems=cat.filter(c=>cfg[c.id]===undefined&&!running[c.id]).map(c=>({name:c.name,icon:c.icon,kind:c.kind,description:c.description,open:()=>this.openInteg(c.id)}));
+    const picking=!!s.igPick;
+    let ig={close:()=>{}};const G=s.ig;
+    if(G){const run=running[G.id];const known=this.igItem(G.id);
+      const it=known||{id:G.id,name:run?run.name:G.id,icon:run?run.icon:'extension',kind:run?run.kind:'Local',description:'Built in. There’s nothing to set up.',fields:[],actions:[],apply:'hot'};
+      const set=(p,v)=>this.igSet(p,v);
+      const st=G.isNew?{dot:'#6f6d69',fg:'#a3a09a',text:'Not set up yet'}
+        :run?{dot:run.ok?'#7fd4a0':'#f2b14c',fg:run.ok?'#a3a09a':'#f2b14c',text:`${run.note||(run.ok?'Connected':'Needs attention')} · ${run.devices} device${run.devices===1?'':'s'}`}
+        :{dot:'#f2b14c',fg:'#f2b14c',text:it.apply==='restart'?'Saved · starts when the hub restarts':'Saved · not running. Check the settings.'};
+      ig={name:it.name,icon:it.icon,kicker:`${it.kind} · ${G.isNew?'Add integration':'Integration'}`,description:it.description,dot:st.dot,stFg:st.fg,status:st.text,
+        fields:it.fields.map(f=>f.type==='list'?lvm(f,getP(G.form,kp(f))||[],kp(f),set):fvm(f,getP(G.form,kp(f)),v=>set(kp(f),v))),
+        hasErr:!!G.err,err:G.err?G.err.split('. ').join('.\n'):'',hasMsg:!!G.msg,msg:G.msg?G.msg.text:'',
+        msgBg:G.msg&&G.msg.ok?'rgba(127,212,160,0.12)':'rgba(242,177,76,0.12)',msgFg:G.msg&&G.msg.ok?'#7fd4a0':'#f2b14c',msgIcon:G.msg&&G.msg.ok?'check_circle':'warning',
+        hasSave:!!known,saveLabel:G.busy==='save'?'Saving…':G.isNew?(it.fields.length?'Save and connect':'Turn on'):'Save',
+        testable:!!it.testable,testLabel:G.busy==='test'?'Testing…':'Test connection',removable:!!known&&cfg[G.id]!==undefined,
+        save:()=>this.igSave(),test:()=>this.igTest(),remove:()=>this.igRemove(),close:()=>this.setState({ig:null}),
+        actions:(it.actions||[]).map(a=>{const r=G.actRes[a.id]||{};const inp=G.acts[a.id]||{};
+          return{label:a.label,icon:a.icon,help:a.help||'',hasHelp:!!a.help,btn:G.busy===a.id?'Working…':a.opensUrl?'Open Google sign-in':a.method==='GET'?'Show':a.label,run:()=>this.igAct(a),
+            fields:(a.fields||[]).map(f=>fvm(f,getP(inp,kp(f))??'',v=>this.igActSet(a.id,kp(f),v))),hasErr:!!r.err,err:r.err||'',hasRows:!!r.rows,rows:r.rows||[]}})}}
+    return {igOpen:!!G,ig,igPicking:picking,igListOn:!picking,pickItems,igLoadErr:s.igLoadErr||'',hasIgLoadErr:!!s.igLoadErr,
+      pickSub:!s.igCat?'Loading…':pickItems.length?`${pickItems.length} available. Pick one to set it up.`:'Everything in the catalog is already set up.',
+      addLabel:picking?'Done':'Add',addIcon:picking?'close':'add',addBg:picking?'rgba(255,255,255,0.08)':'#f2b14c',addFg:picking?'#f1efea':'#1a1408',
+      addInteg:()=>{if(!s.igCat)this.loadInteg();this.setState(p=>({igPick:!p.igPick}))}};
+  }
+  // ---- mode editor (bottom sheet from Modes) ----
+  edVals(s,H,devs,RN){
+    const SM=s.edit&&H.modes.find(m=>m.id===s.edit);
+    if(!SM)return{edOpen:false,ed:{close:()=>{}}};
+    const RK=r=>!r?'sun:sunrise':r.kind==='time'?'time':`${r.kind}:${r.kind==='sun'?r.event:r.prayer}`;
+    const cur=SM.rhythm,ek=s.edStart?.kind??RK(cur);
+    const DEVS=Object.values(devs).filter(d=>d.type!=='camera'&&d.type!=='sensor').sort((a,b)=>(RN[a.room]||'').localeCompare(RN[b.room]||'')||a.name.localeCompare(b.name));
+    const addDev=devs[s.addDevice]?s.addDevice:(DEVS[0]||{}).id;const AD=devs[addDev];
+    const stateOptions=!AD?[]:AD.type==='fan'?[['{"mode":"Auto"}','Auto'],['{"mode":"Sleep"}','Sleep'],['{"on":false}','Off']]
+      :isPlayer(AD)?[['{"on":false,"media":null}','Stop'],...H.sources.map(so=>[JSON.stringify({on:true,media:so.name,vol:30}),`Play ${so.name} at 30%`])]
+      :AD.type==='dimmer'?[['{"on":false}','Off'],...[5,10,25,50,78,100].map(b=>[JSON.stringify({on:true,bri:b}),`On at ${b}%`])]
+      :[['{"on":true}','On'],['{"on":false}','Off']];
+    const addState=stateOptions.some(o=>o[0]===s.addState)?s.addState:(stateOptions[0]||[''])[0];
+    const put=(url,body,msg)=>api('PUT',url,body).then(r=>this.toast(msg,this.undoFn(r.undo))).catch(x=>this.err(x));
+    const picked=`${AD?AD.name:'—'} · ${(stateOptions.find(o=>o[0]===addState)||['','—'])[1]}`;
+    // A new moment defaults to half an hour into this mode, so it lands in the mode being edited.
+    const mh=SM.start!=null?(SM.start+0.5)%24:21,momentAt=s.momentAt||`${String(Math.floor(mh)).padStart(2,'0')}:${String(Math.round(mh%1*60/5)*5%60).padStart(2,'0')}`;
+    const targets=(SM.targets||[]).map(t=>({name:t.name.charAt(0).toUpperCase()+t.name.slice(1),label:t.label,fg:t.missing?'#ff6b5e':'#f1efea',
+      remove:()=>put(`/api/modes/${SM.id}/targets/${encodeURIComponent(t.deviceId)}`,{target:null},`Removed from ${SM.name}`)}));
+    return {edOpen:true,ed:{name:SM.name,icon:SM.icon,color:SM.color,tint:SM.color+'24',span:`${SM.startLabel} → ${SM.endLabel}`,close:()=>this.setState({edit:null,edStart:null,momentAt:null}),
+      startKinds:[['sun:sunrise','Sunrise'],['sun:sunset','Sunset'],['sun:dawn','First light'],['sun:dusk','Dusk'],['prayer:fajr','Fajr'],['prayer:maghrib','Maghrib'],['prayer:isha','Isha'],['time','A clock time']].map(([v,label])=>({v,label})),
+      startKind:ek,isClock:ek==='time',hasOffset:ek!=='time',
+      startAt:s.edStart?.at??(cur&&cur.kind==='time'?cur.at:'20:00'),startOffset:s.edStart?.offset??(cur&&cur.offsetMin||0),
+      setStartKind:e=>this.setState(p=>({edStart:{...(p.edStart||{}),kind:e.target.value}})),
+      setStartAt:e=>this.setState(p=>({edStart:{kind:ek,...(p.edStart||{}),at:e.target.value}})),
+      setStartOffset:e=>this.setState(p=>({edStart:{kind:ek,...(p.edStart||{}),offset:e.target.value}})),
+      saveStart:()=>{const at=s.edStart?.at??(cur&&cur.kind==='time'?cur.at:'20:00');const off=Number(s.edStart?.offset??(cur&&cur.offsetMin||0))||0;
+        const [kind,name]=ek.split(':');const start=kind==='time'?{kind:'time',at}:kind==='sun'?{kind:'sun',event:name,offsetMin:off}:{kind:'prayer',prayer:name,offsetMin:off};
+        put('/api/modes/'+SM.id,{start},`${SM.name} start saved`).then(()=>this.setState({edStart:null}))},
+      ltwJustify:SM.lightTheWay?'flex-end':'flex-start',ltwTrack:SM.lightTheWay?'#f2b14c':'#35363a',
+      toggleLtw:()=>api('PATCH','/api/modes/'+SM.id,{lightTheWay:!SM.lightTheWay}).then(r=>this.toast(`Light the way ${SM.lightTheWay?'off':'on'} in ${SM.name}`,this.undoFn(r.undo))).catch(x=>this.err(x)),
+      targets,noTargets:!targets.length,
+      deviceOptions:DEVS.map(d=>({v:d.id,label:`${RN[d.room]||d.room} · ${d.name}`})),addDevice:addDev,addState,stateOptions:stateOptions.map(([v,label])=>({v,label})),
+      setAddDevice:e=>this.setState({addDevice:e.target.value,addState:null}),setAddState:e=>this.setState({addState:e.target.value}),
+      addTarget:()=>{if(!addDev)return;put(`/api/modes/${SM.id}/targets/${encodeURIComponent(addDev)}`,{target:JSON.parse(addState)},`${SM.name} updated`)},
+      moments:SM.moments.map(mo=>({text:`${mo.t} · ${mo.text}`,remove:()=>api('DELETE','/api/moments/'+mo.id).then(r=>this.toast('Moment removed',this.undoFn(r.undo))).catch(x=>this.err(x))})),noMoments:!SM.moments.length,
+      momentLabel:s.momentLabel||'',momentAt,pickedLabel:picked,
+      setMomentLabel:e=>this.setState({momentLabel:e.target.value}),setMomentAt:e=>this.setState({momentAt:e.target.value}),
+      addMoment:()=>{const label=(s.momentLabel||'').trim();if(!label||!addDev){this.toast('Give the moment a name first');return}
+        api('POST','/api/moments',{label,what:(stateOptions.find(o=>o[0]===addState)||['',''])[1]+' · '+(AD?AD.name:''),at:{kind:'time',at:momentAt},targets:{[addDev]:JSON.parse(addState)}})
+          .then(r=>{this.setState({momentLabel:''});this.toast(`${label} added at ${momentAt}`,this.undoFn(r.undo))}).catch(x=>this.err(x))}}};
+  }
+  scrollRef=el=>{if(el)this._scroll=el}
   renderVals(){
     const s=this.state,H=s.hub,devs=this.devs(),list=Object.values(devs);
     const RN=Object.fromEntries(H.rooms.map(r=>[r.id,r.name]));
     const M=this.modeById(H.current.modeId),nx=this.modeById(H.current.nextId);
     const on=list.filter(d=>isLight(d)&&d.on).length;
     const TABS=[['now','Now','home'],['rooms','Rooms','meeting_room'],['ask','Ask','graphic_eq'],['modes','Modes','routine'],['activity','Activity','history']];
-    const tabs=TABS.map(([id,label,icon])=>{const a=s.tab===id;const c=id==='ask';return{label,icon,go:()=>this.setState({tab:id}),fg:a?'#f1efea':'#8a8781',size:c?'46px':'28px',mt:c?'-20px':'0px',bg:c?'#f2b14c':'transparent',iconFg:c?'#1a1408':a?(id==='modes'?M.color:'#f2b14c'):'#8a8781',iconSize:c?'24px':'23px',fill:a||c?1:0}});
+    const tabs=TABS.map(([id,label,icon])=>{const a=s.tab===id;const c=id==='ask';return{label,icon,go:()=>{if(this.state.page)this.go(null);this.setState({tab:id})},fg:a?'#f1efea':'#8a8781',size:c?'46px':'28px',mt:c?'-20px':'0px',bg:c?'#f2b14c':'transparent',iconFg:c?'#1a1408':a?(id==='modes'?M.color:'#f2b14c'):'#8a8781',iconSize:c?'24px':'23px',fill:a||c?1:0}});
     const ov=H.current.overlay;
     const upcoming=H.upcoming.map(e=>{const sk=e.skipped;return{t:e.t,label:e.label,what:sk?'Skipped tonight':e.what,color:this.modeById(e.modeId).color,op:sk?0.55:1,deco:sk?'line-through':'none',btn:sk?'Undo':'Skip tonight',skip:()=>api('POST','/api/plan/skip',{id:e.id,skip:!sk}).catch(x=>this.err(x))}});
     // Favourites: the user's picks (saved on this phone), or the first four lights and plugs.
@@ -290,7 +772,7 @@ class Component extends DCLogic {
     const DAYC={ok:null,problem:'#ff6b5e',skipped:'#26272b',none:'rgba(255,255,255,0.06)'};
     const modeList=H.modes.map(m=>{const open=s.modeOpen===m.id;const chips=[...m.groups.flatMap(g=>g.chips.map(c=>g.room==='Everywhere'?c:`${g.room}: ${c}`)),...m.moments.map(x=>`${x.t} ${x.text}`)];
       return{...m,span:`${m.startLabel} → ${m.endLabel}`,chips:chips.length?chips:['Nothing changes'],tint:m.color+'24',now:m.id===H.current.modeId,open,border:open?m.color+'66':'rgba(255,255,255,0.04)',
-        days:(m.test.days.length?m.test.days:Array(14).fill('none')).map(c=>({bg:DAYC[c]||m.color})),test:m.test.text,pick:()=>this.setState({modeOpen:open?null:m.id})}});
+        days:(m.test.days.length?m.test.days:Array(14).fill('none')).map(c=>({bg:DAYC[c]||m.color})),test:m.test.text,pick:()=>this.setState({modeOpen:open?null:m.id}),edit:e=>{e.stopPropagation();this.setState({edit:m.id,edStart:null,momentAt:null})}}});
     const room=s.room||(H.rooms[0]||{}).id;
     const rDevs=list.filter(d=>d.room===room);
     const AF=[['all','All'],['auto','Modes'],['people','People'],['device','Devices']];
@@ -302,7 +784,9 @@ class Component extends DCLogic {
     const p=s.parse;const E={builtin:['Built-in · works offline','lock','rgba(127,212,160,0.14)','#7fd4a0'],local:['Local AI · on your server','dns','rgba(124,184,240,0.14)','#7cb8f0'],cloud:['Cloud AI · your key','cloud','rgba(242,177,76,0.14)','#f2b14c']}[s.ai]||['Built-in · works offline','lock','rgba(127,212,160,0.14)','#7fd4a0'];
     const ENG=[['builtin','Built-in','Default','rgba(127,212,160,0.14)','#7fd4a0','Controls devices, rooms and modes, and answers “why”, “what’s next” and “who’s home” from your own data.','Nothing leaves your home.'],['local','Local AI','Private','rgba(124,184,240,0.14)','#7cb8f0','Adds free-form requests and rule drafting with a model running on your own server, e.g. through Dockbit.','Data stays on your network.'],['cloud','Cloud AI','Your API key','rgba(242,177,76,0.14)','#f2b14c','Best understanding, using a provider you choose with your own key.','Only what you allow below is sent.']];
     const SH=[['names','Device and room names','lightbulb','Needed to understand requests'],['rooms','Current device states','toggle_on','On/off, brightness, what’s playing'],['history','Activity history','history','Last 7 days of changes'],['presence','Who’s home','group','Names and arrival times'],['cameras','Cameras','videocam','Never shared']];
-    return {tabs,isNow:s.tab==='now',isRooms:s.tab==='rooms',isModes:s.tab==='modes',isActivity:s.tab==='activity',isAsk:s.tab==='ask',
+    const np=!s.page;
+    return {tabs,isNow:np&&s.tab==='now',isRooms:np&&s.tab==='rooms',isModes:np&&s.tab==='modes',isActivity:np&&s.tab==='activity',isAsk:np&&s.tab==='ask',
+      ...this.pagesVals(s,H,devs,list,RN),...this.edVals(s,H,devs,RN),moreDot:H.integrations.some(i=>!i.ok),scrollRef:this.scrollRef,
       homeName:H.home.name,avatars:(home.length?home:H.people).slice(0,3).map((x,i)=>({initial:x.name[0],ml:i?'-9px':'0px',op:x.home?1:0.4})),
       dateLine:`${H.home.dateLabel} · ${H.home.clock}${w?` · ${w.temp}° ${w.text.toLowerCase()}`:''}`,
       untilLine:H.current.waitingForSomeone?`Lights wait until someone’s home`:`Until ${H.current.untilLabel}, then ${nx.name}`,nowLeft:(H.home.nowHour/24*100)+'%',
@@ -323,7 +807,7 @@ class Component extends DCLogic {
       engine:{label:E[0],icon:E[1],bg:E[2],fg:E[3]},openAi:()=>this.setState({aiOpen:true}),closeAi:()=>this.setState({aiOpen:false}),aiOpen:s.aiOpen,isCloud:s.ai==='cloud',usesAi:s.ai!=='builtin',
       engines:ENG.map(([id,name,tag,tagBg,tagFg,body,data])=>{const a=s.ai===id;return{name,tag,tagBg,tagFg,body,data,border:a?tagFg:'transparent',ring:a?tagFg:'#4a4b50',dot:a?tagFg:'transparent',pick:()=>this.saveAi({ai:id})}}),
       shares:SH.map(([id,name,icon,note])=>{const locked=id==='cameras';const a=!locked&&!!s.share[id];return{name,icon,note,op:locked?0.5:1,justify:a?'flex-end':'flex-start',track:a?'#f2b14c':'#35363a',toggle:()=>{if(!locked)this.saveAi({share:{...s.share,[id]:!s.share[id]}})}}}),
-      sheetOpen:!!D,sh,closeSheet:()=>this.setState({sheet:null}),toastOn:!!s.toast,toastText:s.toast,canUndo:!!s.undo,undo:()=>{s.undo&&s.undo();this.setState({toast:null,undo:null})}};
+      sheetOpen:!!D,sh,closeSheet:()=>this.setState({sheet:null}),toastOn:!!s.toast,toastPos:s.edit||s.ig?'top:calc(env(safe-area-inset-top, 0px) + 12px)':'bottom:104px',toastText:s.toast,canUndo:!!s.undo,undo:()=>{s.undo&&s.undo();this.setState({toast:null,undo:null})}};
   }
 }
 </script>

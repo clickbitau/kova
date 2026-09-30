@@ -28,7 +28,14 @@ add-on: nothing in Kova depends on HA. The design reference lives in
   every action to the API.
 * **Phone app** (`web/phone.html`): the same, sized for a phone and installable
   from Safari (Add to Home Screen). Its service worker (`web/sw.js`) shows push
-  notifications.
+  notifications. The five tabs follow the phone design (Now, Rooms, Ask, Modes,
+  Activity); the ⊞ button on Now opens **More**: Security (camera live view over
+  WebRTC, who's home, today's events), Energy, Media (players, sources, stream
+  addresses), Integrations (the same setup as desktop, as a bottom sheet) and the
+  assistant settings. Each mode card has **Edit mode** (start, Light the way,
+  devices, moments). Links: `?cam=<id>` opens that camera live (the doorbell
+  notification's *View camera* uses it), `?page=security|energy|media|integrations`,
+  `?do=lights-off`. A lock-screen Live Activity needs a native app, so it isn't here.
 * **Later:** Kova Cloud (accounts, remote access relay, backups, updates) and a
   native mobile app. Neither exists yet.
 
