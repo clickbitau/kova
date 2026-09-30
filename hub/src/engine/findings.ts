@@ -34,7 +34,23 @@ export class Checker {
 
   findings(): Finding[] {
     const dismissed = new Set(this.config.get().dismissedFindings);
-    return [...this.emptyHouse(), ...this.staysOn()].filter(f => !dismissed.has(f.id));
+    return [...this.missing(), ...this.emptyHouse(), ...this.staysOn()].filter(f => !dismissed.has(f.id));
+  }
+
+  /** Modes pointing at devices Kova doesn't have (e.g. after swapping the demo for a real home). */
+  private missing(): Finding[] {
+    const devices = this.devices();
+    if (!devices.size) return [];
+    return this.config.get().modes.flatMap(m => {
+      const gone = Object.keys(m.targets).filter(id => !devices.has(id));
+      if (!gone.length) return [];
+      return [{
+        id: `missing:${m.id}`, modeId: m.id, kind: 'Check', icon: 'link_off', tone: 'alert' as const,
+        title: `${m.name} uses ${gone.length} device${gone.length === 1 ? '' : 's'} Kova can’t find`,
+        body: `${gone.slice(0, 4).join(', ')}${gone.length > 4 ? '…' : ''}. They may have been renamed or removed. Pick the right devices in the mode, or remove these.`,
+        fix: 'Remove them', alt: 'Keep for now',
+      }];
+    });
   }
 
   /** Lights left on across a mode that never mentions them, into a later mode. */
@@ -128,6 +144,7 @@ export class Checker {
   fix(id: string): () => void {
     const [kind, a, b] = id.split(':');
     if (kind === 'empty-house') return this.config.update(c => { const m = c.modes.find(x => x.id === a); if (m) m.onlyWhenSomeoneHome = true; });
+    if (kind === 'missing') return this.config.update(c => { const m = c.modes.find(x => x.id === a); const devices = this.devices(); if (m) for (const id of Object.keys(m.targets)) if (!devices.has(id)) delete m.targets[id]; });
     if (kind === 'stays-on') return this.config.update(c => { const m = c.modes.find(x => x.id === b); if (m) m.targets[a] = { on: false }; });
     throw new Error(`Unknown finding ${id}`);
   }

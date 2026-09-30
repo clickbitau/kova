@@ -43,6 +43,11 @@ export function snapshot(hub: Hub) {
   const devices = reg.devices;
   const roomName = (id: string) => cfg.rooms.find(r => r.id === id)?.name ?? id;
   const mn = engine.planner.modeAt(now);
+  /** Editable target rows: which device, what it's set to, and the chip text. */
+  const targetList = (t: Targets) => Object.entries(t).map(([id, cmd]) => {
+    const d = devices.get(id);
+    return { deviceId: id, name: d ? `${roomName(d.room)} ${d.name.toLowerCase()}` : `${id} (missing)`, label: d ? targetLabel(d, cmd) : 'Device not found', target: cmd, missing: !d };
+  });
   const findings = checker.findings();
 
   const modes = cfg.modes.map((m: Mode, i) => {
@@ -56,13 +61,14 @@ export function snapshot(hub: Hub) {
       inherit = reg.list().filter(d => isLight(d) && st[d.id]?.on && !m.targets[d.id])
         .map(d => d.type === 'dimmer' && st[d.id].bri != null && st[d.id].bri! < 100 ? `${d.name} ${st[d.id].bri}%` : `${roomName(d.room)} ${d.name.toLowerCase()}`);
     }
-    const moments = kd.items.filter(x => x.kind === 'moment' && x.modeId === m.id).map(x => ({ t: clock(x.at, tz), text: `${x.label} · ${x.what}` }));
+    const moments = kd.items.filter(x => x.kind === 'moment' && x.modeId === m.id).map(x => ({ id: x.refId, t: clock(x.at, tz), text: `${x.label} · ${x.what}` }));
     return {
       id: m.id, name: m.name, color: m.color, icon: m.icon,
       startLabel: rhythmLabel(m.start), endLabel: rhythmLabel(next.start), nextId: next.id,
       start: entry ? localHour(entry.at, tz) : null,
       onlyWhenSomeoneHome: !!m.onlyWhenSomeoneHome, lightTheWay: !!m.lightTheWay,
       groups: chipsByRoom(m.targets, devices, roomName), inherit, moments,
+      rhythm: m.start, targets: targetList(m.targets),
       test: checker.test(m.id),
     };
   });
@@ -107,7 +113,8 @@ export function snapshot(hub: Hub) {
     day: { bands: engine.planner.bands(today), items, marks },
     upcoming,
     lightTheWay: cfg.lightTheWay.triggers.map(t => ({ id: t.id, label: t.label, minutes: t.minutes, lights: t.lights })),
-    overlays: cfg.overlays.map(o => ({ id: o.id, name: o.name, icon: o.icon, endsLabel: o.endsLabel })),
+    overlays: cfg.overlays.map(o => ({ id: o.id, name: o.name, icon: o.icon, endsLabel: o.endsLabel, targets: targetList(o.targets) })),
+    moments: cfg.moments.map(mo => ({ id: mo.id, label: mo.label, what: mo.what, at: mo.at, atLabel: rhythmLabel(mo.at), targets: targetList(mo.targets) })),
     sources: cfg.sources,
     findings,
     activity,

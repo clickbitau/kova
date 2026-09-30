@@ -9,6 +9,7 @@ import { VirtualAdapter } from '../adapters/virtual.ts';
 import { MatterAdapter } from '../adapters/matter.ts';
 import { HomeKitControllerAdapter } from '../adapters/homekit-controller.ts';
 import { snapshot } from './snapshot.ts';
+import { registerEditRoutes } from './edit-routes.ts';
 import { AiAssistant, loadSettings, publicSettings, saveSettings, type AiOptions, type SettingsPatch } from '../assistant/ai.ts';
 import { isLight, isPlayer } from '../util/describe.ts';
 import type { HomeKitBridge } from '../bridges/homekit.ts';
@@ -150,6 +151,8 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
     });
     return { undo: hub.engine.registerUndo(undo) };
   });
+
+  registerEditRoutes(app, hub);
 
   // Presence from a phone: the Kova app, or an iOS Shortcut / Android automation until the app ships.
   app.post<{ Params: { id: string }; Body: { home: boolean; source?: string } }>('/api/people/:id/presence', async (req, reply) => {
