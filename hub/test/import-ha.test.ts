@@ -17,11 +17,14 @@ function fixture() {
     { entry_id: 'lt', domain: 'localtuya', title: 'localtuya', data: { devices: { bf00: { friendly_name: 'Kitchen Switch', host: '192.168.1.230', local_key: 'aaaaaaaaaaaaaaaa', protocol_version: '3.3', entities: [{ id: 2, platform: 'switch', friendly_name: 'Kitchen Light' }, { id: 3, platform: 'switch', friendly_name: 'Dining Light' }] }, bf01: { friendly_name: 'Office Switch', host: '192.168.1.214', local_key: 'bbbbbbbbbbbbbbbb', protocol_version: '3.4', entities: [{ id: 1, platform: 'switch', friendly_name: 'Office Switch' }] } } } },
     { entry_id: 'tp1', domain: 'tplink', title: 'Lamp L535', data: { host: '10.0.0.5', alias: 'Lamp', credentials_hash: Buffer.alloc(32, 1).toString('base64') } },
     { entry_id: 'c', domain: 'cast', title: 'Google Cast', data: {} },
+    { entry_id: 'tv', domain: 'samsungtv', title: 'Living Room TV', data: { host: '10.0.0.20', mac: 'aa:bb:cc:dd:ee:ff', method: 'websocket', port: 8002, token: 'ha-token' } },
+    { entry_id: 'vs', domain: 'vesync', title: 'VeSync', data: { username: 'me@example.com', password: 'not-imported' } },
   ] });
   w('core.device_registry', { devices: [
     { name: 'Lamp', area_id: 'living_room', config_entries: ['tp1'] },
     { name: 'Music Room Speaker', area_id: null, config_entries: ['c'], model: 'Nest Audio' },
     { name: 'Home Speaker Group', area_id: null, config_entries: ['c'], model: 'Google Cast Group' },
+    { name: 'Bedroom Purifier', area_id: 'living_room', config_entries: ['vs'], model: 'Core300S' },
   ] });
   return dir;
 }
@@ -40,5 +43,11 @@ test('imports rooms, people and local device details from a Home Assistant folde
   assert.ok(r.integrations.tapo!.authHash);
   assert.equal(r.integrations.cast!.rooms!['Music Room Speaker'], 'music_room');
   assert.ok(r.report.some(l => l.includes('1 groups for synced audio') || l.includes('groups for synced audio')));
-  assert.deepEqual(adaptersFor(r.integrations).map(a => a.id), ['tuya', 'tapo', 'cast']);
+  assert.deepEqual(r.integrations.samsungtv!.tvs, [{ host: '10.0.0.20', name: 'Living Room TV', room: 'living_room', mac: 'aa:bb:cc:dd:ee:ff' }]);
+  assert.equal(r.integrations.vesync!.email, 'me@example.com');
+  assert.equal(r.integrations.vesync!.password, '', 'the password is never imported');
+  assert.deepEqual(r.integrations.vesync!.devices, { 'Bedroom Purifier': { room: 'living_room' } });
+  assert.ok(r.report.some(l => l.includes('VeSync') && l.includes('password')));
+  // VeSync waits for a password; everything else starts.
+  assert.deepEqual(adaptersFor(r.integrations, tmpdir()).map(a => a.id), ['tuya', 'tapo', 'cast', 'samsungtv']);
 });

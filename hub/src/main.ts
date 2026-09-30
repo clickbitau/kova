@@ -21,7 +21,7 @@ const demo = env.KOVA_DEMO ? env.KOVA_DEMO !== '0' : !integrations;
 const homeFile = resolve(dataDir, 'home.json');
 const initialConfig = (): HomeConfig => !demo && existsSync(homeFile) ? JSON.parse(readFileSync(homeFile, 'utf8')) as HomeConfig : demoConfig();
 
-const adapters: Adapter[] = integrations ? adaptersFor(integrations) : [];
+const adapters: Adapter[] = integrations ? adaptersFor(integrations, dataDir) : [];
 if (demo) adapters.push(new VirtualAdapter(demoDevices()));
 if (env.KOVA_SONOS === '1') adapters.push(new SonosAdapter());
 
