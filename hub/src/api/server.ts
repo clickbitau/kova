@@ -18,6 +18,8 @@ import { LiveViewUnavailable, NEST_DEFAULT_REDIRECT, exchangeNestCode, nestAuthU
 import type { Presence } from '../services/presence.ts';
 import type { Notifier } from '../services/notify.ts';
 import type { PushSubscription } from 'web-push';
+import { importFromCloud, type CloudImportOptions } from '../adapters/tuya/cloud.ts';
+import { loadIntegrations, saveIntegrations } from '../integrations.ts';
 
 export interface ServerOptions {
   webRoot: string;
@@ -35,6 +37,10 @@ export interface ServerOptions {
   presence?: Presence;
   /** Web Push / ntfy notifications. */
   notifier?: Notifier;
+  /** Where integrations.json lives, for imports that write to it (e.g. Tuya cloud keys). */
+  integrationsPath?: string;
+  /** Tuya cloud import overrides (tests point baseUrl at a fake server and turn discovery off). */
+  tuyaCloud?: Pick<CloudImportOptions, 'baseUrl' | 'discoverMs' | 'discoverPorts' | 'now'>;
 }
 
 const USER = { kind: 'user' as const, label: 'You' };
@@ -207,6 +213,21 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
     try {
       const devices = await m.commission(code, { room: req.body?.room || undefined, name: req.body?.name || undefined });
       return { ok: true, devices: devices.map(d => hub.reg.get(d.id) ?? d) };
+    } catch (e) { return fail(reply, e); }
+  });
+
+  // Fetch Tuya local keys (and names, categories, data points) from the Tuya IoT cloud once, and merge them
+  // into integrations.json. Keys are written to the file but never returned. Takes effect on the next restart.
+  app.post<{ Body: { clientId?: string; secret?: string; region?: string; uid?: string } }>('/api/integrations/tuya/cloud-import', async (req, reply) => {
+    const b = req.body ?? {};
+    const clientId = String(b.clientId ?? '').trim(), secret = String(b.secret ?? '').trim();
+    if (!clientId || !secret) return reply.code(400).send({ error: 'clientId and secret are required' });
+    if (!opts.integrationsPath) return reply.code(400).send({ error: 'This hub has no integrations file configured' });
+    try {
+      const current = loadIntegrations(opts.integrationsPath) ?? {};
+      const r = await importFromCloud({ clientId, secret, region: b.region || 'eu', uid: b.uid || undefined, existing: current.tuya, rooms: hub.config.get().rooms, ...opts.tuyaCloud });
+      saveIntegrations(opts.integrationsPath, { ...current, tuya: r.tuya });
+      return { ok: true, devices: r.devices, restartNeeded: true };
     } catch (e) { return fail(reply, e); }
   });
 

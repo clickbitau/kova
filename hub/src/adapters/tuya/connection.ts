@@ -1,6 +1,6 @@
 import net from 'node:net';
 import { EventEmitter } from 'node:events';
-import { CMD, decodePayload, encodePayload, hmac, newNonce, pack, sessionKey, unpack, ecbDecrypt, type Frame, type Version } from './protocol.ts';
+import { CMD, VERSIONS, decodePayload, encodePayload, hmac, newNonce, pack, pack6699, sessionKey, sessionKey35, unpack, unpack6699, ecbDecrypt, type Frame, type Version } from './protocol.ts';
 
 export type Dps = Record<string, string | number | boolean>;
 
@@ -22,7 +22,7 @@ export class TuyaConnection extends EventEmitter<{ dps: [Dps]; online: [boolean]
   private sock: net.Socket | null = null;
   private buf: Buffer = Buffer.alloc(0);
   private seq = 1;
-  private waiting = new Map<number, { resolve: (f: Frame) => void; reject: (e: Error) => void; timer: NodeJS.Timeout }>();
+  private waiting = new Map<number, { cmd: number; resolve: (f: Frame) => void; reject: (e: Error) => void; timer: NodeJS.Timeout }>();
   private waitingCmd: { cmd: number; resolve: (f: Frame) => void } | null = null;
   private readonly localKey: Buffer;
   private key: Buffer;
@@ -38,10 +38,13 @@ export class TuyaConnection extends EventEmitter<{ dps: [Dps]; online: [boolean]
     super();
     this.localKey = Buffer.from(o.key, 'utf8');
     if (this.localKey.length !== 16) throw new Error(`Tuya local key for ${o.id} must be 16 characters`);
+    if (!VERSIONS.includes(o.version)) throw new Error(`Tuya ${o.id}: protocol ${o.version} is not supported (use 3.3, 3.4 or 3.5)`);
     this.key = this.localKey;
   }
 
   private get timeout() { return this.o.timeoutMs ?? 5000; }
+  /** 3.4 and 3.5 negotiate a session key and use the "new" control/query commands. */
+  private get modern() { return this.o.version !== '3.3'; }
 
   /** Connect (or reuse the live connection). */
   connect(): Promise<void> {
@@ -64,25 +67,30 @@ export class TuyaConnection extends EventEmitter<{ dps: [Dps]; online: [boolean]
       s.on('error', () => { /* handled by close */ });
       this.sock = s;
     });
-    if (this.o.version === '3.4') await this.negotiate();
+    if (this.modern) await this.negotiate();
     this.setOnline(true);
     this.backoff = 1000;
     this.heartbeat = setInterval(() => void this.send(CMD.HEART_BEAT, {}).catch(() => this.sock?.destroy()), this.o.heartbeatMs ?? 10_000);
   }
 
   private async negotiate(): Promise<void> {
+    const v35 = this.o.version === '3.5';
     const local = newNonce();
     const resp = this.expectCmd(CMD.SESS_KEY_NEG_RESP);
-    this.write(CMD.SESS_KEY_NEG_START, encodePayload('3.4', CMD.SESS_KEY_NEG_START, local, this.localKey));
+    // 3.4 ECB-encrypts the handshake payloads; 3.5 sends them as-is inside the GCM frame.
+    this.write(CMD.SESS_KEY_NEG_START, v35 ? local : encodePayload('3.4', CMD.SESS_KEY_NEG_START, local, this.localKey));
     const f = await resp;
-    let p = f.payload;
-    if (p.length % 16 === 4) p = p.subarray(4);
-    const dec = ecbDecrypt(this.localKey, p);
+    let dec = f.payload;
+    if (!v35) {
+      if (dec.length % 16 === 4) dec = dec.subarray(4);
+      try { dec = ecbDecrypt(this.localKey, dec); } catch { throw new Error(`Tuya ${this.o.id}: session key check failed (wrong local key?)`); }
+    }
     const remote = dec.subarray(0, 16);
-    if (!dec.subarray(16, 48).equals(hmac(this.localKey, local))) throw new Error(`Tuya ${this.o.id}: session key check failed (wrong local key?)`);
-    this.write(CMD.SESS_KEY_NEG_FINISH, encodePayload('3.4', CMD.SESS_KEY_NEG_FINISH, hmac(this.localKey, remote), this.localKey));
-    this.key = sessionKey(this.localKey, local, remote);
-    this.hmacKey = this.key;
+    if (dec.length < 48 || !dec.subarray(16, 48).equals(hmac(this.localKey, local))) throw new Error(`Tuya ${this.o.id}: session key check failed (wrong local key?)`);
+    const finish = hmac(this.localKey, remote);
+    this.write(CMD.SESS_KEY_NEG_FINISH, v35 ? finish : encodePayload('3.4', CMD.SESS_KEY_NEG_FINISH, finish, this.localKey));
+    this.key = v35 ? sessionKey35(this.localKey, local, remote) : sessionKey(this.localKey, local, remote);
+    this.hmacKey = v35 ? undefined : this.key;
   }
 
   private expectCmd(cmd: number): Promise<Frame> {
@@ -94,7 +102,7 @@ export class TuyaConnection extends EventEmitter<{ dps: [Dps]; online: [boolean]
 
   private write(cmd: number, payload: Buffer): number {
     const seq = this.seq++;
-    this.sock?.write(pack({ seq, cmd, payload }, this.hmacKey));
+    this.sock?.write(this.o.version === '3.5' ? pack6699({ seq, cmd, payload }, this.key) : pack({ seq, cmd, payload }, this.hmacKey));
     return seq;
   }
 
@@ -105,7 +113,7 @@ export class TuyaConnection extends EventEmitter<{ dps: [Dps]; online: [boolean]
     return new Promise((resolve, reject) => {
       const seq = this.write(cmd, payload);
       const timer = setTimeout(() => { this.waiting.delete(seq); reject(new Error(`Tuya ${this.o.id} didn't reply`)); }, this.timeout);
-      this.waiting.set(seq, { resolve, reject, timer });
+      this.waiting.set(seq, { cmd, resolve, reject, timer });
     });
   }
 
@@ -114,14 +122,14 @@ export class TuyaConnection extends EventEmitter<{ dps: [Dps]; online: [boolean]
   /** Set data points, e.g. { '1': true }. */
   async set(dps: Dps): Promise<void> {
     await this.connect();
-    if (this.o.version === '3.4') await this.send(CMD.CONTROL_NEW, { protocol: 5, t: Number(this.ts()), data: { dps } });
+    if (this.modern) await this.send(CMD.CONTROL_NEW, { protocol: 5, t: Number(this.ts()), data: { dps } });
     else await this.send(CMD.CONTROL, { devId: this.o.id, uid: this.o.id, t: this.ts(), dps });
   }
 
   /** Ask for all data points. The answer also arrives as a 'dps' event. */
   async query(): Promise<Dps> {
     await this.connect();
-    const f = this.o.version === '3.4'
+    const f = this.modern
       ? await this.send(CMD.DP_QUERY_NEW, {})
       : await this.send(CMD.DP_QUERY, { gwId: this.o.id, devId: this.o.id, uid: this.o.id, t: this.ts() });
     return this.parse(f) ?? {};
@@ -138,13 +146,16 @@ export class TuyaConnection extends EventEmitter<{ dps: [Dps]; online: [boolean]
 
   private onData(d: Buffer): void {
     this.buf = Buffer.concat([this.buf, d]);
-    const { frames, rest } = unpack(this.buf, this.hmacKey);
+    const { frames, rest } = this.o.version === '3.5' ? unpack6699(this.buf, this.key) : unpack(this.buf, this.hmacKey);
     this.buf = rest;
     for (const f of frames) {
       if (this.waitingCmd?.cmd === f.cmd) { this.waitingCmd.resolve(f); continue; }
       const dps = f.cmd === CMD.HEART_BEAT ? null : this.parse(f);
-      const w = this.waiting.get(f.seq);
-      if (w) { clearTimeout(w.timer); this.waiting.delete(f.seq); w.resolve(f); }
+      // 3.5 devices answer with their own running sequence number, so match those replies by command.
+      let seq: number | undefined = this.waiting.has(f.seq) ? f.seq : undefined;
+      if (seq === undefined && this.o.version === '3.5') seq = [...this.waiting].find(([, w]) => w.cmd === f.cmd)?.[0];
+      const w = seq === undefined ? undefined : this.waiting.get(seq);
+      if (w) { clearTimeout(w.timer); this.waiting.delete(seq!); w.resolve(f); }
       if (dps && Object.keys(dps).length) this.emit('dps', dps);
     }
   }

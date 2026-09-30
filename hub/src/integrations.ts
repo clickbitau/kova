@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import type { Adapter } from './adapters/sdk.ts';
 import { TuyaAdapter, type TuyaOptions } from './adapters/tuya/index.ts';
 import { TapoAdapter, type TapoOptions } from './adapters/tapo.ts';
@@ -59,6 +59,13 @@ export interface Integrations {
 
 export function loadIntegrations(path: string): Integrations | null {
   return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) as Integrations : null;
+}
+
+/** Write integrations.json with owner-only permissions (it holds device keys). */
+export function saveIntegrations(path: string, i: Integrations): void {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, JSON.stringify(i, null, 2) + '\n', { mode: 0o600 });
+  chmodSync(path, 0o600);
 }
 
 /** `dataDir` is where adapters keep what they learn (e.g. TV pairing tokens); defaults to $KOVA_DATA or ./data. */

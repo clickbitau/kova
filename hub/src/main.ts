@@ -111,7 +111,7 @@ notifier.start();
 // Cloud: Web Push is delivered by Apple's / Google's push service (and ntfy.sh unless self-hosted).
 hub.services.push({ id: 'notify', name: 'Notifications', icon: 'notifications', kind: 'Cloud', status: () => notifier.status() });
 
-const app = await buildServer(hub, { webRoot: resolve(here, '../../web'), token: env.KOVA_TOKEN || undefined, homekit, matterBridge, nest: integrations?.nest, presence, notifier });
+const app = await buildServer(hub, { webRoot: resolve(here, '../../web'), token: env.KOVA_TOKEN || undefined, homekit, matterBridge, nest: integrations?.nest, presence, notifier, integrationsPath: resolve(dataDir, 'integrations.json') });
 const port = Number(env.KOVA_PORT ?? 8140);
 await app.listen({ port, host: env.KOVA_HOST ?? '0.0.0.0' });
 console.log(`Kova hub listening on http://localhost:${port}${demo ? ' (demo home)' : ''}`);
