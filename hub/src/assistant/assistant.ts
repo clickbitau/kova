@@ -163,11 +163,11 @@ export class Assistant {
         if (!i.devices.length) return reply(`There’s nothing I can switch ${i.on ? 'on' : 'off'} there.`, 'Device control');
         const targets: Targets = Object.fromEntries(i.devices.map(id => [id, isPlayer(this.reg.get(id)!) && !i.on ? { on: false, media: null } : { on: i.on }]));
         const r = await this.engine.applyMany(targets, { ...CAUSE, label: `${i.label} ${i.on ? 'on' : 'off'}` });
-        return reply(r.changed.length ? `Done. ${i.label}: ${plural(r.changed.length, 'thing')} ${i.on ? 'on' : 'off'}.` : `${i.label} ${i.devices.length === 1 ? 'was' : 'were'} already ${i.on ? 'on' : 'off'}.`, 'Device control', { undo: r.undo });
+        return reply(r.changed.length ? `Done. ${i.label}: ${plural(r.changed.length, 'thing')} ${i.on ? 'on' : 'off'}.` : `${i.label} ${i.devices.length === 1 ? 'was' : 'were'} already ${i.on ? 'on' : 'off'}.`, 'Device control', { undo: r.changed.length ? r.undo : undefined });
       }
       case 'level': {
         const r = await this.engine.applyMany(Object.fromEntries(i.devices.map(id => [id, { on: true, bri: i.bri }])), { ...CAUSE, label: `${i.label} to ${i.bri}%` });
-        return reply(`${i.label} ${r.changed.length ? 'set to' : 'already at'} ${i.bri}%.`, 'Device control', { undo: r.undo });
+        return reply(`${i.label} ${r.changed.length ? 'set to' : 'already at'} ${i.bri}%.`, 'Device control', { undo: r.changed.length ? r.undo : undefined });
       }
       case 'overlay': {
         const o = this.config.get().overlays.find(x => x.id === i.id) as Overlay;

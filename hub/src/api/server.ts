@@ -126,7 +126,29 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
     return (await hub.engine.undo(req.params.id)) ? { ok: true } : reply.code(410).send({ error: 'Too late to undo' });
   });
 
-  app.post<{ Body: { text: string } }>('/api/ask', async req => hub.assistant.ask(String(req.body?.text ?? '')));
+  // Assistant engine settings. Built-in is the default; AI engines only ever see requests the built-in parser can't handle.
+  type AiSettings = { engine: 'builtin' | 'local' | 'cloud'; share: Record<string, boolean> };
+  const aiSettings = (): AiSettings => hub.store.get<AiSettings>('assistant') ?? { engine: 'builtin', share: { names: true, rooms: true, history: false, presence: false } };
+  app.get('/api/assistant/settings', async () => aiSettings());
+  app.put<{ Body: Partial<AiSettings> }>('/api/assistant/settings', async (req, reply) => {
+    const cur = aiSettings();
+    const engine = req.body.engine ?? cur.engine;
+    if (!['builtin', 'local', 'cloud'].includes(engine)) return reply.code(400).send({ error: 'unknown engine' });
+    // Cameras are never shared, whatever is sent.
+    const next = { engine, share: { ...cur.share, ...(req.body.share ?? {}), cameras: false } };
+    hub.store.set('assistant', next);
+    return next;
+  });
+
+  app.post<{ Body: { text: string } }>('/api/ask', async req => {
+    const r = await hub.assistant.ask(String(req.body?.text ?? ''));
+    const engine = aiSettings().engine;
+    if (!r.understood && engine !== 'builtin') {
+      // AI engines are the next step; say so rather than pretending.
+      return { ...r, text: `That isn’t a built-in command, and the ${engine === 'local' ? 'local' : 'cloud'} AI engine isn’t connected yet. Built-in commands still work.` };
+    }
+    return r;
+  });
   // What Kova understood, as chips, without running anything (for the live preview while typing).
   app.post<{ Body: { text: string } }>('/api/ask/parse', async req => {
     const i = hub.assistant.parse(String(req.body?.text ?? ''));
