@@ -11,6 +11,7 @@ import { snapshot } from './snapshot.ts';
 import { AiAssistant, loadSettings, publicSettings, saveSettings, type AiOptions, type SettingsPatch } from '../assistant/ai.ts';
 import { isLight, isPlayer } from '../util/describe.ts';
 import type { HomeKitBridge } from '../bridges/homekit.ts';
+import type { MatterBridge } from '../bridges/matter-bridge.ts';
 
 export interface ServerOptions {
   webRoot: string;
@@ -18,6 +19,8 @@ export interface ServerOptions {
   token?: string;
   /** The Apple Home bridge, when KOVA_HOMEKIT=1. */
   homekit?: HomeKitBridge;
+  /** The Matter bridge (Google Home, Alexa, SmartThings, Apple Home), when KOVA_MATTER_BRIDGE=1. */
+  matterBridge?: MatterBridge;
   /** Optional AI engine options, e.g. the Anthropic base URL (tests point it at a fake server). */
   ai?: AiOptions;
 }
@@ -57,6 +60,13 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
     const hk = opts.homekit;
     if (!hk) return { enabled: false };
     return { enabled: true, ...hk.setupInfo(), paired: hk.paired };
+  });
+
+  // Pairing info for the Matter bridge (manual code, MT: payload for a QR code, and who it's paired with).
+  app.get('/api/integrations/matter-bridge', async () => {
+    const mb = opts.matterBridge;
+    if (!mb) return { enabled: false };
+    return { enabled: true, ...mb.pairingInfo() };
   });
 
   app.get<{ Querystring: { at?: string; hour?: string } }>('/api/preview', async req => {
