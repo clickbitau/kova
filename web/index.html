@@ -678,7 +678,7 @@ class Component extends DCLogic {
     const overlays=H.overlays.map(o=>{const on=ovOn&&ovOn.id===o.id;return{name:o.name,icon:o.icon,ends:o.endsLabel,bg:on?'rgba(242,177,76,0.1)':'#16171a',border:on?'rgba(242,177,76,0.45)':'rgba(255,255,255,0.05)',iconBg:on?'#f2b14c':'#232428',iconFg:on?'#1a1408':'#f2b14c',go:()=>{if(!on)this.startOverlay(o)}}});
     const roomCards=H.rooms.map(r=>{const ds=vl.filter(d=>d.room===r.id);const on=ds.filter(d=>isLight(d)&&d.on).length;const play=ds.filter(d=>isPlayer(d)&&d.on).length;return{name:r.name,icon:r.icon,pill:on?`${on} on`:play?'Playing':'All off',pillFg:on?'#f2b14c':play?'#7cb8f0':'#8a8781',iconFg:on?'#f2b14c':play?'#7cb8f0':'#8a8781',open:()=>this.setState({screen:'rooms',room:r.id})}});
     const findings=H.findings.map(f=>{const m=this.modeById(f.modeId);return{...f,fg:f.tone==='alert'?'#ff6b5e':'#f2b14c',modeName:m.name,modeColor:m.color,modeTint:m.color+'24',
-      doFix:()=>api('POST',`/api/findings/${encodeURIComponent(f.id)}/fix`).then(r=>{this.setState({modeSel:f.modeId});this.toast(`${m.name} updated`,this.undoFn(r.undo))}).catch(x=>this.err(x)),
+      doFix:()=>api('POST',`/api/findings/${encodeURIComponent(f.id)}/fix`).then(r=>{this.setState({modeSel:f.modeId});this.toast(f.id.startsWith("learn:moment:")?"Added to your day":`${m.name} updated`,this.undoFn(r.undo))}).catch(x=>this.err(x)),
       doAlt:()=>api('POST',`/api/findings/${encodeURIComponent(f.id)}/dismiss`).then(r=>this.toast('Kept as is',this.undoFn(r.undo))).catch(x=>this.err(x))}});
     const SM=this.modeById(s.modeSel||H.current.modeId);const snx=this.modeById(SM.nextId);
     const DAYC={ok:SM.color,problem:'#ff6b5e',skipped:'#26272b',none:'rgba(255,255,255,0.06)'};
@@ -783,7 +783,7 @@ class Component extends DCLogic {
     const actFilters=AF.map(([id,label])=>({label,pick:()=>this.setState({actF:id}),bg:s.actF===id?'#f1efea':'#16171a',fg:s.actF===id?'#141517':'#d8d5cf'}));
     const activity=H.activity.filter(a=>s.actF==='all'||a.type===s.actF).map(a=>({...a,iconBg:(ACT_STYLE[a.type]||ACT_STYLE.system)[0],iconFg:(ACT_STYLE[a.type]||ACT_STYLE.system)[1]}));
     // The inbox: mode findings plus integrations that need attention.
-    const INBOX=[...H.findings.map(f=>({id:'f:'+f.id,icon:f.icon,fg:f.tone==='alert'?'#ff6b5e':'#f2b14c',title:f.title,kind:'Check',body:f.body,btn:'Review',go:'modes'})),
+    const INBOX=[...H.findings.map(f=>({id:'f:'+f.id,icon:f.icon,fg:f.tone==='alert'?'#ff6b5e':'#f2b14c',title:f.title,kind:f.kind||'Check',body:f.body,btn:'Review',go:'modes'})),
       ...H.integrations.filter(i=>!i.ok).map(i=>({id:'i:'+i.id,icon:'build',fg:'#f2b14c',title:`${i.name} needs attention`,kind:'Repair',body:i.note||'Not responding.',btn:'Open',go:'integrations'}))];
     const inbox=INBOX.filter(i=>!s.inboxDone[i.id]).map(i=>({...i,act:()=>this.setState({screen:i.go}),dismiss:()=>this.setState(p=>({inboxDone:{...p.inboxDone,[i.id]:true}}))}));
     const chat=s.chat.map(m=>({text:m.text,justify:m.from==='you'?'flex-end':'flex-start',bg:m.from==='you'?'#f1efea':'#16171a',fg:m.from==='you'?'#141517':'#f1efea',hasAct:!!(m.acts&&m.acts.length),acts:m.acts||[]}));

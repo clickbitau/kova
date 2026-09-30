@@ -76,6 +76,17 @@ add-on: nothing in Kova depends on HA. The design reference lives in
 * **History replay**: each mode start records who was home and how many lights
   it switched on. Findings and the 14-day squares come from those records, so
   they fill in as the home runs. Fix: *only when someone's home*.
+* **Learned from you** (`learn.ts`): Kova reads the changes people made by hand
+  (app, wall switch, voice) over the last 14 days and spots two habits:
+  - the same fix within 30 minutes of a mode starting, on 3 or more days
+    (*Wind down could set the lounge lamp the way you like it*). Fix: change
+    the mode's target;
+  - the same change within about 25 minutes of the same clock time, on 4 or
+    more days, that isn't already planned (*You turn off the office ceiling
+    around 22:15*). Fix: add a moment.
+
+  Changes Kova made itself never count. Each suggestion says which days it's
+  based on; applying one is undoable, and *Not now* hides it for good.
 
 ## Adapters (`hub/src/adapters/`)
 

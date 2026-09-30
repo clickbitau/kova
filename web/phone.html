@@ -285,7 +285,7 @@ class Component extends DCLogic {
     const overlays=H.overlays.map(o=>{const a=ov&&ov.id===o.id;return{name:o.name,icon:o.icon,bg:a?'rgba(242,177,76,0.12)':'#16171a',border:a?'rgba(242,177,76,0.45)':'rgba(255,255,255,0.05)',
       go:()=>{if(a)return;api('POST',`/api/overlays/${o.id}/start`).then(r=>this.toast(`${o.name} is on · ${o.endsLabel.toLowerCase()}`,this.undoFn(r.undo))).catch(x=>this.err(x))}}});
     const findings=H.findings.map(f=>{const m=this.modeById(f.modeId);return{...f,fg:f.tone==='alert'?'#ff6b5e':'#f2b14c',modeName:m.name,modeColor:m.color,modeTint:m.color+'24',
-      doFix:()=>api('POST',`/api/findings/${encodeURIComponent(f.id)}/fix`).then(r=>{this.setState({modeOpen:f.modeId});this.toast(`${m.name} updated`,this.undoFn(r.undo))}).catch(x=>this.err(x)),
+      doFix:()=>api('POST',`/api/findings/${encodeURIComponent(f.id)}/fix`).then(r=>{this.setState({modeOpen:f.modeId});this.toast(f.id.startsWith("learn:moment:")?"Added to your day":`${m.name} updated`,this.undoFn(r.undo))}).catch(x=>this.err(x)),
       doAlt:()=>api('POST',`/api/findings/${encodeURIComponent(f.id)}/dismiss`).then(r=>this.toast('Kept as is',this.undoFn(r.undo))).catch(x=>this.err(x))}});
     const DAYC={ok:null,problem:'#ff6b5e',skipped:'#26272b',none:'rgba(255,255,255,0.06)'};
     const modeList=H.modes.map(m=>{const open=s.modeOpen===m.id;const chips=[...m.groups.flatMap(g=>g.chips.map(c=>g.room==='Everywhere'?c:`${g.room}: ${c}`)),...m.moments.map(x=>`${x.t} ${x.text}`)];

@@ -4,6 +4,7 @@ import type { ConfigStore } from './config.ts';
 import type { Command, Device, Mode } from '../model/types.ts';
 import { isLight } from '../util/describe.ts';
 import { addDays } from '../util/time.ts';
+import { Learner } from './learn.ts';
 
 export interface Finding {
   id: string;
@@ -30,11 +31,16 @@ const DAYS = 14;
  *  - Against real history in the event log (a mode lit an empty house).
  */
 export class Checker {
-  constructor(private engine: Engine, private store: Store, private config: ConfigStore, private devices: () => Map<string, Device>) {}
+  readonly learner: Learner;
+
+  constructor(private engine: Engine, private store: Store, private config: ConfigStore, private devices: () => Map<string, Device>) {
+    this.learner = new Learner(engine, store, config, devices);
+  }
 
   findings(): Finding[] {
     const dismissed = new Set(this.config.get().dismissedFindings);
-    return [...this.missing(), ...this.emptyHouse(), ...this.staysOn()].filter(f => !dismissed.has(f.id));
+    const learned = this.learner.suggestions().map(s => s.finding);
+    return [...this.missing(), ...this.emptyHouse(), ...this.staysOn(), ...learned].filter(f => !dismissed.has(f.id));
   }
 
   /** Modes pointing at devices Kova doesn't have (e.g. after swapping the demo for a real home). */
@@ -142,6 +148,7 @@ export class Checker {
 
   /** Apply a finding's fix. Returns a function that undoes it. */
   fix(id: string): () => void {
+    if (id.startsWith('learn:')) return this.learner.apply(id);
     const [kind, a, b] = id.split(':');
     if (kind === 'empty-house') return this.config.update(c => { const m = c.modes.find(x => x.id === a); if (m) m.onlyWhenSomeoneHome = true; });
     if (kind === 'missing') return this.config.update(c => { const m = c.modes.find(x => x.id === a); const devices = this.devices(); if (m) for (const id of Object.keys(m.targets)) if (!devices.has(id)) delete m.targets[id]; });
