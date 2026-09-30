@@ -10,11 +10,12 @@ export const CAPS: Record<DeviceType, Capability[]> = {
   camera: ['events'],
   sensor: ['events'],
   vacuum: ['onoff', 'vacuum', 'battery'],
+  internet: ['onoff'],
 };
 
 const FIELD_CAP: Record<string, Capability> = {
   on: 'onoff', bri: 'brightness', k: 'colorTemp', color: 'color', mode: 'fanMode', media: 'media', vol: 'volume', power: 'power',
-  activity: 'vacuum', battery: 'battery',
+  activity: 'vacuum', battery: 'battery', paused: 'pause',
 };
 
 /** Drop fields the device can't do, so a mode can target mixed brands safely. */
@@ -34,6 +35,8 @@ export const isPlayer = (d: Pick<Device, 'type'>) => d.type === 'media' || d.typ
 export function targetLabel(d: Device, t: Command): string {
   if (d.type === 'vacuum') return t.on === false || t.activity === 'returning' || t.activity === 'docked' ? `${d.name} docks` : `${d.name} cleans`;
   if (d.type === 'fan') return `${d.name} on ${t.mode ?? (t.on === false ? 'off' : 'Auto')}`;
+  if (d.type === 'internet') return `${d.name} internet ${t.on === false ? 'paused' : 'on'}`;
+  if (isPlayer(d) && t.paused !== undefined && t.on === undefined && t.media === undefined) return `${d.name} ${t.paused ? 'pauses' : 'carries on'}`;
   if (isPlayer(d)) return t.on === false || t.media === null ? `${d.name} stops` : `${d.name} · ${t.media ?? 'on'}${t.vol != null ? ` ${t.vol}%` : ''}`;
   if (t.on === false) return `${d.name} off`;
   if (t.bri != null) return `${d.name} ${t.bri}%${t.k ? ` · ${t.k}K` : t.color ? ' · colour' : ''}`;
@@ -48,9 +51,12 @@ export function changeSentence(d: Device, prev: Command, next: Command): string 
     if (a) return `${d.name} ${says[a]}`;
   }
   if (d.type === 'fan' && next.mode) return `${d.name} set to ${next.mode}`;
+  if (d.type === 'internet' && next.on !== undefined) return `${d.name}: internet ${next.on ? 'back on' : 'paused'}`;
   if (isPlayer(d)) {
     if (next.on === false || next.media === null) return `${d.name} stopped`;
     if (next.media) return `${d.name} playing ${next.media}`;
+    if (next.paused === true) return `${d.name} paused`;
+    if (next.paused === false) return `${d.name} carried on playing`;
     if (next.vol != null) return `${d.name} volume ${next.vol}%`;
   }
   if (next.on === true && !prev.on) return next.bri != null ? `${d.name} on at ${next.bri}%` : `${d.name} on`;

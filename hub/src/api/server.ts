@@ -26,6 +26,7 @@ import { SetupError, type IntegrationsManager } from '../integrations-store.ts';
 import type { HaImport } from '../import/ha-scan.ts';
 import { registerImportRoutes } from './import-routes.ts';
 import { registerHomeRoutes } from './home-routes.ts';
+import { registerLanAppRoutes } from './lan-apps-routes.ts';
 import type { Backups } from '../services/backup.ts';
 import { KOVA_VERSION } from '../version.ts';
 import { createReadStream } from 'node:fs';
@@ -53,6 +54,8 @@ export interface ServerOptions {
 
   /** In-app setup of integrations.json. Without it the setup routes answer 503. */
   integrations?: IntegrationsManager;
+  /** Tests: where to look for Helix Server. */
+  lanApps?: { helixFindHosts?: string[]; helixFindPort?: number };
   /** Import from Home Assistant (backup upload or config folder). */
   haImport?: HaImport;
   /** Nightly backups; when absent the backup endpoints answer 404. */
@@ -318,6 +321,7 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
   registerEditRoutes(app, hub);
   registerImportRoutes(app, opts.haImport);
   registerHomeRoutes(app, hub);
+  registerLanAppRoutes(app, { integrations: opts.integrations, ...opts.lanApps });
 
   // Presence from a phone: the Kova app, or an iOS Shortcut / Android automation ("When I arrive home → Get contents of URL").
   // `home` can be in the body or the query (?home=1), so a Shortcut needs no request body. `?key=` is the person's own key.

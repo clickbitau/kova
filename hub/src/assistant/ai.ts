@@ -119,7 +119,7 @@ export function saveSettings(store: Store, patch: SettingsPatch): AssistantSetti
 export const TOOLS = [
   {
     name: 'set_devices',
-    description: 'Change one or more devices. Only use device ids from the home context. bri is brightness 1-100, k is colour temperature in Kelvin, color is #rrggbb, vol is volume 0-100. Turning a speaker or TV off also stops what it plays.',
+    description: 'Change one or more devices. Only use device ids from the home context. bri is brightness 1-100, k is colour temperature in Kelvin, color is #rrggbb, vol is volume 0-100. Turning a speaker or TV off also stops what it plays. paused pauses or carries on (devices with the pause capability). media on a device with the library capability is a film or show title to find and play there (a Helix box).',
     parameters: {
       type: 'object',
       properties: {
@@ -134,6 +134,8 @@ export const TOOLS = [
               k: { type: 'integer', minimum: 1500, maximum: 9000 },
               color: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' },
               vol: { type: 'integer', minimum: 0, maximum: 100 },
+              paused: { type: 'boolean' },
+              media: { type: 'string' },
             },
             required: ['id'],
           },
@@ -203,6 +205,9 @@ export class Toolbox {
             if (typeof x.k === 'number' && Number.isFinite(x.k)) c.k = Math.round(Math.max(1500, Math.min(9000, x.k)));
             if (typeof x.color === 'string' && /^#[0-9a-f]{6}$/i.test(x.color)) c.color = x.color.toLowerCase();
             if (typeof x.vol === 'number' && Number.isFinite(x.vol)) c.vol = Math.round(Math.max(0, Math.min(100, x.vol)));
+            if (typeof x.paused === 'boolean' && d.capabilities.includes('pause')) c.paused = x.paused;
+            // A title only means something to a TV that finds titles itself; elsewhere media is a named source.
+            if (typeof x.media === 'string' && x.media.trim() && (d.capabilities.includes('library') || this.ai.config.get().sources.some(s => s.name === x.media))) c.media = x.media.trim().slice(0, 120);
             if ((c.bri != null || c.k != null || c.color != null) && c.on === undefined) c.on = true;
             if (c.on === false && isPlayer(d)) c.media = null;
             if (Object.keys(c).length) targets[d.id] = c;
@@ -424,7 +429,7 @@ export class AiAssistant {
       parts.can = d.capabilities.filter(c => c !== 'events' && c !== 'power');
       if (share.rooms) {
         const s = d.state;
-        parts.state = Object.fromEntries(Object.entries({ on: s.on, bri: s.bri, k: s.k, color: s.color, mode: s.mode, media: s.media, vol: s.vol, online: s.online }).filter(([, v]) => v !== undefined && v !== null));
+        parts.state = Object.fromEntries(Object.entries({ on: s.on, bri: s.bri, k: s.k, color: s.color, mode: s.mode, media: s.media, paused: s.paused || undefined, vol: s.vol, online: s.online }).filter(([, v]) => v !== undefined && v !== null));
       }
       return JSON.stringify(parts);
     });

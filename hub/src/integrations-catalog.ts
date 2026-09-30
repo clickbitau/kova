@@ -268,10 +268,60 @@ export const CATALOG: CatalogItem[] = [
     actions: [{ id: 'code', label: 'Show pairing code', icon: 'qr_code_2', method: 'GET', path: '/api/integrations/matter-bridge' }],
   },
   {
-    id: 'presence', name: 'Presence', icon: 'person_pin_circle', kind: 'Local', apply: 'restart',
-    description: 'Who’s home, from phones on your Wi-Fi and phone automations.',
+    id: 'warden', name: 'Warden', icon: 'router', kind: 'Local', apply: 'hot', testable: true,
+    description: 'Your Warden router: internet down and new-device alerts, pause a device’s internet from modes, and who’s home from phones on the network.',
     fields: [
-      { key: 'opnsense.url', label: 'OPNsense address', type: 'text', placeholder: 'https://10.10.0.1' },
+      { key: 'url', label: 'Warden address', type: 'text', required: true, placeholder: 'https://10.10.0.1', help: 'Where you open Warden in a browser.' },
+      { key: 'token', label: 'API token', type: 'password', help: 'Filled in by Link with Warden below (or make one in Warden → System → API tokens, role Operator).' },
+      {
+        key: 'devices', label: 'Internet switches', type: 'list', addLabel: 'Add a device',
+        help: 'Devices whose internet Kova can pause, e.g. a child’s tablet at bedtime. “Devices on your network” below lists them.',
+        item: [
+          { key: 'mac', label: 'MAC address', type: 'text', required: true, placeholder: 'aa:bb:cc:dd:ee:ff' },
+          { key: 'name', label: 'Name', type: 'text', required: true, placeholder: 'Aisha’s iPad' },
+          room(),
+        ],
+      },
+    ],
+    actions: [
+      {
+        id: 'link', label: 'Link with Warden', icon: 'link', method: 'POST', path: '/api/integrations/warden/link',
+        help: 'Sign in with a Warden admin account once. Kova makes its own token and doesn’t keep the password.',
+        fields: [
+          { key: 'url', label: 'Warden address', type: 'text', required: true, placeholder: 'https://10.10.0.1' },
+          { key: 'username', label: 'Username', type: 'text', required: true },
+          { key: 'password', label: 'Password', type: 'password', required: true },
+          { key: 'totp', label: 'One-time code', type: 'text', placeholder: 'if you use two-step sign-in' },
+        ],
+      },
+      { id: 'clients', label: 'Devices on your network', icon: 'devices', method: 'GET', path: '/api/integrations/warden/clients', help: 'Names and MAC addresses, for internet switches and for people’s phones in Presence.' },
+    ],
+  },
+  {
+    id: 'helix', name: 'Helix', icon: 'movie', kind: 'Local', apply: 'hot', testable: true,
+    description: 'Your Helix boxes as TVs: what’s playing, pause for the doorbell, “play The Office in the lounge”, and Movie mode when a film starts.',
+    fields: [
+      { key: 'url', label: 'Helix Server address', type: 'text', required: true, placeholder: 'http://10.10.10.101:8090', help: '“Find Helix Server” below looks for it.' },
+      { key: 'token', label: 'Device token', type: 'password', help: 'Filled in by Pair with Helix below.' },
+      {
+        key: 'rooms', label: 'Boxes', type: 'list', shape: 'map', mapKey: 'box', mapValue: 'room', addLabel: 'Put a box in a room',
+        item: [{ key: 'box', label: 'Box name', type: 'text', required: true, placeholder: 'Lounge' }, room()],
+      },
+    ],
+    actions: [
+      { id: 'find', label: 'Find Helix Server', icon: 'search', method: 'GET', path: '/api/integrations/helix/find' },
+      {
+        id: 'pair', label: 'Pair with Helix', icon: 'add_link', method: 'POST', path: '/api/integrations/helix/pair',
+        help: 'Kova shows a code. In Helix Server open Devices, type the code and press Pair. Kova finishes by itself.',
+        fields: [{ key: 'url', label: 'Helix Server address', type: 'text', placeholder: 'leave empty to use the one above' }],
+      },
+    ],
+  },
+  {
+    id: 'presence', name: 'Presence', icon: 'person_pin_circle', kind: 'Local', apply: 'restart',
+    description: 'Who’s home, from phones on your Wi-Fi (through Warden or OPNsense) and phone automations.',
+    fields: [
+      { key: 'opnsense.url', label: 'OPNsense address', type: 'text', placeholder: 'https://10.10.0.1', help: 'Not needed with Warden: Kova reads phones from Warden once it’s linked.' },
       { key: 'opnsense.key', label: 'OPNsense API key', type: 'password' },
       { key: 'opnsense.secret', label: 'OPNsense API secret', type: 'password' },
       {

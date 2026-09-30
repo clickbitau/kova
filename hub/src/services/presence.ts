@@ -3,6 +3,7 @@ import http from 'node:http';
 import https from 'node:https';
 import net from 'node:net';
 import type { Hub } from '../hub.ts';
+import { Warden, type WardenOptions } from '../adapters/warden.ts';
 
 /** How Kova works out who's home. Lives under `presence` in integrations.json. Every source is optional. */
 export interface PresenceOptions {
@@ -23,6 +24,9 @@ export interface PresenceOptions {
 }
 
 export const ROUTER = 'Router (OPNsense)';
+export const WARDEN = 'Router (Warden)';
+/** Warden counts a phone as here while it was seen this recently. */
+const WARDEN_RECENT_MS = 3 * 60_000;
 export const PING = 'Network (ping)';
 export const PHONE = 'Phone automation';
 /** An explicit "left" from a phone beats the router this long: a phone stays on Wi-Fi while you drive off. */
@@ -50,9 +54,10 @@ export class Presence {
   private keys: Record<string, string>;
   private polling = false;
   /** For the Integrations screen. */
-  private last: { router?: { seen: number; total: number } | { error: string }; ping?: { up: number; total: number } } = {};
+  private last: { router?: { seen: number; total: number } | { error: string }; routerName?: 'Warden'; ping?: { up: number; total: number } } = {};
 
-  constructor(private hub: Hub, private opts: PresenceOptions = {}) {
+  /** `warden` reads the Warden section as it is now, so linking Warden later works without a restart. */
+  constructor(private hub: Hub, private opts: PresenceOptions = {}, private sources: { warden?: () => WardenOptions | undefined } = {}) {
     this.keys = hub.store.get<Record<string, string>>('presenceKeys') ?? {};
   }
 
@@ -62,7 +67,8 @@ export class Presence {
   /** People who have at least one network source. */
   private tracked(): string[] {
     const ids = new Set<string>();
-    if (this.opts.opnsense) for (const [id, p] of Object.entries(this.opts.people ?? {})) if (p.phones?.length) ids.add(id);
+    // Phones count whenever a router can be read: OPNsense, or Warden (which may be linked later).
+    if (this.opts.opnsense || this.sources.warden) for (const [id, p] of Object.entries(this.opts.people ?? {})) if (p.phones?.length) ids.add(id);
     for (const id of Object.keys(this.opts.pingHosts ?? {})) ids.add(id);
     const known = new Set(this.hub.config.get().people.map(p => p.id));
     return [...ids].filter(id => known.has(id));
@@ -122,7 +128,7 @@ export class Presence {
         return {
           id: p.id, name: p.name, key,
           arriveUrl: `${url}&home=1`, leaveUrl: `${url}&home=0`,
-          router: !!(this.opts.opnsense && this.opts.people?.[p.id]?.phones?.length),
+          router: !!((this.opts.opnsense || this.sources.warden?.()?.token) && this.opts.people?.[p.id]?.phones?.length),
           ping: !!this.opts.pingHosts?.[p.id],
         };
       }),
@@ -175,7 +181,8 @@ export class Presence {
           else if (n.left.sawAbsent && t - n.left.at >= LEFT_WINS_MS) n.left = null;
           if (n.left) continue;
         }
-        const label = seen ? (byRouter ? ROUTER : PING) : (byRouter !== undefined ? ROUTER : PING);
+        const routerLabel = this.last.routerName === 'Warden' ? WARDEN : ROUTER;
+        const label = seen ? (byRouter ? routerLabel : PING) : (byRouter !== undefined ? routerLabel : PING);
         if (seen && !n.home) {
           n.home = true;
           await this.set(id, true, label);
@@ -196,6 +203,8 @@ export class Presence {
 
   /** Per person: true if any of their phones is in the router's table, false if none; null map when the router can't be read. */
   private async readRouter(): Promise<Map<string, boolean> | null> {
+    const w = this.sources.warden?.();
+    if (w?.url && w.token) return this.readWarden(w);
     const o = this.opts.opnsense;
     if (!o) return null;
     try {
@@ -207,22 +216,43 @@ export class Presence {
         const ndp = await getJson(`${o.url.replace(/\/+$/, '')}/api/diagnostics/interface/getNdp`, o);
         for (const e of rows(ndp)) if (e.mac) macs.add(normMac(e.mac));
       } catch { /* optional */ }
-      const out = new Map<string, boolean>();
-      let seen = 0, total = 0;
-      for (const [id, p] of Object.entries(this.opts.people ?? {})) {
-        const phones = (p.phones ?? []).map(normMac);
-        if (!phones.length) continue;
-        total += phones.length;
-        const here = phones.filter(m => macs.has(m)).length;
-        seen += here;
-        out.set(id, here > 0);
-      }
-      this.last.router = { seen, total };
-      return out;
+      return this.match(macs);
     } catch (err) {
       this.last.router = { error: err instanceof Error ? err.message : String(err) };
       return null;
     }
+  }
+
+  /** Phones Warden has seen in the last few minutes. */
+  private async readWarden(w: WardenOptions): Promise<Map<string, boolean> | null> {
+    try {
+      const now = Date.now();
+      const macs = new Set((await new Warden(w).clients())
+        .filter(c => c.lastSeenAt ? now - Date.parse(c.lastSeenAt) < WARDEN_RECENT_MS : c.online !== false)
+        .map(c => normMac(c.mac)));
+      this.last.routerName = 'Warden';
+      return this.match(macs);
+    } catch (err) {
+      this.last.routerName = 'Warden';
+      this.last.router = { error: err instanceof Error ? err.message : String(err) };
+      return null;
+    }
+  }
+
+  /** Per person: whether any of their phones is among `macs`. */
+  private match(macs: Set<string>): Map<string, boolean> {
+    const out = new Map<string, boolean>();
+    let seen = 0, total = 0;
+    for (const [id, p] of Object.entries(this.opts.people ?? {})) {
+      const phones = (p.phones ?? []).map(normMac);
+      if (!phones.length) continue;
+      total += phones.length;
+      const here = phones.filter(m => macs.has(m)).length;
+      seen += here;
+      out.set(id, here > 0);
+    }
+    this.last.router = { seen, total };
+    return out;
   }
 
   private async readPing(): Promise<Map<string, boolean> | null> {
@@ -239,9 +269,11 @@ export class Presence {
     const parts: string[] = [];
     let ok = true;
     const r = this.last.router;
-    if (this.opts.opnsense) {
+    const w = this.sources.warden?.();
+    if (this.opts.opnsense || (w?.url && w.token)) {
+      const name = w?.url && w.token ? 'Warden' : 'OPNsense';
       if (!r) parts.push('Router: checking…');
-      else if ('error' in r) { ok = false; parts.push(`Router: can't read OPNsense (${r.error})`); }
+      else if ('error' in r) { ok = false; parts.push(`Router: can't read ${name} (${r.error})`); }
       else parts.push(`Router: ${r.seen} phone${r.seen === 1 ? '' : 's'} seen`);
     }
     const p = this.last.ping;

@@ -9,6 +9,8 @@ import { TuyaConnection } from './adapters/tuya/connection.ts';
 import { VeSyncClient, VeSyncError, VESYNC_HOSTS } from './adapters/vesync.ts';
 import { readRegisters } from './adapters/goodwe.ts';
 import { DEFAULT_PORTS, parseInfo } from './adapters/samsung-tv.ts';
+import { Warden } from './adapters/warden.ts';
+import { HelixApi } from './adapters/helix.ts';
 
 /**
  * In-app setup for integrations.json: read it with secrets hidden, change one
@@ -124,7 +126,13 @@ export class IntegrationsManager {
   /** Settings from the app, with "••••" filled back in from what's stored, checked against the catalog. */
   private prepare(section: string, value: unknown): Obj {
     const item = this.item(section);
-    const merged = keepSecrets(value, this.data[section]);
+    const merged = keepSecrets(value, this.data[section]) as Obj;
+    // Settings the form doesn't show (a pinned certificate, a poll interval) stay as they were.
+    const stored = this.data[section];
+    if (isObj(stored) && isObj(merged)) {
+      const shown = new Set(item.fields.map(f => f.key.split('.')[0]));
+      for (const [k, v] of Object.entries(stored)) if (!shown.has(k) && !(k in merged)) merged[k] = v;
+    }
     const errs = validateSection(item, merged, this.home());
     if (errs.length) throw new SetupError(errs.join('. '));
     return merged as Obj;
@@ -236,6 +244,22 @@ const first = <T>(xs: T[] | undefined, what: string): T => {
 };
 
 const PROBES: Record<string, (cfg: Obj) => Promise<string>> = {
+  async warden(cfg) {
+    const c = cfg as Integrations['warden'] & object;
+    if (!c.url) throw new Error('Enter Warden’s address first');
+    if (!c.token) throw new Error('Link with Warden first (below)');
+    const w = new Warden(c);
+    const d = await w.dashboard().catch(e => { throw new Error(`Couldn’t read Warden at ${w.url}: ${friendly(e)}`); });
+    return `Connected to Warden. Internet ${d.wanUp === false ? 'is down' : 'is up'}, ${d.clientCount ?? 0} devices online.`;
+  },
+  async helix(cfg) {
+    const c = cfg as Integrations['helix'] & object;
+    if (!c.url) throw new Error('Enter Helix Server’s address first');
+    if (!c.token) throw new Error('Pair with Helix first (below)');
+    const h = new HelixApi(c);
+    const boxes = await h.boxes().catch(e => { throw new Error(`Couldn’t read Helix Server at ${h.url}: ${friendly(e)}`); });
+    return boxes.length ? `Connected. Boxes: ${boxes.map(b => `${b.name}${b.online ? '' : ' (offline)'}`).join(', ')}.` : 'Connected. No Helix box has used this server yet.';
+  },
   async tapo(cfg) {
     const c = cfg as Integrations['tapo'] & object;
     const d = first(c.devices, 'device');

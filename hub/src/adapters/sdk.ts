@@ -41,8 +41,11 @@ export interface Adapter {
   kind: 'Local' | 'Cloud';
   start(ctx: AdapterContext): Promise<void>;
   stop(): Promise<void>;
-  /** Apply a partial state. Resolve once the device accepted it. `cause` is why (adapters that act through other devices pass it on). */
-  command(device: Device, cmd: Command, cause?: Cause): Promise<void>;
+  /**
+   * Apply a partial state. Resolve once the device accepted it. `cause` is why (adapters that act through other devices pass it on).
+   * Resolve with state when the device did something more exact than asked (a title it found: "the office" → "Diversity Day").
+   */
+  command(device: Device, cmd: Command, cause?: Cause): Promise<void | DeviceState>;
   status(): AdapterStatus;
   /** Optional: live camera video over WebRTC, negotiated with the browser through the hub. */
   liveView?: LiveView;

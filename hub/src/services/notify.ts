@@ -16,7 +16,7 @@ export interface NotifyOptions {
   /** Kova's address as your phone reaches it (e.g. https://kova.example.com), for links in ntfy notifications. */
   publicUrl?: string;
   /** Built-in rules, all on by default. */
-  rules?: { doorbell?: boolean; everyoneOut?: boolean; offline?: boolean };
+  rules?: { doorbell?: boolean; everyoneOut?: boolean; offline?: boolean; network?: boolean };
   /** A device must be offline this long before "X isn't responding". Default 10. */
   offlineAfterMin?: number;
   /** Wait this long after the last person leaves before "Everyone's out" (lets an Away overlay turn lights off first). Default 60 s. */
@@ -74,7 +74,10 @@ export class Notifier {
   private rule(name: keyof NonNullable<NotifyOptions['rules']>): boolean { return this.opts.rules?.[name] !== false; }
 
   start(): void {
-    const onEvent = (e: DeviceEvent) => { if (e.type === 'ring' && this.rule('doorbell')) this.track(this.onRing(e)); };
+    const onEvent = (e: DeviceEvent) => {
+      if (e.type === 'ring' && this.rule('doorbell')) this.track(this.onRing(e));
+      if (e.device.adapter === 'warden' && this.rule('network')) this.track(this.onNetwork(e));
+    };
     this.hub.reg.on('event', onEvent);
     const onChanged = () => this.onPresence();
     this.hub.engine.on('changed', onChanged);
@@ -116,9 +119,10 @@ export class Notifier {
 
   private async onRing(e: DeviceEvent): Promise<void> {
     // Light the way reacts to the same ring; note what it switches on.
-    const lit = new Set<string>();
-    const onChange = (c: { device: { id: string }; patch: { on?: boolean }; cause: { id?: string } }) => {
+    const lit = new Set<string>(), paused = new Set<string>();
+    const onChange = (c: { device: { id: string }; patch: { on?: boolean; paused?: boolean }; cause: { id?: string } }) => {
       if (c.cause.id === 'light_the_way' && c.patch.on === true) lit.add(c.device.id);
+      if (c.cause.id === 'doorbell-pause' && c.patch.paused === true) paused.add(c.device.id);
     };
     this.hub.reg.on('change', onChange);
     await new Promise<void>(resolve => { const t = setTimeout(resolve, this.opts.ringSettleMs ?? 500); t.unref?.(); });
@@ -126,12 +130,22 @@ export class Notifier {
     const room = this.hub.config.get().rooms.find(r => r.id === e.device.room)?.name;
     const where = room && /door/i.test(room) ? room.toLowerCase() : room ? `${room.toLowerCase()} door` : 'door';
     const names = [...lit].map(id => this.hub.reg.get(id)?.name).filter((n): n is string => !!n);
-    const body = names.length
-      ? `${e.device.name} rang. Light the way turned on ${list(names)}.`
-      : `${e.device.name} rang.`;
+    const held = [...paused].map(id => this.hub.reg.get(id)?.name).filter((n): n is string => !!n);
+    const body = [`${e.device.name} rang.`, names.length ? `Light the way turned on ${list(names)}.` : '', held.length ? `Paused ${list(held)}.` : ''].filter(Boolean).join(' ');
     // Tapping it (or "View camera") opens the phone app on the doorbell's live view.
     const cam = `/phone.html?cam=${encodeURIComponent(e.device.id)}`;
     await this.notify({ title: `Someone’s at the ${where}`, body, tag: `ring-${e.device.id}`, url: cam, actions: [{ action: 'view-camera', title: 'View camera', url: cam }] });
+  }
+
+  /** Warden: the internet went down or came back, a new device joined, or an attack was blocked. */
+  private async onNetwork(e: DeviceEvent): Promise<void> {
+    const d = e.data ?? {};
+    const text = (k: string) => typeof d[k] === 'string' ? d[k] as string : '';
+    const url = '/phone.html?page=integrations';
+    if (e.type === 'internet-down') await this.notify({ title: 'The internet is down', body: 'Warden lost the connection. Kova and your devices at home keep working.', tag: 'internet', url });
+    else if (e.type === 'internet-up') await this.notify({ title: 'The internet is back', body: 'Warden is connected again.', tag: 'internet', url });
+    else if (e.type === 'new-device') await this.notify({ title: text('title') || 'A new device joined your network', body: text('body') || 'Open Warden to name it or block it.', tag: 'warden-new-device', url });
+    else if (e.type === 'threat') await this.notify({ title: text('title') || 'Warden blocked an attack', body: text('body'), tag: 'warden-threat', url });
   }
 
   private onPresence(): void {

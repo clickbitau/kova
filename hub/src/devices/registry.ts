@@ -153,13 +153,14 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
     if (!Object.keys(patch).length) return {};
     const adapter = this.adapters.get(d.adapter);
     if (!adapter) throw new Error(`No adapter ${d.adapter} for ${id}`);
+    let did: void | DeviceState;
     try {
-      await adapter.command(d, patch, cause);
+      did = await adapter.command(d, patch, cause);
     } catch (err) {
       this.store.append({ kind: 'system', device: id, feed: 'system', what: `${d.name} didn't respond`, data: { error: String(err), patch }, cause });
       throw err;
     }
-    return this.apply(d, patch, cause, opts.quiet);
+    return this.apply(d, did ? { ...patch, ...did } : patch, cause, opts.quiet);
   }
 
   /** Apply many targets at once. Failures on one device don't stop the rest. The caller logs one summary entry. */

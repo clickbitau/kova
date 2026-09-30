@@ -150,7 +150,8 @@ export class Engine extends EventEmitter<{ changed: [] }> {
 
   private overlayTargets(o: Overlay): Targets {
     const t: Targets = { ...o.targets };
-    if (o.allOff) for (const d of this.reg.list()) if (!(d.id in t) && (isLight(d) || isPlayer(d))) t[d.id] = isPlayer(d) ? { on: false, media: null } : { on: false };
+    // The device that starts an overlay by itself keeps playing (Movie mustn't stop the film that started it).
+    if (o.allOff) for (const d of this.reg.list()) if (!(d.id in t) && d.id !== o.startsOn?.device && (isLight(d) || isPlayer(d))) t[d.id] = isPlayer(d) ? { on: false, media: null } : { on: false };
     return t;
   }
 
@@ -227,15 +228,35 @@ export class Engine extends EventEmitter<{ changed: [] }> {
   // --------------------------------------------------------- behaviours --
 
   private async onDeviceEvent(e: DeviceEvent): Promise<void> {
-    const labels: Record<string, string> = { person: 'saw a person', ring: 'rang', motion: 'detected motion' };
+    const labels: Record<string, string> = {
+      person: 'saw a person', ring: 'rang', motion: 'detected motion',
+      'internet-down': 'is down', 'internet-up': 'is back', 'new-device': 'saw a new device join', threat: 'blocked an attack',
+      'video-started': 'started playing', 'music-started': 'started playing', paused: 'paused', resumed: 'carried on playing', stopped: 'stopped',
+    };
+    const title = typeof e.data?.title === 'string' && e.data.title && /started$/.test(e.type) ? ` ${e.data.title}` : '';
     this.store.append({
       kind: 'device_event', device: e.device.id, feed: 'people',
-      what: e.type === 'ring' ? `${e.device.name} rang` : `${e.device.name} ${labels[e.type] ?? e.type}`,
+      what: `${e.device.name} ${labels[e.type] ?? e.type}${title}`,
       data: { type: e.type, ...e.data }, cause: { kind: 'device', label: e.device.integration },
     });
     const hits = this.cfg.lightTheWay.triggers.filter(t => 'device' in t.on && t.on.device === e.device.id && t.on.event === e.type);
     for (const t of hits) await this.lightTheWay(t);
+    // "Movie starts when the lounge Helix plays a film."
+    const starts = this.cfg.overlays.find(o => o.startsOn?.device === e.device.id && o.startsOn.event === e.type);
+    if (starts && this.overlay?.id !== starts.id) {
+      await this.startOverlay(starts.id, { kind: 'device', label: `${e.device.name} started playing` }).catch(err => console.warn(`[engine] ${starts.id}: ${String(err)}`));
+    }
+    if (e.type === 'ring' && this.cfg.pauseForDoorbell !== false) await this.pauseForDoor(e.device.name);
     this.emit('changed');
+  }
+
+  /** The doorbell rang: pause what's playing on players that can pause. */
+  private async pauseForDoor(bell: string): Promise<void> {
+    const playing = this.reg.list().filter(d => d.capabilities.includes('pause') && d.state.on && !d.state.paused);
+    if (!playing.length) return;
+    const cause: Cause = { kind: 'behaviour', id: 'doorbell-pause', label: 'Paused for the door', detail: `${bell} rang` };
+    const { changed } = await this.reg.applyTargets(Object.fromEntries(playing.map(d => [d.id, { paused: true }])), cause);
+    if (changed.length) this.store.append({ kind: 'run', device: null, feed: 'auto', what: `Paused ${playing.filter(d => changed.includes(d.id)).map(d => d.name).join(', ')}: ${bell} rang`, data: { changed }, cause });
   }
 
   private async lightTheWay(t: LightTheWayTrigger): Promise<void> {
