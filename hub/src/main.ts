@@ -5,6 +5,7 @@ import { buildServer } from './api/server.ts';
 import { VirtualAdapter } from './adapters/virtual.ts';
 import { SonosAdapter } from './adapters/sonos.ts';
 import { adaptersFor, loadIntegrations } from './integrations.ts';
+import { IntegrationsManager } from './integrations-store.ts';
 import { existsSync, readFileSync } from 'node:fs';
 import type { HomeConfig } from './model/types.ts';
 import { MatterAdapter } from './adapters/matter.ts';
@@ -18,7 +19,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 const env = process.env;
 const dataDir = resolve(env.KOVA_DATA ?? resolve(here, '../../data'));
 // Real devices come from integrations.json (see src/tools/import-ha.ts). Without one, run the demo home.
-const integrations = loadIntegrations(resolve(dataDir, 'integrations.json'));
+const integrationsFile = resolve(dataDir, 'integrations.json');
+const integrations = loadIntegrations(integrationsFile);
 const demo = env.KOVA_DEMO ? env.KOVA_DEMO !== '0' : !integrations;
 const homeFile = resolve(dataDir, 'home.json');
 const initialConfig = (): HomeConfig => !demo && existsSync(homeFile) ? JSON.parse(readFileSync(homeFile, 'utf8')) as HomeConfig : demoConfig();
@@ -26,7 +28,7 @@ const initialConfig = (): HomeConfig => !demo && existsSync(homeFile) ? JSON.par
 const adapters: Adapter[] = integrations ? adaptersFor(integrations, dataDir) : [];
 if (demo) adapters.push(new VirtualAdapter(demoDevices(), DEMO_SOLAR));
 if (env.KOVA_SONOS === '1') adapters.push(new SonosAdapter());
-if (env.KOVA_MATTER === '1' || integrations?.matter) adapters.push(new MatterAdapter({ storageDir: resolve(dataDir, 'matter') }));
+if (env.KOVA_MATTER === '1' && !integrations?.matter) adapters.push(new MatterAdapter({ storageDir: resolve(dataDir, 'matter') }));
 
 const hub = new Hub({
   dbPath: resolve(dataDir, 'kova.db'),
@@ -60,13 +62,15 @@ if (integrations?.aircast?.binary) {
 }
 
 let homekit: HomeKitBridge | undefined;
-if (env.KOVA_HOMEKIT === '1') {
-  homekit = new HomeKitBridge(hub, { storageDir: resolve(dataDir, 'homekit'), port: Number(env.KOVA_HOMEKIT_PORT ?? 51826) });
+if (env.KOVA_HOMEKIT === '1' || integrations?.homekitBridge) {
+  homekit = new HomeKitBridge(hub, { storageDir: resolve(dataDir, 'homekit'), port: Number(env.KOVA_HOMEKIT_PORT ?? integrations?.homekitBridge?.port ?? 51826) });
   await homekit.start();
   console.log(`Apple Home bridge published · setup code ${homekit.setupInfo().pincode}`);
 }
 
-const app = await buildServer(hub, { webRoot: resolve(here, '../../web'), token: env.KOVA_TOKEN || undefined, homekit });
+// In-app setup edits integrations.json and restarts one integration at a time.
+const setup = new IntegrationsManager(hub, { path: integrationsFile, dataDir });
+const app = await buildServer(hub, { webRoot: resolve(here, '../../web'), token: env.KOVA_TOKEN || undefined, homekit, integrations: setup });
 const port = Number(env.KOVA_PORT ?? 8140);
 await app.listen({ port, host: env.KOVA_HOST ?? '0.0.0.0' });
 console.log(`Kova hub listening on http://localhost:${port}${demo ? ' (demo home)' : ''}`);

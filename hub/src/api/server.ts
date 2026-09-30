@@ -11,6 +11,8 @@ import { snapshot } from './snapshot.ts';
 import { AiAssistant, loadSettings, publicSettings, saveSettings, type AiOptions, type SettingsPatch } from '../assistant/ai.ts';
 import { isLight, isPlayer } from '../util/describe.ts';
 import type { HomeKitBridge } from '../bridges/homekit.ts';
+import { CATALOG } from '../integrations-catalog.ts';
+import { SetupError, type IntegrationsManager } from '../integrations-store.ts';
 
 export interface ServerOptions {
   webRoot: string;
@@ -20,6 +22,8 @@ export interface ServerOptions {
   homekit?: HomeKitBridge;
   /** Optional AI engine options, e.g. the Anthropic base URL (tests point it at a fake server). */
   ai?: AiOptions;
+  /** In-app setup of integrations.json. Without it the setup routes answer 503. */
+  integrations?: IntegrationsManager;
 }
 
 const USER = { kind: 'user' as const, label: 'You' };
@@ -93,7 +97,7 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
   // Add a Matter device with its pairing code (for one already in Google Home / Apple Home, open a pairing window there first).
   app.post<{ Body: { code?: string; room?: string; name?: string } }>('/api/integrations/matter/commission', async (req, reply) => {
     const m = hub.reg.adapters.get('matter');
-    if (!(m instanceof MatterAdapter)) return reply.code(400).send({ error: 'Matter is not enabled (set KOVA_MATTER=1)' });
+    if (!(m instanceof MatterAdapter)) return reply.code(400).send({ error: 'Matter is off: add Matter devices in Integrations (or set KOVA_MATTER=1)' });
     const code = String(req.body?.code ?? '').trim();
     if (!code) return reply.code(400).send({ error: 'code is required' });
     try {
@@ -101,6 +105,18 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
       return { ok: true, devices: devices.map(d => hub.reg.get(d.id) ?? d) };
     } catch (e) { return fail(reply, e); }
   });
+
+  // In-app setup. Secrets never leave the hub: GET shows "••••", and sending "••••" back keeps the stored value.
+  app.get('/api/integrations/catalog', async () => CATALOG);
+  const setup = async <T>(reply: { code: (n: number) => { send: (b: unknown) => unknown } }, fn: (m: IntegrationsManager) => Promise<T>) => {
+    if (!opts.integrations) return reply.code(503).send({ error: 'In-app setup isn’t available on this hub' });
+    try { return await fn(opts.integrations); } catch (e) { return reply.code(e instanceof SetupError ? e.statusCode : 400).send({ error: e instanceof Error ? e.message : String(e) }); }
+  };
+  app.get('/api/integrations/config', async (_req, reply) => setup(reply, async m => m.publicConfig()));
+  app.put<{ Params: { section: string }; Body: unknown }>('/api/integrations/config/:section', async (req, reply) => setup(reply, m => m.update(req.params.section, req.body ?? {})));
+  app.delete<{ Params: { section: string } }>('/api/integrations/config/:section', async (req, reply) => setup(reply, m => m.update(req.params.section, null)));
+  // Try settings before saving them: `config` is the unsaved section (with "••••" for unchanged secrets), or omit it to test what's stored.
+  app.post<{ Params: { id: string }; Body: { config?: unknown } }>('/api/integrations/:id/test', async (req, reply) => setup(reply, m => m.test(req.params.id, req.body?.config)));
 
   app.post<{ Params: { id: string }; Body: { what?: 'lights' | 'all' } }>('/api/rooms/:id/off', async req => {
     const room = hub.config.get().rooms.find(r => r.id === req.params.id);
