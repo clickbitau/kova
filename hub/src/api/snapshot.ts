@@ -108,6 +108,13 @@ export function snapshot(hub: Hub) {
     rooms: cfg.rooms,
     // The owner's favourites (null until they pick some: the apps then suggest a few).
     favourites: cfg.favourites ?? null,
+    // Speaker groups, and whether they play in perfect sync (their speakers are exactly a Cast group made in Google Home).
+    speakerGroups: (cfg.speakerGroups ?? []).map(g => {
+      const ms = g.members.map(id => reg.get(id)).filter((d): d is Device => !!d);
+      const cast = reg.adapters.get('cast') as { castGroupFor?: (d: Device[]) => string | undefined } | undefined;
+      const castGroup = ms.length === g.members.length && ms.every(d => d.adapter === 'cast') ? cast?.castGroupFor?.(ms) : undefined;
+      return { ...g, deviceId: `group_${g.id}`, missing: g.members.filter(id => !reg.get(id)), sync: castGroup ? 'perfect' : 'together', castGroup: castGroup ?? null };
+    }),
     groups: cfg.groups,
     people: cfg.people.map(p => ({ ...p, home: engine.people[p.id]?.home ?? true, since: engine.people[p.id]?.since ?? null, sinceLabel: engine.people[p.id] ? clock(engine.people[p.id].since, tz) : '' })),
     devices: reg.list().map(d => ({ ...d, why: engine.why(d.id), usedIn: engine.usedIn(d.id) })),

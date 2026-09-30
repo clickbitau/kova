@@ -1,8 +1,8 @@
 // Kova's domain model. Everything in the hub speaks these types; adapters
 // translate brand-specific protocols into and out of them.
 
-/** What kind of thing a device is. Drives which capabilities it has. */
-export type DeviceType = 'light' | 'dimmer' | 'fan' | 'media' | 'tv' | 'plug' | 'camera' | 'sensor' | 'vacuum';
+/** What kind of thing a device is. Drives which capabilities it has. `internet` is a device's internet access (on = allowed), from the router. */
+export type DeviceType = 'light' | 'dimmer' | 'fan' | 'media' | 'tv' | 'plug' | 'camera' | 'sensor' | 'vacuum' | 'internet';
 
 /**
  * Normalised device state. Every field is optional because devices only carry
@@ -16,8 +16,10 @@ export interface DeviceState {
   color?: string | null;
   /** Fan / purifier mode, e.g. "Auto", "Sleep". */
   mode?: string | null;
-  /** Name of the media source playing, or null when idle. */
+  /** Name of the media source playing, or null when idle. Players with the `library` capability also take a title to find and play. */
   media?: string | null;
+  /** Playback is paused (players with the `pause` capability). `on` stays true while paused. */
+  paused?: boolean;
   vol?: number | null;
   power?: number | null;
   /** Energy produced (inverters) or used today, in kWh. */
@@ -35,7 +37,7 @@ export interface DeviceState {
 
 export type VacuumActivity = 'cleaning' | 'returning' | 'docked' | 'paused' | 'idle' | 'error';
 
-export type Capability = 'onoff' | 'brightness' | 'colorTemp' | 'color' | 'fanMode' | 'media' | 'volume' | 'power' | 'energy' | 'events' | 'vacuum' | 'battery';
+export type Capability = 'onoff' | 'brightness' | 'colorTemp' | 'color' | 'fanMode' | 'media' | 'volume' | 'power' | 'energy' | 'events' | 'vacuum' | 'battery' | 'pause' | 'library';
 
 export interface Device {
   id: string;
@@ -146,6 +148,8 @@ export interface Overlay {
   /** When true, every light and media player not in targets is switched off. */
   allOff?: boolean;
   ends: OverlayEnd;
+  /** Start by itself on a device event ("Movie starts when the lounge Helix plays a film"). */
+  startsOn?: { device: string; event: string };
 }
 
 export interface LightTheWayTrigger {
@@ -179,7 +183,13 @@ export interface HomeConfig {
   devices?: Record<string, DeviceSettings>;
   /** Devices on the owner's Now screen, in order. */
   favourites?: string[];
+  /** Speakers the owner grouped to play together (any brands). Each group is a device of its own. */
+  speakerGroups?: SpeakerGroup[];
+  /** Pause what's playing on players that can pause (a Helix box) when the doorbell rings. Default on. */
+  pauseForDoorbell?: boolean;
 }
+
+export interface SpeakerGroup { id: string; name: string; room?: string; members: string[] }
 
 // ------------------------------------------------------------------ plans --
 

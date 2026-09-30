@@ -120,9 +120,12 @@ if (env.KOVA_MATTER_BRIDGE === '1' || integrations?.matterBridge) {
 }
 
 
+// In-app setup edits integrations.json and restarts one integration at a time.
+const setup = new IntegrationsManager(hub, { path: integrationsFile, dataDir });
+
 // Who's home (router, ping, phone automations). Always on so phone automations get per-person keys;
 // the router and ping sources only run when configured.
-const presence = new Presence(hub, integrations?.presence ?? {});
+const presence = new Presence(hub, integrations?.presence ?? {}, { warden: () => setup.raw('warden') });
 presence.start();
 hub.services.push({ id: 'presence', name: 'Presence', icon: 'person_pin_circle', kind: 'Local', status: () => presence.status() });
 
@@ -132,8 +135,6 @@ notifier.start();
 // Cloud: Web Push is delivered by Apple's / Google's push service (and ntfy.sh unless self-hosted).
 hub.services.push({ id: 'notify', name: 'Notifications', icon: 'notifications', kind: 'Cloud', status: () => notifier.status() });
 
-// In-app setup edits integrations.json and restarts one integration at a time.
-const setup = new IntegrationsManager(hub, { path: integrationsFile, dataDir });
 // Import from Home Assistant, in the app (Import screen).
 const haImport = new HaImport(hub, { dataDir, manager: setup });
 

@@ -16,6 +16,8 @@ export interface Finding {
   body: string;
   fix: string;
   alt: string;
+  /** What the toast says once fixed, when it isn't "<mode> updated". */
+  done?: string;
 }
 
 export type DayResult = 'ok' | 'problem' | 'skipped' | 'none';
@@ -40,7 +42,7 @@ export class Checker {
   findings(): Finding[] {
     const dismissed = new Set(this.config.get().dismissedFindings);
     const learned = this.learner.suggestions().map(s => s.finding);
-    return [...this.missing(), ...this.emptyHouse(), ...this.staysOn(), ...learned].filter(f => !dismissed.has(f.id));
+    return [...this.missing(), ...this.emptyHouse(), ...this.staysOn(), ...this.movieStarts(), ...learned].filter(f => !dismissed.has(f.id));
   }
 
   /** Modes pointing at devices Kova doesn't have (e.g. after swapping the demo for a real home). */
@@ -57,6 +59,29 @@ export class Checker {
         fix: 'Remove them', alt: 'Keep for now',
       }];
     });
+  }
+
+  /**
+   * A TV that tells Kova when a film starts (a Helix box) and a Movie overlay that has to be started by hand:
+   * offer to start it by itself, and end it when the film stops.
+   */
+  private movieStarts(): Finding[] {
+    const c = this.config.get();
+    const movie = c.overlays.find(o => o.id === 'movie') ?? c.overlays.find(o => /movie|film|cinema/i.test(o.name));
+    if (!movie || movie.startsOn || !c.modes.length) return [];
+    const tvs = [...this.devices().values()].filter(d => d.capabilities.includes('library') && !d.hidden);
+    if (!tvs.length) return [];
+    // The box in the room Movie already sets up, else the first one.
+    const rooms = new Set(Object.keys(movie.targets).map(id => this.devices().get(id)?.room).filter(Boolean));
+    const tv = tvs.find(d => rooms.has(d.room)) ?? tvs[0];
+    const mode = c.modes.find(m => /evening|night/i.test(m.name)) ?? c.modes[0];
+    const where = roomName(c, tv.room);
+    return [{
+      id: `movie-starts:${movie.id}:${tv.id}`, modeId: mode.id, kind: 'Suggestion', icon: 'movie', tone: 'check',
+      title: `Start ${movie.name} when ${where && !tv.name.toLowerCase().includes(where.toLowerCase()) ? `the ${where.toLowerCase()} ` : ''}${tv.name} plays a film`,
+      body: `${tv.name} tells Kova when something starts. ${movie.name} could start by itself then${movie.ends.kind === 'manual' || movie.ends.kind === 'device_off' ? ', and end when it stops' : ''}, instead of you starting it.`,
+      fix: `Start ${movie.name} by itself`, alt: 'I’ll start it myself', done: `${movie.name} starts with ${tv.name} now`,
+    }];
   }
 
   /** Lights left on across a mode that never mentions them, into a later mode. */
@@ -152,6 +177,15 @@ export class Checker {
     const [kind, a, b] = id.split(':');
     if (kind === 'empty-house') return this.config.update(c => { const m = c.modes.find(x => x.id === a); if (m) m.onlyWhenSomeoneHome = true; });
     if (kind === 'missing') return this.config.update(c => { const m = c.modes.find(x => x.id === a); const devices = this.devices(); if (m) for (const id of Object.keys(m.targets)) if (!devices.has(id)) delete m.targets[id]; });
+    if (kind === 'movie-starts') {
+      const tv = this.devices().get(b);
+      return this.config.update(c => {
+        const o = c.overlays.find(x => x.id === a);
+        if (!o || !tv) return;
+        o.startsOn = { device: tv.id, event: 'video-started' };
+        if (o.ends.kind === 'manual' || o.ends.kind === 'device_off') { o.ends = { kind: 'device_off', device: tv.id }; o.endsLabel = `Ends when ${tv.name} stops`; }
+      });
+    }
     if (kind === 'stays-on') return this.config.update(c => { const m = c.modes.find(x => x.id === b); if (m) m.targets[a] = { on: false }; });
     throw new Error(`Unknown finding ${id}`);
   }

@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import type { Hub } from '../hub.ts';
 import type { HomeConfig } from '../model/types.ts';
+import { groupDeviceId } from '../adapters/groups.ts';
+import { isPlayer } from '../util/describe.ts';
 import { slug } from '../tools/import-ha.ts';
 
 // Customising the home: its name, rooms, people, favourites, and each device's name, room and
@@ -100,6 +102,48 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
       }
       for (const [g, rooms] of Object.entries(c.groups)) c.groups[g] = rooms.filter(r => r !== id);
     });
+  });
+
+  // --------------------------------------------------------- speaker groups --
+  // Any speakers, any brands, played as one. Members must be speakers or TVs (not other groups).
+  const checkMembers = (members: unknown): string | null => {
+    if (!Array.isArray(members)) return 'Pick the speakers';
+    const ids = [...new Set(members.map(String))];
+    if (ids.length < 2) return 'Pick at least two speakers';
+    for (const id of ids) {
+      const d = hub.reg.get(id);
+      if (!d || !isPlayer(d) || d.adapter === 'groups') return `${d?.name ?? id} can’t be in a speaker group`;
+    }
+    return null;
+  };
+  app.post<{ Body: { name?: string; members?: string[]; room?: string } }>('/api/speaker-groups', async (req, reply) => {
+    const name = text(req.body?.name, 40);
+    if (!name) return bad(reply, 'Give the group a name');
+    const err = checkMembers(req.body?.members);
+    if (err) return bad(reply, err);
+    const room = req.body?.room && hub.config.get().rooms.some(r => r.id === req.body!.room) ? req.body.room : undefined;
+    const groups = hub.config.get().speakerGroups ?? [];
+    let id = slug(name) || 'group', n = 2;
+    while (groups.some(g => g.id === id)) id = `${slug(name) || 'group'}_${n++}`;
+    const r = edit(c => { c.speakerGroups = [...(c.speakerGroups ?? []), { id, name, members: [...new Set(req.body!.members!.map(String))], ...(room ? { room } : {}) }]; });
+    return { id, deviceId: groupDeviceId({ id, name, members: [] }), ...r };
+  });
+  app.put<{ Params: { id: string }; Body: { name?: string; members?: string[]; room?: string | null } }>('/api/speaker-groups/:id', async (req, reply) => {
+    if (!(hub.config.get().speakerGroups ?? []).some(g => g.id === req.params.id)) return bad(reply, 'Unknown group', 404);
+    const name = req.body?.name === undefined ? undefined : text(req.body.name, 40);
+    if (name === '') return bad(reply, 'Give the group a name');
+    if (req.body?.members !== undefined) { const err = checkMembers(req.body.members); if (err) return bad(reply, err); }
+    if (req.body?.room && !hub.config.get().rooms.some(r => r.id === req.body!.room)) return bad(reply, 'Unknown room');
+    return edit(c => {
+      const g = (c.speakerGroups ?? []).find(x => x.id === req.params.id)!;
+      if (name) g.name = name;
+      if (req.body?.members) g.members = [...new Set(req.body.members.map(String))];
+      if (req.body?.room !== undefined) { if (req.body.room) g.room = req.body.room; else delete g.room; }
+    });
+  });
+  app.delete<{ Params: { id: string } }>('/api/speaker-groups/:id', async (req, reply) => {
+    if (!(hub.config.get().speakerGroups ?? []).some(g => g.id === req.params.id)) return bad(reply, 'Unknown group', 404);
+    return edit(c => { c.speakerGroups = (c.speakerGroups ?? []).filter(g => g.id !== req.params.id); });
   });
 
   // ----------------------------------------------------------------- people --

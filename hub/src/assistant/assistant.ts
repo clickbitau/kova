@@ -24,7 +24,10 @@ export type Intent =
   | { kind: 'whatsOn' }
   | { kind: 'status' }
   | { kind: 'learn'; name: string; rooms: string[]; roomNames: string[] }
-  | { kind: 'unknownLabel'; word: string };
+  | { kind: 'unknownLabel'; word: string }
+  /** "play The Office in the lounge": a TV that can find titles itself (a Helix box). */
+  | { kind: 'play'; title: string; device: string; label: string }
+  | { kind: 'pause'; resume: boolean; label: string; devices: string[] };
 
 /** A follow-up the user can tap, executed by POST /api/ask/act. */
 export type AskAction =
@@ -87,6 +90,18 @@ export class Assistant {
     return null;
   }
 
+  /** A room, a learned group of rooms, or a device by name: "lounge", "downstairs", "bedroom tv". */
+  private place(phrase: string): { label: string; has: (d: Device) => boolean } | null {
+    const p = norm(phrase).replace(/^(the|my)\s+/, '').replace(/\s+(tv|telly|box)$/, '').trim();
+    if (!p) return null;
+    const room = [...this.rooms()].sort((a, b) => b.name.length - a.name.length).find(r => norm(r.name) === p || norm(r.id) === p);
+    if (room) return { label: room.name, has: d => d.room === room.id };
+    const group = Object.entries(this.config.get().groups).find(([g]) => norm(g) === p);
+    if (group) return { label: cap(group[0]), has: d => group[1].includes(d.room) };
+    const ids = new Set(this.reg.list().filter(d => norm(d.name) === p || norm(`${this.roomName(d.room)} ${d.name}`).includes(p)).map(d => d.id));
+    return ids.size ? { label: cap(phrase.trim()), has: d => ids.has(d.id) } : null;
+  }
+
   /** Understand a request without doing anything. */
   parse(q: string): Intent | null {
     const t = norm(q);
@@ -126,6 +141,27 @@ export class Assistant {
       if (r && 'unknown' in r) return { kind: 'unknownLabel', word: r.unknown };
       if (r && 'devices' in r) return { kind: 'power', on: dir === 'on', label: r.label, devices: r.devices.filter(d => isLight(d) || isPlayer(d) || d.type === 'plug').map(d => d.id) };
     }
+    // "pause", "pause the lounge tv", "carry on", "resume"
+    const pz = t.match(/^(pause|resume|unpause|carry on|continue|keep playing)(?: (?:the )?(.+))?$/);
+    if (pz) {
+      const resume = pz[1] !== 'pause';
+      const at = pz[2] ? this.place(pz[2]) : null;
+      const players = this.reg.list().filter(d => d.capabilities.includes('pause') && (!at || at.has(d)));
+      if (players.length && (!pz[2] || at)) return { kind: 'pause', resume, label: at?.label ?? 'What’s playing', devices: players.filter(d => d.state.on && !!d.state.paused === resume).map(d => d.id) };
+    }
+    // "play the office in the lounge", "watch dune on the bedroom tv", "put on bluey"
+    const pl = raw.match(/^(?:play|watch|put on) (.+)$/);
+    if (pl) {
+      const tvs = this.reg.list().filter(d => d.capabilities.includes('library'));
+      const split = pl[1].match(/^(.+) (?:on|in) (?:the )?(.+)$/);
+      const at = split ? this.place(split[2]) : null;
+      const title = (at ? split![1] : pl[1]).trim();
+      const picked = at ? tvs.filter(d => at.has(d)) : tvs.length === 1 ? tvs : tvs.filter(d => d.state.on);
+      if (picked.length === 1 && title && !/^(a |the )?(movie|film|something|music)$/.test(norm(title))) {
+        const rn = this.roomName(picked[0].room), dn = picked[0].name;
+        return { kind: 'play', title, device: picked[0].id, label: norm(dn).includes(norm(rn)) ? dn : `${rn} ${dn}`.trim() };
+      }
+    }
     if (ARRIVED.test(t) && this.engine.overlay?.id === 'away') return { kind: 'overlay', id: 'away', name: 'Away', end: true };
     const ov = c.overlays.find(o => new RegExp(`\\b${norm(o.name)}\\b`).test(t)) ?? c.overlays.find(o => OVERLAY_PHRASES[o.id]?.test(t));
     if (ov) return { kind: 'overlay', id: ov.id, name: ov.name, end: /\b(end|stop|finish|cancel|over)\b/.test(t) };
@@ -148,6 +184,8 @@ export class Assistant {
       case 'status': return ['Current mode'];
       case 'learn': return ['Remember', `“${i.name}”`, list(i.roomNames)];
       case 'unknownLabel': return ['Turn', `“${i.word}”`, 'New label'];
+      case 'play': return ['Play', `“${i.title}”`, i.label];
+      case 'pause': return [i.resume ? 'Carry on' : 'Pause', i.label];
     }
   }
 
@@ -207,6 +245,20 @@ export class Assistant {
         const names = on.map(d => `${this.roomName(d.room)} ${d.name.toLowerCase()}`);
         return reply(on.length ? `${plural(on.length, 'light')} ${on.length === 1 ? 'is' : 'are'} on: ${list(names)}.` : 'All the lights are off.', 'Built-in · nothing left your home',
           on.length ? { actions: [{ label: 'Turn them all off', action: { type: 'apply', targets: Object.fromEntries(on.map(d => [d.id, { on: false }])), label: 'All lights off', done: 'All lights are off.' } }] } : {});
+      }
+      case 'play': {
+        try {
+          const undo = await this.engine.command(i.device, { on: true, media: i.title }, { ...CAUSE, label: `Play ${i.title}` });
+          const d = this.reg.get(i.device);
+          return reply(`Playing ${d?.state.media ?? i.title} on ${i.label}.`, 'Device control', { undo });
+        } catch (e) {
+          return reply(e instanceof Error ? e.message : String(e), 'Device control');
+        }
+      }
+      case 'pause': {
+        if (!i.devices.length) return reply(i.resume ? 'Nothing is paused.' : 'Nothing is playing that I can pause.', 'Device control');
+        const r = await this.engine.applyMany(Object.fromEntries(i.devices.map(id => [id, { paused: !i.resume }])), { ...CAUSE, label: i.resume ? 'Carry on' : 'Pause' });
+        return reply(i.resume ? `Carrying on: ${i.label}.` : `Paused: ${i.label}.`, 'Device control', { undo: r.changed.length ? r.undo : undefined });
       }
       case 'status': {
         const now = this.engine.planner.modeAt(this.engine.now());

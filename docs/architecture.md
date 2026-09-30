@@ -34,7 +34,10 @@ add-on: nothing in Kova depends on HA. The design reference lives in
   (Modes, Activity, Energy, Media, Customise home, Integrations, Assistant). The device panel has
   every control the device has (brightness, warmth, colour, volume and sources, purifier modes,
   vacuum clean/dock, watch live, power readings), why it's like this and what's next, and its
-  settings: name, room, favourite, hidden. **Customise home** edits the home's name, rooms (name,
+  settings: name, room, favourite, hidden. **Add** (top of Devices, or *Add a device* when there
+  are none) is the one place to add things: a Matter or HomeKit code, a brand's sign-in, speakers
+  and TVs Kova found on the network, or a new speaker group. **Speaker groups** (Media, or Add →
+  Speaker group) pick any speakers of any brand and name them. **Customise home** edits the home's name, rooms (name,
   icon, order, delete with where their devices go), people, favourites and hidden devices. Links:
   `?cam=<id>` opens that camera live (the doorbell notification's *View camera*),
   `?page=security|more|modes|activity|energy|media|integrations|customise`, `?do=lights-off`.
@@ -101,7 +104,12 @@ add-on: nothing in Kova depends on HA. The design reference lives in
 ## Adapters (`hub/src/adapters/`)
 
 An adapter announces devices, reports state changes, and carries out commands.
-It never makes decisions. See `sdk.ts`.
+It never makes decisions. See `sdk.ts`. `derive` sets state that follows from
+other devices (a speaker group's) without logging it as a change of its own,
+`retract` removes devices the adapter no longer has, and `command` receives the
+cause, so an adapter that passes a command on keeps who asked. `command` may
+resolve with the state the device really took when that's more exact than what
+was asked ("the office" → the episode Helix found), and the registry records that.
 
 | Adapter | Status |
 |---|---|
@@ -118,6 +126,8 @@ It never makes decisions. See `sdk.ts`.
 | `homekit` | HomeKit accessories over IP, with Kova as the controller (like Home Assistant's `homekit_controller`; the reverse of the Apple Home bridge below). mDNS (`_hap._tcp`) discovery, pair-setup with the code on the label, pair-verify on every start, live updates through HAP event subscriptions, `online:false` and reconnect with backoff when an accessory drops, and mDNS to follow accessories that change IP. One Kova device per service, id `homekit_<accessory id>_<aid>_<iid>`: Lightbulb → light/dimmer (On, Brightness, ColorTemperature mireds ↔ K, Hue/Saturation ↔ `#rrggbb`), Outlet → plug, Switch → light, Fan/Fanv2/AirPurifier → fan (Active or On; TargetAirPurifierState/TargetFanState AUTO ↔ `Auto`, manual ↔ `Sleep`). Other services are ignored for now. Long-term keys live in `$KOVA_DATA/homekit-controller/pairings.json` (mode 0600). An accessory takes one admin controller, so remove it from the Home app (or reset it) before pairing it with Kova. Built on [`hap-controller`](https://github.com/Apollon77/hap-controller-node) (MPL-2.0, used unmodified as a dependency). Tested against a real `hap-nodejs` accessory; IP only, no BLE. |
 | `ecovacs` | Ecovacs DEEBOT robot vacuums (T-series and other "mqtt/json" bots, e.g. the T50 OMNI) through the **Ecovacs cloud**. DEEBOTs have no local API, so this needs the internet and the Ecovacs account, and breaks if Ecovacs changes its API. Modelled on the behaviour of the open-source `deebot-client` library (no code taken): a three-step login (signed `user/login` on `gl-{country}-api.ecovacs.com` with an MD5 password → `getAuthCode` on `gl-{country}-openapi.ecovacs.com` → `loginByItToken` on the IoT portal `api-app.dc-{continent}.ww.ecouser.net`), `GetGlobalDeviceList`, then JSON commands through `iot/devmanager.do`: `clean_V2` (start/pause/resume/stop), `charge` (go to dock), and `getCleanInfo_V2` / `getChargeState` / `getBattery`. Kova `vacuum` devices: `on: true` starts (or resumes) an auto clean, `on: false` sends it to the dock; state has `activity` (cleaning, returning, docked, paused, idle, error) and `battery`. Polls every 60 s, plus once shortly after a command; a bot the cloud lists as offline, or that times out, is `online: false`. Logs in again once when the portal rejects the token. A wrong email/password shows on the Integrations screen and isn't retried until restart (to avoid locking the account). **Uncertain:** the app keys, host names, continent mapping and error codes are from memory of `deebot-client` and haven't been checked against the live service; each login step is a separate method so it can be fixed on its own, and `urls` in `integrations.json` overrides the hosts. No real-time MQTT, no room/zone cleaning, no legacy XMPP bots. |
 | `nest` | Google Nest doorbells and cameras (and the Nest Hub Max) through Google's **Smart Device Management (SDM) cloud API**: there is no local API for these devices. Access tokens come from a stored refresh token (`oauth2.googleapis.com/token`) and are cached until a minute before they expire; a 401 gets a fresh token and one retry. Devices from `GET /v1/enterprises/{project}/devices` become Kova `camera` devices (`events`), named after the Google Home custom name or room, in the room given by `rooms` or the Google Home room name, with ids from `ids` or `nest_<last 12 of the device id>` (both keyed by SDM device name, device id or display name). **Events** come from the Cloud Pub/Sub subscription (REST `:pull` long-poll + `:acknowledge`, retry with backoff up to 5 min): `CameraPerson.Person` → `person`, `DoorbellChime.Chime` → `ring`, `CameraMotion.Motion` → `motion`, `CameraSound.Sound` → `sound`, each with `eventId`, `eventSessionId` and `timestamp`. Each eventId (and each event type per event session) fires once; events older than 2 minutes are ignored; every message is acked. These events drive Light the way. **Live view** over WebRTC for cameras whose `CameraLiveStream` trait lists `WEB_RTC` (`GenerateWebRtcStream` / `Extend…` / `Stop…`); the video goes straight from Google to the browser. `GET /api/devices/:id/snapshot` returns the latest event's image for cameras with `CameraEventImage` (older models only). Device list refreshed every 10 min (`pollMs`). |
+| `warden` | **Warden OS**, the home's router (ClickBIT's own), over its REST API (`/api/v1`, HTTPS with the box's self-signed certificate pinned by SHA-256 fingerprint when linked; `util/lan-http.ts`). **Linking** signs in once with an admin account (`POST /login`), makes an API token named Kova with role operator (`POST /tokens`) and signs out; the password isn't kept. An **Internet** device (`warden_internet`, a sensor: on while `GET /dashboard` says `wanUp`) raises `internet-down` / `internet-up`, and passes on Warden's incidents from `GET /events?since=`: `device.new` → `new-device`, `attack`/`security` at level act → `threat`. **Internet switches**: devices the owner lists (`devices: [{mac, name, room}]`) become `internet` devices; off is `POST /clients/{mac}/pause`, on is `DELETE` (state read from the site document's `paused-devices`), so modes can pause a child's tablet at bedtime. Polls every 20 s. Presence reads phones from `GET /clients` (seen in the last 3 minutes). |
+| `helix` | **Helix**, the home's media server and TV boxes (ClickBIT's own). Kova **pairs** like any Helix app: `POST /v1/pair/start` gives a code, the owner types it in Helix Server → Devices, and Kova polls `GET /v1/pair/{id}` for its device token (revocable there). Helix Server doesn't announce itself, so *Find* probes the hub's /24 networks on port 8090 (`/v1/hello`), as the Helix apps do. Each box from `GET /v1/boxes` becomes a `tv` with `pause` and `library` (room from `rooms`, by box name). Its state is read every 3 s through the server's relay (`/v1/boxes/{id}/state`): on while a film, show or music is playing or paused, `media` = title, `paused`, `vol`. Events: `video-started`, `music-started`, `paused`, `resumed`, `stopped`. Pause and carry on are the `playpause` key, stop is `back` (music: `mstop`), both through the relay; `media` = a title is found with `/v1/search` (a show resumes from Keep Watching, else its first episode) and played with the box's own `POST /play` on its remote port (8080), as is volume. |
 
 All adapters except `virtual` are tested against fake devices that speak the protocol; none has been tried on real hardware yet.
 
@@ -252,6 +262,24 @@ and an AirPlay speaker playing together are started at the same moment but
 drift apart by up to a second or two; no public protocol lets a third party
 sync them sample-accurately.
 
+**Kova speaker groups** (`hub/src/adapters/groups.ts`): a named set of speakers
+of any brand, kept in `HomeConfig.speakerGroups`, appears as one media device
+(`group_<id>`) that modes, scenes, routines and the assistant can use like any
+speaker. A command to it goes to every member at the same instant (each
+member's activity says *through Bedrooms*); its state is derived from its
+members (on if any is, *Mixed* when they play different things, the average
+volume). When the members are exactly a Cast group from the Google Home app,
+the Cast adapter plays through that group, so they're in perfect sync; the
+snapshot says `sync: 'perfect'` with the `castGroup`, otherwise `'together'`.
+
+
+**Behaviours that come with Helix:** an overlay can start by itself on a device
+event (`Overlay.startsOn: {device, event}`); Kova suggests "Start Movie when the
+lounge Helix plays a film" (a finding) and, accepted, Movie also ends when the box
+stops. When the doorbell rings, players that can pause are paused
+(`HomeConfig.pauseForDoorbell`, on unless set to false) and the doorbell
+notification says so. Ask Kova understands "play The Office in the lounge",
+"pause" and "carry on"; the AI tool can set `paused` and a title as `media`.
 
 ## Presence and notifications (`hub/src/services/`)
 
@@ -270,6 +298,10 @@ Several optional sources per person, combined into one home/away that goes to
   only after the phone has been gone `awayAfterMin` (default 10) minutes, since
   iPhones drop off Wi-Fi while asleep. Expired entries don't count. Source label
   "Router (OPNsense)".
+* **Router (Warden)**: once Warden is linked, it replaces OPNsense (no restart
+  needed): a phone counts as here while Warden saw it in the last 3 minutes
+  (`GET /api/v1/clients`, `lastSeenAt`). *Devices on your network* in Warden's
+  setup lists names and MACs to pick from. Source label "Router (Warden)".
 * **Ping**: for phones with a fixed IP, a TCP connect to port 62078 (iPhone
   lockdownd). Accepted or refused = something is there; timeout = absent. ICMP
   isn't used because containers often can't send it. Same away debounce.
@@ -317,9 +349,10 @@ Built-in rules (each can be turned off in `notify.rules`):
 
 | Rule | When | Notification |
 |---|---|---|
-| `doorbell` | a device event `ring` | "Someone's at the front door", plus which lights Light the way turned on |
+| `doorbell` | a device event `ring` | "Someone's at the front door", plus which lights Light the way turned on and what was paused |
 | `everyoneOut` | the last person leaves and, after `everyoneOutGraceSec` (60), lights are still on | "Everyone's out, N lights are on" with a *Turn them off* action (`/phone.html?do=lights-off` → `POST /api/lights/off`). Lights Light the way is holding don't count; they turn off by themselves. |
 | `offline` | a device reports `online: false` for `offlineAfterMin` (10) | "X isn't responding", once per outage |
+| `network` | Warden: the internet goes down or comes back, a new device joins, an attack is blocked | "The internet is down" / "is back", and Warden's own words for the rest |
 
 The action links open the Kova app, so from outside the home they only work
 if the app is reachable from outside (reverse proxy or VPN).
@@ -384,6 +417,12 @@ a row on the Integrations screen ("Router: 2 phones seen").
 | POST, PUT, DELETE | `/api/rooms`, `/api/rooms/:id` | `{name, icon?}`; delete takes `{moveTo}` when the room still has devices |
 | PUT | `/api/rooms/order` | `{ids}`: every room id, in the new order |
 | POST, PUT, DELETE | `/api/people`, `/api/people/:id` | `{name, detail?}` |
+| POST | `/api/integrations/warden/link` | `{url, username, password, totp?}`: sign in once, save Kova's own Warden token and the certificate's fingerprint |
+| GET | `/api/integrations/warden/clients` | Devices on the network (name, MAC, IP, seen lately), for internet switches and phones |
+| GET | `/api/integrations/helix/find` | Helix Servers on the hub's networks |
+| POST, GET | `/api/integrations/helix/pair` | `{url?}` → `{code, next}`; Kova saves its token once the code is typed in Helix. GET says `pending`, `approved` or `expired` |
+| POST | `/api/speaker-groups` | `{name, members, room?}` (two or more speakers) → `{id, deviceId, undo}`. Groups are in the snapshot as `speakerGroups` with `deviceId`, `missing`, `sync` and `castGroup` |
+| PUT, DELETE | `/api/speaker-groups/:id` | `{name?, members?, room?}` (`null` room follows the members) → `{undo}` |
 | PUT | `/api/favourites` | `{ids}`: the devices on Now, in order (also in the snapshot as `favourites`) |
 | GET | `/api/import/ha` | The last Home Assistant import: source, stats, integrations and where each goes (`moves`, `set-up`, `built-in`, `handoff`, `unsupported`), review items, handoffs, `applied`; `{scanned:false}` before one |
 | POST | `/api/import/ha/backup` | Body: a backup file (`application/octet-stream`, streamed); header `x-backup-key` for encrypted backups. 400 with `code` `needs-key`, `wrong-key` or `not-ha` |

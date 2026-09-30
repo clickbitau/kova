@@ -16,6 +16,8 @@ import { NestAdapter, type NestOptions } from './adapters/nest.ts';
 import type { PresenceOptions } from './services/presence.ts';
 import type { NotifyOptions } from './services/notify.ts';
 import { MatterAdapter } from './adapters/matter.ts';
+import { WardenAdapter, type WardenOptions } from './adapters/warden.ts';
+import { HelixAdapter, type HelixOptions } from './adapters/helix.ts';
 
 /**
  * What's connected in this home, and how to reach it. Lives in
@@ -52,7 +54,11 @@ export interface Integrations {
   ecovacs?: EcovacsOptions;
   /** Nest cameras and doorbells through Google's SDM cloud API. Starts once projectId and refreshToken are set. */
   nest?: NestOptions;
-  /** Who's home: phone MACs from the router (OPNsense), a TCP ping, and phone automations. */
+  /** Warden OS, the router: internet status and alerts, per-device internet pause, and who's home from phones on the network. */
+  warden?: WardenOptions;
+  /** Helix, the media server and TV boxes: what's playing, pause, play by name, Movie mode by itself. */
+  helix?: HelixOptions;
+  /** Who's home: phone MACs from the router (Warden or OPNsense), a TCP ping, and phone automations. */
   presence?: PresenceOptions;
   /** Push notifications: Web Push to the phone app (no config needed) and/or ntfy, plus which built-in rules run. */
   notify?: NotifyOptions;
@@ -91,6 +97,8 @@ export const ADAPTER_FACTORIES: Factories = {
   ecovacs: c => c.email && c.password ? new EcovacsAdapter(c) : null,
   homekit: (c, dataDir) => new HomeKitControllerAdapter({ storageDir: join(dataDir, 'homekit-controller'), accessories: c.accessories }),
   nest: c => c.projectId && c.refreshToken ? new NestAdapter(c) : null,
+  warden: c => c.url && c.token ? new WardenAdapter(c) : null,
+  helix: c => c.url ? new HelixAdapter(c) : null,
   homekitBridge: null,
   matterBridge: null,
   presence: null,

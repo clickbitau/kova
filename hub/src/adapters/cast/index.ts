@@ -170,6 +170,12 @@ export class CastAdapter implements Adapter {
   private speakerId(d: Device) { return this.castOf.get(d.id) ?? d.id.replace(/^cast_/, ''); }
   private kovaId(castId: string) { return this.kova.get(castId) ?? `cast_${castId}`; }
 
+  /** The name of the Cast group (made in Google Home) whose members are exactly these Kova devices: plays through it are in perfect sync. */
+  castGroupFor(devices: Device[]): string | undefined {
+    const gid = devices.length > 1 ? this.groupFor(devices.map(d => this.speakerId(d))) : undefined;
+    return gid ? this.receivers.get(gid)?.ep.name ?? gid : undefined;
+  }
+
   /** The group whose members are exactly these speakers. */
   groupFor(speakers: string[]): string | undefined {
     const want = new Set(speakers);
