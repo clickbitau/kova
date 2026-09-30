@@ -13,6 +13,7 @@
 <script>(function(){var t="";try{var u=new URL(location.href);t=u.searchParams.get("token")||localStorage.getItem("kova_token")||"";if(u.searchParams.get("token"))localStorage.setItem("kova_token",t)}catch(e){}document.write('<script src="/api/boot.js'+(t?"?token="+encodeURIComponent(t):"")+'"><\/script>')})();</script>
 <script src="./support.js"></script>
 <link rel="stylesheet" href="./motion.css">
+<script src="./motion.js"></script>
 <script src="./sting.js"></script>
 </head>
 <body>
@@ -704,7 +705,7 @@ class Component extends DCLogic {
         msgBg:G.msg&&G.msg.ok?'rgba(127,212,160,0.12)':'rgba(242,177,76,0.12)',msgFg:G.msg&&G.msg.ok?'#7fd4a0':'#f2b14c',msgIcon:G.msg&&G.msg.ok?'check_circle':'warning',
         hasSave:!!known,saveLabel:G.busy==='save'?'Saving…':G.isNew?(it.fields.length?'Save and connect':'Turn on'):'Save',
         testable:!!it.testable,testLabel:G.busy==='test'?'Testing…':'Test connection',removable:!!known&&cfg[G.id]!==undefined,
-        save:()=>this.igSave(),test:()=>this.igTest(),remove:()=>this.igRemove(),close:()=>this.setState({ig:null}),
+        save:()=>this.igSave(),test:()=>this.igTest(),remove:()=>this.igRemove(),close:()=>kovaClose(()=>this.setState({ig:null})),
         actions:(it.actions||[]).map(a=>{const r=G.actRes[a.id]||{};const inp=G.acts[a.id]||{};
           return{label:a.label,icon:a.icon,help:a.help||'',hasHelp:!!a.help,btn:G.busy===a.id?'Working…':a.opensUrl?'Open Google sign-in':a.method==='GET'?'Show':a.label,run:()=>this.igAct(a),
             fields:(a.fields||[]).map(f=>fvm(f,getP(inp,kp(f))??'',v=>this.igActSet(a.id,kp(f),v))),hasErr:!!r.err,err:r.err||'',hasRows:!!r.rows,rows:r.rows||[]}})}}
@@ -732,7 +733,7 @@ class Component extends DCLogic {
     const mh=SM.start!=null?(SM.start+0.5)%24:21,momentAt=s.momentAt||`${String(Math.floor(mh)).padStart(2,'0')}:${String(Math.round(mh%1*60/5)*5%60).padStart(2,'0')}`;
     const targets=(SM.targets||[]).map(t=>({name:t.name.charAt(0).toUpperCase()+t.name.slice(1),label:t.label,fg:t.missing?'#ff6b5e':'#f1efea',
       remove:()=>put(`/api/modes/${SM.id}/targets/${encodeURIComponent(t.deviceId)}`,{target:null},`Removed from ${SM.name}`)}));
-    return {edOpen:true,ed:{name:SM.name,icon:SM.icon,color:SM.color,tint:SM.color+'24',span:`${SM.startLabel} → ${SM.endLabel}`,close:()=>this.setState({edit:null,edStart:null,momentAt:null}),
+    return {edOpen:true,ed:{name:SM.name,icon:SM.icon,color:SM.color,tint:SM.color+'24',span:`${SM.startLabel} → ${SM.endLabel}`,close:()=>kovaClose(()=>this.setState({edit:null,edStart:null,momentAt:null})),
       startKinds:[['sun:sunrise','Sunrise'],['sun:sunset','Sunset'],['sun:dawn','First light'],['sun:dusk','Dusk'],['prayer:fajr','Fajr'],['prayer:maghrib','Maghrib'],['prayer:isha','Isha'],['time','A clock time']].map(([v,label])=>({v,label})),
       startKind:ek,isClock:ek==='time',hasOffset:ek!=='time',
       startAt:s.edStart?.at??(cur&&cur.kind==='time'?cur.at:'20:00'),startOffset:s.edStart?.offset??(cur&&cur.offsetMin||0),
@@ -811,10 +812,10 @@ class Component extends DCLogic {
       hasParse:!!(p&&p.understood),parseChips:p&&p.understood?p.chips.map((t,i)=>({t,bg:i===0?V:N,fg:i===0?VF:(p.kind==='unknownLabel'&&i===1?'#ff6b5e':i===2?'#a3a09a':NF)})):[],
       showNoParse:!!(p&&!p.understood),noParseText:s.ai==='builtin'?'Not a built-in command. Kova can still try, or turn on AI for free-form requests.':'Not a built-in command. This will go to '+(s.ai==='local'?'your local AI.':'cloud AI.'),
       draft:s.draft,setDraft:e=>this.setDraft(e.target.value),draftKey:e=>{if(e.key==='Enter'&&s.draft.trim())this.ask(s.draft.trim())},send:()=>{if(s.draft.trim())this.ask(s.draft.trim())},
-      engine:{label:E[0],icon:E[1],bg:E[2],fg:E[3]},openAi:()=>this.setState({aiOpen:true}),closeAi:()=>this.setState({aiOpen:false}),aiOpen:s.aiOpen,isCloud:s.ai==='cloud',usesAi:s.ai!=='builtin',
+      engine:{label:E[0],icon:E[1],bg:E[2],fg:E[3]},openAi:()=>this.setState({aiOpen:true}),closeAi:()=>kovaClose(()=>this.setState({aiOpen:false})),aiOpen:s.aiOpen,isCloud:s.ai==='cloud',usesAi:s.ai!=='builtin',
       engines:ENG.map(([id,name,tag,tagBg,tagFg,body,data])=>{const a=s.ai===id;return{name,tag,tagBg,tagFg,body,data,border:a?tagFg:'transparent',ring:a?tagFg:'#4a4b50',dot:a?tagFg:'transparent',pick:()=>this.saveAi({ai:id})}}),
       shares:SH.map(([id,name,icon,note])=>{const locked=id==='cameras';const a=!locked&&!!s.share[id];return{name,icon,note,op:locked?0.5:1,justify:a?'flex-end':'flex-start',knob:a?'translateX(14px)':'none',track:a?'#f2b14c':'#35363a',toggle:()=>{if(!locked)this.saveAi({share:{...s.share,[id]:!s.share[id]}})}}}),
-      sheetOpen:!!D,sh,closeSheet:()=>this.setState({sheet:null}),toastOn:!!s.toast,toastPos:s.edit||s.ig?'top:calc(env(safe-area-inset-top, 0px) + 12px)':'bottom:104px',toastText:s.toast,canUndo:!!s.undo,undo:()=>{s.undo&&s.undo();this.setState({toast:null,undo:null})}};
+      sheetOpen:!!D,sh,closeSheet:()=>kovaClose(()=>this.setState({sheet:null})),toastOn:!!s.toast,toastPos:s.edit||s.ig?'top:calc(env(safe-area-inset-top, 0px) + 12px)':'bottom:104px',toastText:s.toast,canUndo:!!s.undo,undo:()=>{s.undo&&s.undo();this.setState({toast:null,undo:null})}};
   }
 }
 </script>

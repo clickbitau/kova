@@ -9,6 +9,7 @@
 <script>(function(){var t="";try{var u=new URL(location.href);t=u.searchParams.get("token")||localStorage.getItem("kova_token")||"";if(u.searchParams.get("token"))localStorage.setItem("kova_token",t)}catch(e){}document.write('<script src="/api/boot.js'+(t?"?token="+encodeURIComponent(t):"")+'"><\/script>')})();</script>
 <script src="./support.js"></script>
 <link rel="stylesheet" href="./motion.css">
+<script src="./motion.js"></script>
 <script src="./sting.js"></script>
 </head>
 <body>
@@ -195,39 +196,27 @@
 </sc-if>
 
 <sc-if value="{{ isAutos }}" hint-placeholder-val="{{ false }}">
-<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:12px"><div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;color:#a3a09a">{{ autoCount }}</span><h1 style="margin:0;font-size:30px;font-weight:700;letter-spacing:-0.02em">Automations</h1></div><div style="padding:9px 16px;border-radius:12px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px"><span style="font-family:'Material Symbols Rounded';font-size:18px">add</span>New automation</div></div>
+<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:12px"><div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;color:#a3a09a">{{ autoCount }}</span><h1 style="margin:0;font-size:30px;font-weight:700;letter-spacing:-0.02em">Automations</h1></div><div onClick="{{ autoCta.go }}" style="padding:9px 16px;border-radius:12px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:18px">move_down</span>{{ autoCta.label }}</div></div>
 
 <div style="background:#16171a;border-radius:18px;padding:18px 20px 14px;display:flex;flex-direction:column;gap:10px">
-<div style="display:flex;justify-content:space-between;font-size:13px"><span style="font-weight:700">Your day</span><span style="color:#a3a09a">White line = now, 19:42 · sun and prayer times for today</span></div>
+<div style="display:flex;justify-content:space-between;font-size:13px"><span style="font-weight:700">Your day</span><span style="color:#a3a09a">{{ stripNote }}</span></div>
 <div style="position:relative;height:136px">
-<div style="position:absolute;left:0;width:24.7%;top:60px;height:14px;border-radius:7px 0 0 7px;background:#1f2a3a"></div>
-<div style="position:absolute;left:74.6%;right:0;top:60px;height:14px;border-radius:0 7px 7px 0;background:#1f2a3a"></div>
-<div style="position:absolute;left:24.7%;width:49.9%;top:60px;height:14px;background:#2a2620"></div>
+<div style="position:absolute;left:0;width:{{ sunRise }};top:60px;height:14px;border-radius:7px 0 0 7px;background:#1f2a3a"></div>
+<div style="position:absolute;left:{{ sunSet }};right:0;top:60px;height:14px;border-radius:0 7px 7px 0;background:#1f2a3a"></div>
+<div style="position:absolute;left:{{ sunRise }};width:{{ sunDay }};top:60px;height:14px;background:#2a2620"></div>
 <sc-for list="{{ strip }}" as="m" hint-placeholder-count="8">
 <div onClick="{{ m.open }}" style="position:absolute;left:{{ m.left }};top:{{ m.top }};transform:translateX(-50%);display:flex;flex-direction:{{ m.dir }};align-items:center;gap:3px;cursor:pointer">
 <span style="font-size:11px;font-weight:700;white-space:nowrap;padding:2px 7px;border-radius:6px;background:{{ m.bg }};color:{{ m.fg }}">{{ m.label }}</span><div style="width:1px;height:{{ m.tick }};background:rgba(255,255,255,0.25)"></div>
 </div>
 </sc-for>
-<div style="position:absolute;left:82%;top:54px;height:26px;width:2px;border-radius:1px;background:#fff"></div>
+<div style="position:absolute;left:{{ stripNow }};top:54px;height:26px;width:2px;border-radius:1px;background:#fff"></div>
 </div>
 <div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:11px;color:#6f6d69"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>
 </div>
 
-<sc-if value="{{ merging }}" hint-placeholder-val="{{ false }}">
-<div style="border-radius:18px;padding:20px;background:rgba(242,177,76,0.08);border:1px solid rgba(242,177,76,0.3);display:flex;flex-direction:column;gap:14px">
-<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><span style="font-size:16px;font-weight:700">Combine into “Lights when someone’s there”</span><span style="font-size:12px;color:#a3a09a">Replaces 4 automations · originals kept as backup</span></div>
-<div style="font-size:18px;line-height:2;display:flex;flex-wrap:wrap;align-items:center;gap:6px">When <span style="padding:2px 10px;border-radius:8px;background:#f2b14c;color:#1a1408;font-weight:700">someone is seen</span> after dark, turn on <span style="padding:2px 10px;border-radius:8px;background:#26272b;font-weight:600">the lights</span> for <span style="padding:2px 10px;border-radius:8px;background:#26272b;font-weight:600">a while</span>, restarting if they’re seen again</div>
-<div style="display:grid;grid-template-columns:1.4fr 1.4fr 0.6fr;font-size:14px;background:#16171a;border-radius:12px;overflow:hidden">
-<div style="padding:10px 14px;font-size:12px;color:#a3a09a;font-weight:700">SEEN BY</div><div style="padding:10px 14px;font-size:12px;color:#a3a09a;font-weight:700">LIGHTS</div><div style="padding:10px 14px;font-size:12px;color:#a3a09a;font-weight:700">FOR</div>
-<div style="padding:10px 14px;border-top:1px solid rgba(255,255,255,0.06)">Office camera</div><div style="padding:10px 14px;border-top:1px solid rgba(255,255,255,0.06)">Office ceiling, LED strip</div><div style="padding:10px 14px;border-top:1px solid rgba(255,255,255,0.06)">10 min</div>
-<div style="padding:10px 14px;border-top:1px solid rgba(255,255,255,0.06)">Garage camera</div><div style="padding:10px 14px;border-top:1px solid rgba(255,255,255,0.06)">Garage light</div><div style="padding:10px 14px;border-top:1px solid rgba(255,255,255,0.06)">10 min</div>
-<div style="padding:10px 14px;border-top:1px solid rgba(255,255,255,0.06)">Doorbell camera</div><div style="padding:10px 14px;border-top:1px solid rgba(255,255,255,0.06)">Porch, Path lights</div><div style="padding:10px 14px;border-top:1px solid rgba(255,255,255,0.06)">5 min</div>
-<div style="padding:10px 14px;border-top:1px solid rgba(255,255,255,0.06)">Methel or Brishti arrives</div><div style="padding:10px 14px;border-top:1px solid rgba(255,255,255,0.06)">Garage, Porch, Path</div><div style="padding:10px 14px;border-top:1px solid rgba(255,255,255,0.06)">10 min</div>
-</div>
-<div style="display:flex;gap:8px"><div onClick="{{ applyMerge }}" style="padding:9px 16px;border-radius:10px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;cursor:pointer">Combine</div><div onClick="{{ closeMerge }}" style="padding:9px 16px;border-radius:10px;background:rgba(255,255,255,0.06);font-size:13px;font-weight:600;cursor:pointer">Keep separate</div></div>
-</div>
-</sc-if>
+<sc-if value="{{ noAutos }}" hint-placeholder-val="{{ false }}"><div style="border-radius:18px;padding:22px;background:#16171a;display:flex;align-items:center;gap:16px;flex-wrap:wrap"><span style="font-family:'Material Symbols Rounded';font-size:26px;color:#f2b14c">move_down</span><div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:220px"><span style="font-size:15px;font-weight:700">No Home Assistant automations yet</span><span style="font-size:13px;color:#a3a09a;line-height:1.5">Import a Home Assistant backup to see each of your automations here, in plain words, with how Kova covers it.</span></div><div onClick="{{ autoCta.go }}" style="padding:9px 16px;border-radius:10px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;cursor:pointer">Import from Home Assistant</div></div></sc-if>
 
+<sc-if value="{{ hasAutos }}" hint-placeholder-val="{{ true }}">
 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr));gap:24px;align-items:start">
 <div style="display:flex;flex-direction:column;gap:18px">
 <sc-for list="{{ autoGroups }}" as="g" hint-placeholder-count="2">
@@ -238,7 +227,7 @@
 <div onClick="{{ a.open }}" style="display:flex;align-items:center;gap:14px;padding:13px 16px;cursor:pointer;border-top:1px solid rgba(255,255,255,0.05);background:{{ a.bg }}" style-hover="background:#1c1d21">
 <div style="width:34px;height:34px;border-radius:10px;flex:none;display:flex;align-items:center;justify-content:center;background:#222327;color:{{ a.iconFg }}"><span style="font-family:'Material Symbols Rounded';font-size:19px">{{ a.icon }}</span></div>
 <div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:14px;font-weight:700;color:{{ a.nameFg }}">{{ a.name }}</span><span style="font-size:12px;color:#a3a09a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ a.summary }}</span></div>
-<div onClick="{{ a.toggle }}" style="width:34px;height:20px;border-radius:10px;padding:2px;flex:none;display:flex;justify-content:flex-start;background:{{ a.track }}"><div style="width:16px;height:16px;border-radius:50%;background:#fff;transform:{{ a.knob }}"></div></div>
+<span style="flex:none;font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px;background:{{ a.pillBg }};color:{{ a.pillFg }}">{{ a.pill }}</span>
 </div>
 </sc-for>
 </div>
@@ -253,28 +242,49 @@
 <span style="font-size:12px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">{{ p.k }}</span>
 <div style="display:flex;flex-wrap:wrap;gap:6px">
 <sc-for list="{{ p.chips }}" as="ch" hint-placeholder-count="2">
-<div style="padding:8px 12px;border-radius:10px;font-size:14px;font-weight:600;background:{{ p.bg }};color:{{ p.fg }};cursor:pointer" style-hover="outline:1px solid rgba(242,177,76,0.6)">{{ ch }}</div>
+<div style="padding:8px 12px;border-radius:10px;font-size:14px;font-weight:600;background:{{ p.bg }};color:{{ p.fg }}">{{ ch }}</div>
 </sc-for>
-<div style="padding:8px 12px;border-radius:10px;font-size:14px;font-weight:600;border:1px dashed rgba(255,255,255,0.18);color:#a3a09a;cursor:pointer">+</div>
 </div>
 </div>
 </sc-for>
+<div style="display:flex;gap:12px;align-items:center;padding:12px 14px;border-radius:12px;background:rgba(242,177,76,0.08);border:1px solid rgba(242,177,76,0.22)"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#f2b14c">{{ sel.kovaIcon }}</span><div style="display:flex;flex-direction:column;gap:2px;flex:1"><span style="font-size:11px;font-weight:700;color:#f2b14c;text-transform:uppercase;letter-spacing:0.06em">In Kova</span><span style="font-size:13.5px;font-weight:600">{{ sel.kova }}</span></div></div>
 <div style="font-size:12px;color:#a3a09a;line-height:1.5;padding:12px;border-radius:10px;background:#1c1d20">{{ sel.lastRun }}</div>
-<sc-if value="{{ advanced }}" hint-placeholder-val="{{ false }}">
+<sc-if value="{{ sel.showCode }}" hint-placeholder-val="{{ false }}">
 <pre style="margin:0;padding:14px;border-radius:12px;background:#0e0f10;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.6;color:#d8d5cf;white-space:pre-wrap">{{ sel.code }}</pre>
 </sc-if>
-<div style="display:flex;gap:8px"><div onClick="{{ testSel }}" style="padding:9px 16px;border-radius:10px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px"><span style="font-family:'Material Symbols Rounded';font-size:18px">play_arrow</span>Run now</div><div style="padding:9px 16px;border-radius:10px;background:rgba(255,255,255,0.06);font-size:13px;font-weight:600">History</div></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap"><div onClick="{{ sel.go }}" style="padding:9px 16px;border-radius:10px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px"><span style="font-family:'Material Symbols Rounded';font-size:18px">arrow_forward</span>{{ sel.goLabel }}</div><div onClick="{{ sel.toggleCode }}" style="padding:9px 16px;border-radius:10px;background:rgba(255,255,255,0.06);font-size:13px;font-weight:600;cursor:pointer">{{ sel.codeLabel }}</div></div>
 </div>
 </div>
+</sc-if>
 </sc-if>
 
 <sc-if value="{{ isImport }}" hint-placeholder-val="{{ false }}">
-<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;color:#a3a09a">Home Assistant 2026.2.2 · 10.10.10.150:8123</span><h1 style="margin:0;font-size:30px;font-weight:700;letter-spacing:-0.02em">Import from Home Assistant</h1></div>
+<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;color:#a3a09a">{{ impSub }}</span><h1 style="margin:0;font-size:30px;font-weight:700;letter-spacing:-0.02em">Import from Home Assistant</h1></div>
 <div style="display:flex;flex-wrap:wrap;gap:8px">
 <sc-for list="{{ steps }}" as="st" hint-placeholder-count="4">
 <div style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;font-size:13px;font-weight:600;background:{{ st.bg }};color:{{ st.fg }}"><span style="font-family:'Material Symbols Rounded';font-size:18px">{{ st.icon }}</span>{{ st.label }}</div>
 </sc-for>
 </div>
+<sc-if value="{{ impUpload }}" hint-placeholder-val="{{ false }}">
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:16px;align-items:start">
+<div style="background:#16171a;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:14px">
+<span style="font-size:16px;font-weight:700">Upload a Home Assistant backup</span>
+<span style="font-size:13px;color:#a3a09a;line-height:1.55">In Home Assistant: Settings → System → Backups, make a backup (or pick one) and download it. Kova reads your settings from it and skips the history, so a big backup is fine. Nothing changes until you switch over.</span>
+<label style="border:1.5px dashed rgba(255,255,255,0.16);border-radius:14px;padding:22px;display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer;text-align:center"><span style="font-family:'Material Symbols Rounded';font-size:30px;color:#f2b14c">upload_file</span><span style="font-size:14px;font-weight:600">{{ imp.fileLabel }}</span><span style="font-size:12px;color:#8a8781">{{ imp.fileSub }}</span><input type="file" accept=".tar,.gz,.tgz" onChange="{{ imp.pick }}" style="display:none"></label>
+<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:600;color:#a3a09a">Encryption key <span style="font-weight:500;color:#6f6d69">{{ imp.keyNote }}</span></span><input type="password" value="{{ imp.key }}" onChange="{{ imp.setKey }}" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX" autocomplete="off" style="padding:11px 14px;border-radius:12px;border:1px solid rgba(255,255,255,0.1);background:#0e0f10;color:#f1efea;font-family:Manrope,sans-serif;font-size:14px;outline:none;width:100%;min-width:0"><span style="font-size:11.5px;color:#6f6d69;line-height:1.45">Backups from Home Assistant 2025.1 and later are encrypted. Find the key in Settings → System → Backups → ⋮ → Encryption key.</span></div>
+<sc-if value="{{ imp.busy }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:6px"><div style="height:6px;border-radius:3px;background:#232428;overflow:hidden"><div style="height:100%;border-radius:3px;background:#f2b14c;width:{{ imp.pct }}"></div></div><span style="font-size:12px;color:#a3a09a">{{ imp.busyText }}</span></div></sc-if>
+<sc-if value="{{ imp.hasErr }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:10px;padding:12px 14px;border-radius:12px;background:rgba(255,107,94,0.1);color:#ff6b5e;font-size:13px;line-height:1.5"><span style="font-family:'Material Symbols Rounded';font-size:19px">error</span><span>{{ imp.err }}</span></div></sc-if>
+<div style="display:flex;gap:8px;align-items:center"><div onClick="{{ imp.scan }}" style="padding:10px 18px;border-radius:12px;background:{{ imp.scanBg }};color:{{ imp.scanFg }};font-size:13px;font-weight:700;cursor:pointer">{{ imp.scanLabel }}</div><sc-if value="{{ imp.canCancel }}" hint-placeholder-val="{{ false }}"><span onClick="{{ imp.cancel }}" style="font-size:13px;font-weight:600;color:#a3a09a;cursor:pointer">Back to the last import</span></sc-if></div>
+</div>
+<div style="background:#16171a;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:12px">
+<span style="font-size:15px;font-weight:700">Or use a folder on the hub</span>
+<span style="font-size:13px;color:#a3a09a;line-height:1.55">If you copied Home Assistant’s config folder to the machine Kova runs on (the install guide shows how), give its path.</span>
+<input value="{{ imp.path }}" onChange="{{ imp.setPath }}" placeholder="/root/ha-config" autocomplete="off" style="padding:11px 14px;border-radius:12px;border:1px solid rgba(255,255,255,0.1);background:#0e0f10;color:#f1efea;font-family:Manrope,sans-serif;font-size:14px;outline:none;width:100%;min-width:0">
+<div onClick="{{ imp.scanFolder }}" style="align-self:flex-start;padding:9px 16px;border-radius:12px;background:rgba(255,255,255,0.08);font-size:13px;font-weight:700;cursor:pointer">Read this folder</div>
+</div>
+</div>
+</sc-if>
+<sc-if value="{{ impScanned }}" hint-placeholder-val="{{ true }}">
 <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px">
 <sc-for list="{{ importStats }}" as="is" hint-placeholder-count="5">
 <div style="background:#16171a;border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:6px"><span style="font-size:28px;font-weight:700;letter-spacing:-0.02em">{{ is.n }}</span><span style="font-size:13px;font-weight:600">{{ is.label }}</span><span style="font-size:12px;color:#a3a09a;line-height:1.4">{{ is.sub }}</span></div>
@@ -294,7 +304,7 @@
 </div>
 </div>
 <div style="display:flex;flex-direction:column;gap:10px">
-<span style="font-size:17px;font-weight:700">Hand off to your other apps</span>
+<sc-if value="{{ hasHandoffs }}" hint-placeholder-val="{{ true }}"><span style="font-size:17px;font-weight:700">Hand off to your other apps</span>
 <div style="background:#16171a;border-radius:16px;overflow:hidden">
 <sc-for list="{{ handoffs }}" as="h" hint-placeholder-count="3">
 <div style="display:flex;align-items:center;gap:14px;padding:14px 16px;border-top:1px solid rgba(255,255,255,0.05)">
@@ -304,13 +314,15 @@
 </div>
 </sc-for>
 </div>
+</sc-if>
 <div style="background:#16171a;border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:12px">
-<span style="font-size:14px;font-weight:700">When you’re ready</span>
-<span style="font-size:13px;color:#a3a09a;line-height:1.5">Kova is mirroring HA right now. Switching over moves Matter, the HomeKit bridges and all automations to Kova, and pauses them in HA. You can switch back for 14 days.</span>
-<div style="display:flex;gap:8px;flex-wrap:wrap"><div style="padding:9px 16px;border-radius:10px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700">Switch over</div><div style="padding:9px 16px;border-radius:10px;background:rgba(255,255,255,0.06);font-size:13px;font-weight:600">Keep mirroring</div></div>
+<span style="font-size:14px;font-weight:700">{{ sw.title }}</span>
+<span style="font-size:13px;color:#a3a09a;line-height:1.5">{{ sw.text }}</span>
+<div style="display:flex;gap:8px;flex-wrap:wrap"><sc-if value="{{ sw.canApply }}" hint-placeholder-val="{{ true }}"><div onClick="{{ sw.apply }}" style="padding:9px 16px;border-radius:10px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;cursor:pointer">{{ sw.applyLabel }}</div></sc-if><div onClick="{{ sw.again }}" style="padding:9px 16px;border-radius:10px;background:rgba(255,255,255,0.06);font-size:13px;font-weight:600;cursor:pointer">Import another backup</div></div>
 </div>
 </div>
 </div>
+</sc-if>
 </sc-if>
 
 <sc-if value="{{ isDev }}" hint-placeholder-val="{{ false }}">
@@ -670,27 +682,6 @@ const flat=d=>({...d,...d.state,eid:d.address,integ:d.integration,bri:d.state.br
 
 // ---- Screens that don't have a backend yet keep the design's sample data. ----
 // Import from Home Assistant (migration tool, next milestone).
-const AUTOS=[
-{id:'sunset',name:'Sunset lights',kind:'time',at:17.92,label:'Sunset −10',icon:'wb_twilight',when:['10 min before sunset'],cond:[],then:['Turn on 6 lights','Lamp 78% · 3000K','TV backlight 31%'],on:1,last:'Now Evening mode'},
-{id:'winddown',name:'Wind down',kind:'time',at:20,label:'Wind down',icon:'nights_stay',when:['Every day at 20:00'],cond:[],then:['Turn off 8 lights','Lamp 5% · 2000K','TV backlight 16%'],on:1,last:'Now Wind down mode'},
-{id:'rain_start',name:'Thunderstorm sounds',kind:'time',at:21,label:'Rain',icon:'thunderstorm',when:['Every day at 21:00'],cond:[],then:['Play rain stream on Master bed speaker','Volume 60%'],on:1,last:'Now a moment in Wind down'},
-{id:'quran_start',name:'Quran recitation',kind:'time',at:23.5,label:'Quran',icon:'menu_book',when:['Every day at 23:30'],cond:[],then:['Play Tarateel stream on 4 speakers','Volume 15%'],on:1,last:'Now Night mode'},
-{id:'quran_stop',name:'Stop recitation at Fajr',kind:'time',at:4.58,label:'Fajr',icon:'wb_sunny',when:['At Fajr prayer time'],cond:[],then:['Stop 4 speakers'],on:1,last:'Now Dawn mode'},
-{id:'sunrise',name:'Sunrise reset',kind:'time',at:5.93,label:'Sunrise',icon:'light_mode',when:['At sunrise'],cond:[],then:['Turn off all lights','Purifiers to Auto'],on:1,last:'Now Day mode'},
-{id:'rain_stop',name:'Stop thunderstorm',kind:'time',at:7,label:'Rain off',icon:'volume_off',when:['Every day at 07:00'],cond:[],then:['Stop Master bed speaker'],on:1,last:'Now a moment in Day'},
-{id:'arrival',name:'Garage on arrival',kind:'event',icon:'directions_car',look:1,when:['Methel or Brishti arrives home'],cond:['After sunset'],then:['Garage, Porch, Path lights on','Off after 10 min'],on:1,last:'Now Light the way'},
-{id:'office_occ',name:'Office light when occupied',kind:'event',icon:'person',look:1,when:['Office camera sees a person'],cond:['After sunset'],then:['Office ceiling, LED strip on','Off after 10 min'],on:1,last:'Now Light the way'},
-{id:'garage_person',name:'Garage light on person',kind:'event',icon:'person',look:1,when:['Garage camera sees a person'],cond:['After sunset'],then:['Garage light on','Off after 10 min'],on:1,last:'Now Light the way'},
-{id:'front_person',name:'Front door light on person',kind:'event',icon:'person',look:1,when:['Doorbell camera sees a person'],cond:['After sunset'],then:['Porch, Path lights on','Off after 5 min'],on:1,last:'Now Light the way'},
-{id:'doorbell',name:'Doorbell ring',kind:'event',icon:'doorbell',when:['Doorbell is pressed'],cond:[],then:['Notify Methel & Brishti with camera','After sunset: porch lights 5 min'],on:1,last:'Now Light the way + notifications'}];
-const REVIEW=[
-{id:'dup',icon:'build',title:'Duplicate description key in 3 scripts',detail:'movie_mode, date_mode, party_mode define description twice. The second, empty one wins in HA.',btn:'Fix',done:'Fixed'},
-{id:'scenes',icon:'auto_awesome',title:'Your 4 scripts behave like scenes',detail:'scenes.yaml is empty. Converting gives you previews and undo.',btn:'Convert',done:'Converted'},
-{id:'names',icon:'label',title:'Give 28 devices friendly names',detail:'e.g. light.smart_lighting_2 → “TV backlight”. Guessed from your YAML comments.',btn:'Accept all',done:'Accepted'},
-{id:'shell',icon:'terminal',title:'shell_command: copy_font',detail:'Runs python3 on the host. Kova runs it in a sandbox once you approve.',btn:'Approve',done:'Approved'},
-{id:'hacs',icon:'extension',title:'HACS and opnsense_v060_backup',detail:'Not needed in Kova. localtuya and browser_mod become built-in features.',btn:'Skip',done:'Skipped'}];
-const HAND=[{id:'warden',letter:'W',app:'Warden',what:'OPNsense firewall at 10.10.0.1'},{id:'helix',letter:'H',app:'Helix',what:'Plex and qBittorrent'},{id:'dockbit',letter:'D',app:'Dockbit',what:'Matter server and go2rtc containers'}];
-const code=a=>`automation "${a.name}"\n  when: ${a.when.join(', ')}${a.cond.length?`\n  only_if: ${a.cond.join(', ').toLowerCase()}`:''}\n  do:\n${a.then.map(t=>'    - '+t).join('\n')}\n  mode: ${a.kind==='event'?'restart':'single'}`;
 const ASKS=['Turn off downstairs','Why is the garage light on?','What lights are on?','Start Movie'];
 const ACT_STYLE={auto:['rgba(242,177,76,0.13)','#f2b14c'],people:['rgba(127,212,160,0.14)','#7fd4a0'],device:['rgba(124,184,240,0.13)','#7cb8f0'],system:['#232428','#a3a09a']};
 
@@ -726,8 +717,8 @@ function resRows(r){if(r==null||typeof r!=='object')return[{k:'Result',v:String(
   return rows.length?rows:[{k:'Done',v:'OK',font:'inherit'}]}
 
 class Component extends DCLogic {
-  state={hub:BOOT,conn:!!window.KOVA_BOOT,screen:this.props.startScreen??'home',room:(BOOT.rooms[0]||{}).id,drawer:null,tab:'simple',advanced:(this.props.depth??'Simple')==='Advanced',sel:'sunset',toast:null,undo:null,merging:false,merged:false,done:{},linked:{},q:'',camSel:null,mediaSel:null,actF:'all',inboxDone:{},iq:'',intF:'All',draft:'',chat:[{from:'kova',text:`Hi. ${BOOT.devices.filter(d=>isLight(d)&&d.state.on).length} lights are on and the home is in ${(BOOT.modes.find(m=>m.id===BOOT.current.modeId)||BOOT.modes[0]).name}. What do you need?`}],preview:null,pv:null,modeSel:null,igCat:null,igCfg:null,igPick:false,ig:null,igLoadErr:null};
-  componentDidMount(){this.connect();this.loadInteg()}
+  state={hub:BOOT,conn:!!window.KOVA_BOOT,screen:this.props.startScreen??'home',room:(BOOT.rooms[0]||{}).id,drawer:null,tab:'simple',advanced:(this.props.depth??'Simple')==='Advanced',sel:'sunset',toast:null,undo:null,merging:false,merged:false,done:{},linked:{},q:'',camSel:null,mediaSel:null,actF:'all',inboxDone:{},iq:'',intF:'All',draft:'',chat:[{from:'kova',text:`Hi. ${BOOT.devices.filter(d=>isLight(d)&&d.state.on).length} lights are on and the home is in ${(BOOT.modes.find(m=>m.id===BOOT.current.modeId)||BOOT.modes[0]).name}. What do you need?`}],preview:null,pv:null,modeSel:null,igCat:null,igCfg:null,igPick:false,ig:null,igLoadErr:null,imp:null,impAutos:[],impFile:null,impKey:'',impPath:'',impBusy:null,impPct:0,impErr:null,impNeedKey:false,impNew:false,showCode:false};
+  componentDidMount(){this.connect();this.loadInteg();this.loadImport()}
   componentWillUnmount(){this._closed=true;try{this._ws&&this._ws.close()}catch(e){}this.stopLive(true)}
   componentDidUpdate(){if(this._pc&&this.state.screen!=='security')this.stopLive()}
   // ---- camera live view: WebRTC straight from the camera's cloud (Nest) to this browser; the hub only relays the offer/answer ----
@@ -788,6 +779,31 @@ class Component extends DCLogic {
         const x=await api('POST','/api/ask/act',{action:a.action});this.setState(pp=>({chat:[...pp.chat,{from:'kova',text:x.text}]}));if(x.undo)this.toast(x.text,this.undoFn(x.undo))}}))}]}))}
     catch(e){this.setState(p=>({chat:[...p.chat,{from:'kova',text:'I couldn’t reach the hub. '+e.message}]}))}
   }
+  // ---- import from Home Assistant ----
+  async loadImport(){try{const [x,a]=await Promise.all([api('GET','/api/import/ha'),api('GET','/api/import/ha/automations')]);this.setState({imp:x&&x.scanned?x:null,impAutos:a.automations||[]})}catch(e){}}
+  impScan(){const f=this.state.impFile;if(!f||this.state.impBusy)return;
+    this.setState({impBusy:'upload',impPct:0,impErr:null});
+    const x=new XMLHttpRequest();x.open('POST','/api/import/ha/backup');
+    x.setRequestHeader('content-type','application/octet-stream');x.setRequestHeader('x-file-name',encodeURIComponent(f.name));
+    if(this.state.impKey.trim())x.setRequestHeader('x-backup-key',this.state.impKey.trim());
+    if(KOVA_TOKEN)x.setRequestHeader('authorization','Bearer '+KOVA_TOKEN);
+    x.upload.onprogress=e=>{if(e.lengthComputable)this.setState({impPct:e.loaded/e.total,impBusy:e.loaded>=e.total?'read':'upload'})};
+    x.onload=()=>{let j={};try{j=JSON.parse(x.responseText)}catch(e){}
+      if(x.status>=200&&x.status<300){this.setState({impBusy:null,imp:j,impNew:false,impErr:null,impNeedKey:false,impFile:null});this.toast('Home Assistant backup read');api('GET','/api/import/ha/automations').then(a=>this.setState({impAutos:a.automations||[]})).catch(()=>{})}
+      else this.setState({impBusy:null,impErr:j.error||x.statusText||'Upload failed',impNeedKey:j.code==='needs-key'||j.code==='wrong-key'||this.state.impNeedKey})};
+    x.onerror=()=>this.setState({impBusy:null,impErr:'The upload stopped. Check the connection to the hub and try again.'});
+    x.send(f)}
+  async impFolder(){const path=this.state.impPath.trim();if(!path||this.state.impBusy)return;this.setState({impBusy:'read',impPct:1,impErr:null});
+    try{const j=await api('POST','/api/import/ha/folder',{path});this.setState({impBusy:null,imp:j,impNew:false});this.toast('Home Assistant folder read');this.loadImport()}catch(e){this.setState({impBusy:null,impErr:e.message})}}
+  async impApply(){const I=this.state.imp;if(!I)return;
+    if(!confirm(`Switch over to Kova?\n\nKova starts its own connections to your devices${this.state.hub.demo?' and replaces the demo home':''}, and brings in your rooms and people. Home Assistant itself isn’t changed.`))return;
+    this.setState({impApplying:true});
+    try{const r=await api('POST','/api/import/ha/apply',{});this.setState({imp:r.summary,impApplying:false});this.loadInteg();
+      this.toast(`Switched over · ${r.started.length} started${r.written.length>r.started.length?`, ${r.written.length-r.started.length} need you`:''}`)}catch(e){this.setState({impApplying:false});this.err(e)}}
+  async impMark(id){try{const r=await api('POST',`/api/import/ha/review/${encodeURIComponent(id)}`,{});this.setState({imp:r})}catch(e){this.err(e)}}
+  impAct(r){const a=r.action;if(a.kind==='integration'){this.setState({screen:'integrations'});if(this.state.igCat)this.openInteg(a.id);else this.loadInteg().then(()=>this.openInteg(a.id))}
+    else if(a.kind==='screen')this.setState({screen:a.screen});
+    if(a.kind!=='integration')this.impMark(r.id)}
   // ---- integration setup ----
   async loadInteg(){try{const [cat,cfg]=await Promise.all([api('GET','/api/integrations/catalog'),api('GET','/api/integrations/config')]);this.setState({igCat:cat,igCfg:cfg,igLoadErr:null});return cfg}catch(e){this.setState({igLoadErr:`Couldn’t load integration settings: ${e.message}`});return null}}
   igItem(id){return(this.state.igCat||[]).find(c=>c.id===id)}
@@ -999,7 +1015,7 @@ class Component extends DCLogic {
         msgBg:G.msg&&G.msg.ok?'rgba(127,212,160,0.12)':'rgba(242,177,76,0.12)',msgFg:G.msg&&G.msg.ok?'#7fd4a0':'#f2b14c',msgIcon:G.msg&&G.msg.ok?'check_circle':'warning',
         hasSave:!!known,saveLabel:G.busy==='save'?'Saving…':G.isNew?(it.fields.length?'Save and connect':'Turn on'):'Save',
         testable:!!it.testable,testLabel:G.busy==='test'?'Testing…':'Test connection',removable:!!known&&cfg[G.id]!==undefined,
-        save:()=>this.igSave(),test:()=>this.igTest(),remove:()=>this.igRemove(),close:()=>this.setState({ig:null}),
+        save:()=>this.igSave(),test:()=>this.igTest(),remove:()=>this.igRemove(),close:()=>kovaClose(()=>this.setState({ig:null})),
         actions:(it.actions||[]).map(a=>{const r=G.actRes[a.id]||{};const inp=G.acts[a.id]||{};
           return{label:a.label,icon:a.icon,help:a.help||'',hasHelp:!!a.help,btn:G.busy===a.id?'Working…':a.opensUrl?'Open Google sign-in':a.method==='GET'?'Show':a.label,run:()=>this.igAct(a),
             fields:(a.fields||[]).map(f=>fvm(f,getP(inp,kp(f))??'',v=>this.igActSet(a.id,kp(f),v))),hasErr:!!r.err,err:r.err||'',hasRows:!!r.rows,rows:r.rows||[]}})}}
@@ -1015,24 +1031,48 @@ class Component extends DCLogic {
     const go=screen=>()=>this.setState({screen});
     const lightsOn=list.filter(d=>isLight(d)&&d.on).length;
     const inboxLeft=H.findings.length+H.integrations.filter(i=>!i.ok).length;
-    const nav=[['home','Now','home'],['modes','Modes','routine'],['rooms','Rooms','meeting_room'],['energy','Energy','electric_meter'],['security','Security','shield'],['media','Media','play_circle'],['activity','Activity','history',inboxLeft||''],['assistant','Ask Kova','graphic_eq'],['integrations','Integrations','extension','',1],['import','Import','move_down',REVIEW.length-Object.keys(s.done).length||'']].concat(adv?[['dev','Developer','code']]:[]).map(([id,label,icon,badge,gap])=>({label,icon,badge:badge||'',mt:gap?'14px':'0px',go:go(id),bg:s.screen===id?'rgba(242,177,76,0.12)':'transparent',fg:s.screen===id?'#f2b14c':'#d8d5cf'}));
+    const nav=[['home','Now','home'],['modes','Modes','routine'],['rooms','Rooms','meeting_room'],['energy','Energy','electric_meter'],['security','Security','shield'],['media','Media','play_circle'],['activity','Activity','history',inboxLeft||''],['assistant','Ask Kova','graphic_eq'],['integrations','Integrations','extension','',1],['import','Import','move_down',(s.imp&&s.imp.review.filter(r=>!r.done).length)||'']].concat(adv?[['dev','Developer','code']]:[]).map(([id,label,icon,badge,gap])=>({label,icon,badge:badge||'',mt:gap?'14px':'0px',go:go(id),bg:s.screen===id?'rgba(242,177,76,0.12)':'transparent',fg:s.screen===id?'#f2b14c':'#d8d5cf'}));
     const room=s.room||(H.rooms[0]||{}).id;
     const tiles=list.filter(d=>d.room===room).map(d=>{const [st,sf]=this.stateOf(d);return{...d,...this.tint(d),icon:ICON[d.type],state:st,stateFg:sf,showId:adv,toggle:()=>this.toggleDev(d.id),open:()=>this.setState({drawer:d.id,tab:'simple'})}});
     const rDevs=list.filter(d=>d.room===room);const rOn=rDevs.filter(d=>isLight(d)&&d.on).length;
     const roomTabs=H.rooms.map(r=>({name:r.name,open:()=>this.setState({room:r.id}),bg:room===r.id?'#f1efea':'#16171a',fg:room===r.id?'#141517':'#d8d5cf'}));
-    // Imported rules (sample data until the Home Assistant importer lands).
+    // Imported rules: the Home Assistant automations from the last import, in plain words, with how Kova covers each.
+    const AUTOS=s.impAutos||[];
     const RP=[['0px','40px','column'],['28px','12px','column'],['74px','10px','column-reverse'],['74px','38px','column-reverse']];
-    const strip=AUTOS.filter(a=>a.kind==='time').sort((x,y)=>x.at-y.at).map((a,i)=>{const [top,tick,dir]=RP[i%4];return{label:a.label+' '+fmt(a.at),left:(a.at/24*100)+'%',top,tick,dir,bg:s.sel===a.id?'#f2b14c':'#26272b',fg:s.sel===a.id?'#1a1408':'#f1efea',open:()=>this.setState({sel:a.id})}});
-    const item=a=>({name:a.name,icon:a.icon,summary:a.when[0]+(a.cond.length?', '+a.cond[0].toLowerCase():'')+' → '+a.then[0],bg:s.sel===a.id?'#1f2024':'transparent',iconFg:'#6f6d69',nameFg:'#8a8781',justify:'flex-start',knob:'none',track:'#35363a',open:()=>this.setState({sel:a.id}),toggle:e=>e.stopPropagation()});
-    const autoGroups=[{title:'On a schedule',items:AUTOS.filter(a=>a.kind==='time').map(item)},{title:'When something happens',items:AUTOS.filter(a=>a.kind==='event').map(item)}];
+    const strip=AUTOS.filter(a=>a.kind==='time'&&a.at!=null).sort((x,y)=>x.at-y.at).map((a,i)=>{const [top,tick,dir]=RP[i%4];return{label:/^\d/.test(a.label)?a.label:`${a.label} ${fmt(a.at)}`,left:(a.at/24*100)+'%',top,tick,dir,bg:s.sel===a.id?'#f2b14c':'#26272b',fg:s.sel===a.id?'#1a1408':'#f1efea',open:()=>this.setState({sel:a.id})}});
+    const item=a=>({name:a.name,icon:a.icon,summary:a.when[0]+(a.cond.length?', '+a.cond[0].toLowerCase():'')+' → '+a.then[0],bg:s.sel===a.id?'#1f2024':'transparent',iconFg:a.enabled?'#f2b14c':'#6f6d69',nameFg:a.enabled?'#f1efea':'#8a8781',
+      pill:a.enabled?'On':'Off',pillBg:a.enabled?'rgba(127,212,160,0.14)':'#232428',pillFg:a.enabled?'#7fd4a0':'#8a8781',open:()=>this.setState({sel:a.id,showCode:false})});
+    const autoGroups=[{title:'On a schedule',items:AUTOS.filter(a=>a.kind==='time').map(item)},{title:'When something happens',items:AUTOS.filter(a=>a.kind==='event').map(item)}].filter(g=>g.items.length);
     const A=AUTOS.find(a=>a.id===s.sel)||AUTOS[0];
-    const sel={name:A.name,status:'Replaced',stBg:'rgba(255,255,255,0.06)',stFg:'#a3a09a',lastRun:A.last,code:code(A),parts:[{k:'When',chips:A.when,bg:'#f2b14c',fg:'#1a1408'}].concat(A.cond.length?[{k:'Only if',chips:A.cond,bg:'#26272b',fg:'#f1efea'}]:[]).concat([{k:'Then',chips:A.then,bg:'#26272b',fg:'#f1efea'}])};
-    const doneN=Object.keys(s.done).length;
-    const review=REVIEW.map(r=>{const d=s.done[r.id];return{...r,icon:d?'check_circle':r.icon,iconFg:d?'#7fd4a0':'#f2b14c',btn:d?r.done:r.btn,btnBg:d?'transparent':'#f2b14c',btnFg:d?'#7fd4a0':'#1a1408',act:()=>this.setState(p=>({done:{...p.done,[r.id]:true}}))}});
-    const handoffs=HAND.map(h=>{const l=s.linked[h.id];return{...h,btn:l?'Linked':'Link',btnBg:l?'transparent':'rgba(255,255,255,0.08)',btnFg:l?'#7fd4a0':'#f1efea',act:()=>this.setState(p=>({linked:{...p.linked,[h.id]:true}}))}});
-    const stepsDone=doneN===REVIEW.length;
-    const steps=[['Connected',1],['Scanned 36 integrations',1],[stepsDone?'Reviewed':`Review · ${REVIEW.length-doneN} left`,stepsDone],['Switch over',0]].map(([label,d],i)=>({label,icon:d?'check':i===2?'pending':'radio_button_unchecked',bg:d?'rgba(127,212,160,0.12)':i===2?'rgba(242,177,76,0.12)':'#16171a',fg:d?'#7fd4a0':i===2?'#f2b14c':'#a3a09a'}));
-    const importStats=[['31','Native integrations','Matter, Thread, Sonos, Cast, Nest, GoodWe…'],['3','Via plugin','localtuya, browser_mod, opnsense'],['13','Automations','11 enabled, 2 disabled'],['4','Scripts','Good Night, Movie, Date, Party'],['10','Rooms detected','From entity names']].map(([n,label,sub])=>({n,label,sub}));
+    const KW={'A mode or a moment':['routine','Open Modes',()=>this.setState({screen:'modes'})],'Light the way':['directions_walk','Open Light the way',()=>this.setState({screen:'modes'})],
+      'Presence and the Away overlay':['person_pin_circle','Set up presence',()=>{this.setState({screen:'integrations'});this.openInteg('presence')}],'Notifications':['notifications','Set up notifications',()=>{this.setState({screen:'integrations'});this.openInteg('notify')}],
+      'Needs a look':['help','Open Modes',()=>this.setState({screen:'modes'})]};
+    const kw=A?(KW[A.kova]||KW['Needs a look']):KW['Needs a look'];
+    const sel=A?{name:A.name,status:A.enabled?'On in Home Assistant':'Off in Home Assistant',stBg:A.enabled?'rgba(127,212,160,0.14)':'rgba(255,255,255,0.06)',stFg:A.enabled?'#7fd4a0':'#a3a09a',lastRun:A.lastRun,code:A.yaml,
+      kova:A.kova==='Needs a look'?'Nothing does this automatically yet: build it from a mode, a moment or an overlay.':A.kova,kovaIcon:kw[0],go:kw[2],goLabel:kw[1],showCode:!!s.showCode,codeLabel:s.showCode?'Hide YAML':'Show YAML',toggleCode:()=>this.setState(p=>({showCode:!p.showCode})),
+      parts:[{k:'When',chips:A.when,bg:'#f2b14c',fg:'#1a1408'}].concat(A.cond.length?[{k:'Only if',chips:A.cond,bg:'#26272b',fg:'#f1efea'}]:[]).concat([{k:'Then',chips:A.then,bg:'#26272b',fg:'#f1efea'}])}
+      :{name:'',status:'',stBg:'transparent',stFg:'#a3a09a',lastRun:'',code:'',kova:'',kovaIcon:'help',go:()=>{},goLabel:'',showCode:false,codeLabel:'',toggleCode:()=>{},parts:[]};
+    const sun=H.home.sun||{rise:6,set:18};const rise=sun.rise??6,set=sun.set??18;
+    // Import from Home Assistant: the last scan (backup or folder), what needs the owner, and switching over.
+    const I=s.imp,impShowUpload=!I||s.impNew;
+    const left=I?I.review.filter(r=>!r.done).length:0;
+    const review=I?I.review.map(r=>({...r,icon:r.done?'check_circle':r.icon,iconFg:r.done?'#7fd4a0':'#f2b14c',btn:r.done?r.doneLabel:r.btn,btnBg:r.done?'transparent':'#f2b14c',btnFg:r.done?'#7fd4a0':'#1a1408',act:()=>{if(!r.done||r.action.kind!=='ack')this.impAct(r)}})):[];
+    const handoffs=I?I.handoffs.map(h=>({...h,btn:h.done?'Noted':'Got it',btnBg:h.done?'transparent':'rgba(255,255,255,0.08)',btnFg:h.done?'#7fd4a0':'#f1efea',act:()=>{if(!h.done)this.impMark(h.id)}})):[];
+    const stepDefs=I?[['Backup read',1],[`Scanned ${I.integrations.length} integrations`,1],[left?`Review · ${left} left`:'Reviewed',!left],[I.applied?'Switched over':'Switch over',!!I.applied]]:[['Upload a backup',0],['Scan',0],['Review',0],['Switch over',0]];
+    const cur=stepDefs.findIndex(x=>!x[1]);
+    const steps=stepDefs.map(([label,d],i)=>({label,icon:d?'check':i===cur?'pending':'radio_button_unchecked',bg:d?'rgba(127,212,160,0.12)':i===cur?'rgba(242,177,76,0.12)':'#16171a',fg:d?'#7fd4a0':i===cur?'#f2b14c':'#a3a09a'}));
+    const importStats=I?I.stats:[];
+    const ap=I&&I.applied;
+    const sw={title:ap?'Switched over':'When you’re ready',canApply:!!I&&!ap,applyLabel:s.impApplying?'Switching over… starting your devices':'Switch over',apply:()=>{if(!s.impApplying)this.impApply()},again:()=>this.setState({impNew:true,impErr:null,impFile:null}),
+      text:ap?`Done ${new Date(ap.at).toLocaleString('en-AU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).replace(/\bSept\b/,'Sep')}. ${ap.started.length?`Started ${lst(ap.started)}. `:''}${ap.written.length>ap.started.length?'The rest start once you finish the items under Needs your review. ':''}${ap.kept.length?`Kept your Kova settings for ${lst(ap.kept)}. `:''}Home Assistant isn’t changed: turn off its automations that Kova now covers, so they don’t both act.`
+        :`Switching over starts Kova’s own connections to your devices${H.demo?', replaces the demo home':''} and brings in your rooms and people. Home Assistant isn’t changed, and you can keep it running for anything Kova doesn’t do yet.`};
+    const f=s.impFile,busy=s.impBusy;
+    const imp={fileLabel:f?f.name:'Choose a backup file',fileSub:f?`${(f.size/1048576).toFixed(f.size>104857600?0:1)} MB`:'.tar from Home Assistant, or a .tar.gz of its config folder',
+      pick:e=>{const file=e.target.files&&e.target.files[0];if(file)this.setState({impFile:file,impErr:null})},
+      key:s.impKey,setKey:e=>this.setState({impKey:e.target.value}),keyNote:s.impNeedKey?'· needed for this backup':'· if the backup is encrypted',
+      busy:!!busy,pct:Math.round((busy==='read'?1:s.impPct)*100)+'%',busyText:busy==='read'?'Reading your settings…':`Uploading… ${Math.round(s.impPct*100)}%`,
+      hasErr:!!s.impErr,err:s.impErr||'',scan:()=>this.impScan(),scanLabel:busy?'Reading…':'Read backup',scanBg:f&&!busy?'#f2b14c':'rgba(255,255,255,0.08)',scanFg:f&&!busy?'#1a1408':'#8a8781',
+      path:s.impPath,setPath:e=>this.setState({impPath:e.target.value}),scanFolder:()=>this.impFolder(),canCancel:!!I&&s.impNew,cancel:()=>this.setState({impNew:false,impErr:null})};
     const q=s.q.toLowerCase();
     const entities=list.filter(d=>!q||[d.id,d.eid,d.name,RN[d.room],d.integ].join(' ').toLowerCase().includes(q)).map(d=>{const [st,sf]=this.stateOf(d);return{eid:d.eid,name:d.name,room:RN[d.room]||d.room,integ:d.integ,state:st,stateFg:sf}});
     const D=s.drawer&&devs[s.drawer];let dr={};
@@ -1055,11 +1095,14 @@ class Component extends DCLogic {
       goRooms:go('rooms'),goAutos:go('autos'),lightsOnLabel:`${lightsOn} lights on`,
       roomName:RN[room]||'',roomTabs,tiles,roomSummary:`${rDevs.length} devices · ${rOn} lights on`,
       roomAllOff:()=>api('POST',`/api/rooms/${room}/off`,{}).then(r=>this.toast(`${RN[room]} lights off`,this.undoFn(r.undo))).catch(x=>this.err(x)),
-      autoCount:`${AUTOS.length} imported rules · now ${H.modes.length} modes and 1 behaviour`,strip,autoGroups,sel,merging:false,applyMerge:()=>{},closeMerge:()=>{},testSel:()=>this.setState({screen:'modes'}),
-      steps,importStats,review,reviewTitle:`Needs your review · ${REVIEW.length-doneN} left`,handoffs,
+      autoCount:AUTOS.length?`${AUTOS.length} Home Assistant automation${AUTOS.length===1?'':'s'} · ${AUTOS.filter(a=>a.enabled).length} on · Kova has ${H.modes.length} modes and ${H.overlays.length} overlays`:'Nothing imported yet',strip,autoGroups,sel,hasAutos:AUTOS.length>0,noAutos:!AUTOS.length,
+      autoCta:{label:AUTOS.length?'Import a newer backup':'Import from Home Assistant',go:()=>this.setState({screen:'import',impNew:!!s.imp})},
+      stripNote:`White line = now, ${H.home.clock} · sunrise ${fmt(rise)}, sunset ${fmt(set)}`,sunRise:(rise/24*100)+'%',sunSet:(set/24*100)+'%',sunDay:((set-rise)/24*100)+'%',stripNow:(H.home.nowHour/24*100)+'%',
+      steps,importStats,review,reviewTitle:left?`Needs your review · ${left} left`:'Needs your review · all done',handoffs,hasHandoffs:handoffs.length>0,
+      impSub:I?`Home Assistant${I.source.haVersion?' '+I.source.haVersion:''} · ${I.source.label}`:'Bring your home over from Home Assistant',impUpload:impShowUpload,impScanned:!impShowUpload,imp,sw,
       q:s.q,setQ:e=>this.setState({q:e.target.value}),entities,advanced:adv,
       toggleAdvanced:()=>this.setState(p=>({advanced:!p.advanced,tab:'simple',screen:p.screen==='dev'?'home':p.screen})),advJustify:adv?'flex-end':'flex-start',advKnob:adv?'translateX(14px)':'none',advTrack:adv?'#f2b14c':'#35363a',
-      drawerOpen:!!D,dr,tabs,tabSimple:s.tab==='simple',tabDetails:s.tab==='details',tabCode:s.tab==='code'&&adv,closeDrawer:()=>this.setState({drawer:null}),
+      drawerOpen:!!D,dr,tabs,tabSimple:s.tab==='simple',tabDetails:s.tab==='details',tabCode:s.tab==='code'&&adv,closeDrawer:()=>kovaClose(()=>this.setState({drawer:null})),
       ...this.moreVals(s,H,devs,list,go),
       ...this.v3Vals(s,H,devs,go),
       toastOn:!!s.toast,toastText:s.toast,canUndo:!!s.undo,undo:()=>{s.undo&&s.undo();this.setState({toast:null,undo:null})}};
