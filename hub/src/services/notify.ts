@@ -13,6 +13,8 @@ export interface NotifyOptions {
   ntfy?: { url: string; topic: string; token?: string };
   /** VAPID "subject" Apple/Google may use to contact you: a mailto: or https: URL. */
   push?: { subject?: string };
+  /** The Kova phone app's notifications go through Expo's push service (a cloud relay to Apple and Google). `url` is for tests. */
+  expo?: { url?: string; accessToken?: string };
   /** Kova's address as your phone reaches it (e.g. https://kova.example.com), for links in ntfy notifications. */
   publicUrl?: string;
   /** Built-in rules, all on by default. */
@@ -41,6 +43,12 @@ export interface Notification {
 }
 
 export interface StoredSubscription { subscription: PushSubscription; personId?: string; added: number }
+
+/** A Kova phone app on someone's phone: its Expo push token. */
+export interface AppPhone { token: string; personId?: string; name?: string; platform?: string; added: number }
+
+export const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
+const EXPO_TOKEN = /^(ExponentPushToken|ExpoPushToken)\[[A-Za-z0-9_-]+\]$/;
 
 interface Vapid { publicKey: string; privateKey: string }
 
@@ -212,12 +220,29 @@ export class Notifier {
     return rest.length !== all.length;
   }
 
+  /** Phones with the Kova app that asked for notifications. */
+  appPhones(): AppPhone[] { return this.hub.store.get<AppPhone[]>('appPhones') ?? []; }
+  private saveApps(a: AppPhone[]): void { this.hub.store.set('appPhones', a); }
+
+  registerApp(token: string, o: { personId?: string; name?: string; platform?: string } = {}): void {
+    if (!EXPO_TOKEN.test(token)) throw new Error('token must be an Expo push token (ExponentPushToken[…])');
+    const rest = this.appPhones().filter(a => a.token !== token);
+    this.saveApps([...rest, { token, personId: o.personId || undefined, name: o.name?.slice(0, 60) || undefined, platform: o.platform?.slice(0, 20) || undefined, added: this.now }]);
+  }
+
+  unregisterApp(token: string): boolean {
+    const all = this.appPhones();
+    const rest = all.filter(a => a.token !== token);
+    this.saveApps(rest);
+    return rest.length !== all.length;
+  }
+
   /** Whether any channel could deliver right now. */
-  hasChannels(): boolean { return !!this.opts.ntfy || this.subscriptions().length > 0; }
+  hasChannels(): boolean { return !!this.opts.ntfy || this.subscriptions().length > 0 || this.appPhones().length > 0; }
 
   /** Send to every channel. Returns how many deliveries succeeded. */
-  async notify(n: Notification): Promise<{ push: number; ntfy: boolean; removed: number }> {
-    const out = { push: 0, ntfy: false, removed: 0 };
+  async notify(n: Notification): Promise<{ push: number; ntfy: boolean; removed: number; app: number }> {
+    const out = { push: 0, ntfy: false, removed: 0, app: 0 };
     if (!this.hasChannels()) return out;
     const subs = this.subscriptions().filter(s => !n.people?.length || !s.personId || n.people.includes(s.personId));
     const payload = JSON.stringify({ title: n.title, body: n.body, url: n.url ?? '/phone.html', tag: n.tag, actions: n.actions ?? [] });
@@ -242,18 +267,56 @@ export class Notifier {
       this.saveSubs(this.subscriptions().filter(s => !dead.includes(s.subscription.endpoint)));
       out.removed = dead.length;
     }
+    const apps = this.appPhones().filter(a => !n.people?.length || !a.personId || n.people.includes(a.personId));
+    if (apps.length) {
+      try {
+        const r = await this.sendExpo(n, apps);
+        out.app = r.sent;
+        if (r.gone.length) { this.saveApps(this.appPhones().filter(a => !r.gone.includes(a.token))); out.removed += r.gone.length; }
+        errors.push(...r.errors);
+      } catch (err) { errors.push(`app: ${String((err as Error).message ?? err)}`); }
+    }
     if (this.opts.ntfy) {
       try { await this.sendNtfy(n); out.ntfy = true; } catch (err) { errors.push(`ntfy: ${String((err as Error).message ?? err)}`); }
     }
-    const channels = [out.push ? `${out.push} phone${out.push === 1 ? '' : 's'}` : null, out.ntfy ? 'ntfy' : null].filter(Boolean);
+    const phones = out.push + out.app;
+    const channels = [phones ? `${phones} phone${phones === 1 ? '' : 's'}` : null, out.ntfy ? 'ntfy' : null].filter(Boolean);
     this.hub.store.append({
       kind: 'system', device: null, feed: 'system',
       what: `Notified: ${n.title}`,
-      data: { title: n.title, body: n.body, url: n.url, tag: n.tag, push: out.push, ntfy: out.ntfy, removed: out.removed, errors },
+      data: { title: n.title, body: n.body, url: n.url, tag: n.tag, push: out.push, app: out.app, ntfy: out.ntfy, removed: out.removed, errors },
       cause: { kind: 'system', label: 'Notifications', detail: channels.length ? `sent to ${channels.join(' and ')}` : 'not delivered' },
     });
     this.hub.emit('changed');
     return out;
+  }
+
+  /**
+   * To the Kova app through Expo's push service: one request for every phone. The app opens `url` on a tap
+   * (a camera, lights off). Tokens Apple or Google say are gone are dropped.
+   */
+  private async sendExpo(n: Notification, apps: AppPhone[]): Promise<{ sent: number; gone: string[]; errors: string[] }> {
+    const messages = apps.map(a => ({
+      to: a.token, title: n.title, body: n.body, sound: 'default', priority: 'high', channelId: 'default',
+      data: { url: n.url ?? '/phone.html', tag: n.tag, actions: n.actions ?? [] },
+      ...(n.actions?.length ? { categoryId: n.tag?.startsWith('ring') ? 'doorbell' : undefined } : {}),
+    }));
+    const res = await fetch(this.opts.expo?.url ?? EXPO_PUSH_URL, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json', ...(this.opts.expo?.accessToken ? { authorization: `Bearer ${this.opts.expo.accessToken}` } : {}) },
+      body: JSON.stringify(messages),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) throw new Error(`Expo push HTTP ${res.status}`);
+    const j = await res.json() as { data?: { status: string; message?: string; details?: { error?: string } }[] };
+    const gone: string[] = [], errors: string[] = [];
+    let sent = 0;
+    (j.data ?? []).forEach((t, i) => {
+      if (t.status === 'ok') sent++;
+      else if (t.details?.error === 'DeviceNotRegistered') gone.push(apps[i].token);
+      else errors.push(`app: ${t.message ?? t.details?.error ?? 'failed'}`);
+    });
+    return { sent, gone, errors };
   }
 
   private sendNtfy(n: Notification): Promise<void> {
@@ -285,7 +348,7 @@ export class Notifier {
 
   /** Row on the Integrations screen. */
   status(): { ok: boolean; note?: string } {
-    const n = this.subscriptions().length;
+    const n = this.subscriptions().length + this.appPhones().length;
     const parts = [`${n} phone${n === 1 ? '' : 's'} subscribed`];
     if (this.opts.ntfy) parts.push(`ntfy topic ${this.opts.ntfy.topic}`);
     return { ok: true, note: parts.join(' · ') };

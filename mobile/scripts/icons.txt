@@ -1,0 +1,16 @@
+# Material Symbols Rounded icons the app can draw. Icons named by the hub (modes, rooms,
+# overlays, integrations, activity) are included too; add a name here and run build-icons.
+account_tree add add_link air air_purifier airplay apps arrow_back arrow_downward arrow_forward arrow_upward
+auto_awesome auto_mode backup balcony bathtub bed bedtime block bolt call campaign cast category celebration
+chair check check_circle checkroom chevron_left chevron_right cleaning_services close cloud cloud_download
+cloud_off crib dark_mode deck delete desk devices directions_walk do_not_disturb_on door_front doorbell dns
+edit electric_meter electrical_services energy_savings_leaf error event_busy fact_check favorite
+fitness_center flight_takeoff garage_home graphic_eq group help history home home_iot_device hub info key
+kitchen layers light_mode lightbulb link link_off local_laundry_service location_on lock luggage
+meeting_room menu_book mic more_horiz movie music_note nights_stay notifications notifications_active
+notifications_off outlet password pause person person_pin_circle phone_iphone piano play_arrow power
+power_settings_new qr_code_2 qr_code_scanner radio refresh remove_circle restart_alt router routine
+schedule search search_off send sensors settings shield single_bed skip_next solar_power speaker
+speaker_group stairs star stop sync thunderstorm toggle_on tune tv videocam videocam_off visibility
+visibility_off volume_down volume_off volume_up wb_sunny wb_twilight weekend wifi wifi_off yard
+water_drop sunny partly_cloudy_day rainy foggy ac_unit mode_fan sensor_door bathroom home_work

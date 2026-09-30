@@ -42,8 +42,28 @@ add-on: nothing in Kova depends on HA. The design reference lives in
   `?cam=<id>` opens that camera live (the doorbell notification's *View camera*),
   `?page=security|more|modes|activity|energy|media|integrations|customise`, `?do=lights-off`.
   A lock-screen Live Activity needs a native app, so it isn't here.
-* **Later:** Kova Cloud (accounts, remote access relay, backups, updates) and a
-  native mobile app. Neither exists yet.
+* **Native app** (`mobile/`): Kova for iPhone and Android, Expo SDK 57 / React Native, the same
+  stack as the Warden and Helix apps. Same tabs and design as the phone web app, drawn natively:
+  **Now**, **Devices** (tiles, the device panel with every control and its settings), **Ask**
+  (with the "Understood" chips), **Security** (camera images, who's home, the network, today),
+  **More** (Modes with findings and the 14-day test, Activity, This phone). Setup-heavy screens
+  (Integrations, Customise, the mode editor, Energy, Media, Add) and live camera video open the
+  web app's page in the app (`phone.html?embed=1`, whose back button returns to the app).
+  - **Connecting:** scan the code from `web/connect.html` (the desktop sidebar's "Kova on your
+    phone", or More in the phone web app): `GET /api/app-link` gives `kova://connect?url=…&token=…`
+    and its QR code, to callers that already have the token. Or it looks for a hub on the phone's
+    Wi-Fi (`/api/health` on port 8140 across the /24), or you type the address. Kept in the
+    Keychain / Keystore.
+  - **Live state:** `/api/ws`, reconnecting with backoff and when the app comes to the front;
+    changes show at once and the hub's snapshot has the final word; every action's undo is a toast.
+  - **Arrive and leave:** the OS watches a 150 m circle around the home (`home.location` in the
+    snapshot) and wakes the app on crossing it, which posts to `/api/people/:id/presence` with that
+    person's own key (source "Kova app (location)"). A "left" inside the circle is ignored.
+  - **Notifications:** `POST /api/push/app {token, personId}` registers the phone's Expo push
+    token; the notifier sends through Expo's push service alongside Web Push and ntfy. A tap on
+    the doorbell opens its camera; *Turn them off* turns the lights off.
+  - Widgets, Live Activities and Siri need native extensions (Swift/Kotlin) and aren't there yet.
+* **Later:** Kova Cloud (accounts, remote access relay, backups, updates). It doesn't exist yet.
 
 ## Domain model (`hub/src/model/types.ts`)
 
@@ -340,6 +360,11 @@ channel and logs the notification to Activity (`kind: 'system'`, feed `system`).
   certificate (e.g. Caddy or Nginx Proxy Manager with a DNS-challenge Let's
   Encrypt cert for `kova.yourdomain`, resolved to the hub on your LAN), then open
   that address and add it to the Home Screen.
+* **The Kova app** (`mobile/`): through Expo's push service (`exp.host`, a cloud
+  relay to Apple and Google), one request for every phone that registered with
+  `POST /api/push/app`. The message carries the same `url` the app opens on a tap.
+  Tokens Expo reports as `DeviceNotRegistered` are removed. Works on plain HTTP.
+  `notify.expo.accessToken` if the Expo project requires one.
 * **ntfy**: a JSON POST to an [ntfy](https://ntfy.sh) server (ntfy.sh or
   self-hosted). Install the ntfy app and subscribe to the topic. It works with
   Kova on plain HTTP, so it's the zero-setup option. Pick a long random topic
@@ -411,6 +436,8 @@ a row on the Integrations screen ("Router: 2 phones seen").
 | GET | `/api/devices/:id/snapshot` | Latest event image, where the camera offers one (404 otherwise) |
 | GET | `/api/integrations/nest/auth-url` | `?redirectUri=` → `{url, redirectUri}`: Google's page for linking Nest |
 | POST | `/api/integrations/nest/auth-code` | `{code, redirectUri}` → `{refreshToken}` to save as `nest.refreshToken`; with in-app setup it's saved for you and the answer is `{ok, linked, status}` |
+| GET | `/api/app-link` | `{url, link, qrSvg, hasToken}`: the `kova://connect` link (with the token) and its QR code, for the native app |
+| POST, DELETE | `/api/push/app` | `{token, personId?, name?, platform?}`: the native app's Expo push token |
 | GET | `/api/health` | `{ok, version, uptimeS}`; no token needed, no home data (for health checks) |
 | PATCH | `/api/devices/:id/settings` | `{name?, room?, hidden?, favourite?}` (`null` name or room goes back to the integration's) → `{undo}`. Devices carry `hidden` and `original: {name, room}` when changed |
 | PUT | `/api/home` | `{name}` |

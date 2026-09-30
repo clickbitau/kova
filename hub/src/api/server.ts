@@ -27,6 +27,7 @@ import type { HaImport } from '../import/ha-scan.ts';
 import { registerImportRoutes } from './import-routes.ts';
 import { registerHomeRoutes } from './home-routes.ts';
 import { registerLanAppRoutes } from './lan-apps-routes.ts';
+import { registerAppLinkRoutes } from './app-link.ts';
 import type { Backups } from '../services/backup.ts';
 import { KOVA_VERSION } from '../version.ts';
 import { createReadStream } from 'node:fs';
@@ -322,6 +323,7 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
   registerImportRoutes(app, opts.haImport);
   registerHomeRoutes(app, hub);
   registerLanAppRoutes(app, { integrations: opts.integrations, ...opts.lanApps });
+  registerAppLinkRoutes(app, { token: opts.token, port: () => { const a = app.server.address(); return typeof a === 'object' && a ? a.port : Number(process.env.KOVA_PORT ?? 8140); } });
 
   // Presence from a phone: the Kova app, or an iOS Shortcut / Android automation ("When I arrive home → Get contents of URL").
   // `home` can be in the body or the query (?home=1), so a Shortcut needs no request body. `?key=` is the person's own key.
@@ -359,6 +361,17 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
   app.post<{ Body: { endpoint?: string } }>('/api/push/unsubscribe', async (req, reply) => {
     if (!opts.notifier) return reply.code(404).send({ error: 'notifications are not running' });
     return { ok: opts.notifier.unsubscribe(String(req.body?.endpoint ?? '')) };
+  });
+  // The Kova phone app: its Expo push token, and who the phone belongs to.
+  app.post<{ Body: { token?: string; personId?: string; name?: string; platform?: string } }>('/api/push/app', async (req, reply) => {
+    if (!opts.notifier) return reply.code(404).send({ error: 'notifications are not running' });
+    const personId = req.body?.personId;
+    if (personId && !hub.config.get().people.some(p => p.id === personId)) return reply.code(400).send({ error: 'unknown person' });
+    try { opts.notifier.registerApp(String(req.body?.token ?? ''), { personId, name: req.body?.name, platform: req.body?.platform }); hub.emit('changed'); return { ok: true }; } catch (e) { return fail(reply, e); }
+  });
+  app.delete<{ Body: { token?: string } }>('/api/push/app', async (req, reply) => {
+    if (!opts.notifier) return reply.code(404).send({ error: 'notifications are not running' });
+    return { ok: opts.notifier.unregisterApp(String(req.body?.token ?? '')) };
   });
   app.post('/api/push/test', async (_req, reply) => {
     if (!opts.notifier) return reply.code(404).send({ error: 'notifications are not running' });
