@@ -2,7 +2,7 @@
 // translate brand-specific protocols into and out of them.
 
 /** What kind of thing a device is. Drives which capabilities it has. */
-export type DeviceType = 'light' | 'dimmer' | 'fan' | 'media' | 'tv' | 'plug' | 'camera' | 'sensor';
+export type DeviceType = 'light' | 'dimmer' | 'fan' | 'media' | 'tv' | 'plug' | 'camera' | 'sensor' | 'vacuum';
 
 /**
  * Normalised device state. Every field is optional because devices only carry
@@ -26,10 +26,16 @@ export interface DeviceState {
   grid?: number | null;
   /** Whole-home consumption in W, when a meter or hybrid inverter reports it. */
   load?: number | null;
+  /** Robot vacuum: what it's doing. `on` is true while cleaning. */
+  activity?: VacuumActivity;
+  /** Battery charge 0–100. */
+  battery?: number | null;
   online?: boolean;
 }
 
-export type Capability = 'onoff' | 'brightness' | 'colorTemp' | 'color' | 'fanMode' | 'media' | 'volume' | 'power' | 'energy' | 'events';
+export type VacuumActivity = 'cleaning' | 'returning' | 'docked' | 'paused' | 'idle' | 'error';
+
+export type Capability = 'onoff' | 'brightness' | 'colorTemp' | 'color' | 'fanMode' | 'media' | 'volume' | 'power' | 'energy' | 'events' | 'vacuum' | 'battery';
 
 export interface Device {
   id: string;

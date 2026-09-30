@@ -200,7 +200,8 @@ async function api(method,path,body){
   return j;
 }
 const BOOT=window.KOVA_BOOT||{home:{name:'Kova',timezone:'UTC',nowHour:12,dateLabel:'',clock:''},rooms:[],groups:{},people:[],devices:[],modes:[{id:'day',name:'Day',color:'#dcd27e',icon:'light_mode',startLabel:'',endLabel:'',groups:[],inherit:[],moments:[],test:{days:[],text:''}}],current:{modeId:'day',untilLabel:'',nextId:'day',overlay:null},day:{bands:[],items:[],marks:[]},upcoming:[],overlays:[],sources:[],findings:[],activity:[],integrations:[],lightTheWay:[],weather:null,offline:true};
-const ICON={light:'lightbulb',dimmer:'lightbulb',fan:'air_purifier',media:'speaker',tv:'tv',camera:'videocam',plug:'outlet',sensor:'sensors'};
+const ICON={light:'lightbulb',dimmer:'lightbulb',fan:'air_purifier',media:'speaker',tv:'tv',camera:'videocam',plug:'outlet',sensor:'sensors',vacuum:'cleaning_services'};
+const VAC={cleaning:'Cleaning',returning:'Returning to dock',docked:'Docked',paused:'Paused',idle:'Idle',error:'Needs attention'};
 const AS={auto:['rgba(242,177,76,0.13)','#f2b14c'],people:['rgba(127,212,160,0.14)','#7fd4a0'],device:['rgba(124,184,240,0.13)','#7cb8f0'],system:['#232428','#a3a09a']};
 const SRC_ICON={'Device control':'toggle_on','From the activity log':'history','From your modes':'routine','Built-in · nothing left your home':'lock'};
 const isLight=d=>d.type==='light'||d.type==='dimmer';
@@ -232,9 +233,10 @@ class Component extends DCLogic {
   modeById(id){const H=this.state.hub;return H.modes.find(m=>m.id===id)||H.modes[0]}
   tog(id){const d=this.devs()[id];if(!d||d.type==='camera'||d.type==='sensor')return;
     if(d.type==='fan'){this.send(id,{mode:d.mode==='Auto'?'Sleep':'Auto'});return}
+    if(d.type==='vacuum'){this.optimistic(id,{activity:d.on?'returning':'cleaning'});this.send(id,{on:!d.on});return}
     if(isPlayer(d)){this.send(id,d.on?{on:false,media:null}:{on:true,media:(this.state.hub.sources[0]||{}).name||'Radio',vol:d.vol??30});return}
     this.send(id,{on:!d.on})}
-  st(d){if(d.type==='camera'||d.type==='sensor')return d.online===false?['Offline','#ff6b5e']:['Live','#7fd4a0'];if(d.online===false)return['Not responding','#ff6b5e'];if(d.type==='fan')return[d.mode||'Auto','#7cb8f0'];if(isPlayer(d))return d.on?[d.media?`Playing ${d.media}`:'Playing','#7cb8f0']:['Idle','#a3a09a'];if(!d.on)return['Off','#a3a09a'];if(d.type==='dimmer')return[`On · ${d.bri}%`,'#f2b14c'];if(d.type==='plug')return[d.power!=null?`On · ${d.power} W`:'On','#f2b14c'];return['On','#f2b14c']}
+  st(d){if(d.type==='camera'||d.type==='sensor')return d.online===false?['Offline','#ff6b5e']:['Live','#7fd4a0'];if(d.online===false)return['Not responding','#ff6b5e'];if(d.type==='vacuum'){const a=d.activity||(d.on?'cleaning':'idle');return[`${VAC[a]||'Idle'}${d.battery!=null?' · '+d.battery+'%':''}`,a==='error'?'#ff6b5e':a==='cleaning'?'#f2b14c':'#a3a09a']}if(d.type==='fan')return[d.mode||'Auto','#7cb8f0'];if(isPlayer(d))return d.on?[d.media?`Playing ${d.media}`:'Playing','#7cb8f0']:['Idle','#a3a09a'];if(!d.on)return['Off','#a3a09a'];if(d.type==='dimmer')return[`On · ${d.bri}%`,'#f2b14c'];if(d.type==='plug')return[d.power!=null?`On · ${d.power} W`:'On','#f2b14c'];return['On','#f2b14c']}
   tint(d){const media=isPlayer(d);if(d.type==='camera'||d.type==='sensor')return{bg:'#16171a',border:'rgba(255,255,255,0.05)',iconBg:'rgba(127,212,160,0.15)',iconFg:'#7fd4a0'};if(d.type==='fan'||media)return{bg:d.on&&media?'rgba(124,184,240,0.12)':'#16171a',border:d.on&&media?'rgba(124,184,240,0.3)':'rgba(255,255,255,0.05)',iconBg:d.on?'rgba(124,184,240,0.2)':'#232428',iconFg:d.on?'#7cb8f0':'#8a8781'};return d.on?{bg:'rgba(242,177,76,0.11)',border:'rgba(242,177,76,0.28)',iconBg:d.color||'#f2b14c',iconFg:'#1a1408'}:{bg:'#16171a',border:'rgba(255,255,255,0.05)',iconBg:'#232428',iconFg:'#8a8781'}}
   tile(d){const [s,f]=this.st(d);return{...d,...this.tint(d),icon:ICON[d.type],state:s,stateFg:f,toggle:()=>this.tog(d.id),open:e=>{e.stopPropagation();this.setState({sheet:d.id})}}}
   // Live "Understood" preview, parsed on the hub as you type.
