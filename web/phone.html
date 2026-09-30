@@ -75,7 +75,7 @@
 </sc-if>
 
 <sc-if value="{{ isDevices }}" hint-placeholder-val="{{ false }}">
-<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px"><div style="display:flex;flex-direction:column;gap:4px"><span style="font-size:30px;font-weight:700;letter-spacing:-0.02em">Devices</span><span style="font-size:13px;color:#a3a09a">{{ devSummary }}</span></div><div onClick="{{ goCustomise }}" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:12px;background:rgba(255,255,255,0.07);font-size:13px;font-weight:700;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:18px">tune</span>Customise</div></div>
+<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px"><div style="display:flex;flex-direction:column;gap:4px"><span style="font-size:30px;font-weight:700;letter-spacing:-0.02em">Devices</span><span style="font-size:13px;color:#a3a09a">{{ devSummary }}</span></div><div style="display:flex;gap:8px"><div onClick="{{ goCustomise }}" title="Customise" style="width:38px;height:38px;border-radius:12px;background:rgba(255,255,255,0.07);display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:19px">tune</span></div><div onClick="{{ openAdd }}" style="display:flex;align-items:center;gap:4px;padding:8px 12px 8px 9px;border-radius:12px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:19px">add</span>Add</div></div></div>
 <div style="display:flex;align-items:center;gap:8px;padding:0 6px 0 12px;border-radius:14px;background:#16171a;border:1px solid rgba(255,255,255,0.08);margin-top:-8px"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#8a8781">search</span><input value="{{ devQ }}" onChange="{{ setDevQ }}" placeholder="Search devices" autocomplete="off" style="flex:1;min-width:0;background:transparent;border:none;outline:none;color:#f1efea;font-family:Manrope,sans-serif;font-size:16px;padding:11px 0"><sc-if value="{{ hasDevQ }}" hint-placeholder-val="{{ false }}"><span onClick="{{ clearDevQ }}" style="font-family:'Material Symbols Rounded';font-size:19px;color:#8a8781;padding:6px;cursor:pointer">close</span></sc-if></div>
 <div style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:-8px -18px 0;padding:0 18px"><sc-for list="{{ roomPills }}" as="rt" hint-placeholder-count="6"><div onClick="{{ rt.open }}" style="flex:none;padding:8px 14px;border-radius:999px;font-size:13px;font-weight:600;cursor:pointer;background:{{ rt.bg }};color:{{ rt.fg }}">{{ rt.name }}</div></sc-for></div>
 <div style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:-12px -18px 0;padding:0 18px"><sc-for list="{{ typeChips }}" as="tc" hint-placeholder-count="5"><div onClick="{{ tc.pick }}" style="flex:none;display:flex;align-items:center;gap:5px;padding:6px 11px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;background:{{ tc.bg }};color:{{ tc.fg }};border:1px solid {{ tc.border }}"><span style="font-family:'Material Symbols Rounded';font-size:15px">{{ tc.icon }}</span>{{ tc.label }}</div></sc-for></div>
@@ -92,7 +92,7 @@
 </div>
 </div>
 </sc-for>
-<sc-if value="{{ devEmpty }}" hint-placeholder-val="{{ false }}"><div style="padding:28px 16px;border-radius:18px;background:#16171a;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center"><span style="font-family:'Material Symbols Rounded';font-size:28px;color:#6f6d69">search_off</span><span style="font-size:14px;font-weight:700">{{ devEmptyTitle }}</span><span style="font-size:12.5px;color:#a3a09a;line-height:1.45">{{ devEmptyText }}</span></div></sc-if>
+<sc-if value="{{ devEmpty }}" hint-placeholder-val="{{ false }}"><div style="padding:28px 16px;border-radius:18px;background:#16171a;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center"><span style="font-family:'Material Symbols Rounded';font-size:28px;color:#6f6d69">search_off</span><span style="font-size:14px;font-weight:700">{{ devEmptyTitle }}</span><span style="font-size:12.5px;color:#a3a09a;line-height:1.45">{{ devEmptyText }}</span><sc-if value="{{ devEmptyAdd }}" hint-placeholder-val="{{ false }}"><div onClick="{{ openAdd }}" style="margin-top:6px;padding:9px 16px;border-radius:12px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;cursor:pointer">Add a device</div></sc-if></div></sc-if>
 <sc-if value="{{ hasHidden }}" hint-placeholder-val="{{ false }}"><div onClick="{{ toggleHidden }}" style="align-self:center;display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:999px;background:rgba(255,255,255,0.06);font-size:12.5px;font-weight:600;color:#a3a09a;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:17px">{{ hiddenIcon }}</span>{{ hiddenLabel }}</div></sc-if>
 </sc-if>
 
@@ -261,6 +261,13 @@
 <sc-if value="{{ editSources }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:10px"><sc-for list="{{ sourceRows }}" as="sr" hint-placeholder-count="2"><div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:600;color:#a3a09a">{{ sr.name }}</span><div style="display:flex;gap:8px"><input value="{{ sr.url }}" onChange="{{ sr.setUrl }}" placeholder="https://… stream address" inputmode="url" autocapitalize="off" style="padding:10px 12px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font-family:Manrope,sans-serif;font-size:16px;flex:1;min-width:0;outline:none"><div onClick="{{ sr.save }}" style="padding:10px 14px;border-radius:10px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center">Save</div></div></div></sc-for></div></sc-if>
 </div>
 </div>
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">Speaker groups</span><span onClick="{{ newGroup }}" style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:#f2b14c;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:18px">add</span>New group</span></div>
+<sc-if value="{{ hasGroups }}" hint-placeholder-val="{{ true }}"><div style="background:#16171a;border-radius:18px;overflow:hidden">
+<sc-for list="{{ groupRows }}" as="gr" hint-placeholder-count="2"><div onClick="{{ gr.open }}" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid rgba(255,255,255,0.05);cursor:pointer"><div style="width:36px;height:36px;flex:none;border-radius:10px;display:flex;align-items:center;justify-content:center;background:{{ gr.iconBg }};color:{{ gr.iconFg }}"><span style="font-family:'Material Symbols Rounded';font-size:20px">speaker_group</span></div><div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:14px;font-weight:700">{{ gr.name }}</span><span style="font-size:12px;color:{{ gr.subFg }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ gr.sub }}</span></div><div onClick="{{ gr.toggle }}" style="width:36px;height:36px;flex:none;border-radius:50%;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px;font-variation-settings:'FILL' 1">{{ gr.playIcon }}</span></div></div></sc-for>
+</div></sc-if>
+<sc-if value="{{ noGroups }}" hint-placeholder-val="{{ false }}"><div onClick="{{ newGroup }}" style="border-radius:16px;padding:14px;border:1px dashed rgba(255,255,255,0.14);display:flex;align-items:center;gap:12px;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:22px;color:#7cb8f0">speaker_group</span><span style="font-size:13px;color:#a3a09a;line-height:1.45">Group speakers of any brand to play as one. Google Cast speakers that are also a group in Google Home play in perfect sync.</span></div></sc-if>
+</div>
 <div style="background:#16171a;border-radius:18px;overflow:hidden">
 <sc-for list="{{ players }}" as="pl" hint-placeholder-count="4">
 <div onClick="{{ pl.pick }}" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid rgba(255,255,255,0.05);cursor:pointer;background:{{ pl.bg }}">
@@ -328,6 +335,7 @@
 <sc-if value="{{ sh.hasColor }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:13px;font-weight:600">Colour</span><div style="display:grid;grid-template-columns:repeat(8,1fr);gap:8px"><sc-for list="{{ sh.colors }}" as="c" hint-placeholder-count="8"><div onClick="{{ c.pick }}" style="aspect-ratio:1;border-radius:50%;background:{{ c.bg }};outline:{{ c.ring }};outline-offset:2px;cursor:pointer"></div></sc-for></div></div></sc-if>
 <sc-if value="{{ sh.isPlayer }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:10px"><div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#a3a09a">volume_down</span><input type="range" min="0" max="100" value="{{ sh.vol }}" onChange="{{ sh.setVol }}" style="flex:1;accent-color:#7cb8f0"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#a3a09a;width:36px;text-align:right">{{ sh.volLabel }}</span></div><span style="font-size:13px;font-weight:600">Play</span><div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ sh.sources }}" as="so" hint-placeholder-count="4"><div onClick="{{ so.play }}" style="display:flex;align-items:center;gap:6px;padding:9px 12px;border-radius:10px;background:{{ so.bg }};color:{{ so.fg }};font-size:13px;font-weight:600;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:17px">{{ so.icon }}</span>{{ so.name }}</div></sc-for></div></div></sc-if>
 <sc-if value="{{ sh.hasModes }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:13px;font-weight:600">{{ sh.modesLabel }}</span><div style="display:flex;gap:8px;flex-wrap:wrap"><sc-for list="{{ sh.modes }}" as="mo" hint-placeholder-count="3"><div onClick="{{ mo.pick }}" style="flex:1;min-width:84px;display:flex;align-items:center;justify-content:center;gap:6px;padding:11px 10px;border-radius:12px;background:{{ mo.bg }};color:{{ mo.fg }};font-size:13px;font-weight:700;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:18px">{{ mo.icon }}</span>{{ mo.label }}</div></sc-for></div></div></sc-if>
+<sc-if value="{{ sh.isGroup }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;background:#1c1d20"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:{{ sh.groupFg }}">{{ sh.groupIcon }}</span><div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:13.5px;font-weight:600">{{ sh.groupMembers }}</span><span style="font-size:12px;color:#a3a09a">{{ sh.groupSync }}</span></div><div onClick="{{ sh.editGroup }}" style="padding:8px 12px;border-radius:10px;background:rgba(255,255,255,0.08);font-size:12.5px;font-weight:700;cursor:pointer">Edit</div></div></sc-if>
 <sc-if value="{{ sh.isCamera }}" hint-placeholder-val="{{ false }}"><div onClick="{{ sh.watch }}" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:13px;border-radius:14px;background:#f2b14c;color:#1a1408;font-size:14px;font-weight:700;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px;font-variation-settings:'FILL' 1">play_arrow</span>Watch live</div></sc-if>
 <sc-if value="{{ sh.hasPower }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:10px"><sc-for list="{{ sh.readings }}" as="rd" hint-placeholder-count="2"><div style="flex:1;padding:12px 14px;border-radius:14px;background:#1c1d20;display:flex;flex-direction:column;gap:2px"><span style="font-size:11.5px;color:#a3a09a">{{ rd.k }}</span><span style="font-size:17px;font-weight:700">{{ rd.v }}</span></div></sc-for></div></sc-if>
 <div style="display:flex;flex-direction:column;border-radius:14px;background:#1c1d20;overflow:hidden"><div style="display:flex;gap:12px;padding:12px 14px"><span style="font-family:'Material Symbols Rounded';font-size:19px;color:#a3a09a">help</span><div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">Why it’s like this</span><span style="font-size:13.5px;line-height:1.4">{{ sh.why }}</span></div></div><div style="display:flex;gap:12px;padding:12px 14px;border-top:1px solid rgba(255,255,255,0.05)"><span style="font-family:'Material Symbols Rounded';font-size:19px;color:#f2b14c">schedule</span><div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">What’s next</span><span style="font-size:13.5px;line-height:1.4">{{ sh.next }}</span></div></div></div>
@@ -369,6 +377,38 @@
 <div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:600;color:#a3a09a">Name</span><input value="{{ ps.name }}" onChange="{{ ps.setName }}" autocomplete="off" style="flex:1;min-width:0;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,0.1);background:#16171a;color:#f1efea;font-family:Manrope,sans-serif;font-size:16px;outline:none"></div>
 <div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:600;color:#a3a09a">Their phone</span><input value="{{ ps.detail }}" onChange="{{ ps.setDetail }}" placeholder="e.g. iPhone" autocomplete="off" style="flex:1;min-width:0;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,0.1);background:#16171a;color:#f1efea;font-family:Manrope,sans-serif;font-size:16px;outline:none"></div>
 <div onClick="{{ ps.remove }}" style="align-self:flex-start;padding:9px 14px;border-radius:10px;background:rgba(255,107,94,0.14);color:#ff6b5e;font-size:13px;font-weight:700;cursor:pointer">Remove {{ ps.title }}</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ addOpen }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ add.close }}" style="position:absolute;inset:0;background:rgba(0,0,0,0.55)"></div>
+<div style="position:absolute;left:0;right:0;bottom:0;max-height:92%;overflow-y:auto;scrollbar-width:none;border-radius:28px 28px 0 0;background:#141517;padding:10px 20px calc(env(safe-area-inset-bottom, 0px) + 34px);display:flex;flex-direction:column;gap:16px">
+<div onClick="{{ add.close }}" title="Close" style="align-self:stretch;display:flex;justify-content:center;padding:8px 0 12px;margin:-10px 0 -10px;cursor:pointer;flex:none"><div style="width:40px;height:5px;border-radius:3px;background:#35363a;"></div></div>
+<div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:21px;font-weight:700">Add a device</span><span style="font-size:13px;color:#a3a09a">Pick how it connects. Everything stays on your network unless it says Cloud.</span></div>
+<sc-for list="{{ add.sections }}" as="sec" hint-placeholder-count="3">
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">{{ sec.title }}</span>
+<div style="border-radius:16px;background:#1c1d20;overflow:hidden">
+<sc-for list="{{ sec.rows }}" as="ar" hint-placeholder-count="3"><div onClick="{{ ar.go }}" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid rgba(255,255,255,0.05);cursor:pointer"><div style="width:36px;height:36px;flex:none;border-radius:11px;background:#26272b;display:flex;align-items:center;justify-content:center;color:{{ ar.fg }}"><span style="font-family:'Material Symbols Rounded';font-size:20px">{{ ar.icon }}</span></div><div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:14px;font-weight:700">{{ ar.name }}</span><span style="font-size:12px;color:{{ ar.subFg }};line-height:1.35">{{ ar.sub }}</span></div><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#6f6d69">chevron_right</span></div></sc-for>
+</div></div>
+</sc-for>
+<span style="font-size:12px;color:#6f6d69;line-height:1.5">Moving from Home Assistant? Open Kova on a computer and use Import: it brings your devices, rooms and people across.</span>
+</div>
+</sc-if>
+
+<sc-if value="{{ gOpen }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ gs.close }}" style="position:absolute;inset:0;background:rgba(0,0,0,0.55)"></div>
+<div style="position:absolute;left:0;right:0;bottom:0;max-height:92%;overflow-y:auto;scrollbar-width:none;border-radius:28px 28px 0 0;background:#141517;padding:10px 20px calc(env(safe-area-inset-bottom, 0px) + 34px);display:flex;flex-direction:column;gap:16px">
+<div onClick="{{ gs.close }}" title="Close" style="align-self:stretch;display:flex;justify-content:center;padding:8px 0 12px;margin:-10px 0 -10px;cursor:pointer;flex:none"><div style="width:40px;height:5px;border-radius:3px;background:#35363a;"></div></div>
+<div style="display:flex;justify-content:space-between;align-items:center;gap:12px"><div style="display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font-size:12px;color:#a3a09a">{{ gs.kicker }}</span><span style="font-size:21px;font-weight:700">{{ gs.title }}</span></div><div onClick="{{ gs.save }}" style="padding:9px 16px;border-radius:12px;background:{{ gs.saveBg }};color:{{ gs.saveFg }};font-size:13px;font-weight:700;cursor:pointer">{{ gs.saveLabel }}</div></div>
+<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:600;color:#a3a09a">Name</span><input value="{{ gs.name }}" onChange="{{ gs.setName }}" placeholder="e.g. Downstairs, Whole home" autocomplete="off" style="flex:1;min-width:0;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,0.1);background:#16171a;color:#f1efea;font-family:Manrope,sans-serif;font-size:16px;outline:none"></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:12px;font-weight:600;color:#a3a09a">Speakers · {{ gs.count }}</span>
+<div style="border-radius:14px;background:#1c1d20;overflow:hidden">
+<sc-for list="{{ gs.speakers }}" as="sp" hint-placeholder-count="5"><div onClick="{{ sp.toggle }}" style="display:flex;align-items:center;gap:12px;padding:11px 14px;border-top:1px solid rgba(255,255,255,0.05);cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:22px;color:{{ sp.checkFg }};font-variation-settings:'FILL' {{ sp.fill }}">{{ sp.check }}</span><span style="font-family:'Material Symbols Rounded';font-size:19px;color:#8a8781">{{ sp.icon }}</span><div style="display:flex;flex-direction:column;gap:1px;flex:1;min-width:0"><span style="font-size:14px;font-weight:600">{{ sp.name }}</span><span style="font-size:12px;color:#a3a09a">{{ sp.sub }}</span></div></div></sc-for>
+<sc-if value="{{ gs.noSpeakers }}" hint-placeholder-val="{{ false }}"><div style="padding:14px;font-size:13px;color:#a3a09a;line-height:1.45">No speakers yet. Turn on Google Cast, Sonos or AirPlay in Add a device.</div></sc-if>
+</div></div>
+<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:600;color:#a3a09a">Room</span><select value="{{ gs.room }}" onChange="{{ gs.setRoom }}" style="padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,0.1);background:#16171a;color:#f1efea;font-family:Manrope,sans-serif;font-size:16px;outline:none;width:100%"><sc-for list="{{ gs.rooms }}" as="ro" hint-placeholder-count="4"><option value="{{ ro.v }}">{{ ro.label }}</option></sc-for></select></div>
+<div style="display:flex;gap:12px;padding:12px 14px;border-radius:14px;background:{{ gs.syncBg }}"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:{{ gs.syncFg }}">{{ gs.syncIcon }}</span><div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:13.5px;font-weight:700;color:{{ gs.syncFg }}">{{ gs.syncTitle }}</span><span style="font-size:12.5px;color:#a3a09a;line-height:1.45">{{ gs.syncText }}</span></div></div>
+<sc-if value="{{ gs.canDelete }}" hint-placeholder-val="{{ false }}"><div onClick="{{ gs.remove }}" style="align-self:flex-start;padding:9px 14px;border-radius:10px;background:rgba(255,107,94,0.14);color:#ff6b5e;font-size:13px;font-weight:700;cursor:pointer">Delete group</div></sc-if>
 </div>
 </sc-if>
 
@@ -881,7 +921,7 @@ class Component extends DCLogic {
     return{devSummary:`${pool.length} device${pool.length===1?'':'s'} · ${onAll} light${onAll===1?'':'s'} on`,devQ:s.devQ||'',setDevQ:e=>this.setState({devQ:e.target.value}),hasDevQ:!!q,clearDevQ:()=>this.setState({devQ:''}),
       roomPills:[pill('all','All rooms'),...roomIds.filter(id=>list.some(d=>d.room===id)).map(id=>pill(id,RN[id]||'Other'))],
       typeChips:present.map(([id,label,icon])=>{const a=tf[0]===id;return{label,icon,pick:()=>this.setState({devType:id}),bg:a?'rgba(242,177,76,0.14)':'transparent',fg:a?'#f2b14c':'#a3a09a',border:a?'rgba(242,177,76,0.4)':'rgba(255,255,255,0.08)'}}),
-      devGroups:groups,devEmpty:!groups.length,devEmptyTitle:list.length?'Nothing matches':'No devices yet',devEmptyText:list.length?'Try another word, room or type.':'Add an integration in More → Integrations, or import from Home Assistant.',
+      devGroups:groups,devEmpty:!groups.length,devEmptyAdd:!list.length,devEmptyTitle:list.length?'Nothing matches':'No devices yet',devEmptyText:list.length?'Try another word, room or type.':'Add an integration in More → Integrations, or import from Home Assistant.',
       hasHidden:nHidden>0,hiddenLabel:s.showHidden?'Hide hidden devices':`Show ${nHidden} hidden device${nHidden===1?'':'s'}`,hiddenIcon:s.showHidden?'visibility_off':'visibility',toggleHidden:()=>this.setState(p=>({showHidden:!p.showHidden})),
       goCustomise:()=>this.go('customise')};
   }
@@ -907,6 +947,8 @@ class Component extends DCLogic {
       hasColor:cap('color')&&!!D.on,colors:COLS.map(c=>({bg:c,ring:(D.color||'').toLowerCase()===c?'2px solid #fff':'none',pick:()=>this.send(D.id,{on:true,color:c})})),
       isPlayer:isPlayer(D),vol:D.vol??30,volLabel:(D.vol??30)+'%',setVol:e=>this.patch(D.id,{vol:+e.target.value}),
       sources:H.sources.map(so=>{const a=D.on&&D.media===so.name;return{name:so.name,icon:so.icon,bg:a?'rgba(124,184,240,0.2)':'#1c1d20',fg:a?'#7cb8f0':'#d8d5cf',play:()=>this.send(D.id,{on:true,media:so.name,vol:D.vol??30})}}),
+      ...(()=>{const g=(H.speakerGroups||[]).find(x=>x.deviceId===D.id);if(!g)return{isGroup:false};const names=g.members.map(id=>(H.devices.find(x=>x.id===id)||{name:id}).name);
+        return{isGroup:true,groupMembers:`Plays on ${names.join(', ')}`,groupSync:g.sync==='perfect'?`Perfect sync through “${g.castGroup}”`:'Start together',groupIcon:g.sync==='perfect'?'graphic_eq':'sync',groupFg:g.sync==='perfect'?'#7fd4a0':'#f2b14c',editGroup:()=>this.openGroup(g)}})(),
       hasModes:modes.length>0,modes,modesLabel,isCamera:D.type==='camera',watch:()=>this.watch(D.id),hasPower:readings.length>0,readings,
       why:D.why?D.why.now:'',next:D.why?D.why.next:'',
       nameDraft:draft,setName:e=>this.setState({nameDraft:e.target.value}),nameChanged:!!draft.trim()&&draft.trim()!==D.name,origName:D.original?D.original.name:D.name,
@@ -955,6 +997,53 @@ class Component extends DCLogic {
         close:()=>kovaClose(()=>this.setState({psEdit:null}))}}
     return{cu,rm,rmOpen:!!R,ps,psOpen:!!P};
   }
+  // ---- adding devices: every way a device can join Kova, with what's already connected ----
+  openAdd(){this.setState({adding:true});if(!this.state.igCat)this.loadInteg()}
+  openSetup(id){kovaClose(()=>this.setState({adding:false}));const open=()=>this.openInteg(id);if(this.state.igCat)setTimeout(open,200);else this.loadInteg().then(()=>setTimeout(open,200))}
+  addVals(s,H){
+    const run=Object.fromEntries(H.integrations.map(i=>[i.id,i])),cfg=s.igCfg||{};
+    const row=(id,name,icon,fg,desc)=>{const r=run[id],set=cfg[id]!==undefined;
+      return{name,icon,fg,sub:r?(r.ok?`Connected · ${r.devices} device${r.devices===1?'':'s'}`:`Needs attention · ${r.note||'not responding'}`):set?'Saved · waiting for its settings':desc,subFg:r&&!r.ok?'#f2b14c':r?'#7fd4a0':'#a3a09a',go:()=>this.openSetup(id)}};
+    const B='#7cb8f0',A='#f2b14c',G='#7fd4a0';
+    const sections=[
+      {title:'Pair a new device',rows:[row('matter','Matter','hub',G,'Lights, plugs and more, with the code on the device'),row('homekit','HomeKit accessory','home_iot_device',A,'Anything with a HomeKit setup code')]},
+      {title:'Speakers and TVs',rows:[row('cast','Google Cast','cast',B,'Nest speakers and displays, Chromecast, Cast groups: found by themselves'),row('sonos','Sonos','speaker',B,'Found by themselves'),row('samsungtv','Samsung TV','tv',B,'By IP address; the TV asks you to allow Kova once'),row('airplay','AirPlay','airplay',B,'Apple TV and AirPlay speakers, through OwnTone'),
+        {name:'Speaker group',icon:'speaker_group',fg:B,sub:'Play speakers of any brand as one',subFg:'#a3a09a',go:()=>{kovaClose(()=>this.setState({adding:false}));setTimeout(()=>this.openGroup(null),200)}}]},
+      {title:'Lights, plugs and appliances',rows:[row('tuya','Tuya · Smart Life','toggle_on',A,'Switches, lights and LED strips, locally'),row('tapo','TP-Link Tapo','outlet',A,'Plugs and bulbs, locally'),row('vesync','Levoit (VeSync)','air_purifier',B,'Air purifiers · Cloud'),row('ecovacs','Ecovacs DEEBOT','cleaning_services',A,'Robot vacuums · Cloud'),row('goodwe','GoodWe solar','solar_power',A,'Inverter, over your network')]},
+      {title:'Cameras',rows:[row('nest','Google Nest','videocam',G,'Doorbell and cameras · Cloud')]},
+    ];
+    return{addOpen:!!s.adding,openAdd:()=>this.openAdd(),add:{sections,close:()=>kovaClose(()=>this.setState({adding:false}))}};
+  }
+  // ---- speaker groups: any speakers, any brands, as one ----
+  openGroup(g){this.setState({sheet:null,gEdit:g?g.id:'new',gDraft:g?{name:g.name,members:[...g.members],room:g.room||''}:{name:'',members:[],room:''}})}
+  groupVals(s,H,devs,RN){
+    const SG=H.speakerGroups||[];
+    const groupRows=SG.map(g=>{const d=devs[g.deviceId],on=!!(d&&d.on);return{name:g.name,sub:`${g.members.length} speakers · ${g.sync==='perfect'?'perfect sync':'start together'}${on&&d.media?` · ${d.media}`:''}`,subFg:on?'#7cb8f0':'#a3a09a',
+      iconBg:on?'rgba(124,184,240,0.2)':'#232428',iconFg:on?'#7cb8f0':'#8a8781',playIcon:on?'stop':'play_arrow',open:()=>this.openGroup(g),toggle:e=>{e.stopPropagation();if(d)this.tog(d.id)}}});
+    let gs={close:()=>{}};
+    if(s.gEdit){const G=s.gEdit!=='new'?SG.find(g=>g.id===s.gEdit):null,dr=s.gDraft||{name:'',members:[],room:''};
+      const players=Object.values(devs).filter(d=>isPlayer(d)&&d.adapter!=='groups').sort((a,b)=>(RN[a.room]||'').localeCompare(RN[b.room]||'')||a.name.localeCompare(b.name));
+      const chosen=dr.members.map(id=>devs[id]).filter(Boolean),same=G&&G.members.length===dr.members.length&&G.members.every(x=>dr.members.includes(x));
+      const S=chosen.length<2?['touch_app','#a3a09a','#1c1d20','Pick at least two speakers','A group plays the same thing on all of them at once.']
+        :same&&G.sync==='perfect'?['graphic_eq','#7fd4a0','rgba(127,212,160,0.1)','Perfect sync',`These speakers are the Google Home group “${G.castGroup}”, so Kova plays through it and they stay locked together.`]
+        :chosen.every(d=>d.adapter==='cast')?['sync','#f2b14c','rgba(242,177,76,0.1)','Starts together','For perfect sync, make a group with exactly these speakers in the Google Home app. Kova finds it and uses it automatically.']
+        :['sync','#f2b14c','rgba(242,177,76,0.1)','Starts together','Different brands start at the same moment but can drift slightly over a long session: they can’t share one clock. Great for background music across rooms.'];
+      const valid=!!dr.name.trim()&&dr.members.length>=2;
+      const done=msg=>r=>{this.toast(msg,this.undoFn(r.undo));kovaClose(()=>this.setState({gEdit:null}))};
+      gs={kicker:G?'Speaker group':'New speaker group',title:dr.name.trim()||(G?G.name:'New group'),name:dr.name,setName:e=>{const v=e.target.value;this.setState(p=>({gDraft:{...p.gDraft,name:v}}))},
+        count:`${dr.members.length} picked`,noSpeakers:!players.length,
+        speakers:players.map(d=>{const sel=dr.members.includes(d.id);return{name:d.name,sub:`${RN[d.room]||'No room'} · ${d.integration||''}`,icon:ICON[d.type],check:sel?'check_circle':'radio_button_unchecked',fill:sel?1:0,checkFg:sel?'#f2b14c':'#6f6d69',
+          toggle:()=>this.setState(p=>({gDraft:{...p.gDraft,members:sel?p.gDraft.members.filter(x=>x!==d.id):[...p.gDraft.members,d.id]}}))}}),
+        room:dr.room,rooms:[{v:'',label:'Automatic: the speakers’ room'},...H.rooms.map(r=>({v:r.id,label:r.name}))],setRoom:e=>{const v=e.target.value;this.setState(p=>({gDraft:{...p.gDraft,room:v}}))},
+        syncIcon:S[0],syncFg:S[1],syncBg:S[2],syncTitle:S[3],syncText:S[4],
+        saveLabel:G?'Save':'Create',saveBg:valid?'#f2b14c':'rgba(255,255,255,0.08)',saveFg:valid?'#1a1408':'#8a8781',
+        save:()=>{if(!valid){this.toast(dr.name.trim()?'Pick at least two speakers':'Give the group a name');return}
+          const body={name:dr.name.trim(),members:dr.members,room:dr.room||null};
+          (G?api('PUT',`/api/speaker-groups/${encodeURIComponent(G.id)}`,body):api('POST','/api/speaker-groups',{...body,room:dr.room||undefined})).then(done(G?`${body.name} saved`:`${body.name} created`)).catch(e=>this.err(e))},
+        canDelete:!!G,remove:()=>{if(!G||!confirm(`Delete ${G.name}? The speakers stay as they are.`))return;api('DELETE',`/api/speaker-groups/${encodeURIComponent(G.id)}`,{}).then(done(`${G.name} deleted`)).catch(e=>this.err(e))},
+        close:()=>kovaClose(()=>this.setState({gEdit:null}))}}
+    return{groupRows,hasGroups:SG.length>0,noGroups:!SG.length,newGroup:()=>this.openGroup(null),gOpen:!!s.gEdit,gs};
+  }
   scrollRef=el=>{if(el)this._scroll=el}
   renderVals(){
     const s=this.state,H=s.hub,devs=this.devs(),list=Object.values(devs);
@@ -992,7 +1081,7 @@ class Component extends DCLogic {
     const SH=[['names','Device and room names','lightbulb','Needed to understand requests'],['rooms','Current device states','toggle_on','On/off, brightness, what’s playing'],['history','Activity history','history','Last 7 days of changes'],['presence','Who’s home','group','Names and arrival times'],['cameras','Cameras','videocam','Never shared']];
     const np=!s.page;
     const pg=s.page;
-    return {tabs,...this.pagesVals(s,H,devs,list,RN),...this.edVals(s,H,devs,RN),...this.devVals(s,H,devs,list,RN),...this.cuVals(s,H,devs,list,RN),
+    return {tabs,...this.pagesVals(s,H,devs,list,RN),...this.edVals(s,H,devs,RN),...this.devVals(s,H,devs,list,RN),...this.cuVals(s,H,devs,list,RN),...this.addVals(s,H),...this.groupVals(s,H,devs,RN),
       isNow:np&&s.tab==='now',isDevices:np&&s.tab==='devices',isAsk:np&&s.tab==='ask',isSecurity:(np&&s.tab==='security')||pg==='security',secBack:pg==='security',isMore:(np&&s.tab==='more')||pg==='more',moreBack:pg==='more',
       isModes:pg==='modes',isActivity:pg==='activity',isCustomise:pg==='customise',goActivity:()=>this.go('activity'),scrollRef:this.scrollRef,
       homeName:H.home.name,avatars:(home.length?home:H.people).slice(0,3).map((x,i)=>({initial:x.name[0],ml:i?'-9px':'0px',op:x.home?1:0.4})),
@@ -1013,7 +1102,7 @@ class Component extends DCLogic {
       engine:{label:E[0],icon:E[1],bg:E[2],fg:E[3]},openAi:()=>this.setState({aiOpen:true}),closeAi:()=>kovaClose(()=>this.setState({aiOpen:false})),aiOpen:s.aiOpen,isCloud:s.ai==='cloud',usesAi:s.ai!=='builtin',
       engines:ENG.map(([id,name,tag,tagBg,tagFg,body,data])=>{const a=s.ai===id;return{name,tag,tagBg,tagFg,body,data,border:a?tagFg:'transparent',ring:a?tagFg:'#4a4b50',dot:a?tagFg:'transparent',pick:()=>this.saveAi({ai:id})}}),
       shares:SH.map(([id,name,icon,note])=>{const locked=id==='cameras';const a=!locked&&!!s.share[id];return{name,icon,note,op:locked?0.5:1,justify:a?'flex-end':'flex-start',knob:a?'translateX(14px)':'none',track:a?'#f2b14c':'#35363a',toggle:()=>{if(!locked)this.saveAi({share:{...s.share,[id]:!s.share[id]}})}}}),
-      sheetOpen:!!D,sh,closeSheet:()=>kovaClose(()=>this.setState({sheet:null})),toastOn:!!s.toast,toastPos:s.edit||s.ig||s.sheet||s.rmEdit||s.psEdit||s.aiOpen?'top:calc(env(safe-area-inset-top, 0px) + 12px)':'bottom:104px',toastText:s.toast,canUndo:!!s.undo,undo:()=>{s.undo&&s.undo();this.setState({toast:null,undo:null})}};
+      sheetOpen:!!D,sh,closeSheet:()=>kovaClose(()=>this.setState({sheet:null})),toastOn:!!s.toast,toastPos:s.edit||s.ig||s.sheet||s.rmEdit||s.psEdit||s.aiOpen||s.adding||s.gEdit?'top:calc(env(safe-area-inset-top, 0px) + 12px)':'bottom:104px',toastText:s.toast,canUndo:!!s.undo,undo:()=>{s.undo&&s.undo();this.setState({toast:null,undo:null})}};
   }
 }
 </script>

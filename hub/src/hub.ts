@@ -6,6 +6,7 @@ import { Engine } from './engine/engine.ts';
 import { Checker } from './engine/findings.ts';
 import { Assistant } from './assistant/assistant.ts';
 import type { Adapter } from './adapters/sdk.ts';
+import { SpeakerGroupsAdapter } from './adapters/groups.ts';
 import type { HomeConfig } from './model/types.ts';
 import type { Weather } from './services/weather.ts';
 import { Energy } from './services/energy.ts';
@@ -41,6 +42,8 @@ export class Hub extends EventEmitter<{ changed: [] }> {
   readonly weather?: Weather;
   readonly services: Service[] = [];
   readonly energy: Energy;
+  /** Speaker groups made in Kova (they're devices of their own). */
+  readonly groups: SpeakerGroupsAdapter;
 
   constructor(private opts: HubOptions) {
     super();
@@ -48,6 +51,8 @@ export class Hub extends EventEmitter<{ changed: [] }> {
     this.config = new ConfigStore(this.store, opts.initialConfig);
     this.reg = new Registry(this.store, name => this.config.get().sources.find(s => s.name === name)?.url, () => this.config.get().devices ?? {});
     this.config.on('changed', () => this.reg.reapplySettings());
+    this.groups = new SpeakerGroupsAdapter(this.reg, () => this.config.get().speakerGroups ?? []);
+    this.config.on('changed', () => this.groups.sync());
     this.engine = new Engine(this.store, this.reg, this.config, opts.now);
     this.checker = new Checker(this.engine, this.store, this.config, () => this.reg.devices);
     this.assistant = new Assistant(this.engine, this.reg, this.config);
@@ -61,6 +66,8 @@ export class Hub extends EventEmitter<{ changed: [] }> {
 
   async start(): Promise<void> {
     for (const a of this.opts.adapters) await this.reg.addAdapter(a);
+    // Speaker groups come after the speakers they group.
+    await this.reg.addAdapter(this.groups);
     this.engine.start(this.opts.tickMs ?? 1000);
     this.energy.start(this.opts.energyMs ?? (this.opts.tickMs === 0 ? 0 : 60_000));
     this.weather?.start(this.config.get());

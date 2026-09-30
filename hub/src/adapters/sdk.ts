@@ -1,4 +1,4 @@
-import type { Command, Device, DeviceState } from '../model/types.ts';
+import type { Cause, Command, Device, DeviceState } from '../model/types.ts';
 
 /**
  * A device as an adapter announces it. The registry fills in the rest.
@@ -23,6 +23,10 @@ export interface AdapterContext {
   event(deviceId: string, type: string, data?: Record<string, unknown>): void;
   /** Look up a media source's stream URL by name. */
   sourceUrl(name: string): string | undefined;
+  /** Set the state of a device whose state is worked out from others (a speaker group): quietly, without an Activity entry. */
+  derive(deviceId: string, state: DeviceState): void;
+  /** Remove devices this adapter no longer has (a deleted group). */
+  retract(deviceIds: string[]): void;
 }
 
 /**
@@ -37,8 +41,8 @@ export interface Adapter {
   kind: 'Local' | 'Cloud';
   start(ctx: AdapterContext): Promise<void>;
   stop(): Promise<void>;
-  /** Apply a partial state. Resolve once the device accepted it. */
-  command(device: Device, cmd: Command): Promise<void>;
+  /** Apply a partial state. Resolve once the device accepted it. `cause` is why (adapters that act through other devices pass it on). */
+  command(device: Device, cmd: Command, cause?: Cause): Promise<void>;
   status(): AdapterStatus;
   /** Optional: live camera video over WebRTC, negotiated with the browser through the hub. */
   liveView?: LiveView;

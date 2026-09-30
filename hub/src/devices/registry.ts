@@ -53,6 +53,8 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
       report: (id, state) => this.report(id, state),
       event: (id, type, data = {}) => this.deviceEvent(id, type, data),
       sourceUrl: this.sourceUrl,
+      derive: (id, state) => { const d = this.devices.get(id); if (!d) return; const patch = this.diff(d, state); if (!Object.keys(patch).length) return; d.state = { ...d.state, ...patch }; this.emit('measure'); },
+      retract: ids => { let n = 0; for (const id of ids) if (this.devices.get(id)?.adapter === a.id) { this.devices.delete(id); n++; } if (n) this.emit('devices'); },
     };
     try {
       await a.start(ctx);
@@ -152,7 +154,7 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
     const adapter = this.adapters.get(d.adapter);
     if (!adapter) throw new Error(`No adapter ${d.adapter} for ${id}`);
     try {
-      await adapter.command(d, patch);
+      await adapter.command(d, patch, cause);
     } catch (err) {
       this.store.append({ kind: 'system', device: id, feed: 'system', what: `${d.name} didn't respond`, data: { error: String(err), patch }, cause });
       throw err;

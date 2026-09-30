@@ -34,7 +34,10 @@ add-on: nothing in Kova depends on HA. The design reference lives in
   (Modes, Activity, Energy, Media, Customise home, Integrations, Assistant). The device panel has
   every control the device has (brightness, warmth, colour, volume and sources, purifier modes,
   vacuum clean/dock, watch live, power readings), why it's like this and what's next, and its
-  settings: name, room, favourite, hidden. **Customise home** edits the home's name, rooms (name,
+  settings: name, room, favourite, hidden. **Add** (top of Devices, or *Add a device* when there
+  are none) is the one place to add things: a Matter or HomeKit code, a brand's sign-in, speakers
+  and TVs Kova found on the network, or a new speaker group. **Speaker groups** (Media, or Add →
+  Speaker group) pick any speakers of any brand and name them. **Customise home** edits the home's name, rooms (name,
   icon, order, delete with where their devices go), people, favourites and hidden devices. Links:
   `?cam=<id>` opens that camera live (the doorbell notification's *View camera*),
   `?page=security|more|modes|activity|energy|media|integrations|customise`, `?do=lights-off`.
@@ -101,7 +104,10 @@ add-on: nothing in Kova depends on HA. The design reference lives in
 ## Adapters (`hub/src/adapters/`)
 
 An adapter announces devices, reports state changes, and carries out commands.
-It never makes decisions. See `sdk.ts`.
+It never makes decisions. See `sdk.ts`. `derive` sets state that follows from
+other devices (a speaker group's) without logging it as a change of its own,
+`retract` removes devices the adapter no longer has, and `command` receives the
+cause, so an adapter that passes a command on keeps who asked.
 
 | Adapter | Status |
 |---|---|
@@ -252,6 +258,16 @@ and an AirPlay speaker playing together are started at the same moment but
 drift apart by up to a second or two; no public protocol lets a third party
 sync them sample-accurately.
 
+**Kova speaker groups** (`hub/src/adapters/groups.ts`): a named set of speakers
+of any brand, kept in `HomeConfig.speakerGroups`, appears as one media device
+(`group_<id>`) that modes, scenes, routines and the assistant can use like any
+speaker. A command to it goes to every member at the same instant (each
+member's activity says *through Bedrooms*); its state is derived from its
+members (on if any is, *Mixed* when they play different things, the average
+volume). When the members are exactly a Cast group from the Google Home app,
+the Cast adapter plays through that group, so they're in perfect sync; the
+snapshot says `sync: 'perfect'` with the `castGroup`, otherwise `'together'`.
+
 
 ## Presence and notifications (`hub/src/services/`)
 
@@ -384,6 +400,8 @@ a row on the Integrations screen ("Router: 2 phones seen").
 | POST, PUT, DELETE | `/api/rooms`, `/api/rooms/:id` | `{name, icon?}`; delete takes `{moveTo}` when the room still has devices |
 | PUT | `/api/rooms/order` | `{ids}`: every room id, in the new order |
 | POST, PUT, DELETE | `/api/people`, `/api/people/:id` | `{name, detail?}` |
+| POST | `/api/speaker-groups` | `{name, members, room?}` (two or more speakers) → `{id, deviceId, undo}`. Groups are in the snapshot as `speakerGroups` with `deviceId`, `missing`, `sync` and `castGroup` |
+| PUT, DELETE | `/api/speaker-groups/:id` | `{name?, members?, room?}` (`null` room follows the members) → `{undo}` |
 | PUT | `/api/favourites` | `{ids}`: the devices on Now, in order (also in the snapshot as `favourites`) |
 | GET | `/api/import/ha` | The last Home Assistant import: source, stats, integrations and where each goes (`moves`, `set-up`, `built-in`, `handoff`, `unsupported`), review items, handoffs, `applied`; `{scanned:false}` before one |
 | POST | `/api/import/ha/backup` | Body: a backup file (`application/octet-stream`, streamed); header `x-backup-key` for encrypted backups. 400 with `code` `needs-key`, `wrong-key` or `not-ha` |

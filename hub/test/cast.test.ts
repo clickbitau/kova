@@ -93,3 +93,28 @@ test('Cast: several speakers playing the same thing use their Cast group (perfec
     for (const f of [a, b, c, g]) f.server.close();
   }
 });
+
+test('Cast: a Kova speaker group whose speakers are a Cast group plays through it (perfect sync)', async () => {
+  const a = fakeCast('Music Room Speaker'), b = fakeCast('Baby Room speaker');
+  const g = fakeCast('Home Speaker Group', ['aaaa0000-0000-0000-0000-000000000001', 'bbbb0000-0000-0000-0000-000000000002']);
+  const ep = async (f: ReturnType<typeof fakeCast>, id: string, model: string) => ({ id, name: f.name, model, host: '127.0.0.1', port: await listen(f) });
+  const reg = new Registry(new Store(':memory:'), n => (n === 'Tarateel' ? 'https://stream.example/tarateel.mp3' : undefined));
+  const cast = new CastAdapter({
+    discover: false, insecure: true, pollMs: 0, batchMs: 20,
+    endpoints: [await ep(a, 'aaaa0000000000000000000000000001', 'Nest Audio'), await ep(b, 'bbbb0000000000000000000000000002', 'Nest Audio'), await ep(g, 'dddd0000000000000000000000000004', 'Google Cast Group')],
+  });
+  const { SpeakerGroupsAdapter } = await import('../src/adapters/groups.ts');
+  const groups = new SpeakerGroupsAdapter(reg, () => [{ id: 'kids', name: 'Kids rooms', members: ['cast_aaaa0000000000000000000000000001', 'cast_bbbb0000000000000000000000000002'] }]);
+  await reg.addAdapter(cast);
+  await reg.addAdapter(groups);
+  try {
+    assert.equal(cast.castGroupFor([reg.get('cast_aaaa0000000000000000000000000001')!, reg.get('cast_bbbb0000000000000000000000000002')!]), 'Home Speaker Group');
+    await reg.command('group_kids', { on: true, media: 'Tarateel', vol: 20 }, { kind: 'user', label: 'You' });
+    assert.equal(g.loads(), 1, 'one LOAD on the Cast group');
+    assert.equal(a.loads() + b.loads(), 0, 'not on each speaker separately');
+    assert.equal(reg.get('group_kids')!.state.media, 'Tarateel');
+  } finally {
+    await reg.stop();
+    for (const f of [a, b, g]) f.server.close();
+  }
+});

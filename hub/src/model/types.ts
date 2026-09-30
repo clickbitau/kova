@@ -179,7 +179,11 @@ export interface HomeConfig {
   devices?: Record<string, DeviceSettings>;
   /** Devices on the owner's Now screen, in order. */
   favourites?: string[];
+  /** Speakers the owner grouped to play together (any brands). Each group is a device of its own. */
+  speakerGroups?: SpeakerGroup[];
 }
+
+export interface SpeakerGroup { id: string; name: string; room?: string; members: string[] }
 
 // ------------------------------------------------------------------ plans --
 
