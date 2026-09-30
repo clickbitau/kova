@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..24,400,0..1,0&display=swap" rel="stylesheet"><style>body{margin:0;background:#0e0f10;-webkit-font-smoothing:antialiased}*{box-sizing:border-box}a{color:#f2b14c}a:hover{color:#f7cb82}</style></helmet>
+<div style="min-height:100vh;background:#0e0f10;color:#f1efea;font-family:Manrope,system-ui,sans-serif;padding:48px 44px 96px;display:flex;flex-direction:column;gap:56px;max-width:1320px;margin:0 auto">
+
+<header style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px"><svg width="34" height="34" viewBox="0 0 48 48"><path d="M8 26L24 11L40 26" fill="none" stroke="#f1efea" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path><path d="M16 32L24 24.5L32 32" fill="none" stroke="#f1efea" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="24" cy="38.5" r="3.5" fill="#f2b14c"></circle></svg><span style="font-size:15px;font-weight:700;color:#a3a09a">Kova Design Language · v1</span></div>
+<h1 style="margin:0;font-size:44px;font-weight:700;letter-spacing:-0.03em;line-height:1.1;max-width:820px;text-wrap:pretty">Calm by default. Colour only when something is on.</h1>
+<p style="margin:0;font-size:16px;line-height:1.55;color:#a3a09a;max-width:720px;text-wrap:pretty">The foundations every Kova screen is built from. Tokens live in <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#d8d5cf">styles.css</span>, with one file per concern under <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#d8d5cf">tokens/</span>.</p>
+</header>
+
+<section style="display:flex;flex-direction:column;gap:18px">
+<h2 style="margin:0;font-size:13px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.08em">Principles</h2>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px">
+<div style="background:#16171a;border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:8px"><span style="font-size:15px;font-weight:700">Colour means state</span><span style="font-size:13px;color:#a3a09a;line-height:1.5">Surfaces are neutral. Amber appears only where a light is on or an action is primary, so you can read a screen at a glance.</span></div>
+<div style="background:#16171a;border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:8px"><span style="font-size:15px;font-weight:700">Depth dial</span><span style="font-size:13px;color:#a3a09a;line-height:1.5">Every object has Simple, Details and Code tabs. Power sits one layer down and is never in the way.</span></div>
+<div style="background:#16171a;border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:8px"><span style="font-size:15px;font-weight:700">Flat, stepped depth</span><span style="font-size:13px;color:#a3a09a;line-height:1.5">Hierarchy comes from lightness steps, not borders or shadows. Shadows are only for things that float: toasts and drawers.</span></div>
+<div style="background:#16171a;border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:8px"><span style="font-size:15px;font-weight:700">Plain words, real numbers</span><span style="font-size:13px;color:#a3a09a;line-height:1.5">“8 lights on”, not “Lighting status: Active”. Names come before ids. Times use the 24-hour clock.</span></div>
+</div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:18px">
+<h2 style="margin:0;font-size:13px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.08em">Logo</h2>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:12px">
+<div style="background:#111214;border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:36px;display:flex;align-items:center;gap:18px">
+<div style="width:84px;height:84px;border-radius:22px;background:#1d1e21;display:flex;align-items:center;justify-content:center"><svg width="56" height="56" viewBox="0 0 48 48"><path d="M8 26L24 11L40 26" fill="none" stroke="#f1efea" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path><path d="M16 32L24 24.5L32 32" fill="none" stroke="#f1efea" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="24" cy="38.5" r="3.5" fill="#f2b14c"></circle></svg></div>
+<span style="font-size:40px;font-weight:800;letter-spacing:-0.035em">Kova</span></div>
+<div style="background:#f4f2ee;border-radius:16px;padding:36px;display:flex;align-items:center;gap:18px;color:#141517">
+<svg width="64" height="64" viewBox="0 0 48 48"><path d="M8 26L24 11L40 26" fill="none" stroke="#141517" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path><path d="M16 32L24 24.5L32 32" fill="none" stroke="#141517" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="24" cy="38.5" r="3.5" fill="#e39a2a"></circle></svg>
+<span style="font-size:40px;font-weight:800;letter-spacing:-0.035em">Kova</span></div>
+<div style="background:#16171a;border-radius:16px;padding:22px;display:flex;flex-direction:column;gap:10px;font-size:13px;color:#a3a09a;line-height:1.5">
+<span style="font-size:15px;font-weight:700;color:#f1efea">Usage</span>
+<span>The dot is always amber and is the only colour in the mark. The chevrons use ink or bone to match the surface.</span>
+<span>Wordmark: Manrope 800 at −0.035em. Keep clear space of at least one chevron height around the lockup.</span>
+<span>Below 24px, use the favicon: one chevron and a solid dot.</span>
+</div>
+</div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:18px">
+<h2 style="margin:0;font-size:13px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.08em">Colour · surfaces</h2>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px">
+<sc-for list="{{ surfaces }}" as="c" hint-placeholder-count="7">
+<div style="display:flex;flex-direction:column;gap:8px"><div style="height:72px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:{{ c.hex }}"></div><div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:13px;font-weight:700">{{ c.name }}</span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#a3a09a">{{ c.token }} · {{ c.hex }}</span><span style="font-size:12px;color:#8a8781">{{ c.use }}</span></div></div>
+</sc-for>
+</div>
+<h2 style="margin:12px 0 0;font-size:13px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.08em">Colour · state</h2>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px">
+<sc-for list="{{ states }}" as="c" hint-placeholder-count="5">
+<div style="background:#16171a;border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;gap:8px"><div style="flex:2;height:56px;border-radius:10px;background:{{ c.hex }}"></div><div style="flex:1;height:56px;border-radius:10px;background:{{ c.tint }};border:1px solid {{ c.line }}"></div></div>
+<div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:14px;font-weight:700;color:{{ c.hex }}">{{ c.name }}</span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#a3a09a">{{ c.token }} · {{ c.hex }}</span><span style="font-size:12px;color:#c9c6c0;line-height:1.4">{{ c.use }}</span></div>
+</div>
+</sc-for>
+</div>
+<h2 style="margin:12px 0 0;font-size:13px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.08em">Colour · text</h2>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px">
+<sc-for list="{{ texts }}" as="c" hint-placeholder-count="4">
+<div style="background:#16171a;border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:4px"><span style="font-size:20px;font-weight:700;color:{{ c.hex }}">Lounge · 3 on</span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#a3a09a">{{ c.token }} · {{ c.hex }}</span><span style="font-size:12px;color:#8a8781">{{ c.use }}</span></div>
+</sc-for>
+</div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:18px">
+<h2 style="margin:0;font-size:13px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.08em">Type · Manrope + JetBrains Mono</h2>
+<div style="background:#16171a;border-radius:18px;overflow:hidden">
+<sc-for list="{{ typeScale }}" as="t" hint-placeholder-count="9">
+<div style="display:grid;grid-template-columns:170px minmax(0,1fr);gap:20px;align-items:baseline;padding:16px 20px;border-top:1px solid rgba(255,255,255,0.05)">
+<div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:13px;font-weight:700">{{ t.name }}</span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#a3a09a">{{ t.spec }}</span></div>
+<span style="font-family:{{ t.family }};font-size:{{ t.size }};font-weight:{{ t.weight }};letter-spacing:{{ t.track }};text-transform:{{ t.transform }};color:{{ t.color }};line-height:1.25">{{ t.sample }}</span>
+</div>
+</sc-for>
+</div>
+</section>
+
+<section style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,400px),1fr));gap:24px">
+<div style="display:flex;flex-direction:column;gap:18px">
+<h2 style="margin:0;font-size:13px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.08em">Icons · Material Symbols Rounded</h2>
+<div style="background:#16171a;border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:16px">
+<div style="display:grid;grid-template-columns:repeat(8,1fr);gap:10px">
+<sc-for list="{{ icons }}" as="i" hint-placeholder-count="16">
+<div style="aspect-ratio:1;border-radius:12px;background:#1c1d20;display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:22px;color:#d8d5cf">{{ i }}</span></div>
+</sc-for>
+</div>
+<div style="display:flex;gap:16px;align-items:center;font-size:12px;color:#a3a09a;flex-wrap:wrap">
+<div style="display:flex;align-items:center;gap:8px"><span style="font-family:'Material Symbols Rounded';font-size:22px;color:#8a8781">lightbulb</span>Outline = off, nav</div>
+<div style="display:flex;align-items:center;gap:8px"><span style="font-family:'Material Symbols Rounded';font-size:22px;color:#f2b14c;font-variation-settings:'FILL' 1">lightbulb</span>Filled = on, active</div>
+<span>Sizes 18 / 20 / 22 · 56 in heroes</span>
+</div>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:18px">
+<h2 style="margin:0;font-size:13px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.08em">Shape · radius and spacing</h2>
+<div style="background:#16171a;border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:18px">
+<div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+<sc-for list="{{ radii }}" as="r" hint-placeholder-count="7">
+<div style="display:flex;flex-direction:column;gap:6px;align-items:center"><div style="width:52px;height:52px;background:#2a2b2f;border-radius:{{ r.v }}"></div><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#a3a09a">{{ r.v }}</span><span style="font-size:11px;color:#8a8781">{{ r.use }}</span></div>
+</sc-for>
+</div>
+<div style="display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap">
+<sc-for list="{{ spaces }}" as="s" hint-placeholder-count="10">
+<div style="display:flex;flex-direction:column;gap:6px;align-items:center"><div style="width:{{ s.px }};height:{{ s.px }};background:#f2b14c;border-radius:2px"></div><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#a3a09a">{{ s.v }}</span></div>
+</sc-for>
+</div>
+<span style="font-size:12px;color:#a3a09a;line-height:1.5">Minimum hit target is 44px on touch. Page padding is 40px on desktop and 20px on phone.</span>
+</div>
+</div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:18px">
+<h2 style="margin:0;font-size:13px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.08em">Components · controls</h2>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:12px">
+
+<div style="background:#16171a;border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:14px"><span style="font-size:13px;font-weight:700;color:#a3a09a">Buttons</span>
+<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+<div style="padding:9px 16px;border-radius:10px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px;cursor:pointer" style-hover="background:#f7cb82"><span style="font-family:'Material Symbols Rounded';font-size:18px">play_arrow</span>Run now</div>
+<div style="padding:9px 16px;border-radius:10px;background:rgba(255,255,255,0.06);font-size:13px;font-weight:600;cursor:pointer" style-hover="background:rgba(255,255,255,0.1)">Keep mirroring</div>
+<div style="padding:9px 12px;border-radius:10px;font-size:13px;font-weight:600;color:#f2b14c;cursor:pointer" style-hover="background:rgba(242,177,76,0.1)">See your whole day</div>
+<div style="width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:20px">close</span></div>
+<div style="padding:9px 16px;border-radius:10px;background:#232428;color:#6f6d69;font-size:13px;font-weight:700">Disabled</div>
+</div>
+<span style="font-size:12px;color:#8a8781">Primary (amber, one per view) · Secondary · Text · Icon · Disabled. Radius 10, hover lightens, press shrinks to 0.97.</span></div>
+
+<div style="background:#16171a;border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:14px"><span style="font-size:13px;font-weight:700;color:#a3a09a">Switch · segmented · tabs</span>
+<div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center">
+<div style="width:34px;height:20px;border-radius:10px;padding:2px;display:flex;justify-content:flex-end;background:#f2b14c"><div style="width:16px;height:16px;border-radius:50%;background:#fff"></div></div>
+<div style="width:34px;height:20px;border-radius:10px;padding:2px;display:flex;justify-content:flex-start;background:#35363a"><div style="width:16px;height:16px;border-radius:50%;background:#fff"></div></div>
+<div style="display:flex;gap:4px;padding:4px;border-radius:12px;background:#1c1d20"><div style="padding:7px 14px;border-radius:9px;font-size:13px;font-weight:700;background:#2a2b2f">Simple</div><div style="padding:7px 14px;border-radius:9px;font-size:13px;font-weight:700;color:#a3a09a">Details</div><div style="padding:7px 14px;border-radius:9px;font-size:13px;font-weight:700;color:#a3a09a">Code</div></div>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:6px"><div style="padding:7px 13px;border-radius:999px;font-size:13px;font-weight:600;background:#f1efea;color:#141517">Lounge</div><div style="padding:7px 13px;border-radius:999px;font-size:13px;font-weight:600;background:#1c1d20;color:#d8d5cf">Kitchen</div><div style="padding:7px 13px;border-radius:999px;font-size:13px;font-weight:600;background:#1c1d20;color:#d8d5cf">Office</div></div>
+<span style="font-size:12px;color:#8a8781">Switch: amber track when on. Room filter pills invert (bone background) when selected.</span></div>
+
+<div style="background:#16171a;border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:14px"><span style="font-size:13px;font-weight:700;color:#a3a09a">Status pills · level badges</span>
+<div style="display:flex;flex-wrap:wrap;gap:8px">
+<div style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;background:rgba(242,177,76,0.13);color:#f2b14c;font-size:13px;font-weight:600"><span style="font-family:'Material Symbols Rounded';font-size:18px;font-variation-settings:'FILL' 1">lightbulb</span>8 lights on</div>
+<div style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;background:#1c1d20;font-size:13px;font-weight:600"><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#7fd4a0">group</span>Methel &amp; Brishti home</div>
+<div style="display:flex;align-items:center;gap:6px;padding:3px 8px;border-radius:999px;background:rgba(0,0,0,0.55);font-size:11px;font-weight:700"><div style="width:6px;height:6px;border-radius:50%;background:#ff6b5e"></div>LIVE</div>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+<span style="font-family:'JetBrains Mono',monospace;font-size:11px;padding:2px 6px;border-radius:5px;background:rgba(127,212,160,0.14);color:#7fd4a0">L1</span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;padding:2px 6px;border-radius:5px;background:rgba(124,184,240,0.14);color:#7cb8f0">L2</span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;padding:2px 6px;border-radius:5px;background:rgba(242,177,76,0.14);color:#f2b14c">L3</span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;padding:2px 6px;border-radius:5px;background:rgba(217,163,240,0.14);color:#d9a3f0">L4</span>
+<span style="font-size:11px;font-weight:700;padding:3px 7px;border-radius:999px;background:rgba(242,177,76,0.15);color:#f2b14c">3 on</span><span style="font-size:11px;font-weight:700;padding:3px 7px;border-radius:999px;background:rgba(124,184,240,0.15);color:#7cb8f0">Playing</span><span style="font-size:11px;font-weight:700;padding:3px 7px;border-radius:999px;background:rgba(255,255,255,0.06);color:#a3a09a">All off</span>
+</div>
+<span style="font-size:12px;color:#8a8781">Tint at 13–15% with full-strength text in the same hue.</span></div>
+
+<div style="background:#16171a;border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:14px"><span style="font-size:13px;font-weight:700;color:#a3a09a">Inputs</span>
+<div style="padding:12px 16px;border-radius:12px;border:1px solid rgba(255,255,255,0.1);background:#1c1d20;font-size:14px;color:#6f6d69">Search devices, rooms, settings…</div>
+<div style="padding:12px 16px;border-radius:12px;border:1px solid #f2b14c;background:#1c1d20;font-family:'JetBrains Mono',monospace;font-size:13px">light.kitchen</div>
+<div style="display:flex;flex-direction:column;gap:8px"><div style="display:flex;justify-content:space-between;font-size:13px;font-weight:600"><span>Brightness</span><span style="color:#a3a09a">78%</span></div><div style="height:6px;border-radius:3px;background:#35363a;position:relative"><div style="position:absolute;left:0;top:0;bottom:0;width:78%;border-radius:3px;background:#f2b14c"></div><div style="position:absolute;left:78%;top:50%;width:18px;height:18px;border-radius:50%;background:#fff;transform:translate(-50%,-50%)"></div></div></div>
+</div>
+</div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:18px">
+<h2 style="margin:0;font-size:13px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.08em">Components · home</h2>
+<span style="font-size:13px;color:#a3a09a;margin-top:-8px">Device tile: tap the icon or name to toggle, ⋯ to open details. Off tiles stay quiet; on tiles take the state colour.</span>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px">
+<sc-for list="{{ tiles }}" as="d" hint-placeholder-count="5">
+<div style="border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:22px;background:{{ d.bg }};border:1px solid {{ d.border }}">
+<div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:{{ d.iconBg }};color:{{ d.iconFg }}"><span style="font-family:'Material Symbols Rounded';font-size:22px;font-variation-settings:'FILL' 1">{{ d.icon }}</span></div><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#a3a09a">more_horiz</span></div>
+<div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:15px;font-weight:700">{{ d.name }}</span><span style="font-size:12px;color:{{ d.fg }}">{{ d.state }}</span><span style="font-size:10.5px;color:#6f6d69;text-transform:uppercase;letter-spacing:0.06em;margin-top:6px">{{ d.variant }}</span></div>
+</div>
+</sc-for>
+</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:12px">
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+<div style="padding:16px;border-radius:16px;display:flex;flex-direction:column;gap:18px;background:rgba(242,177,76,0.1);border:1px solid rgba(242,177,76,0.45)"><div style="width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:#f2b14c;color:#1a1408"><span style="font-family:'Material Symbols Rounded';font-size:22px;font-variation-settings:'FILL' 1">movie</span></div><div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:15px;font-weight:700">Movie Mode</span><span style="font-size:12px;color:#a3a09a">Active</span></div></div>
+<div style="padding:16px;border-radius:16px;display:flex;flex-direction:column;gap:18px;background:#1c1d20;border:1px solid rgba(255,255,255,0.05)"><div style="width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:#232428;color:#f2b14c"><span style="font-family:'Material Symbols Rounded';font-size:22px;font-variation-settings:'FILL' 1">bedtime</span></div><div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:15px;font-weight:700">Good Night</span><span style="font-size:12px;color:#a3a09a">Scene card</span></div></div>
+</div>
+<div style="background:#16171a;border-radius:16px;overflow:hidden;align-self:start">
+<div style="display:flex;align-items:center;gap:14px;padding:13px 16px"><div style="width:34px;height:34px;border-radius:10px;background:#222327;color:#f2b14c;display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:19px">wb_twilight</span></div><div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:14px;font-weight:700">Sunset lights</span><span style="font-size:12px;color:#a3a09a">10 min before sunset → Turn on 6 lights</span></div><div style="width:34px;height:20px;border-radius:10px;padding:2px;display:flex;justify-content:flex-end;background:#f2b14c"><div style="width:16px;height:16px;border-radius:50%;background:#fff"></div></div></div>
+<div style="display:flex;align-items:center;gap:14px;padding:13px 16px;border-top:1px solid rgba(255,255,255,0.05)"><div style="width:34px;height:34px;border-radius:10px;background:#222327;color:#6f6d69;display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:19px">bedtime</span></div><div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:14px;font-weight:700;color:#8a8781">Sleep mode</span><span style="font-size:12px;color:#a3a09a">Every day at 00:00 → Turn off Downlights</span></div><div style="width:34px;height:20px;border-radius:10px;padding:2px;display:flex;justify-content:flex-start;background:#35363a"><div style="width:16px;height:16px;border-radius:50%;background:#fff"></div></div></div>
+</div>
+<div style="background:#16171a;border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:12px;align-self:start">
+<span style="font-size:12px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">Sentence builder</span>
+<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:14px;font-weight:600"><span style="color:#a3a09a">When</span><span style="padding:7px 11px;border-radius:10px;background:#f2b14c;color:#1a1408">someone is seen</span><span style="color:#a3a09a">only if</span><span style="padding:7px 11px;border-radius:10px;background:#26272b">after sunset</span><span style="color:#a3a09a">then</span><span style="padding:7px 11px;border-radius:10px;background:#26272b">Porch lights on</span><span style="padding:7px 11px;border-radius:10px;border:1px dashed rgba(255,255,255,0.18);color:#a3a09a">+</span></div>
+<span style="font-size:12px;color:#8a8781">Triggers are amber and everything else is neutral, so you can find the cause at a glance.</span>
+</div>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center">
+<div style="display:flex;align-items:center;gap:16px;padding:12px 14px 12px 18px;border-radius:14px;background:#f1efea;color:#141517;font-size:14px;font-weight:600;box-shadow:0 10px 30px rgba(0,0,0,0.4)"><span>Movie Mode ran · 8 devices changed</span><div style="padding:6px 12px;border-radius:9px;background:#141517;color:#f1efea;font-size:13px">Undo</div></div>
+<span style="font-size:12px;color:#8a8781">Toast: inverted, bottom centre, 5 s, always offers Undo when something changed.</span>
+</div>
+</section>
+
+<section style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,400px),1fr));gap:24px">
+<div style="display:flex;flex-direction:column;gap:18px">
+<h2 style="margin:0;font-size:13px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.08em">Motion</h2>
+<div style="background:#16171a;border-radius:18px;overflow:hidden">
+<sc-for list="{{ motion }}" as="m" hint-placeholder-count="5">
+<div style="display:flex;gap:14px;padding:13px 18px;border-top:1px solid rgba(255,255,255,0.05);font-size:13px"><span style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#f2b14c;width:92px;flex:none">{{ m.k }}</span><span style="color:#c9c6c0;line-height:1.45">{{ m.v }}</span></div>
+</sc-for>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:18px">
+<h2 style="margin:0;font-size:13px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.08em">Voice · copy</h2>
+<div style="background:#16171a;border-radius:18px;overflow:hidden">
+<sc-for list="{{ voice }}" as="v" hint-placeholder-count="6">
+<div style="display:grid;grid-template-columns:1fr 1fr;border-top:1px solid rgba(255,255,255,0.05);font-size:13px">
+<div style="padding:12px 16px;display:flex;gap:8px"><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#7fd4a0">check</span><span>{{ v.yes }}</span></div>
+<div style="padding:12px 16px;display:flex;gap:8px;color:#8a8781"><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#ff6b5e">close</span><span>{{ v.no }}</span></div>
+</div>
+</sc-for>
+</div>
+</div>
+</section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals(){
+    const surfaces=[['Page','--kv-ink-0','#0e0f10','App background'],['Nav','--kv-ink-1','#111214','Sidebar, bottom bar'],['Card','--kv-ink-2','#16171a','Cards, tiles, lists'],['Inset','--kv-ink-3','#1c1d20','Inside cards, inputs'],['Control','--kv-ink-4','#232428','Icon wells, chips'],['Selected','--kv-ink-5','#2a2b2f','Active tab'],['Paper','--kv-paper-0','#f4f2ee','Light theme page']].map(([name,token,hex,use])=>({name,token,hex,use}));
+    const states=[['Amber · on','--kv-amber','#f2b14c','rgba(242,177,76,0.13)','rgba(242,177,76,0.3)','Lights on, primary action, triggers, selection'],['Blue · media & air','--kv-blue','#7cb8f0','rgba(124,184,240,0.13)','rgba(124,184,240,0.3)','Speakers, TVs, purifiers, climate'],['Green · healthy','--kv-green','#7fd4a0','rgba(127,212,160,0.14)','rgba(127,212,160,0.3)','Present, live, connected, done'],['Red · alert','--kv-red','#ff6b5e','rgba(255,107,94,0.14)','rgba(255,107,94,0.3)','Recording, errors, alarm'],['Violet · developer','--kv-violet','#d9a3f0','rgba(217,163,240,0.14)','rgba(217,163,240,0.3)','Advanced mode, L4 only']].map(([name,token,hex,tint,line,use])=>({name,token,hex,tint,line,use}));
+    const texts=[['--text-primary','#f1efea','Headings, names'],['--text-secondary','#d8d5cf','Nav labels, code'],['--text-muted','#a3a09a','States, captions (4.5:1+)'],['--text-faint','#6f6d69','Ids, disabled. Never body text']].map(([token,hex,use])=>({token,hex,use}));
+    const F="Manrope,sans-serif",M="'JetBrains Mono',monospace";
+    const typeScale=[['Display','34 / 700 / −2.5%',F,'34px',700,'-0.025em','none','#f1efea','Good evening, Methel'],['H1','30 / 700 / −2%',F,'30px',700,'-0.02em','none','#f1efea','Automations'],['H2','17 / 700',F,'17px',700,'0','none','#f1efea','Tonight'],['Title','15 / 700',F,'15px',700,'0','none','#f1efea','Movie Mode'],['Body','14 / 500–600',F,'14px',500,'0','none','#f1efea','4 of your automations do the same thing.'],['Label','13 / 600',F,'13px',600,'0','none','#f1efea','Turn all lights off'],['Caption','12 / 500',F,'12px',500,'0','none','#a3a09a','Ran today at 17:55 · changed 8 devices'],['Overline','12 / 700 / +6%',F,'12px',700,'0.06em','uppercase','#a3a09a','On a schedule'],['Mono','12 / 400',M,'12px',400,'0','none','#d8d5cf','light.kitchen_switch_switch_1 · 23:30']].map(([name,spec,family,size,weight,track,transform,color,sample])=>({name,spec,family,size,weight,track,transform,color,sample}));
+    const icons=['home','meeting_room','bolt','lightbulb','speaker','tv','air_purifier','videocam','outlet','doorbell','wb_twilight','bedtime','movie','thermostat','electric_meter','shield','history','graphic_eq','settings','code','person','auto_awesome','solar_power','lock'];
+    const radii=[['6px','Badge'],['9px','Tab'],['10px','Button'],['12px','Input'],['16px','Card'],['18px','Tile'],['999px','Pill']].map(([v,use])=>({v,use}));
+    const spaces=[4,6,8,10,12,16,20,24,32,40].map(n=>({v:n,px:n+'px'}));
+    const tiles=[
+      {name:'Lamp',state:'On · 78% · 3000K',variant:'Light on',icon:'lightbulb',bg:'rgba(242,177,76,0.11)',border:'rgba(242,177,76,0.28)',iconBg:'#f2b14c',iconFg:'#1a1408',fg:'#f2b14c'},
+      {name:'Lamp',state:'On · 30% · colour',variant:'Light, colour',icon:'lightbulb',bg:'rgba(242,177,76,0.11)',border:'rgba(242,177,76,0.28)',iconBg:'#ff8c64',iconFg:'#1a1408',fg:'#f2b14c'},
+      {name:'Downlights',state:'Off',variant:'Off',icon:'lightbulb',bg:'#16171a',border:'rgba(255,255,255,0.08)',iconBg:'#232428',iconFg:'#8a8781',fg:'#a3a09a'},
+      {name:'Living room display',state:'Playing · Jazz · 25%',variant:'Media',icon:'speaker',bg:'rgba(124,184,240,0.12)',border:'rgba(124,184,240,0.3)',iconBg:'rgba(124,184,240,0.2)',iconFg:'#7cb8f0',fg:'#7cb8f0'},
+      {name:'Doorbell',state:'Live',variant:'Camera',icon:'videocam',bg:'#16171a',border:'rgba(255,255,255,0.08)',iconBg:'rgba(127,212,160,0.15)',iconFg:'#7fd4a0',fg:'#7fd4a0'}];
+    const motion=[['120ms','Hover, press. Buttons scale to 0.97 on press.'],['200ms out','State changes: tile turns on, switch slides, tint fades in.'],['280ms','Drawers slide from the right, sheets rise from the bottom.'],['pop','Scene run, success tick, logo dot. Slight overshoot.'],['never','Looping or decorative motion on control screens. Wall panels may drift in ambient mode only.']].map(([k,v])=>({k,v}));
+    const voice=[['8 lights on','Lighting status: Active'],['Sunset lights ran at 17:55','Automation executed successfully'],['Porch light','light.front_door_switch_switch_1'],['Combine them into one?','Optimize your automation config!'],['Couldn’t reach Sonos. Retry?','Error 503: integration unavailable'],['Methel & Brishti home','2 persons detected in zone.home']].map(([yes,no])=>({yes,no}));
+    return {surfaces,states,texts,typeScale,icons,radii,spaces,tiles,motion,voice};
+  }
+}
+</script>
+</body>
+</html>

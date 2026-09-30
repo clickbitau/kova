@@ -1,0 +1,2 @@
+/* Kova is flat: depth comes from lightness steps (ink-0 → ink-5). Shadows only on floating layers. */
+:root{--shadow-float:0 10px 30px rgba(0,0,0,0.40);--shadow-none:none}

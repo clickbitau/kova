@@ -1,0 +1,25 @@
+/* Kova colour. Rule: colour means state. Amber = light/on/primary, Blue = media/air/climate, Green = healthy/present/live, Red = alert, Violet = developer (L4). */
+:root{
+--kv-ink-0:#0e0f10;--kv-ink-1:#111214;--kv-ink-2:#16171a;--kv-ink-3:#1c1d20;--kv-ink-4:#232428;--kv-ink-5:#2a2b2f;--kv-ink-6:#35363a;
+--kv-paper-0:#f4f2ee;--kv-paper-1:#ffffff;--kv-paper-2:#ece9e3;--kv-paper-3:#e2ded7;
+--kv-bone:#f1efea;--kv-bone-2:#d8d5cf;--kv-stone:#a3a09a;--kv-stone-2:#8a8781;--kv-stone-3:#6f6d69;--kv-coal:#141517;
+--kv-amber:#f2b14c;--kv-amber-hover:#f7cb82;--kv-amber-deep:#e39a2a;--kv-on-amber:#1a1408;
+--kv-blue:#7cb8f0;--kv-green:#7fd4a0;--kv-red:#ff6b5e;--kv-violet:#d9a3f0;
+--kv-amber-tint:rgba(242,177,76,0.13);--kv-amber-line:rgba(242,177,76,0.30);
+--kv-blue-tint:rgba(124,184,240,0.13);--kv-blue-line:rgba(124,184,240,0.30);
+--kv-green-tint:rgba(127,212,160,0.14);--kv-red-tint:rgba(255,107,94,0.14);--kv-violet-tint:rgba(217,163,240,0.14);
+--kv-scrim:rgba(0,0,0,0.55);
+/* semantic — dark (default) */
+--surface-page:var(--kv-ink-0);--surface-nav:var(--kv-ink-1);--surface-card:var(--kv-ink-2);--surface-inset:var(--kv-ink-3);--surface-control:var(--kv-ink-4);--surface-selected:var(--kv-ink-5);
+--line-hairline:rgba(255,255,255,0.07);--line-control:rgba(255,255,255,0.12);
+--text-primary:var(--kv-bone);--text-secondary:var(--kv-bone-2);--text-muted:var(--kv-stone);--text-faint:var(--kv-stone-3);
+--state-on:var(--kv-amber);--state-on-tint:var(--kv-amber-tint);--state-media:var(--kv-blue);--state-media-tint:var(--kv-blue-tint);--state-ok:var(--kv-green);--state-alert:var(--kv-red);--state-dev:var(--kv-violet);
+--action-primary:var(--kv-amber);--action-primary-hover:var(--kv-amber-hover);--action-on-primary:var(--kv-on-amber);--action-secondary:rgba(255,255,255,0.06);
+--switch-off:var(--kv-ink-6);--focus-ring:var(--kv-amber);
+}
+[data-kv-theme="light"]{
+--surface-page:var(--kv-paper-0);--surface-nav:var(--kv-paper-2);--surface-card:var(--kv-paper-1);--surface-inset:var(--kv-paper-2);--surface-control:var(--kv-paper-3);--surface-selected:var(--kv-paper-3);
+--line-hairline:rgba(0,0,0,0.07);--line-control:rgba(0,0,0,0.14);
+--text-primary:var(--kv-coal);--text-secondary:#3a3935;--text-muted:#5f5c57;--text-faint:#8a8781;
+--state-on:var(--kv-amber-deep);--action-secondary:rgba(0,0,0,0.05);--switch-off:#cfcac2;
+}

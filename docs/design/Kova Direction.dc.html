@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..24,400,0..1,0&display=swap" rel="stylesheet"><style>body{margin:0;background:#0e0f10;-webkit-font-smoothing:antialiased}*{box-sizing:border-box}a{color:#f2b14c}a:hover{color:#f7cb82}</style></helmet>
+<div style="min-height:100vh;background:#0e0f10;color:#f1efea;font-family:Manrope,system-ui,sans-serif;padding:56px 44px 120px;display:flex;flex-direction:column;gap:72px;max-width:1180px;margin:0 auto">
+
+<header style="display:flex;flex-direction:column;gap:18px;max-width:820px">
+<span style="font-size:13px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.08em">Kova · Product direction</span>
+<h1 style="margin:0;font-size:46px;font-weight:700;letter-spacing:-0.03em;line-height:1.08;text-wrap:pretty">Home Assistant shows you your devices. Kova shows you your home’s day.</h1>
+<p style="margin:0;font-size:17px;line-height:1.6;color:#c9c6c0;text-wrap:pretty">HA is built around entities: every device becomes a card, and every behaviour becomes a separate trigger-condition-action rule. v2 of our prototype copied that shape. People don’t think in entities, though. They think in time (“after dark”, “at bedtime”, “after Fajr”) and in states of the house (“everyone’s asleep”, “guests are over”). Kova should be built on those two things.</p>
+</header>
+
+<section style="display:flex;flex-direction:column;gap:22px">
+<div style="display:flex;align-items:baseline;gap:14px"><span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#f2b14c">01</span><h2 style="margin:0;font-size:28px;font-weight:700;letter-spacing:-0.02em">The Home Timeline</h2></div>
+<p style="margin:0;font-size:15px;line-height:1.6;color:#c9c6c0;max-width:780px;text-wrap:pretty">One horizontal line is the home screen. The past shows what happened and why. “Now” is the present state. The future shows what the home will do next, scheduled and predicted. Scrub back to see last night, or drag a future event to reschedule it. In HA this is spread across four places (Overview, Logbook, History, the automation list); in Kova it’s one view.</p>
+<div style="background:#16171a;border-radius:20px;padding:24px;display:flex;flex-direction:column;gap:18px">
+<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;font-size:13px"><span style="font-weight:700">Wednesday · your actual schedule</span><span style="color:#a3a09a">Filled = happened · outlined = coming up</span></div>
+<div style="position:relative;height:40px;border-radius:10px;overflow:hidden;display:flex">
+<sc-for list="{{ bands }}" as="b" hint-placeholder-count="6">
+<div style="height:100%;width:{{ b.w }};background:{{ b.bg }};display:flex;align-items:center;padding:0 10px;font-size:12px;font-weight:700;color:{{ b.fg }};white-space:nowrap;overflow:hidden">{{ b.name }}</div>
+</sc-for>
+<div style="position:absolute;left:82%;top:0;bottom:0;width:2px;background:#fff"></div>
+</div>
+<div style="position:relative;height:124px">
+<sc-for list="{{ events }}" as="e" hint-placeholder-count="10">
+<div style="position:absolute;left:{{ e.left }};top:{{ e.top }};transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:4px">
+<div style="width:12px;height:12px;border-radius:50%;background:{{ e.fill }};border:2px solid {{ e.stroke }}"></div>
+<span style="font-size:11px;font-weight:600;white-space:nowrap;color:{{ e.fg }}">{{ e.label }}</span>
+</div>
+</sc-for>
+</div>
+<div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:11px;color:#6f6d69"><span>00</span><span>06</span><span>12</span><span>18</span><span>NOW 19:42</span><span>24</span></div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px">
+<div style="background:#1c1d20;border-radius:12px;padding:14px;font-size:13px;line-height:1.5"><b>Tap a past dot</b><br><span style="color:#a3a09a">18:52 Porch lights on, because the doorbell camera saw a person after dark.</span></div>
+<div style="background:#1c1d20;border-radius:12px;padding:14px;font-size:13px;line-height:1.5"><b>Tap a future dot</b><br><span style="color:#a3a09a">21:00 Rain sounds in the master bedroom. Skip tonight, or move it to 21:30.</span></div>
+<div style="background:#1c1d20;border-radius:12px;padding:14px;font-size:13px;line-height:1.5"><b>Rooms and devices are still there</b><br><span style="color:#a3a09a">They sit below the timeline for direct control. The timeline is where you understand the home.</span></div>
+</div>
+</div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:22px">
+<div style="display:flex;align-items:baseline;gap:14px"><span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#f2b14c">02</span><h2 style="margin:0;font-size:28px;font-weight:700;letter-spacing:-0.02em">Modes: the home has a state</h2></div>
+<p style="margin:0;font-size:15px;line-height:1.6;color:#c9c6c0;max-width:780px;text-wrap:pretty">Right now your home runs on 13 automations and 4 scripts, all of which set devices at a time or on an event. Almost all of them are really describing how the house should feel in a part of the day. Kova makes that the core idea. The home is always in one mode, each mode says how things should be, and moving between modes does the work. Scenes become temporary modes layered on top, and Away and Guests are modes too.</p>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:16px;align-items:start">
+<div style="display:flex;flex-direction:column;gap:8px">
+<sc-for list="{{ modes }}" as="m" hint-placeholder-count="5">
+<div style="border-radius:16px;padding:16px 18px;display:flex;flex-direction:column;gap:8px;background:{{ m.bg }};border:1px solid {{ m.border }}">
+<div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:{{ m.fg }}">{{ m.icon }}</span><span style="font-size:15px;font-weight:700;flex:1">{{ m.name }}</span><span style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#a3a09a">{{ m.when }}</span></div>
+<span style="font-size:13px;color:#c9c6c0;line-height:1.5">{{ m.how }}</span>
+<span style="font-size:11.5px;color:#8a8781">Replaces: {{ m.replaces }}</span>
+</div>
+</sc-for>
+</div>
+<div style="display:flex;flex-direction:column;gap:12px">
+<div style="background:#16171a;border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:10px">
+<span style="font-size:12px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">One behaviour, every dark mode</span>
+<div style="font-size:16px;line-height:1.7">When <span style="padding:2px 9px;border-radius:8px;background:#f2b14c;color:#1a1408;font-weight:700">someone is seen or arrives</span>, light their way for a few minutes.</div>
+<span style="font-size:12.5px;color:#a3a09a;line-height:1.5">Replaces 4 automations: office, garage and front door person detection, and garage arrival. Each room says which lights count as “the way”.</span>
+</div>
+<div style="background:#16171a;border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:10px">
+<span style="font-size:12px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">Overlays</span>
+<div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ overlays }}" as="o" hint-placeholder-count="6"><div style="padding:8px 12px;border-radius:10px;background:#1c1d20;font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#f2b14c">{{ o.icon }}</span>{{ o.name }}</div></sc-for></div>
+<span style="font-size:12.5px;color:#a3a09a;line-height:1.5">These sit on top of the time mode and end on their own: Movie ends when the TV turns off, Guests at checkout, Away when someone’s phone comes home.</span>
+</div>
+<div style="background:rgba(242,177,76,0.09);border:1px solid rgba(242,177,76,0.28);border-radius:16px;padding:18px;display:flex;align-items:center;gap:18px">
+<div style="display:flex;flex-direction:column;align-items:center"><span style="font-size:34px;font-weight:700;letter-spacing:-0.02em">17</span><span style="font-size:11px;color:#a3a09a">HA items</span></div>
+<span style="font-family:'Material Symbols Rounded';font-size:24px;color:#f2b14c">arrow_forward</span>
+<div style="display:flex;flex-direction:column;align-items:center"><span style="font-size:34px;font-weight:700;letter-spacing:-0.02em;color:#f2b14c">5 + 1</span><span style="font-size:11px;color:#a3a09a">modes + behaviour</span></div>
+<span style="font-size:13px;color:#c9c6c0;line-height:1.45;flex:1">Same home, same result. The whole setup fits on one screen.</span>
+</div>
+</div>
+</div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:22px">
+<div style="display:flex;align-items:baseline;gap:14px"><span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#f2b14c">03</span><h2 style="margin:0;font-size:28px;font-weight:700;letter-spacing:-0.02em">Teach, test, then trust</h2></div>
+<p style="margin:0;font-size:15px;line-height:1.6;color:#c9c6c0;max-width:780px;text-wrap:pretty">In HA you write a rule and find out if it’s right when it misfires. Kova replays every rule against your real history before it goes live, and keeps checking it afterwards. New rules can come from watching what you do. These findings are from your actual config:</p>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:14px;align-items:start">
+<sc-for list="{{ findings }}" as="f" hint-placeholder-count="3">
+<div style="background:#16171a;border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;gap:8px"><span style="font-family:'Material Symbols Rounded';font-size:19px;color:{{ f.fg }}">{{ f.icon }}</span><span style="font-size:11.5px;font-weight:700;color:{{ f.fg }};text-transform:uppercase;letter-spacing:0.06em">{{ f.kind }}</span></div>
+<span style="font-size:16px;font-weight:700;line-height:1.35">{{ f.title }}</span>
+<span style="font-size:13px;color:#a3a09a;line-height:1.55">{{ f.body }}</span>
+<sc-if value="{{ f.hasDays }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:6px"><div style="display:grid;grid-template-columns:repeat(14,1fr);gap:4px"><sc-for list="{{ f.days }}" as="d" hint-placeholder-count="14"><div style="aspect-ratio:1;border-radius:4px;background:{{ d.bg }}"></div></sc-for></div><span style="font-size:11px;color:#8a8781">{{ f.legend }}</span></div>
+</sc-if>
+<div style="padding:8px 12px;border-radius:9px;background:#f2b14c;color:#1a1408;font-size:12px;font-weight:700;align-self:flex-start">{{ f.btn }}</div>
+</div>
+</sc-for>
+</div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:22px">
+<div style="display:flex;align-items:baseline;gap:14px"><span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#f2b14c">04</span><h2 style="margin:0;font-size:28px;font-weight:700;letter-spacing:-0.02em">Smaller ideas that add up</h2></div>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px">
+<sc-for list="{{ smaller }}" as="s" hint-placeholder-count="6">
+<div style="background:#16171a;border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:8px"><span style="font-family:'Material Symbols Rounded';font-size:22px;color:#7cb8f0">{{ s.icon }}</span><span style="font-size:15px;font-weight:700">{{ s.name }}</span><span style="font-size:13px;color:#a3a09a;line-height:1.5">{{ s.body }}</span></div>
+</sc-for>
+</div>
+</section>
+
+<section style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:20px">
+<div style="display:flex;flex-direction:column;gap:14px">
+<h2 style="margin:0;font-size:22px;font-weight:700;letter-spacing:-0.02em">What we stop copying from HA</h2>
+<div style="background:#16171a;border-radius:18px;overflow:hidden">
+<sc-for list="{{ stops }}" as="x" hint-placeholder-count="5">
+<div style="display:flex;flex-direction:column;gap:4px;padding:14px 18px;border-top:1px solid rgba(255,255,255,0.05)"><span style="font-size:14px;font-weight:700">{{ x.a }}</span><span style="font-size:13px;color:#a3a09a;line-height:1.5">{{ x.b }}</span></div>
+</sc-for>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:14px">
+<h2 style="margin:0;font-size:22px;font-weight:700;letter-spacing:-0.02em">Risks to design for</h2>
+<div style="background:#16171a;border-radius:18px;overflow:hidden">
+<sc-for list="{{ risks }}" as="x" hint-placeholder-count="4">
+<div style="display:flex;flex-direction:column;gap:4px;padding:14px 18px;border-top:1px solid rgba(255,255,255,0.05)"><span style="font-size:14px;font-weight:700">{{ x.a }}</span><span style="font-size:13px;color:#a3a09a;line-height:1.5">{{ x.b }}</span></div>
+</sc-for>
+</div>
+</div>
+</section>
+
+<section style="border-radius:20px;padding:28px;background:#16171a;display:flex;flex-direction:column;gap:12px">
+<span style="font-size:13px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.08em">In one line</span>
+<span style="font-size:26px;font-weight:700;letter-spacing:-0.02em;line-height:1.3;max-width:900px;text-wrap:pretty">Kova understands what your home is doing, why, and what comes next. You set how it should feel, and it tests every change against your real life before trusting it.</span>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals(){
+    const B=[['Night',0,4.58,'#1f2a3a','#7cb8f0'],['Dawn',4.58,5.93,'#2a2436','#d9a3f0'],['Day',5.93,17.92,'#232428','#a3a09a'],['Evening',17.92,20,'rgba(242,177,76,0.28)','#f2b14c'],['Wind down',20,23.5,'rgba(242,140,76,0.22)','#f0a070'],['Night',23.5,24,'#1f2a3a','#7cb8f0']];
+    const bands=B.map(([name,a,b,bg,fg])=>({name:b-a>1.2?name:'',w:((b-a)/24*100)+'%',bg,fg}));
+    const EV=[[4.58,'Quran stops',0,1],[5.93,'All off',1,1],[7,'Rain stops',2,1],[17.92,'Evening lights',0,1],[18.87,'Porch · person',1,1],[20,'Wind down',2,0],[21,'Rain sounds',3,0],[23.5,'Quran',0,0]];
+    const events=EV.map(([h,label,row,past])=>({left:(h/24*100)+'%',top:(row*30)+'px',label,fill:past?'#f1efea':'transparent',stroke:past?'#f1efea':'#f2b14c',fg:past?'#c9c6c0':'#f2b14c'}));
+    const modes=[
+      {name:'Day',icon:'light_mode',when:'sunrise → sunset',how:'Lights off unless someone turns them on. Purifiers on Auto.',replaces:'Sunrise reset',bg:'#16171a',border:'rgba(255,255,255,0.06)',fg:'#a3a09a'},
+      {name:'Evening',icon:'wb_twilight',when:'sunset −10 → 20:00',how:'Kitchen, lounge, laundry, porch, path and garage on. Lamp 78% at 3000K, TV backlight 31%.',replaces:'Sunset lights',bg:'rgba(242,177,76,0.08)',border:'rgba(242,177,76,0.25)',fg:'#f2b14c'},
+      {name:'Wind down',icon:'nights_stay',when:'20:00 → 23:30',how:'Only the lamp at 5% and 2000K plus the TV backlight. Rain sounds in the master bedroom from 21:00.',replaces:'Wind down, Thunderstorm start',bg:'rgba(242,140,76,0.07)',border:'rgba(242,140,76,0.22)',fg:'#f0a070'},
+      {name:'Night',icon:'bedtime',when:'23:30 → Fajr',how:'Tarateel on 4 speakers at 15%, never in the master bedroom. Purifiers on Sleep with displays off.',replaces:'Quran start, Sleep mode, Purifiers night',bg:'rgba(124,184,240,0.07)',border:'rgba(124,184,240,0.22)',fg:'#7cb8f0'},
+      {name:'Dawn',icon:'wb_sunny',when:'Fajr → sunrise',how:'Recitation stops. Everything stays quiet until sunrise.',replaces:'Quran stop at Fajr',bg:'rgba(217,163,240,0.06)',border:'rgba(217,163,240,0.2)',fg:'#d9a3f0'}];
+    const overlays=[['Movie','movie'],['Date','favorite'],['Party','celebration'],['Good night','bedtime'],['Away','flight_takeoff'],['Guests','luggage']].map(([name,icon])=>({name,icon}));
+    const d14=(pattern)=>pattern.split('').map(c=>({bg:c==='x'?'#ff6b5e':c==='o'?'#f2b14c':c==='-'?'#26272b':'#7fd4a0'}));
+    const findings=[
+      {kind:'Tested on history',icon:'history',fg:'#ff6b5e',title:'Sunset lights run even when nobody is home',body:'The automation has no presence condition. Over the last 14 days it would have lit 8 devices for an empty house on 3 evenings.',hasDays:true,days:d14('ooooxooooxoxoo'),legend:'Amber = ran with someone home · red = ran with nobody home',btn:'Only when someone’s home'},
+      {kind:'Lint',icon:'rule',fg:'#f2b14c',title:'“After sunset” stops working at midnight',body:'In HA, the sun condition “after sunset” is false after 00:00. If Brishti gets home at 01:00, the garage stays dark. In Kova, “after dark” means sunset to sunrise.',hasDays:false,days:[],legend:'',btn:'Use “after dark”'},
+      {kind:'Learned from you',icon:'auto_awesome',fg:'#7fd4a0',title:'You turn the lamp to warm 30% most nights around 21:15',body:'This is an example of what Kova would notice after a couple of weeks. It proposes a change to Wind down and shows the nights it would have applied before you accept.',hasDays:true,days:d14('gg-ggg-gggg-gg'),legend:'Green = you did this manually · grey = you didn’t',btn:'Add to Wind down'}];
+    const smaller=[
+      {icon:'mosque',name:'Rhythms, not just sun',body:'Prayer times, school terms, shift rosters and public holidays are first-class schedules any mode can follow. Your setup already depends on Fajr.'},
+      {icon:'help',name:'“Why?” on every state',body:'Tap any light to see the chain behind it: who or what changed it, when, and what will change it next.'},
+      {icon:'swap_horiz',name:'Conflicts shown, not hidden',body:'If two modes or rules fight over the same device, Kova shows the conflict and asks which one wins.'},
+      {icon:'person',name:'Per-person homes',body:'Brishti gets her own view and quiet hours, and guests get a link that expires. Everyone sees the same modes, but only what they’re allowed to change.'},
+      {icon:'wall_art',name:'Ambient first',body:'The wall panel and TV show the current mode and the next thing coming. Controls appear when someone walks up.'},
+      {icon:'dns',name:'One box, whole suite',body:'Kova hands network to Warden, media to Helix and containers to Dockbit. No add-on store full of servers to babysit.'}];
+    const stops=[
+      {a:'Dashboards as the home screen',b:'The timeline and rooms are the default. Dashboards stay for wall panels and people who love building them.'},
+      {a:'Entities in the UI',b:'Names, rooms and modes only. Entity ids live in Advanced mode.'},
+      {a:'YAML as the source of truth',b:'Modes and rules are stored as data. Code view is a generated, editable, two-way projection.'},
+      {a:'One rule per behaviour',b:'Behaviours attach to modes and rooms, so one idea stays one thing.'},
+      {a:'Settings sprawl',b:'Integrations, people and system. Everything else lives next to what it affects.'}];
+    const risks=[
+      {a:'HA migrators expect automations',b:'Import converts rules into modes where it can and keeps the rest as plain automations. Nothing is lost.'},
+      {a:'Big homes, busy timelines',b:'The timeline groups by mode and room, and shows only changes that matter by default.'},
+      {a:'Mode edge cases',b:'Overlays need clear priority and an obvious way back. Design this carefully and test it with the family.'},
+      {a:'Learning can feel creepy',b:'Suggestions are local, explained with evidence, and never applied without a tap.'}];
+    return {bands,events,modes,overlays,findings,smaller,stops,risks};
+  }
+}
+</script>
+</body>
+</html>

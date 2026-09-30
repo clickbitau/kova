@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kova</title>
+<link rel="icon" href="./assets/logo/kova-favicon.svg">
+<script>(function(){var t="";try{var u=new URL(location.href);t=u.searchParams.get("token")||localStorage.getItem("kova_token")||"";if(u.searchParams.get("token"))localStorage.setItem("kova_token",t)}catch(e){}document.write('<script src="/api/boot.js'+(t?"?token="+encodeURIComponent(t):"")+'"><\/script>')})();</script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..24,400,0..1,0&display=swap" rel="stylesheet"><style>body{margin:0;background:#0e0f10;-webkit-font-smoothing:antialiased}a{color:#f2b14c}a:hover{color:#f7cb82}*{box-sizing:border-box}input[type=range]{accent-color:#f2b14c}</style></helmet>
+<div style="display:flex;min-height:100vh;background:#0e0f10;color:#f1efea;font-family:Manrope,system-ui,sans-serif">
+
+<aside style="width:236px;flex:none;border-right:1px solid rgba(255,255,255,0.07);padding:22px 14px;display:flex;flex-direction:column;gap:4px;position:sticky;top:0;height:100vh;background:#111214">
+<div style="display:flex;align-items:center;gap:10px;padding:4px 10px 18px">
+<div style="width:30px;height:30px;border-radius:9px;background:#1d1e21;display:flex;align-items:center;justify-content:center"><svg width="22" height="22" viewBox="0 0 48 48"><path d="M8 26L24 11L40 26" fill="none" stroke="#f1efea" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path><path d="M16 32L24 24.5L32 32" fill="none" stroke="#f1efea" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="24" cy="38.5" r="3.5" fill="#f2b14c"></circle></svg></div>
+<div style="display:flex;flex-direction:column"><span style="font-size:18px;font-weight:800;letter-spacing:-0.02em">Kova</span><span style="font-size:12px;color:#a3a09a">{{ homeName }}</span></div>
+</div>
+<div onClick="{{ goModes }}" style="margin:0 2px 14px;padding:11px 12px;border-radius:12px;background:#17181b;display:flex;align-items:center;gap:12px;cursor:pointer"><div style="width:10px;height:10px;border-radius:50%;background:{{ mode.color }};box-shadow:0 0 0 4px {{ mode.tint }}"></div><div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:13px;font-weight:700">{{ mode.name }}</span><span style="font-size:11px;color:#a3a09a">{{ mode.untilShort }}</span></div></div>
+<sc-for list="{{ nav }}" as="n" hint-placeholder-count="5">
+<div onClick="{{ n.go }}" style="display:flex;align-items:center;gap:12px;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:14px;font-weight:600;margin-top:{{ n.mt }};background:{{ n.bg }};color:{{ n.fg }}" style-hover="background:rgba(255,255,255,0.05)">
+<span style="font-family:'Material Symbols Rounded';font-size:20px;line-height:1">{{ n.icon }}</span><span style="flex:1">{{ n.label }}</span><span style="font-size:11px;color:#a3a09a">{{ n.badge }}</span>
+</div>
+</sc-for>
+<div style="margin-top:auto;display:flex;flex-direction:column;gap:10px">
+<div style="padding:12px;border-radius:12px;background:#17181b;display:flex;flex-direction:column;gap:6px">
+<div style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600"><div style="width:7px;height:7px;border-radius:50%;background:{{ hubDot }}"></div>{{ hubTitle }}</div>
+<div style="font-size:12px;color:#a3a09a;line-height:1.4">{{ hubSub }}</div>
+</div>
+<div onClick="{{ toggleAdvanced }}" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;cursor:pointer" style-hover="background:rgba(255,255,255,0.05)">
+<div style="display:flex;flex-direction:column;flex:1"><span style="font-size:13px;font-weight:600">Advanced mode</span><span style="font-size:11px;color:#a3a09a">Code, entity ids, dev tools</span></div>
+<div style="width:34px;height:20px;border-radius:10px;padding:2px;display:flex;justify-content:{{ advJustify }};background:{{ advTrack }}"><div style="width:16px;height:16px;border-radius:50%;background:#fff"></div></div>
+</div>
+</div>
+</aside>
+
+<main style="flex:1;min-width:0;padding:30px 40px 80px;display:flex;flex-direction:column;gap:28px;position:relative;isolation:isolate;overflow:hidden">
+
+<sc-if value="{{ isHome }}" hint-placeholder-val="{{ true }}">
+<div style="position:absolute;top:-240px;left:-10%;right:-10%;height:620px;background:radial-gradient(50% 55% at 28% 45%, {{ mode.glow }}, transparent 72%);pointer-events:none;z-index:-1"></div>
+<sc-if value="{{ previewing }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:14px;background:{{ mode.tint }};border:1px solid {{ mode.line }}"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:{{ mode.color }}">preview</span><span style="font-size:14px;font-weight:600;flex:1">{{ previewText }}</span><div onClick="{{ backToNow }}" style="padding:7px 12px;border-radius:9px;background:#f1efea;color:#141517;font-size:12px;font-weight:700;cursor:pointer">Back to now</div></div>
+</sc-if>
+<div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:20px">
+<div style="display:flex;flex-direction:column;gap:8px">
+<span style="font-size:13px;color:#a3a09a;font-weight:500">{{ nowLabel }}</span>
+<div style="display:flex;align-items:center;gap:14px"><span style="font-family:'Material Symbols Rounded';font-size:42px;font-variation-settings:'FILL' 1;color:{{ mode.color }}">{{ mode.icon }}</span><h1 style="margin:0;font-size:46px;font-weight:700;letter-spacing:-0.03em;line-height:1">{{ mode.name }}</h1></div>
+<span style="font-size:15px;color:#c9c6c0">{{ mode.until }}</span>
+<sc-if value="{{ overlayOn }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;align-items:center;gap:10px;padding:6px 6px 6px 12px;border-radius:12px;background:#1c1d20;align-self:flex-start"><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#f2b14c;font-variation-settings:'FILL' 1">{{ overlay.icon }}</span><span style="font-size:13px;font-weight:600">{{ overlay.label }}</span><div onClick="{{ endOverlay }}" style="padding:5px 10px;border-radius:8px;background:rgba(255,255,255,0.08);font-size:12px;font-weight:700;cursor:pointer">End</div></div>
+</sc-if>
+</div>
+<div style="display:flex;gap:10px;flex-wrap:wrap">
+<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:14px;background:#16171a"><span style="font-family:'Material Symbols Rounded';font-size:24px;color:#a3a09a">{{ weatherIcon }}</span><div style="display:flex;flex-direction:column"><span style="font-size:16px;font-weight:700">{{ weatherTemp }}</span><span style="font-size:11px;color:#a3a09a">{{ weatherText }}</span></div></div>
+<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:14px;background:#16171a"><div style="display:flex"><sc-for list="{{ avatars }}" as="av" hint-placeholder-count="2"><div style="width:28px;height:28px;border-radius:50%;background:#2a2b2f;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;border:2px solid #16171a;margin-left:{{ av.ml }};opacity:{{ av.op }}">{{ av.initial }}</div></sc-for></div><div style="display:flex;flex-direction:column"><span style="font-size:13px;font-weight:700">{{ peopleLabel }}</span><span style="font-size:11px;color:#a3a09a">{{ lightsOnLabel }}</span></div></div>
+</div>
+</div>
+
+<div style="background:#16171a;border-radius:20px;padding:20px 22px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;font-size:13px"><span style="font-weight:700">Today</span><span style="color:#a3a09a">Tap anywhere on the day to preview it</span></div>
+<div onClick="{{ scrub }}" style="position:relative;cursor:crosshair">
+<div style="height:44px;border-radius:12px;overflow:hidden;display:flex">
+<sc-for list="{{ bands }}" as="bd" hint-placeholder-count="6"><div style="height:100%;width:{{ bd.w }};background:{{ bd.bg }};display:flex;align-items:center;padding:0 10px;font-size:12px;font-weight:700;color:{{ bd.fg }};white-space:nowrap;overflow:hidden">{{ bd.name }}</div></sc-for>
+</div>
+<div style="position:relative;height:152px;margin-top:10px">
+<sc-for list="{{ tlEvents }}" as="te" hint-placeholder-count="9"><div style="position:absolute;left:{{ te.left }};top:{{ te.top }};transform:{{ te.tx }};display:flex;align-items:center;gap:6px;opacity:{{ te.op }}"><div style="width:10px;height:10px;border-radius:50%;flex:none;background:{{ te.fill }};border:2px solid {{ te.stroke }}"></div><span style="font-size:11.5px;font-weight:600;white-space:nowrap;color:{{ te.fg }}">{{ te.label }}</span></div></sc-for>
+</div>
+<div style="position:absolute;left:{{ nowLeft }};top:-4px;height:52px;width:2px;border-radius:1px;background:#fff"></div>
+<sc-if value="{{ previewing }}" hint-placeholder-val="{{ false }}"><div style="position:absolute;left:{{ previewLeft }};top:-6px;height:56px;width:3px;border-radius:2px;background:{{ mode.color }}"></div><div style="position:absolute;left:{{ previewLeft }};top:12px;transform:translateX(-50%);padding:2px 8px;border-radius:6px;background:{{ mode.color }};color:#141517;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500">{{ previewTime }}</div></sc-if>
+</div>
+<div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:11px;color:#6f6d69"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr));gap:16px;align-items:start">
+<div style="display:flex;flex-direction:column;gap:10px">
+<h2 style="margin:0;font-size:17px;font-weight:700">Just happened</h2>
+<div style="background:#16171a;border-radius:16px;padding:4px 16px">
+<sc-for list="{{ happened }}" as="hp" hint-placeholder-count="3"><div style="display:flex;gap:12px;padding:12px 0;border-top:1px solid rgba(255,255,255,0.05)"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#a3a09a;width:40px;padding-top:2px">{{ hp.t }}</span><div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:0"><span style="font-size:14px;font-weight:600">{{ hp.what }}</span><span style="font-size:12px;color:#a3a09a;display:flex;align-items:center;gap:5px"><span style="font-family:'Material Symbols Rounded';font-size:14px">subdirectory_arrow_right</span>{{ hp.why }}</span></div></div></sc-for>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px">
+<h2 style="margin:0;font-size:17px;font-weight:700">Coming up</h2>
+<div style="background:#16171a;border-radius:16px;padding:4px 16px">
+<sc-for list="{{ upcoming }}" as="up" hint-placeholder-count="3"><div style="display:flex;gap:12px;padding:12px 0;border-top:1px solid rgba(255,255,255,0.05);align-items:center;opacity:{{ up.op }}"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;width:40px;color:{{ up.color }}">{{ up.t }}</span><div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:0"><span style="font-size:14px;font-weight:600;text-decoration:{{ up.deco }}">{{ up.label }}</span><span style="font-size:12px;color:#a3a09a">{{ up.what }}</span></div><div onClick="{{ up.skip }}" style="padding:6px 10px;border-radius:8px;background:rgba(255,255,255,0.06);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">{{ up.btn }}</div></div></sc-for>
+</div>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:baseline;justify-content:space-between"><h2 style="margin:0;font-size:17px;font-weight:700">Switch the home to</h2><span style="font-size:12px;color:#a3a09a">Each one ends by itself</span></div>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px">
+<sc-for list="{{ overlays }}" as="ov" hint-placeholder-count="6"><div onClick="{{ ov.go }}" style="padding:14px;border-radius:16px;cursor:pointer;display:flex;flex-direction:column;gap:12px;background:{{ ov.bg }};border:1px solid {{ ov.border }}" style-hover="border-color:rgba(242,177,76,0.5)"><div style="width:36px;height:36px;border-radius:11px;display:flex;align-items:center;justify-content:center;background:{{ ov.iconBg }};color:{{ ov.iconFg }}"><span style="font-family:'Material Symbols Rounded';font-size:20px;font-variation-settings:'FILL' 1">{{ ov.icon }}</span></div><div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:14px;font-weight:700">{{ ov.name }}</span><span style="font-size:11.5px;color:#a3a09a;line-height:1.35">{{ ov.ends }}</span></div></div></sc-for>
+</div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr));gap:16px;align-items:start">
+<div style="display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:baseline;justify-content:space-between"><h2 style="margin:0;font-size:17px;font-weight:700">Rooms</h2><span onClick="{{ goRooms }}" style="font-size:12px;color:#f2b14c;cursor:pointer;font-weight:600">All devices</span></div>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px">
+<sc-for list="{{ roomCards }}" as="r" hint-placeholder-count="10"><div onClick="{{ r.open }}" style="padding:12px 14px;border-radius:14px;background:#16171a;cursor:pointer;display:flex;align-items:center;gap:10px" style-hover="background:#1c1d21"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:{{ r.iconFg }}">{{ r.icon }}</span><div style="display:flex;flex-direction:column;gap:1px;min-width:0"><span style="font-size:13px;font-weight:700">{{ r.name }}</span><span style="font-size:11.5px;color:{{ r.pillFg }}">{{ r.pill }}</span></div></div></sc-for>
+</div>
+</div>
+<sc-if value="{{ hasFindings }}" hint-placeholder-val="{{ true }}">
+<div style="border-radius:18px;padding:18px;background:#16171a;border:1px solid rgba(255,255,255,0.06);display:flex;flex-direction:column;gap:12px;margin-top:30px">
+<div style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:#7fd4a0;text-transform:uppercase;letter-spacing:0.06em"><span style="font-family:'Material Symbols Rounded';font-size:18px">fact_check</span>Kova checked your modes</div>
+<span style="font-size:15px;font-weight:700;line-height:1.4">{{ findingsHeadline }}</span>
+<span style="font-size:13px;color:#a3a09a;line-height:1.5">Each mode was replayed against the last 14 days of your home.</span>
+<div onClick="{{ goModes }}" style="padding:8px 14px;border-radius:10px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;cursor:pointer;align-self:flex-start">Review</div>
+</div>
+</sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{ isModes }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:12px"><div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;color:#a3a09a">{{ modesSummary }}</span><h1 style="margin:0;font-size:30px;font-weight:700;letter-spacing:-0.02em">Modes</h1></div><span onClick="{{ goAutos }}" style="font-size:13px;color:#a3a09a;cursor:pointer;font-weight:600;display:flex;align-items:center;gap:6px"><span style="font-family:'Material Symbols Rounded';font-size:18px">list</span>Imported rules (13)</span></div>
+<sc-if value="{{ hasFindings }}" hint-placeholder-val="{{ true }}">
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:12px">
+<sc-for list="{{ findings }}" as="fd" hint-placeholder-count="3">
+<div style="background:#16171a;border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:9px;border:1px solid rgba(255,255,255,0.05)">
+<div style="display:flex;align-items:center;gap:8px"><span style="font-family:'Material Symbols Rounded';font-size:18px;color:{{ fd.fg }}">{{ fd.icon }}</span><span style="font-size:11px;font-weight:700;color:{{ fd.fg }};text-transform:uppercase;letter-spacing:0.06em;flex:1">{{ fd.kind }}</span><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:{{ fd.modeTint }};color:{{ fd.modeColor }}">{{ fd.modeName }}</span></div>
+<span style="font-size:14.5px;font-weight:700;line-height:1.35">{{ fd.title }}</span>
+<span style="font-size:12.5px;color:#a3a09a;line-height:1.5">{{ fd.body }}</span>
+<div style="display:flex;gap:8px;flex-wrap:wrap"><div onClick="{{ fd.doFix }}" style="padding:7px 12px;border-radius:9px;background:#f2b14c;color:#1a1408;font-size:12px;font-weight:700;cursor:pointer">{{ fd.fix }}</div><div onClick="{{ fd.doAlt }}" style="padding:7px 12px;border-radius:9px;background:rgba(255,255,255,0.06);font-size:12px;font-weight:600;cursor:pointer">{{ fd.alt }}</div></div>
+</div>
+</sc-for>
+</div>
+</sc-if>
+<div style="display:grid;grid-template-columns:minmax(0,300px) minmax(0,1fr);gap:20px;align-items:start">
+<div style="display:flex;flex-direction:column;gap:18px">
+<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">Through the day</span>
+<sc-for list="{{ modeList }}" as="ml" hint-placeholder-count="5"><div onClick="{{ ml.pick }}" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;cursor:pointer;background:{{ ml.bg }};border:1px solid {{ ml.border }}" style-hover="background:#1c1d21"><div style="width:10px;height:10px;border-radius:50%;background:{{ ml.color }};box-shadow:0 0 0 4px {{ ml.tint }}"></div><div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:14px;font-weight:700">{{ ml.name }}</span><span style="font-size:11.5px;color:#a3a09a">{{ ml.span }}</span></div><sc-if value="{{ ml.now }}" hint-placeholder-val="{{ false }}"><span style="font-size:10.5px;font-weight:800;padding:2px 7px;border-radius:999px;background:{{ ml.color }};color:#141517">NOW</span></sc-if></div></sc-for>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">On top</span>
+<div style="background:#16171a;border-radius:14px;overflow:hidden"><sc-for list="{{ overlays }}" as="ov" hint-placeholder-count="6"><div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:1px solid rgba(255,255,255,0.04)"><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#f2b14c">{{ ov.icon }}</span><span style="font-size:13px;font-weight:600;flex:1">{{ ov.name }}</span><span style="font-size:11px;color:#8a8781;text-align:right">{{ ov.ends }}</span></div></sc-for></div>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">Behaviours</span>
+<div style="background:#16171a;border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:8px"><div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#f2b14c">footprint</span><span style="font-size:14px;font-weight:700;flex:1">Light the way</span></div><span style="font-size:12.5px;color:#a3a09a;line-height:1.5">{{ ltwText }}</span><span style="font-size:11px;color:#8a8781">{{ ltwSub }}</span></div>
+</div>
+</div>
+
+<div style="background:#16171a;border-radius:20px;overflow:hidden;display:flex;flex-direction:column">
+<div style="height:6px;background:{{ sm.color }}"></div>
+<div style="padding:22px;display:flex;flex-direction:column;gap:20px">
+<div style="display:flex;align-items:center;gap:14px"><div style="width:48px;height:48px;border-radius:14px;display:flex;align-items:center;justify-content:center;background:{{ sm.tint }};color:{{ sm.color }}"><span style="font-family:'Material Symbols Rounded';font-size:26px;font-variation-settings:'FILL' 1">{{ sm.icon }}</span></div><div style="display:flex;flex-direction:column;gap:2px;flex:1"><span style="font-size:24px;font-weight:700;letter-spacing:-0.02em">{{ sm.name }}</span><span style="font-size:13px;color:#a3a09a">{{ sm.span }}</span></div><div onClick="{{ sm.preview }}" style="padding:8px 14px;border-radius:10px;background:rgba(255,255,255,0.06);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px"><span style="font-family:'Material Symbols Rounded';font-size:18px">preview</span>Preview</div></div>
+<div style="display:flex;flex-wrap:wrap;gap:8px;font-size:13px;font-weight:600;align-items:center"><span style="color:#a3a09a">Starts</span><span style="padding:7px 11px;border-radius:10px;background:{{ sm.color }};color:#141517">{{ sm.starts }}</span><span style="color:#a3a09a">ends</span><span style="padding:7px 11px;border-radius:10px;background:#26272b">{{ sm.ends }}</span></div>
+<div style="display:flex;flex-direction:column;gap:10px"><span style="font-size:12px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">How the home should be</span>
+<sc-for list="{{ sm.groups }}" as="g" hint-placeholder-count="3"><div style="display:grid;grid-template-columns:110px minmax(0,1fr);gap:12px;align-items:start"><span style="font-size:13px;font-weight:700;padding-top:7px">{{ g.room }}</span><div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ g.chips }}" as="c" hint-placeholder-count="2"><span style="padding:7px 11px;border-radius:10px;background:#1c1d20;font-size:13px;font-weight:600;border:1px solid rgba(255,255,255,0.05)">{{ c }}</span></sc-for></div></div></sc-for>
+<sc-if value="{{ sm.hasInherit }}" hint-placeholder-val="{{ false }}"><div style="font-size:12.5px;color:#a3a09a;line-height:1.5;padding:10px 12px;border-radius:10px;background:#1c1d20">{{ sm.inherit }}</div></sc-if>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:12px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">Moments in this mode</span>
+<sc-for list="{{ sm.moments }}" as="mo" hint-placeholder-count="1"><div style="display:flex;gap:12px;align-items:center;padding:10px 12px;border-radius:10px;background:#1c1d20"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:{{ sm.color }}">{{ mo.t }}</span><span style="font-size:13px;font-weight:600">{{ mo.text }}</span></div></sc-for>
+<span style="font-size:12.5px;color:#8a8781">{{ sm.noMoments }}</span>
+</div>
+<div onClick="{{ sm.toggleLtw }}" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;background:#1c1d20;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#f2b14c">footprint</span><div style="display:flex;flex-direction:column;gap:2px;flex:1"><span style="font-size:13px;font-weight:700">Light the way in this mode</span><span style="font-size:12px;color:#a3a09a">Lights follow people seen by cameras or arriving home</span></div><div style="width:34px;height:20px;border-radius:10px;padding:2px;display:flex;justify-content:{{ sm.ltwJustify }};background:{{ sm.ltwTrack }}"><div style="width:16px;height:16px;border-radius:50%;background:#fff"></div></div></div>
+<div style="display:flex;flex-direction:column;gap:10px;padding:16px;border-radius:14px;border:1px solid rgba(255,255,255,0.08)">
+<div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#7fd4a0">history</span><span style="font-size:14px;font-weight:700;flex:1">Tested on the last 14 days</span></div>
+<div style="display:grid;grid-template-columns:repeat(14,1fr);gap:5px"><sc-for list="{{ sm.days }}" as="d" hint-placeholder-count="14"><div style="aspect-ratio:1;border-radius:5px;background:{{ d.bg }}"></div></sc-for></div>
+<span style="font-size:13px;color:#c9c6c0;line-height:1.5">{{ sm.testText }}</span>
+</div>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isRooms }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;color:#a3a09a">Rooms</span><h1 style="margin:0;font-size:30px;font-weight:700;letter-spacing:-0.02em">{{ roomName }}</h1></div>
+<div style="display:flex;flex-wrap:wrap;gap:6px">
+<sc-for list="{{ roomTabs }}" as="rt" hint-placeholder-count="10">
+<div onClick="{{ rt.open }}" style="padding:7px 13px;border-radius:999px;font-size:13px;font-weight:600;cursor:pointer;background:{{ rt.bg }};color:{{ rt.fg }}">{{ rt.name }}</div>
+</sc-for>
+</div>
+<div style="display:flex;align-items:center;gap:10px;font-size:13px;color:#a3a09a"><span>{{ roomSummary }}</span><span onClick="{{ roomAllOff }}" style="color:#f2b14c;font-weight:600;cursor:pointer">Turn all lights off</span></div>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px">
+<sc-for list="{{ tiles }}" as="d" hint-placeholder-count="6">
+<div style="border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:22px;background:{{ d.bg }};border:1px solid {{ d.border }};transition:background .2s">
+<div style="display:flex;justify-content:space-between;align-items:flex-start">
+<div onClick="{{ d.toggle }}" style="width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;background:{{ d.iconBg }};color:{{ d.iconFg }}"><span style="font-family:'Material Symbols Rounded';font-size:22px;font-variation-settings:'FILL' 1">{{ d.icon }}</span></div>
+<div onClick="{{ d.open }}" style="width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#a3a09a" style-hover="background:rgba(255,255,255,0.07)"><span style="font-family:'Material Symbols Rounded';font-size:20px">more_horiz</span></div>
+</div>
+<div onClick="{{ d.toggle }}" style="display:flex;flex-direction:column;gap:3px;cursor:pointer"><span style="font-size:15px;font-weight:700">{{ d.name }}</span><span style="font-size:12px;color:{{ d.stateFg }}">{{ d.state }}</span><sc-if value="{{ d.showId }}" hint-placeholder-val="{{ false }}"><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#6f6d69;margin-top:4px;word-break:break-all">{{ d.eid }}</span></sc-if></div>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ isAutos }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:12px"><div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;color:#a3a09a">{{ autoCount }}</span><h1 style="margin:0;font-size:30px;font-weight:700;letter-spacing:-0.02em">Automations</h1></div><div style="padding:9px 16px;border-radius:12px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px"><span style="font-family:'Material Symbols Rounded';font-size:18px">add</span>New automation</div></div>
+
+<div style="background:#16171a;border-radius:18px;padding:18px 20px 14px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;justify-content:space-between;font-size:13px"><span style="font-weight:700">Your day</span><span style="color:#a3a09a">White line = now, 19:42 · sun and prayer times for today</span></div>
+<div style="position:relative;height:136px">
+<div style="position:absolute;left:0;width:24.7%;top:60px;height:14px;border-radius:7px 0 0 7px;background:#1f2a3a"></div>
+<div style="position:absolute;left:74.6%;right:0;top:60px;height:14px;border-radius:0 7px 7px 0;background:#1f2a3a"></div>
+<div style="position:absolute;left:24.7%;width:49.9%;top:60px;height:14px;background:#2a2620"></div>
+<sc-for list="{{ strip }}" as="m" hint-placeholder-count="8">
+<div onClick="{{ m.open }}" style="position:absolute;left:{{ m.left }};top:{{ m.top }};transform:translateX(-50%);display:flex;flex-direction:{{ m.dir }};align-items:center;gap:3px;cursor:pointer">
+<span style="font-size:11px;font-weight:700;white-space:nowrap;padding:2px 7px;border-radius:6px;background:{{ m.bg }};color:{{ m.fg }}">{{ m.label }}</span><div style="width:1px;height:{{ m.tick }};background:rgba(255,255,255,0.25)"></div>
+</div>
+</sc-for>
+<div style="position:absolute;left:82%;top:54px;height:26px;width:2px;border-radius:1px;background:#fff"></div>
+</div>
+<div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:11px;color:#6f6d69"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>
+</div>
+
+<sc-if value="{{ merging }}" hint-placeholder-val="{{ false }}">
+<div style="border-radius:18px;padding:20px;background:rgba(242,177,76,0.08);border:1px solid rgba(242,177,76,0.3);display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><span style="font-size:16px;font-weight:700">Combine into “Lights when someone’s there”</span><span style="font-size:12px;color:#a3a09a">Replaces 4 automations · originals kept as backup</span></div>
+<div style="font-size:18px;line-height:2;display:flex;flex-wrap:wrap;align-items:center;gap:6px">When <span style="padding:2px 10px;border-radius:8px;background:#f2b14c;color:#1a1408;font-weight:700">someone is seen</span> after dark, turn on <span style="padding:2px 10px;border-radius:8px;background:#26272b;font-weight:600">the lights</span> for <span style="padding:2px 10px;border-radius:8px;background:#26272b;font-weight:600">a while</span>, restarting if they’re seen again</div>
+<div style="display:grid;grid-template-columns:1.4fr 1.4fr 0.6fr;font-size:14px;background:#16171a;border-radius:12px;overflow:hidden">
+<div style="padding:10px 14px;font-size:12px;color:#a3a09a;font-weight:700">SEEN BY</div><div style="padding:10px 14px;font-size:12px;color:#a3a09a;font-weight:700">LIGHTS</div><div style="padding:10px 14px;font-size:12px;color:#a3a09a;font-weight:700">FOR</div>
+<div style="padding:10px 14px;border-top:1px solid rgba(255,255,255,0.06)">Office camera</div><div style="padding:10px 14px;border-top:1px solid rgba(255,255,255,0.06)">Office ceiling, LED strip</div><div style="padding:10px 14px;border-top:1px solid rgba(255,255,255,0.06)">10 min</div>
+<div style="padding:10px 14px;border-top:1px solid rgba(255,255,255,0.06)">Garage camera</div><div style="padding:10px 14px;border-top:1px solid rgba(255,255,255,0.06)">Garage light</div><div style="padding:10px 14px;border-top:1px solid rgba(255,255,255,0.06)">10 min</div>
+<div style="padding:10px 14px;border-top:1px solid rgba(255,255,255,0.06)">Doorbell camera</div><div style="padding:10px 14px;border-top:1px solid rgba(255,255,255,0.06)">Porch, Path lights</div><div style="padding:10px 14px;border-top:1px solid rgba(255,255,255,0.06)">5 min</div>
+<div style="padding:10px 14px;border-top:1px solid rgba(255,255,255,0.06)">Methel or Brishti arrives</div><div style="padding:10px 14px;border-top:1px solid rgba(255,255,255,0.06)">Garage, Porch, Path</div><div style="padding:10px 14px;border-top:1px solid rgba(255,255,255,0.06)">10 min</div>
+</div>
+<div style="display:flex;gap:8px"><div onClick="{{ applyMerge }}" style="padding:9px 16px;border-radius:10px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;cursor:pointer">Combine</div><div onClick="{{ closeMerge }}" style="padding:9px 16px;border-radius:10px;background:rgba(255,255,255,0.06);font-size:13px;font-weight:600;cursor:pointer">Keep separate</div></div>
+</div>
+</sc-if>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr));gap:24px;align-items:start">
+<div style="display:flex;flex-direction:column;gap:18px">
+<sc-for list="{{ autoGroups }}" as="g" hint-placeholder-count="2">
+<div style="display:flex;flex-direction:column;gap:8px">
+<span style="font-size:12px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">{{ g.title }}</span>
+<div style="background:#16171a;border-radius:16px;overflow:hidden">
+<sc-for list="{{ g.items }}" as="a" hint-placeholder-count="4">
+<div onClick="{{ a.open }}" style="display:flex;align-items:center;gap:14px;padding:13px 16px;cursor:pointer;border-top:1px solid rgba(255,255,255,0.05);background:{{ a.bg }}" style-hover="background:#1c1d21">
+<div style="width:34px;height:34px;border-radius:10px;flex:none;display:flex;align-items:center;justify-content:center;background:#222327;color:{{ a.iconFg }}"><span style="font-family:'Material Symbols Rounded';font-size:19px">{{ a.icon }}</span></div>
+<div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:14px;font-weight:700;color:{{ a.nameFg }}">{{ a.name }}</span><span style="font-size:12px;color:#a3a09a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ a.summary }}</span></div>
+<div onClick="{{ a.toggle }}" style="width:34px;height:20px;border-radius:10px;padding:2px;flex:none;display:flex;justify-content:{{ a.justify }};background:{{ a.track }}"><div style="width:16px;height:16px;border-radius:50%;background:#fff"></div></div>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-for>
+</div>
+
+<div style="position:sticky;top:24px;background:#16171a;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:18px">
+<div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><span style="font-size:19px;font-weight:700">{{ sel.name }}</span><span style="font-size:12px;font-weight:700;padding:4px 9px;border-radius:999px;background:{{ sel.stBg }};color:{{ sel.stFg }}">{{ sel.status }}</span></div>
+<sc-for list="{{ sel.parts }}" as="p" hint-placeholder-count="3">
+<div style="display:flex;flex-direction:column;gap:8px">
+<span style="font-size:12px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">{{ p.k }}</span>
+<div style="display:flex;flex-wrap:wrap;gap:6px">
+<sc-for list="{{ p.chips }}" as="ch" hint-placeholder-count="2">
+<div style="padding:8px 12px;border-radius:10px;font-size:14px;font-weight:600;background:{{ p.bg }};color:{{ p.fg }};cursor:pointer" style-hover="outline:1px solid rgba(242,177,76,0.6)">{{ ch }}</div>
+</sc-for>
+<div style="padding:8px 12px;border-radius:10px;font-size:14px;font-weight:600;border:1px dashed rgba(255,255,255,0.18);color:#a3a09a;cursor:pointer">+</div>
+</div>
+</div>
+</sc-for>
+<div style="font-size:12px;color:#a3a09a;line-height:1.5;padding:12px;border-radius:10px;background:#1c1d20">{{ sel.lastRun }}</div>
+<sc-if value="{{ advanced }}" hint-placeholder-val="{{ false }}">
+<pre style="margin:0;padding:14px;border-radius:12px;background:#0e0f10;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.6;color:#d8d5cf;white-space:pre-wrap">{{ sel.code }}</pre>
+</sc-if>
+<div style="display:flex;gap:8px"><div onClick="{{ testSel }}" style="padding:9px 16px;border-radius:10px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px"><span style="font-family:'Material Symbols Rounded';font-size:18px">play_arrow</span>Run now</div><div style="padding:9px 16px;border-radius:10px;background:rgba(255,255,255,0.06);font-size:13px;font-weight:600">History</div></div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isImport }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;color:#a3a09a">Home Assistant 2026.2.2 · 10.10.10.150:8123</span><h1 style="margin:0;font-size:30px;font-weight:700;letter-spacing:-0.02em">Import from Home Assistant</h1></div>
+<div style="display:flex;flex-wrap:wrap;gap:8px">
+<sc-for list="{{ steps }}" as="st" hint-placeholder-count="4">
+<div style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;font-size:13px;font-weight:600;background:{{ st.bg }};color:{{ st.fg }}"><span style="font-family:'Material Symbols Rounded';font-size:18px">{{ st.icon }}</span>{{ st.label }}</div>
+</sc-for>
+</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px">
+<sc-for list="{{ importStats }}" as="is" hint-placeholder-count="5">
+<div style="background:#16171a;border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:6px"><span style="font-size:28px;font-weight:700;letter-spacing:-0.02em">{{ is.n }}</span><span style="font-size:13px;font-weight:600">{{ is.label }}</span><span style="font-size:12px;color:#a3a09a;line-height:1.4">{{ is.sub }}</span></div>
+</sc-for>
+</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:24px;align-items:start">
+<div style="display:flex;flex-direction:column;gap:10px">
+<span style="font-size:17px;font-weight:700">{{ reviewTitle }}</span>
+<div style="background:#16171a;border-radius:16px;overflow:hidden">
+<sc-for list="{{ review }}" as="rv" hint-placeholder-count="5">
+<div style="display:flex;align-items:center;gap:14px;padding:14px 16px;border-top:1px solid rgba(255,255,255,0.05)">
+<span style="font-family:'Material Symbols Rounded';font-size:20px;color:{{ rv.iconFg }}">{{ rv.icon }}</span>
+<div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:0"><span style="font-size:14px;font-weight:600">{{ rv.title }}</span><span style="font-size:12px;color:#a3a09a;line-height:1.4">{{ rv.detail }}</span></div>
+<div onClick="{{ rv.act }}" style="padding:7px 12px;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;background:{{ rv.btnBg }};color:{{ rv.btnFg }}">{{ rv.btn }}</div>
+</div>
+</sc-for>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px">
+<span style="font-size:17px;font-weight:700">Hand off to your other apps</span>
+<div style="background:#16171a;border-radius:16px;overflow:hidden">
+<sc-for list="{{ handoffs }}" as="h" hint-placeholder-count="3">
+<div style="display:flex;align-items:center;gap:14px;padding:14px 16px;border-top:1px solid rgba(255,255,255,0.05)">
+<div style="width:36px;height:36px;border-radius:10px;background:#222327;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#f2b14c">{{ h.letter }}</div>
+<div style="display:flex;flex-direction:column;gap:3px;flex:1"><span style="font-size:14px;font-weight:700">{{ h.app }}</span><span style="font-size:12px;color:#a3a09a">{{ h.what }}</span></div>
+<div onClick="{{ h.act }}" style="padding:7px 12px;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;background:{{ h.btnBg }};color:{{ h.btnFg }}">{{ h.btn }}</div>
+</div>
+</sc-for>
+</div>
+<div style="background:#16171a;border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:12px">
+<span style="font-size:14px;font-weight:700">When you’re ready</span>
+<span style="font-size:13px;color:#a3a09a;line-height:1.5">Kova is mirroring HA right now. Switching over moves Matter, the HomeKit bridges and all automations to Kova, and pauses them in HA. You can switch back for 14 days.</span>
+<div style="display:flex;gap:8px;flex-wrap:wrap"><div style="padding:9px 16px;border-radius:10px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700">Switch over</div><div style="padding:9px 16px;border-radius:10px;background:rgba(255,255,255,0.06);font-size:13px;font-weight:600">Keep mirroring</div></div>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isDev }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;color:#a3a09a">Developer</span><h1 style="margin:0;font-size:30px;font-weight:700;letter-spacing:-0.02em">Entities</h1></div>
+<input value="{{ q }}" onChange="{{ setQ }}" placeholder="Filter by id, name, room or integration" style="padding:12px 16px;border-radius:12px;border:1px solid rgba(255,255,255,0.1);background:#16171a;color:#f1efea;font-family:'JetBrains Mono',monospace;font-size:13px;outline:none;max-width:520px">
+<div style="background:#16171a;border-radius:16px;overflow:auto">
+<div style="display:grid;grid-template-columns:minmax(260px,2fr) 1.2fr 1fr 1.2fr 0.9fr;min-width:820px;font-size:13px">
+<div style="padding:11px 16px;font-size:11px;color:#a3a09a;font-weight:700">ENTITY ID (HA ALIAS)</div><div style="padding:11px 16px;font-size:11px;color:#a3a09a;font-weight:700">NAME</div><div style="padding:11px 16px;font-size:11px;color:#a3a09a;font-weight:700">ROOM</div><div style="padding:11px 16px;font-size:11px;color:#a3a09a;font-weight:700">INTEGRATION</div><div style="padding:11px 16px;font-size:11px;color:#a3a09a;font-weight:700">STATE</div>
+<sc-for list="{{ entities }}" as="e" hint-placeholder-count="10">
+<div style="padding:10px 16px;border-top:1px solid rgba(255,255,255,0.05);font-family:'JetBrains Mono',monospace;font-size:12px;color:#d8d5cf">{{ e.eid }}</div><div style="padding:10px 16px;border-top:1px solid rgba(255,255,255,0.05)">{{ e.name }}</div><div style="padding:10px 16px;border-top:1px solid rgba(255,255,255,0.05);color:#a3a09a">{{ e.room }}</div><div style="padding:10px 16px;border-top:1px solid rgba(255,255,255,0.05);color:#a3a09a">{{ e.integ }}</div><div style="padding:10px 16px;border-top:1px solid rgba(255,255,255,0.05);color:{{ e.stateFg }}">{{ e.state }}</div>
+</sc-for>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isEnergy }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:12px"><div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;color:#a3a09a">Today so far · GoodWe inverter</span><h1 style="margin:0;font-size:30px;font-weight:700;letter-spacing:-0.02em">Energy</h1></div>
+</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr));gap:16px;align-items:stretch">
+<div style="background:#16171a;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:18px">
+<span style="font-size:15px;font-weight:700">Right now</span>
+<div style="display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:center;gap:8px">
+<div style="display:flex;flex-direction:column;align-items:center;gap:8px"><div style="width:64px;height:64px;border-radius:50%;background:#1c1d20;display:flex;align-items:center;justify-content:center;color:#6f6d69"><span style="font-family:'Material Symbols Rounded';font-size:28px">solar_power</span></div><span style="font-size:13px;font-weight:700">0 W</span><span style="font-size:11px;color:#a3a09a">Solar · night</span></div>
+<span style="font-family:'Material Symbols Rounded';font-size:20px;color:#35363a">arrow_forward</span>
+<div style="display:flex;flex-direction:column;align-items:center;gap:8px"><div style="width:76px;height:76px;border-radius:50%;background:rgba(242,177,76,0.13);border:1px solid rgba(242,177,76,0.35);display:flex;align-items:center;justify-content:center;color:#f2b14c"><span style="font-family:'Material Symbols Rounded';font-size:32px;font-variation-settings:'FILL' 1">home</span></div><span style="font-size:15px;font-weight:700">1.4 kW</span><span style="font-size:11px;color:#a3a09a">Home using</span></div>
+<span style="font-family:'Material Symbols Rounded';font-size:20px;color:#a3a09a">arrow_back</span>
+<div style="display:flex;flex-direction:column;align-items:center;gap:8px"><div style="width:64px;height:64px;border-radius:50%;background:#1c1d20;display:flex;align-items:center;justify-content:center;color:#d8d5cf"><span style="font-family:'Material Symbols Rounded';font-size:28px">electrical_services</span></div><span style="font-size:13px;font-weight:700">1.4 kW</span><span style="font-size:11px;color:#a3a09a">From grid</span></div>
+</div>
+<div style="font-size:13px;color:#a3a09a;line-height:1.5;padding:12px;border-radius:12px;background:#1c1d20">Solar stopped at 18:04. Tomorrow’s forecast is sunny, so the dishwasher and laundry are cheapest to run after 10:00.</div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+<sc-for list="{{ energyStats }}" as="es" hint-placeholder-count="4">
+<div style="background:#16171a;border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;color:#a3a09a;font-weight:600">{{ es.label }}</span><span style="font-size:26px;font-weight:700;letter-spacing:-0.02em;color:{{ es.fg }}">{{ es.v }}</span><span style="font-size:12px;color:#8a8781">{{ es.sub }}</span></div>
+</sc-for>
+</div>
+</div>
+<div style="background:#16171a;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;align-items:center"><span style="font-size:15px;font-weight:700">Hour by hour</span><div style="display:flex;gap:16px;font-size:12px;color:#a3a09a"><div style="display:flex;align-items:center;gap:6px"><div style="width:10px;height:10px;border-radius:3px;background:#f2b14c"></div>Solar</div><div style="display:flex;align-items:center;gap:6px"><div style="width:10px;height:10px;border-radius:3px;background:#4a4b50"></div>Home use</div></div></div>
+<div style="display:grid;grid-template-columns:repeat(24,1fr);gap:4px;align-items:end;height:180px">
+<sc-for list="{{ energyBars }}" as="b" hint-placeholder-count="24">
+<div style="position:relative;height:100%;display:flex;align-items:flex-end;justify-content:center"><div style="position:absolute;bottom:0;left:0;right:0;border-radius:4px 4px 0 0;height:{{ b.use }};background:{{ b.useBg }}"></div><div style="position:absolute;bottom:0;left:22%;right:22%;border-radius:3px 3px 0 0;height:{{ b.solar }};background:#f2b14c;opacity:{{ b.op }}"></div></div>
+</sc-for>
+</div>
+<div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:11px;color:#6f6d69"><span>00</span><span>06</span><span>12</span><span>18</span><span>23</span></div>
+</div>
+<div style="background:#16171a;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:12px">
+<span style="font-size:15px;font-weight:700">What’s measured</span>
+<sc-for list="{{ energyDevices }}" as="ed" hint-placeholder-count="5">
+<div style="display:grid;grid-template-columns:minmax(120px,1fr) 2fr 70px;gap:14px;align-items:center;font-size:13px"><span style="font-weight:600">{{ ed.name }}</span><div style="height:8px;border-radius:4px;background:#232428;overflow:hidden"><div style="height:100%;border-radius:4px;width:{{ ed.w }};background:{{ ed.bg }}"></div></div><span style="text-align:right;color:#a3a09a;font-family:'JetBrains Mono',monospace;font-size:12px">{{ ed.v }}</span></div>
+</sc-for>
+<span style="font-size:12px;color:#8a8781">Only 2 plugs and 2 purifiers report power. Add a whole-home meter or smart plugs to see the rest.</span>
+</div>
+</sc-if>
+
+<sc-if value="{{ isSecurity }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;color:#a3a09a">{{ secSummary }}</span><h1 style="margin:0;font-size:30px;font-weight:700;letter-spacing:-0.02em">Security</h1></div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:16px;align-items:start">
+<div style="display:flex;flex-direction:column;gap:12px">
+<div style="border-radius:18px;overflow:hidden;background:#16171a">
+<div style="aspect-ratio:16/9;background:repeating-linear-gradient(135deg,#1b1c1f 0 12px,#202125 12px 24px);display:flex;align-items:center;justify-content:center;position:relative"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#6f6d69">{{ camMain.slot }}</span><div style="position:absolute;top:12px;left:12px;display:flex;align-items:center;gap:6px;padding:4px 9px;border-radius:999px;background:rgba(0,0,0,0.55);font-size:11px;font-weight:700"><div style="width:6px;height:6px;border-radius:50%;background:#ff6b5e"></div>LIVE</div><div style="position:absolute;bottom:12px;right:12px;display:flex;gap:8px"><div style="width:38px;height:38px;border-radius:50%;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:20px">mic</span></div><div style="width:38px;height:38px;border-radius:50%;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:20px">fullscreen</span></div></div></div>
+<div style="padding:12px 16px;display:flex;justify-content:space-between;align-items:center"><span style="font-size:15px;font-weight:700">{{ camMain.name }}</span><span style="font-size:12px;color:#a3a09a">{{ camMain.last }}</span></div>
+</div>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+<sc-for list="{{ camThumbs }}" as="ct" hint-placeholder-count="3">
+<div onClick="{{ ct.pick }}" style="border-radius:12px;overflow:hidden;cursor:pointer;background:#16171a;outline:{{ ct.ring }};outline-offset:2px"><div style="aspect-ratio:16/9;background:repeating-linear-gradient(135deg,#1b1c1f 0 8px,#202125 8px 16px)"></div><div style="padding:8px 10px;font-size:12px;font-weight:700">{{ ct.name }}</div></div>
+</sc-for>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:16px">
+<div style="background:#16171a;border-radius:18px;padding:18px;display:flex;flex-direction:column;gap:12px">
+<span style="font-size:15px;font-weight:700">Who’s home</span>
+<sc-for list="{{ people }}" as="pp" hint-placeholder-count="2">
+<div style="display:flex;align-items:center;gap:12px"><div style="width:40px;height:40px;border-radius:50%;background:#2a2b2f;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px">{{ pp.initial }}</div><div style="display:flex;flex-direction:column;gap:2px;flex:1"><span style="font-size:14px;font-weight:700">{{ pp.name }}</span><span style="font-size:12px;color:#a3a09a">{{ pp.detail }}</span></div><span style="font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px;background:rgba(127,212,160,0.14);color:#7fd4a0">{{ pp.status }}</span></div>
+</sc-for>
+</div>
+<div style="background:#16171a;border-radius:18px;padding:18px;display:flex;flex-direction:column;gap:4px">
+<span style="font-size:15px;font-weight:700;margin-bottom:6px">Today’s events</span>
+<sc-for list="{{ secEvents }}" as="se" hint-placeholder-count="5">
+<div style="display:flex;gap:12px;padding:9px 0;border-top:1px solid rgba(255,255,255,0.05);align-items:center"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#a3a09a;width:40px">{{ se.t }}</span><span style="font-family:'Material Symbols Rounded';font-size:18px;color:{{ se.fg }}">{{ se.icon }}</span><span style="font-size:13px;flex:1">{{ se.text }}</span></div>
+</sc-for>
+</div>
+<div style="border-radius:18px;padding:18px;border:1px dashed rgba(255,255,255,0.14);display:flex;align-items:center;gap:14px"><span style="font-family:'Material Symbols Rounded';font-size:24px;color:#a3a09a">lock</span><div style="display:flex;flex-direction:column;gap:2px;flex:1"><span style="font-size:14px;font-weight:700">No locks or alarm yet</span><span style="font-size:12px;color:#a3a09a">Matter locks and alarm panels show up here.</span></div><div onClick="{{ goIntegrations }}" style="padding:7px 12px;border-radius:9px;background:rgba(255,255,255,0.06);font-size:12px;font-weight:700;cursor:pointer">Add</div></div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isMedia }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;color:#a3a09a">{{ mediaCount }}</span><h1 style="margin:0;font-size:30px;font-weight:700;letter-spacing:-0.02em">Media</h1></div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:16px;align-items:start">
+<div style="background:#16171a;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:18px">
+<div style="display:flex;gap:16px;align-items:center">
+<div style="width:96px;height:96px;border-radius:14px;flex:none;background:repeating-linear-gradient(135deg,#1f2a3a 0 8px,#243142 8px 16px);display:flex;align-items:center;justify-content:center"><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#7cb8f0">artwork</span></div>
+<div style="display:flex;flex-direction:column;gap:4px;min-width:0"><span style="font-size:12px;color:#a3a09a">{{ mp.room }}</span><span style="font-size:20px;font-weight:700">{{ mp.name }}</span><span style="font-size:13px;color:{{ mp.fg }}">{{ mp.state }}</span></div>
+</div>
+<div style="display:flex;align-items:center;justify-content:center;gap:18px">
+<span style="font-family:'Material Symbols Rounded';font-size:26px;color:#a3a09a">skip_previous</span>
+<div onClick="{{ mp.toggle }}" style="width:58px;height:58px;border-radius:50%;background:#7cb8f0;color:#0e1520;display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:32px;font-variation-settings:'FILL' 1">{{ mp.playIcon }}</span></div>
+<span style="font-family:'Material Symbols Rounded';font-size:26px;color:#a3a09a">skip_next</span>
+</div>
+<div style="display:flex;align-items:center;gap:12px"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#a3a09a">volume_down</span><input type="range" min="0" max="100" value="{{ mp.vol }}" onChange="{{ mp.setVol }}" style="flex:1;accent-color:#7cb8f0"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#a3a09a;width:36px;text-align:right">{{ mp.volLabel }}</span></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:12px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">Play here</span>
+<div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ sources }}" as="so" hint-placeholder-count="5"><div onClick="{{ so.play }}" style="padding:8px 12px;border-radius:10px;background:#1c1d20;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px" style-hover="background:#232428"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#7cb8f0">{{ so.icon }}</span>{{ so.name }}</div></sc-for></div>
+</div>
+</div>
+<div style="background:#16171a;border-radius:18px;overflow:hidden">
+<sc-for list="{{ players }}" as="pl" hint-placeholder-count="7">
+<div onClick="{{ pl.pick }}" style="display:flex;align-items:center;gap:14px;padding:13px 16px;border-top:1px solid rgba(255,255,255,0.05);cursor:pointer;background:{{ pl.bg }}" style-hover="background:#1c1d21">
+<div style="width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:{{ pl.iconBg }};color:{{ pl.iconFg }}"><span style="font-family:'Material Symbols Rounded';font-size:20px;font-variation-settings:'FILL' 1">{{ pl.icon }}</span></div>
+<div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:14px;font-weight:700">{{ pl.name }}</span><span style="font-size:12px;color:{{ pl.fg }}">{{ pl.room }} · {{ pl.state }}</span></div>
+<div onClick="{{ pl.toggle }}" style="width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:20px;font-variation-settings:'FILL' 1">{{ pl.playIcon }}</span></div>
+</div>
+</sc-for>
+<div style="display:flex;align-items:center;gap:10px;padding:13px 16px;border-top:1px solid rgba(255,255,255,0.05);font-size:13px;color:#a3a09a"><span style="font-family:'Material Symbols Rounded';font-size:18px">movie</span>Plex at 10.10.10.101 is managed in Helix</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isActivity }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;color:#a3a09a">Today · every change and what caused it</span><h1 style="margin:0;font-size:30px;font-weight:700;letter-spacing:-0.02em">Activity</h1></div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:20px;align-items:start">
+<div style="display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ actFilters }}" as="af" hint-placeholder-count="5"><div onClick="{{ af.pick }}" style="padding:7px 13px;border-radius:999px;font-size:13px;font-weight:600;cursor:pointer;background:{{ af.bg }};color:{{ af.fg }}">{{ af.label }}</div></sc-for></div>
+<div style="background:#16171a;border-radius:18px;padding:6px 18px">
+<sc-for list="{{ activity }}" as="ac" hint-placeholder-count="8">
+<div style="display:flex;gap:14px;padding:13px 0;border-top:1px solid rgba(255,255,255,0.05)">
+<span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#a3a09a;width:40px;padding-top:2px">{{ ac.t }}</span>
+<div style="width:30px;height:30px;border-radius:9px;flex:none;display:flex;align-items:center;justify-content:center;background:{{ ac.iconBg }};color:{{ ac.iconFg }}"><span style="font-family:'Material Symbols Rounded';font-size:17px">{{ ac.icon }}</span></div>
+<div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:0"><span style="font-size:14px;font-weight:600">{{ ac.what }}</span><span style="font-size:12px;color:#a3a09a">{{ ac.why }}</span></div>
+</div>
+</sc-for>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:12px">
+<span style="font-size:17px;font-weight:700">{{ inboxTitle }}</span>
+<sc-for list="{{ inbox }}" as="ib" hint-placeholder-count="3">
+<div style="background:#16171a;border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:{{ ib.fg }}">{{ ib.icon }}</span><span style="font-size:14px;font-weight:700;flex:1">{{ ib.title }}</span><span style="font-size:11px;color:#8a8781">{{ ib.kind }}</span></div>
+<span style="font-size:13px;color:#a3a09a;line-height:1.45">{{ ib.body }}</span>
+<div style="display:flex;gap:8px"><div onClick="{{ ib.act }}" style="padding:7px 12px;border-radius:9px;background:#f2b14c;color:#1a1408;font-size:12px;font-weight:700;cursor:pointer">{{ ib.btn }}</div><div onClick="{{ ib.dismiss }}" style="padding:7px 12px;border-radius:9px;background:rgba(255,255,255,0.06);font-size:12px;font-weight:600;cursor:pointer">Dismiss</div></div>
+</div>
+</sc-for>
+<sc-if value="{{ inboxEmpty }}" hint-placeholder-val="{{ false }}"><div style="border-radius:16px;padding:22px;border:1px dashed rgba(255,255,255,0.14);font-size:13px;color:#a3a09a;text-align:center">All clear. Nothing needs you.</div></sc-if>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isAssistant }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;color:#a3a09a">{{ askSub }}</span><h1 style="margin:0;font-size:30px;font-weight:700;letter-spacing:-0.02em">Ask Kova</h1></div>
+<div style="max-width:760px;width:100%;display:flex;flex-direction:column;gap:14px">
+<sc-for list="{{ chat }}" as="m" hint-placeholder-count="2">
+<div style="display:flex;justify-content:{{ m.justify }}"><div style="max-width:80%;padding:12px 16px;border-radius:16px;font-size:14px;line-height:1.5;background:{{ m.bg }};color:{{ m.fg }}">{{ m.text }}<sc-if value="{{ m.hasAct }}" hint-placeholder-val="{{ false }}"><div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><sc-for list="{{ m.acts }}" as="ma" hint-placeholder-count="1"><div onClick="{{ ma.run }}" style="padding:7px 12px;border-radius:9px;background:#f2b14c;color:#1a1408;font-size:12px;font-weight:700;cursor:pointer">{{ ma.label }}</div></sc-for></div></sc-if></div></div>
+</sc-for>
+<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px"><sc-for list="{{ asks }}" as="q" hint-placeholder-count="4"><div onClick="{{ q.ask }}" style="padding:8px 13px;border-radius:999px;background:#16171a;border:1px solid rgba(255,255,255,0.08);font-size:13px;font-weight:600;cursor:pointer" style-hover="border-color:rgba(242,177,76,0.5)">{{ q.text }}</div></sc-for></div>
+<div style="display:flex;gap:8px;align-items:center;padding:6px 6px 6px 16px;border-radius:16px;background:#16171a;border:1px solid rgba(255,255,255,0.1)">
+<input value="{{ draft }}" onChange="{{ setDraft }}" onKeyDown="{{ draftKey }}" placeholder="Ask or tell Kova anything" style="flex:1;background:transparent;border:none;outline:none;color:#f1efea;font-family:Manrope,sans-serif;font-size:14px;padding:8px 0">
+<div style="width:40px;height:40px;border-radius:12px;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:20px">mic</span></div>
+<div onClick="{{ sendDraft }}" style="width:40px;height:40px;border-radius:12px;background:#f2b14c;color:#1a1408;display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px">arrow_upward</span></div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isIntegrations }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:12px"><div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;color:#a3a09a">Settings · {{ integCount }}</span><h1 style="margin:0;font-size:30px;font-weight:700;letter-spacing:-0.02em">Integrations</h1></div><div style="padding:9px 16px;border-radius:12px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px"><span style="font-family:'Material Symbols Rounded';font-size:18px">add</span>Add integration</div></div>
+<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+<input value="{{ iq }}" onChange="{{ setIq }}" placeholder="Search integrations" style="padding:11px 16px;border-radius:12px;border:1px solid rgba(255,255,255,0.1);background:#16171a;color:#f1efea;font-family:Manrope,sans-serif;font-size:14px;outline:none;width:280px;max-width:100%">
+<sc-for list="{{ integFilters }}" as="ifl" hint-placeholder-count="4"><div onClick="{{ ifl.pick }}" style="padding:7px 13px;border-radius:999px;font-size:13px;font-weight:600;cursor:pointer;background:{{ ifl.bg }};color:{{ ifl.fg }}">{{ ifl.label }}</div></sc-for>
+</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px">
+<sc-for list="{{ integrations }}" as="it" hint-placeholder-count="12">
+<div style="background:#16171a;border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:14px;border:1px solid {{ it.border }}">
+<div style="display:flex;align-items:center;gap:12px"><div style="width:40px;height:40px;border-radius:12px;background:#232428;display:flex;align-items:center;justify-content:center;color:#d8d5cf"><span style="font-family:'Material Symbols Rounded';font-size:21px">{{ it.icon }}</span></div><div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:14px;font-weight:700">{{ it.name }}</span><span style="font-size:12px;color:#a3a09a">{{ it.sub }}</span></div></div>
+<div style="display:flex;align-items:center;gap:8px"><div style="width:7px;height:7px;border-radius:50%;background:{{ it.dot }}"></div><span style="font-size:12px;color:{{ it.stFg }};flex:1">{{ it.status }}</span><span style="font-size:11px;color:#8a8781">{{ it.kind }}</span></div>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+</main>
+
+<sc-if value="{{ drawerOpen }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ closeDrawer }}" style="position:fixed;inset:0;background:rgba(0,0,0,0.55)"></div>
+<div style="position:fixed;top:0;right:0;bottom:0;width:min(420px,100vw);background:#141517;border-left:1px solid rgba(255,255,255,0.08);padding:24px;display:flex;flex-direction:column;gap:20px;overflow:auto">
+<div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:12px;color:#a3a09a">{{ dr.room }}</span><span style="font-size:22px;font-weight:700">{{ dr.name }}</span></div><div onClick="{{ closeDrawer }}" style="width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px">close</span></div></div>
+<div style="display:flex;gap:4px;padding:4px;border-radius:12px;background:#1c1d20">
+<sc-for list="{{ tabs }}" as="tb" hint-placeholder-count="2">
+<div onClick="{{ tb.go }}" style="flex:1;text-align:center;padding:8px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;background:{{ tb.bg }};color:{{ tb.fg }}">{{ tb.label }}</div>
+</sc-for>
+</div>
+<sc-if value="{{ tabSimple }}" hint-placeholder-val="{{ true }}">
+<div onClick="{{ dr.toggle }}" style="border-radius:22px;padding:28px;display:flex;flex-direction:column;align-items:center;gap:10px;cursor:pointer;background:{{ dr.bg }}">
+<span style="font-family:'Material Symbols Rounded';font-size:56px;font-variation-settings:'FILL' 1;color:{{ dr.iconFg }}">{{ dr.icon }}</span>
+<span style="font-size:32px;font-weight:700;letter-spacing:-0.02em">{{ dr.big }}</span><span style="font-size:13px;color:#a3a09a">Tap to toggle</span>
+</div>
+<div style="display:flex;flex-direction:column;border-radius:14px;background:#1c1d20;overflow:hidden"><div style="display:flex;gap:12px;padding:12px 14px;align-items:flex-start"><span style="font-family:'Material Symbols Rounded';font-size:19px;color:#a3a09a">help</span><div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">Why it’s like this</span><span style="font-size:13px;line-height:1.45">{{ drWhy.now }}</span></div></div><div style="display:flex;gap:12px;padding:12px 14px;align-items:flex-start;border-top:1px solid rgba(255,255,255,0.05)"><span style="font-family:'Material Symbols Rounded';font-size:19px;color:#f2b14c">schedule</span><div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">What’s next</span><span style="font-size:13px;line-height:1.45">{{ drWhy.next }}</span></div></div></div>
+<sc-if value="{{ dr.dimmable }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:8px"><div style="display:flex;justify-content:space-between;font-size:13px;font-weight:600"><span>Brightness</span><span style="color:#a3a09a">{{ dr.briLabel }}</span></div><input type="range" min="1" max="100" value="{{ dr.bri }}" onChange="{{ dr.setBri }}" style="width:100%"></div>
+</sc-if>
+<sc-if value="{{ dr.hasWarmth }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:13px;font-weight:600">Warmth</span><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
+<sc-for list="{{ dr.temps }}" as="k" hint-placeholder-count="4">
+<div onClick="{{ k.pick }}" style="padding:10px 0;border-radius:10px;text-align:center;font-size:12px;font-weight:700;cursor:pointer;background:{{ k.bg }};color:#1a1408;outline:{{ k.ring }};outline-offset:2px">{{ k.label }}</div>
+</sc-for>
+</div></div>
+</sc-if>
+</sc-if>
+<sc-if value="{{ tabDetails }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;background:#1c1d20;border-radius:14px;overflow:hidden">
+<sc-for list="{{ dr.facts }}" as="f" hint-placeholder-count="4">
+<div style="display:flex;justify-content:space-between;gap:12px;padding:12px 14px;border-top:1px solid rgba(255,255,255,0.05);font-size:13px"><span style="color:#a3a09a">{{ f.k }}</span><span style="font-weight:600;text-align:right">{{ f.v }}</span></div>
+</sc-for>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:13px;font-weight:700">Used in</span>
+<sc-for list="{{ dr.usedIn }}" as="u" hint-placeholder-count="2">
+<div onClick="{{ u.open }}" style="padding:10px 14px;border-radius:10px;background:#1c1d20;font-size:13px;font-weight:600;cursor:pointer;display:flex;justify-content:space-between" style-hover="background:#232428"><span>{{ u.name }}</span><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#a3a09a">chevron_right</span></div>
+</sc-for>
+<span style="font-size:12px;color:#6f6d69">{{ dr.usedNone }}</span>
+</div>
+</sc-if>
+<sc-if value="{{ tabCode }}" hint-placeholder-val="{{ false }}">
+<pre style="margin:0;padding:16px;border-radius:12px;background:#0e0f10;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.65;color:#d8d5cf;white-space:pre-wrap">{{ dr.code }}</pre>
+<span style="font-size:12px;color:#a3a09a">HA-style id kept as an alias, so imported YAML keeps working.</span>
+</sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{ toastOn }}" hint-placeholder-val="{{ false }}">
+<div style="position:fixed;left:50%;bottom:28px;transform:translateX(-50%);display:flex;align-items:center;gap:16px;padding:12px 14px 12px 18px;border-radius:14px;background:#f1efea;color:#141517;font-size:14px;font-weight:600;box-shadow:0 10px 30px rgba(0,0,0,0.4)">
+<span>{{ toastText }}</span>
+<sc-if value="{{ canUndo }}" hint-placeholder-val="{{ false }}"><div onClick="{{ undo }}" style="padding:6px 12px;border-radius:9px;background:#141517;color:#f1efea;font-size:13px;cursor:pointer">Undo</div></sc-if>
+</div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;depth&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Simple&quot;,&quot;Advanced&quot;],&quot;default&quot;:&quot;Simple&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;startScreen&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;home&quot;,&quot;modes&quot;,&quot;rooms&quot;,&quot;energy&quot;,&quot;security&quot;,&quot;media&quot;,&quot;activity&quot;,&quot;assistant&quot;,&quot;integrations&quot;,&quot;import&quot;],&quot;default&quot;:&quot;home&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+// ---- Kova web app logic. The markup above is the v3 design; everything it shows comes from the hub. ----
+const KOVA_TOKEN=(()=>{try{return localStorage.getItem('kova_token')||''}catch(e){return ''}})();
+async function api(method,path,body){
+  const r=await fetch(path,{method,headers:{...(body!==undefined?{'content-type':'application/json'}:{}),...(KOVA_TOKEN?{authorization:'Bearer '+KOVA_TOKEN}:{})},body:body===undefined?undefined:JSON.stringify(body)});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(j.error||r.statusText);
+  return j;
+}
+const EMPTY={home:{name:'Kova',timezone:'UTC',now:Date.now(),nowHour:new Date().getHours()+new Date().getMinutes()/60,date:'',dateLabel:'',clock:''},rooms:[],groups:{},people:[],devices:[],modes:[{id:'day',name:'Day',color:'#dcd27e',icon:'light_mode',startLabel:'',endLabel:'',groups:[],inherit:[],moments:[],test:{days:[],text:''},start:null}],current:{modeId:'day',untilLabel:'',nextId:'day',overlay:null},day:{bands:[],items:[],marks:[]},upcoming:[],overlays:[],sources:[],findings:[],activity:[],integrations:[],lightTheWay:[],weather:null,demo:false,offline:true};
+const BOOT=window.KOVA_BOOT||EMPTY;
+const ICON={light:'lightbulb',dimmer:'lightbulb',fan:'air_purifier',media:'speaker',tv:'tv',camera:'videocam',plug:'outlet',sensor:'sensors'};
+const fmt=h=>{const m=Math.round(h*60);return String(Math.floor(m/60)%24).padStart(2,'0')+':'+String(m%60).padStart(2,'0')};
+const lst=xs=>xs.length<=1?xs.join(''):xs.slice(0,-1).join(', ')+' and '+xs[xs.length-1];
+const isLight=d=>d.type==='light'||d.type==='dimmer';
+const isPlayer=d=>d.type==='media'||d.type==='tv';
+const flat=d=>({...d,...d.state,eid:d.address,integ:d.integration,bri:d.state.bri??100});
+
+// ---- Screens that don't have a backend yet keep the design's sample data. ----
+// Import from Home Assistant (migration tool, next milestone).
+const AUTOS=[
+{id:'sunset',name:'Sunset lights',kind:'time',at:17.92,label:'Sunset −10',icon:'wb_twilight',when:['10 min before sunset'],cond:[],then:['Turn on 6 lights','Lamp 78% · 3000K','TV backlight 31%'],on:1,last:'Now Evening mode'},
+{id:'winddown',name:'Wind down',kind:'time',at:20,label:'Wind down',icon:'nights_stay',when:['Every day at 20:00'],cond:[],then:['Turn off 8 lights','Lamp 5% · 2000K','TV backlight 16%'],on:1,last:'Now Wind down mode'},
+{id:'rain_start',name:'Thunderstorm sounds',kind:'time',at:21,label:'Rain',icon:'thunderstorm',when:['Every day at 21:00'],cond:[],then:['Play rain stream on Master bed speaker','Volume 60%'],on:1,last:'Now a moment in Wind down'},
+{id:'quran_start',name:'Quran recitation',kind:'time',at:23.5,label:'Quran',icon:'menu_book',when:['Every day at 23:30'],cond:[],then:['Play Tarateel stream on 4 speakers','Volume 15%'],on:1,last:'Now Night mode'},
+{id:'quran_stop',name:'Stop recitation at Fajr',kind:'time',at:4.58,label:'Fajr',icon:'wb_sunny',when:['At Fajr prayer time'],cond:[],then:['Stop 4 speakers'],on:1,last:'Now Dawn mode'},
+{id:'sunrise',name:'Sunrise reset',kind:'time',at:5.93,label:'Sunrise',icon:'light_mode',when:['At sunrise'],cond:[],then:['Turn off all lights','Purifiers to Auto'],on:1,last:'Now Day mode'},
+{id:'rain_stop',name:'Stop thunderstorm',kind:'time',at:7,label:'Rain off',icon:'volume_off',when:['Every day at 07:00'],cond:[],then:['Stop Master bed speaker'],on:1,last:'Now a moment in Day'},
+{id:'arrival',name:'Garage on arrival',kind:'event',icon:'directions_car',look:1,when:['Methel or Brishti arrives home'],cond:['After sunset'],then:['Garage, Porch, Path lights on','Off after 10 min'],on:1,last:'Now Light the way'},
+{id:'office_occ',name:'Office light when occupied',kind:'event',icon:'person',look:1,when:['Office camera sees a person'],cond:['After sunset'],then:['Office ceiling, LED strip on','Off after 10 min'],on:1,last:'Now Light the way'},
+{id:'garage_person',name:'Garage light on person',kind:'event',icon:'person',look:1,when:['Garage camera sees a person'],cond:['After sunset'],then:['Garage light on','Off after 10 min'],on:1,last:'Now Light the way'},
+{id:'front_person',name:'Front door light on person',kind:'event',icon:'person',look:1,when:['Doorbell camera sees a person'],cond:['After sunset'],then:['Porch, Path lights on','Off after 5 min'],on:1,last:'Now Light the way'},
+{id:'doorbell',name:'Doorbell ring',kind:'event',icon:'doorbell',when:['Doorbell is pressed'],cond:[],then:['Notify Methel & Brishti with camera','After sunset: porch lights 5 min'],on:1,last:'Now Light the way + notifications'}];
+const REVIEW=[
+{id:'dup',icon:'build',title:'Duplicate description key in 3 scripts',detail:'movie_mode, date_mode, party_mode define description twice. The second, empty one wins in HA.',btn:'Fix',done:'Fixed'},
+{id:'scenes',icon:'auto_awesome',title:'Your 4 scripts behave like scenes',detail:'scenes.yaml is empty. Converting gives you previews and undo.',btn:'Convert',done:'Converted'},
+{id:'names',icon:'label',title:'Give 28 devices friendly names',detail:'e.g. light.smart_lighting_2 → “TV backlight”. Guessed from your YAML comments.',btn:'Accept all',done:'Accepted'},
+{id:'shell',icon:'terminal',title:'shell_command: copy_font',detail:'Runs python3 on the host. Kova runs it in a sandbox once you approve.',btn:'Approve',done:'Approved'},
+{id:'hacs',icon:'extension',title:'HACS and opnsense_v060_backup',detail:'Not needed in Kova. localtuya and browser_mod become built-in features.',btn:'Skip',done:'Skipped'}];
+const HAND=[{id:'warden',letter:'W',app:'Warden',what:'OPNsense firewall at 10.10.0.1'},{id:'helix',letter:'H',app:'Helix',what:'Plex and qBittorrent'},{id:'dockbit',letter:'D',app:'Dockbit',what:'Matter server and go2rtc containers'}];
+const code=a=>`automation "${a.name}"\n  when: ${a.when.join(', ')}${a.cond.length?`\n  only_if: ${a.cond.join(', ').toLowerCase()}`:''}\n  do:\n${a.then.map(t=>'    - '+t).join('\n')}\n  mode: ${a.kind==='event'?'restart':'single'}`;
+// Energy (needs an inverter / meter integration, next milestone).
+const SOLAR=[0,0,0,0,0,0,0.1,0.6,1.3,2.0,2.5,2.8,2.9,2.8,2.5,2.0,1.3,0.6,0.1,0,0,0,0,0];
+const USE=[0.5,0.4,0.4,0.4,0.4,0.5,0.9,1.2,0.8,0.7,0.7,0.8,0.9,0.8,0.7,0.8,1.1,1.6,2.1,1.4,null,null,null,null];
+const ASKS=['Turn off downstairs','Why is the garage light on?','What lights are on?','Start Movie'];
+const ACT_STYLE={auto:['rgba(242,177,76,0.13)','#f2b14c'],people:['rgba(127,212,160,0.14)','#7fd4a0'],device:['rgba(124,184,240,0.13)','#7cb8f0'],system:['#232428','#a3a09a']};
+
+class Component extends DCLogic {
+  state={hub:BOOT,conn:!!window.KOVA_BOOT,screen:this.props.startScreen??'home',room:(BOOT.rooms[0]||{}).id,drawer:null,tab:'simple',advanced:(this.props.depth??'Simple')==='Advanced',sel:'sunset',toast:null,undo:null,merging:false,merged:false,done:{},linked:{},q:'',camSel:null,mediaSel:null,actF:'all',inboxDone:{},iq:'',intF:'All',draft:'',chat:[{from:'kova',text:`Hi. ${BOOT.devices.filter(d=>isLight(d)&&d.state.on).length} lights are on and the home is in ${(BOOT.modes.find(m=>m.id===BOOT.current.modeId)||BOOT.modes[0]).name}. What do you need?`}],preview:null,pv:null,modeSel:null};
+  componentDidMount(){this.connect()}
+  componentWillUnmount(){this._closed=true;try{this._ws&&this._ws.close()}catch(e){}}
+  connect(){
+    if(this._closed)return;
+    const url=`${location.protocol==='https:'?'wss':'ws'}://${location.host}/api/ws${KOVA_TOKEN?'?token='+encodeURIComponent(KOVA_TOKEN):''}`;
+    let ws;try{ws=new WebSocket(url)}catch(e){this.setState({conn:false});setTimeout(()=>this.connect(),3000);return}
+    this._ws=ws;
+    ws.onmessage=ev=>{try{const m=JSON.parse(ev.data);if(m.type==='state'){this.setState({hub:m.data,conn:true});if(this.state.preview!=null)this.loadPreview(this.state.preview)}}catch(e){}};
+    ws.onclose=()=>{this.setState({conn:false});setTimeout(()=>this.connect(),2000)};
+  }
+  // ---- actions ----
+  toast(text,undo){clearTimeout(this._t);this.setState({toast:text,undo:undo||null});this._t=setTimeout(()=>this.setState({toast:null,undo:null}),5000)}
+  undoFn(id){return id?()=>api('POST','/api/undo/'+id).catch(e=>this.toast(e.message)):null}
+  err(e){this.toast(e.message||String(e))}
+  optimistic(id,p){this.setState(s=>({hub:{...s.hub,devices:s.hub.devices.map(d=>d.id===id?{...d,state:{...d.state,...p}}:d)}}))}
+  async send(id,p,msg){this.optimistic(id,p);try{const r=await api('POST','/api/devices/'+id,p);if(msg)this.toast(msg,this.undoFn(r.undo))}catch(e){this.err(e)}}
+  patch(id,p){clearTimeout(this._pt);this.optimistic(id,p);this._pt=setTimeout(()=>api('POST','/api/devices/'+id,p).catch(e=>this.err(e)),150)}
+  toggleDev(id){const d=this.devs()[id];if(!d||d.type==='camera'||d.type==='sensor')return;if(d.type==='fan'){this.send(id,{mode:d.mode==='Auto'?'Sleep':'Auto'});return}if(isPlayer(d)){const src=(this.state.hub.sources[0]||{}).name||'Radio';this.send(id,d.on?{on:false,media:null}:{on:true,media:src,vol:d.vol??30});return}this.send(id,{on:!d.on})}
+  async startOverlay(o){try{const r=await api('POST',`/api/overlays/${o.id}/start`);this.setState({preview:null,pv:null});this.toast(`${o.name} is on`,this.undoFn(r.undo))}catch(e){this.err(e)}}
+  async loadPreview(h){try{const r=await api('GET','/api/preview?hour='+h.toFixed(3));if(this.state.preview===h)this.setState({pv:r})}catch(e){}}
+  setPreview(h){this.setState({preview:h,pv:null});if(h!=null)this.loadPreview(h)}
+  async reply(q){
+    this.setState(p=>({draft:'',chat:[...p.chat,{from:'you',text:q}]}));
+    try{const r=await api('POST','/api/ask',{text:q});
+      this.setState(p=>({chat:[...p.chat,{from:'kova',text:r.text,acts:(r.actions||[]).map(a=>({label:a.label,run:async()=>{
+        if(a.action.type==='screen'){this.setState({screen:a.action.screen});return}
+        const x=await api('POST','/api/ask/act',{action:a.action});this.setState(pp=>({chat:[...pp.chat,{from:'kova',text:x.text}]}));if(x.undo)this.toast(x.text,this.undoFn(x.undo))}}))}]}))}
+    catch(e){this.setState(p=>({chat:[...p.chat,{from:'kova',text:'I couldn’t reach the hub. '+e.message}]}))}
+  }
+  // ---- derived data ----
+  devs(){const o={};this.state.hub.devices.forEach(d=>{o[d.id]=flat(d)});return o}
+  modeById(id){const H=this.state.hub;return H.modes.find(m=>m.id===id)||H.modes[0]}
+  stateOf(d){if(d.type==='camera'||d.type==='sensor')return d.online===false?['Offline','#ff6b5e']:['Live','#7fd4a0'];if(d.online===false)return['Not responding','#ff6b5e'];if(d.type==='fan')return[d.mode||'Auto','#7cb8f0'];if(isPlayer(d))return d.on?[`Playing · ${d.media||'Audio'}${d.vol!=null?' · '+d.vol+'%':''}`,'#7cb8f0']:['Idle','#a3a09a'];if(d.type==='plug')return d.on?[`On${d.power!=null?' · '+d.power+' W':''}`,'#f2b14c']:['Off','#a3a09a'];if(!d.on)return['Off','#a3a09a'];if(d.type==='dimmer')return[`On · ${d.bri}%${d.k?' · '+d.k+'K':d.color?' · colour':''}`,'#f2b14c'];return['On','#f2b14c']}
+  tint(d){if(isPlayer(d)||d.type==='fan')return{bg:d.on&&d.type!=='fan'?'rgba(124,184,240,0.12)':'#16171a',border:d.on&&d.type!=='fan'?'rgba(124,184,240,0.3)':'rgba(255,255,255,0.05)',iconBg:d.on||d.type==='fan'?'rgba(124,184,240,0.2)':'#232428',iconFg:d.on||d.type==='fan'?'#7cb8f0':'#8a8781'};if(d.type==='camera'||d.type==='sensor')return{bg:'#16171a',border:'rgba(255,255,255,0.05)',iconBg:'rgba(127,212,160,0.15)',iconFg:'#7fd4a0'};const c=d.color||'#f2b14c';return d.on?{bg:'rgba(242,177,76,0.11)',border:'rgba(242,177,76,0.28)',iconBg:c,iconFg:'#1a1408'}:{bg:'#16171a',border:'rgba(255,255,255,0.05)',iconBg:'#232428',iconFg:'#8a8781'}}
+
+  v3Vals(s,H,devs,go){
+    const RN=Object.fromEntries(H.rooms.map(r=>[r.id,r.name]));
+    const mk=m=>({...m,tint:m.color+'24',line:m.color+'55',glow:m.color+'30'});
+    const nowH=H.home.nowHour;const ph=s.preview;
+    const bandAt=h=>H.day.bands.find(b=>h>=b.start&&h<b.end)||H.day.bands[H.day.bands.length-1]||{modeId:H.current.modeId};
+    const curId=ph!=null?bandAt(ph).modeId:H.current.modeId;
+    const M=this.modeById(curId);const nx=this.modeById(ph!=null?M.nextId:H.current.nextId);
+    const mode={...mk(M),until:ph!=null?`${M.startLabel} → ${M.endLabel}`:H.current.waitingForSomeone?`Lights wait until someone’s home · until ${H.current.untilLabel}, then ${nx.name}`:`Until ${H.current.untilLabel}, then ${nx.name}`,untilShort:ph!=null?`previewing ${fmt(ph)}`:`until ${H.current.untilLabel}`};
+    const vdevs=ph!=null&&s.pv?Object.fromEntries(Object.entries(devs).map(([id,d])=>[id,{...d,...(s.pv.devices[id]||{})}])):devs;const vl=Object.values(vdevs);
+    const lightsOn=vl.filter(d=>isLight(d)&&d.on).length;
+    const bands=H.day.bands.map(b=>{const m=this.modeById(b.modeId);return{name:b.end-b.start>2.5?m.name:'',w:((b.end-b.start)/24*100)+'%',bg:m.color+(b.modeId===curId?'40':'22'),fg:m.color}});
+    // Lay out timeline labels in rows so they don't overlap.
+    const pts=[...H.day.items.map(i=>({h:i.hour,label:i.kind==='mode'?this.modeById(i.modeId).name:i.label,past:i.past,skipped:i.skipped})),...H.day.marks.map(m=>({h:m.hour,label:m.label,past:true,skipped:false}))].sort((a,b)=>a.h-b.h);
+    const rowsEnd=[];
+    const tlEvents=pts.map(p=>{const w=0.5+p.label.length*0.17;const right=p.h+w>24;const a=right?p.h-w:p.h,b=right?p.h:p.h+w;let row=rowsEnd.findIndex(e=>e<=a);if(row<0){row=rowsEnd.length<6?rowsEnd.length:rowsEnd.indexOf(Math.min(...rowsEnd))}rowsEnd[row]=b;const mc=this.modeById(bandAt(p.h).modeId).color;return{left:(p.h/24*100)+'%',top:(row*25)+'px',tx:right?'translateX(calc(-100% + 10px))':'translateX(-5px)',label:p.label,fill:p.past?'#f1efea':'transparent',stroke:p.past?'#f1efea':mc,fg:p.past?'#c9c6c0':mc,op:p.skipped?0.35:1}});
+    const happened=H.activity.filter(a=>a.type==='auto'||a.type==='people').slice(0,3).map(a=>({t:a.t,what:a.what,why:a.why}));
+    const upcoming=H.upcoming.map(e=>{const sk=e.skipped;return{t:e.t,label:e.label,what:sk?'Skipped tonight':e.what,color:this.modeById(e.modeId).color,op:sk?0.5:1,deco:sk?'line-through':'none',btn:sk?'Undo':'Skip tonight',skip:()=>api('POST','/api/plan/skip',{id:e.id,skip:!sk}).then(()=>{if(!sk)this.toast(`${e.label} skipped tonight`,()=>api('POST','/api/plan/skip',{id:e.id,skip:false}))}).catch(x=>this.err(x))}});
+    const ovOn=H.current.overlay;
+    const overlays=H.overlays.map(o=>{const on=ovOn&&ovOn.id===o.id;return{name:o.name,icon:o.icon,ends:o.endsLabel,bg:on?'rgba(242,177,76,0.1)':'#16171a',border:on?'rgba(242,177,76,0.45)':'rgba(255,255,255,0.05)',iconBg:on?'#f2b14c':'#232428',iconFg:on?'#1a1408':'#f2b14c',go:()=>{if(!on)this.startOverlay(o)}}});
+    const roomCards=H.rooms.map(r=>{const ds=vl.filter(d=>d.room===r.id);const on=ds.filter(d=>isLight(d)&&d.on).length;const play=ds.filter(d=>isPlayer(d)&&d.on).length;return{name:r.name,icon:r.icon,pill:on?`${on} on`:play?'Playing':'All off',pillFg:on?'#f2b14c':play?'#7cb8f0':'#8a8781',iconFg:on?'#f2b14c':play?'#7cb8f0':'#8a8781',open:()=>this.setState({screen:'rooms',room:r.id})}});
+    const findings=H.findings.map(f=>{const m=this.modeById(f.modeId);return{...f,fg:f.tone==='alert'?'#ff6b5e':'#f2b14c',modeName:m.name,modeColor:m.color,modeTint:m.color+'24',
+      doFix:()=>api('POST',`/api/findings/${encodeURIComponent(f.id)}/fix`).then(r=>{this.setState({modeSel:f.modeId});this.toast(`${m.name} updated`,this.undoFn(r.undo))}).catch(x=>this.err(x)),
+      doAlt:()=>api('POST',`/api/findings/${encodeURIComponent(f.id)}/dismiss`).then(r=>this.toast('Kept as is',this.undoFn(r.undo))).catch(x=>this.err(x))}});
+    const SM=this.modeById(s.modeSel||H.current.modeId);const snx=this.modeById(SM.nextId);
+    const DAYC={ok:SM.color,problem:'#ff6b5e',skipped:'#26272b',none:'rgba(255,255,255,0.06)'};
+    const sm={...mk(SM),span:`${SM.startLabel} → ${SM.endLabel}`,starts:SM.onlyWhenSomeoneHome?`${SM.startLabel}, if someone’s home`:SM.startLabel,ends:`${SM.endLabel}, then ${snx.name}`,
+      groups:SM.groups.length?SM.groups:[{room:'Everywhere',chips:['Nothing changes']}],hasInherit:SM.inherit.length>0,inherit:`Still on from earlier: ${lst(SM.inherit)}.`,
+      moments:SM.moments,noMoments:SM.moments.length?'':'Nothing else happens during this mode.',
+      days:(SM.test.days.length?SM.test.days:Array(14).fill('none')).map(c=>({bg:DAYC[c]})),testText:SM.test.text,
+      ltwJustify:SM.lightTheWay?'flex-end':'flex-start',ltwTrack:SM.lightTheWay?'#f2b14c':'#35363a',
+      toggleLtw:()=>api('PATCH','/api/modes/'+SM.id,{lightTheWay:!SM.lightTheWay}).then(r=>this.toast(`Light the way ${SM.lightTheWay?'off':'on'} in ${SM.name}`,this.undoFn(r.undo))).catch(x=>this.err(x)),
+      preview:()=>{this.setState({screen:'home'});if(SM.start!=null)this.setPreview((SM.start+0.25)%24)}};
+    const modeList=H.modes.map(m=>{const sel=m.id===SM.id;return{...mk(m),span:`${m.startLabel} → ${m.endLabel}`,now:m.id===H.current.modeId,bg:sel?'#1f2024':'#16171a',border:sel?m.color+'66':'rgba(255,255,255,0.04)',pick:()=>this.setState({modeSel:m.id})}});
+    const ltwModes=H.modes.filter(m=>m.lightTheWay).map(m=>m.name);
+    const mins=H.lightTheWay.map(t=>t.minutes);const range=mins.length?(Math.min(...mins)===Math.max(...mins)?`${mins[0]}`:`${Math.min(...mins)}–${Math.max(...mins)}`):'5';
+    const D=s.drawer&&devs[s.drawer];
+    const n=H.findings.length;
+    const tzCity=(H.home.timezone.split('/').pop()||'').replace(/_/g,' ');
+    return {mode,previewing:ph!=null,previewText:ph!=null?`Previewing ${fmt(ph)} · ${M.name}. This is what the home will look like.`:'',previewLeft:ph!=null?(ph/24*100)+'%':'0%',previewTime:ph!=null?fmt(ph):'',backToNow:()=>this.setPreview(null),
+      nowLeft:(nowH/24*100)+'%',nowLabel:ph!=null?`Preview · ${fmt(ph)}`:`${H.home.dateLabel} · ${H.home.clock} · ${tzCity}`,lightsOnLabel:`${lightsOn} light${lightsOn===1?'':'s'} on`,
+      scrub:e=>{const r=e.currentTarget.getBoundingClientRect();const hh=Math.max(0,Math.min(23.95,(e.clientX-r.left)/r.width*24));this.setPreview(Math.abs(hh-nowH)<0.3?null:hh)},
+      bands,tlEvents,happened,upcoming,overlays,overlayOn:!!ovOn,overlay:ovOn?{icon:ovOn.icon,label:`${ovOn.name} is on · ${ovOn.endsLabel.toLowerCase()}`}:{icon:'',label:''},
+      endOverlay:()=>api('POST','/api/overlays/end').then(()=>this.toast('Back to '+this.modeById(H.current.modeId).name)).catch(x=>this.err(x)),
+      roomCards,findings,hasFindings:n>0,findingsHeadline:n?`${n} thing${n===1?'':'s'} worth a look: ${H.findings[0].title.charAt(0).toLowerCase()+H.findings[0].title.slice(1)}`:'',
+      modeList,sm,ltwText:`When someone is seen or arrives, light their way for ${range} minutes. On in ${ltwModes.join(', ')||'no modes'}.`,ltwSub:`${H.lightTheWay.length} trigger${H.lightTheWay.length===1?'':'s'}`,
+      modesSummary:`${H.modes.length} modes · ${H.overlays.length} overlays · 1 behaviour`,
+      isModes:s.screen==='modes',goModes:go('modes'),drWhy:D?D.why:{now:'',next:''}};
+  }
+
+  moreVals(s,H,devs,list,go){
+    const RN=Object.fromEntries(H.rooms.map(r=>[r.id,r.name]));
+    const pct=v=>Math.round(v/3*100)+'%';
+    const energyBars=SOLAR.map((sv,h)=>({solar:pct(sv),use:USE[h]==null?'3%':pct(USE[h]),useBg:USE[h]==null?'#1f2023':'#4a4b50',op:USE[h]==null?0.25:1}));
+    const energyStats=[['Solar made','21.5 kWh','#f2b14c','Sample data'],['Home used','17.1 kWh','#f1efea','Sample data'],['From grid','8.4 kWh','#f1efea','Sample data'],['Cost so far','$2.34','#f1efea','Connect an inverter to track']].map(([label,v,fg,sub])=>({label,v,fg,sub}));
+    const plugs=list.filter(d=>d.power!=null);const maxP=Math.max(1,...plugs.map(d=>d.on?d.power:0));
+    const energyDevices=plugs.map((d,i)=>({name:d.name,v:(d.on?d.power:0)+' W',w:((d.on?d.power:0)/maxP*100)+'%',bg:i===0?'#f2b14c':'#6f6d69'}));
+    const cams=list.filter(d=>d.type==='camera');const camId=s.camSel||(cams[0]&&cams[0].id);
+    const lastSeen=id=>{const a=H.activity.find(x=>x.what.startsWith((devs[id]||{}).name||'~')&&(x.icon==='person'||x.icon==='doorbell'));return a?`${a.what.includes('rang')?'Rang':'Person'} at ${a.t}`:'No activity today'};
+    const cm=devs[camId];
+    const camMain=cm?{name:RN[cm.room]||cm.name,last:lastSeen(cm.id),slot:`${(RN[cm.room]||cm.name).toLowerCase()} stream`}:{name:'No cameras',last:'',slot:'no camera connected'};
+    const camThumbs=cams.map(c=>({name:RN[c.room]||c.name,pick:()=>this.setState({camSel:c.id}),ring:camId===c.id?'2px solid #f2b14c':'none'}));
+    const people=H.people.map(p=>({initial:p.name[0],name:p.name,detail:`${p.detail}${p.sinceLabel?` · ${p.home?'home':'left'} since ${p.sinceLabel}`:''}`,status:p.home?'Home':'Away'}));
+    const secEvents=H.activity.filter(a=>a.type==='people').slice(0,6).map(a=>({t:a.t,icon:a.icon,fg:a.icon==='doorbell'?'#7cb8f0':a.icon==='person'?'#f2b14c':'#7fd4a0',text:a.what}));
+    const pls=list.filter(isPlayer);
+    const P=devs[s.mediaSel]||pls[0];
+    let mp={name:'No speakers yet',room:'',state:'',fg:'#a3a09a',playIcon:'play_arrow',vol:0,volLabel:'',toggle:()=>{},setVol:()=>{}};
+    if(P){const [pst,pfg]=this.stateOf(P);mp={name:P.name,room:RN[P.room]||'',state:pst,fg:pfg,playIcon:P.on?'pause':'play_arrow',vol:P.vol??30,volLabel:(P.vol??30)+'%',toggle:()=>this.toggleDev(P.id),setVol:e=>this.patch(P.id,{vol:+e.target.value})}}
+    const sources=H.sources.map(so=>({name:so.name,icon:so.icon,play:()=>{if(P)this.send(P.id,{on:true,media:so.name,vol:P.vol??30},`Playing ${so.name} on ${P.name}`)}}));
+    const players=pls.map(d=>{const [st,fg]=this.stateOf(d);const sel=P&&d.id===P.id;return{name:d.name,room:RN[d.room]||'',state:st,fg,icon:ICON[d.type],playIcon:d.on?'pause':'play_arrow',bg:sel?'#1f2024':'transparent',iconBg:d.on?'rgba(124,184,240,0.2)':'#232428',iconFg:d.on?'#7cb8f0':'#8a8781',pick:()=>this.setState({mediaSel:d.id}),toggle:e=>{e.stopPropagation();this.toggleDev(d.id)}}});
+    const AF=[['all','All'],['auto','Automations'],['people','People'],['device','Devices'],['system','System']];
+    const actFilters=AF.map(([id,label])=>({label,pick:()=>this.setState({actF:id}),bg:s.actF===id?'#f1efea':'#16171a',fg:s.actF===id?'#141517':'#d8d5cf'}));
+    const activity=H.activity.filter(a=>s.actF==='all'||a.type===s.actF).map(a=>({...a,iconBg:(ACT_STYLE[a.type]||ACT_STYLE.system)[0],iconFg:(ACT_STYLE[a.type]||ACT_STYLE.system)[1]}));
+    // The inbox: mode findings plus integrations that need attention.
+    const INBOX=[...H.findings.map(f=>({id:'f:'+f.id,icon:f.icon,fg:f.tone==='alert'?'#ff6b5e':'#f2b14c',title:f.title,kind:'Check',body:f.body,btn:'Review',go:'modes'})),
+      ...H.integrations.filter(i=>!i.ok).map(i=>({id:'i:'+i.id,icon:'build',fg:'#f2b14c',title:`${i.name} needs attention`,kind:'Repair',body:i.note||'Not responding.',btn:'Open',go:'integrations'}))];
+    const inbox=INBOX.filter(i=>!s.inboxDone[i.id]).map(i=>({...i,act:()=>this.setState({screen:i.go}),dismiss:()=>this.setState(p=>({inboxDone:{...p.inboxDone,[i.id]:true}}))}));
+    const chat=s.chat.map(m=>({text:m.text,justify:m.from==='you'?'flex-end':'flex-start',bg:m.from==='you'?'#f1efea':'#16171a',fg:m.from==='you'?'#141517':'#f1efea',hasAct:!!(m.acts&&m.acts.length),acts:m.acts||[]}));
+    const iq=s.iq.toLowerCase();
+    const IF=['All','Needs attention','Local','Cloud'];
+    const INTEG=H.integrations.map(i=>({name:i.name,icon:i.icon,sub:`${i.devices} device${i.devices===1?'':'s'}`,st:i.ok?'ok':'attention',kind:i.kind,note:i.note}));
+    const integrations=INTEG.filter(i=>(!iq||(i.name+' '+i.sub).toLowerCase().includes(iq))&&(s.intF==='All'||(s.intF==='Needs attention'?i.st==='attention':i.kind===s.intF))).map(i=>({...i,status:i.note||(i.st==='ok'?'Connected':'Needs attention'),dot:i.st==='ok'?'#7fd4a0':'#f2b14c',stFg:i.st==='attention'?'#f2b14c':'#a3a09a',border:i.st==='attention'?'rgba(242,177,76,0.3)':'rgba(255,255,255,0.05)'}));
+    return {isEnergy:s.screen==='energy',isSecurity:s.screen==='security',isMedia:s.screen==='media',isActivity:s.screen==='activity',isAssistant:s.screen==='assistant',isIntegrations:s.screen==='integrations',
+      energyBars,energyStats,energyDevices,camMain,camThumbs,people,secEvents,mp,sources,players,mediaCount:`${pls.filter(d=>d.on).length} playing · ${pls.length} players`,
+      secSummary:`${cams.length} camera${cams.length===1?'':'s'} · ${H.people.length} ${H.people.length===1?'person':'people'}`,
+      actFilters,activity,inbox,inboxEmpty:!inbox.length,inboxTitle:inbox.length?`Needs you · ${inbox.length}`:'Needs you',
+      askSub:`Runs locally · knows your ${list.length} devices, ${H.rooms.length} rooms and ${H.modes.length} modes`,
+      chat,asks:ASKS.map(text=>({text,ask:()=>this.reply(text)})),draft:s.draft,setDraft:e=>this.setState({draft:e.target.value}),draftKey:e=>{if(e.key==='Enter'&&s.draft.trim())this.reply(s.draft.trim())},sendDraft:()=>{if(s.draft.trim())this.reply(s.draft.trim())},
+      iq:s.iq,setIq:e=>this.setState({iq:e.target.value}),integFilters:IF.map(f=>({label:f,pick:()=>this.setState({intF:f}),bg:s.intF===f?'#f1efea':'#16171a',fg:s.intF===f?'#141517':'#d8d5cf'})),integrations,integCount:`${INTEG.length} connected`,goIntegrations:go('integrations')};
+  }
+
+  renderVals(){
+    const s=this.state,H=s.hub,devs=this.devs(),list=Object.values(devs),adv=s.advanced;
+    const RN=Object.fromEntries(H.rooms.map(r=>[r.id,r.name]));
+    const go=screen=>()=>this.setState({screen});
+    const lightsOn=list.filter(d=>isLight(d)&&d.on).length;
+    const inboxLeft=H.findings.length+H.integrations.filter(i=>!i.ok).length;
+    const nav=[['home','Now','home'],['modes','Modes','routine'],['rooms','Rooms','meeting_room'],['energy','Energy','electric_meter'],['security','Security','shield'],['media','Media','play_circle'],['activity','Activity','history',inboxLeft||''],['assistant','Ask Kova','graphic_eq'],['integrations','Integrations','extension','',1],['import','Import','move_down',REVIEW.length-Object.keys(s.done).length||'']].concat(adv?[['dev','Developer','code']]:[]).map(([id,label,icon,badge,gap])=>({label,icon,badge:badge||'',mt:gap?'14px':'0px',go:go(id),bg:s.screen===id?'rgba(242,177,76,0.12)':'transparent',fg:s.screen===id?'#f2b14c':'#d8d5cf'}));
+    const room=s.room||(H.rooms[0]||{}).id;
+    const tiles=list.filter(d=>d.room===room).map(d=>{const [st,sf]=this.stateOf(d);return{...d,...this.tint(d),icon:ICON[d.type],state:st,stateFg:sf,showId:adv,toggle:()=>this.toggleDev(d.id),open:()=>this.setState({drawer:d.id,tab:'simple'})}});
+    const rDevs=list.filter(d=>d.room===room);const rOn=rDevs.filter(d=>isLight(d)&&d.on).length;
+    const roomTabs=H.rooms.map(r=>({name:r.name,open:()=>this.setState({room:r.id}),bg:room===r.id?'#f1efea':'#16171a',fg:room===r.id?'#141517':'#d8d5cf'}));
+    // Imported rules (sample data until the Home Assistant importer lands).
+    const RP=[['0px','40px','column'],['28px','12px','column'],['74px','10px','column-reverse'],['74px','38px','column-reverse']];
+    const strip=AUTOS.filter(a=>a.kind==='time').sort((x,y)=>x.at-y.at).map((a,i)=>{const [top,tick,dir]=RP[i%4];return{label:a.label+' '+fmt(a.at),left:(a.at/24*100)+'%',top,tick,dir,bg:s.sel===a.id?'#f2b14c':'#26272b',fg:s.sel===a.id?'#1a1408':'#f1efea',open:()=>this.setState({sel:a.id})}});
+    const item=a=>({name:a.name,icon:a.icon,summary:a.when[0]+(a.cond.length?', '+a.cond[0].toLowerCase():'')+' → '+a.then[0],bg:s.sel===a.id?'#1f2024':'transparent',iconFg:'#6f6d69',nameFg:'#8a8781',justify:'flex-start',track:'#35363a',open:()=>this.setState({sel:a.id}),toggle:e=>e.stopPropagation()});
+    const autoGroups=[{title:'On a schedule',items:AUTOS.filter(a=>a.kind==='time').map(item)},{title:'When something happens',items:AUTOS.filter(a=>a.kind==='event').map(item)}];
+    const A=AUTOS.find(a=>a.id===s.sel)||AUTOS[0];
+    const sel={name:A.name,status:'Replaced',stBg:'rgba(255,255,255,0.06)',stFg:'#a3a09a',lastRun:A.last,code:code(A),parts:[{k:'When',chips:A.when,bg:'#f2b14c',fg:'#1a1408'}].concat(A.cond.length?[{k:'Only if',chips:A.cond,bg:'#26272b',fg:'#f1efea'}]:[]).concat([{k:'Then',chips:A.then,bg:'#26272b',fg:'#f1efea'}])};
+    const doneN=Object.keys(s.done).length;
+    const review=REVIEW.map(r=>{const d=s.done[r.id];return{...r,icon:d?'check_circle':r.icon,iconFg:d?'#7fd4a0':'#f2b14c',btn:d?r.done:r.btn,btnBg:d?'transparent':'#f2b14c',btnFg:d?'#7fd4a0':'#1a1408',act:()=>this.setState(p=>({done:{...p.done,[r.id]:true}}))}});
+    const handoffs=HAND.map(h=>{const l=s.linked[h.id];return{...h,btn:l?'Linked':'Link',btnBg:l?'transparent':'rgba(255,255,255,0.08)',btnFg:l?'#7fd4a0':'#f1efea',act:()=>this.setState(p=>({linked:{...p.linked,[h.id]:true}}))}});
+    const stepsDone=doneN===REVIEW.length;
+    const steps=[['Connected',1],['Scanned 36 integrations',1],[stepsDone?'Reviewed':`Review · ${REVIEW.length-doneN} left`,stepsDone],['Switch over',0]].map(([label,d],i)=>({label,icon:d?'check':i===2?'pending':'radio_button_unchecked',bg:d?'rgba(127,212,160,0.12)':i===2?'rgba(242,177,76,0.12)':'#16171a',fg:d?'#7fd4a0':i===2?'#f2b14c':'#a3a09a'}));
+    const importStats=[['31','Native integrations','Matter, Thread, Sonos, Cast, Nest, GoodWe…'],['3','Via plugin','localtuya, browser_mod, opnsense'],['13','Automations','11 enabled, 2 disabled'],['4','Scripts','Good Night, Movie, Date, Party'],['10','Rooms detected','From entity names']].map(([n,label,sub])=>({n,label,sub}));
+    const q=s.q.toLowerCase();
+    const entities=list.filter(d=>!q||[d.id,d.eid,d.name,RN[d.room],d.integ].join(' ').toLowerCase().includes(q)).map(d=>{const [st,sf]=this.stateOf(d);return{eid:d.eid,name:d.name,room:RN[d.room]||d.room,integ:d.integ,state:st,stateFg:sf}});
+    const D=s.drawer&&devs[s.drawer];let dr={};
+    if(D){const [st]=this.stateOf(D);const t=this.tint(D);
+      const usedIn=(D.usedIn||[]).map(u=>({name:u.name,open:()=>this.setState(u.kind==='mode'?{screen:'modes',modeSel:u.id,drawer:null}:{screen:'modes',drawer:null})}));
+      dr={name:D.name,room:RN[D.room]||'',icon:ICON[D.type],bg:t.bg,iconFg:D.on&&isLight(D)?(D.color||'#f2b14c'):t.iconFg,big:st.split(' · ')[0],dimmable:D.type==='dimmer'&&D.on,bri:D.bri,briLabel:D.bri+'%',hasWarmth:(D.capabilities||[]).includes('colorTemp')&&D.on,
+        setBri:e=>this.patch(D.id,{bri:+e.target.value}),toggle:()=>this.toggleDev(D.id),
+        temps:[2200,2700,3000,4000].map(k=>({label:k+'K',bg:k===2200?'#ffb56b':k===2700?'#ffc98a':k===3000?'#ffd9a8':'#fff1dc',ring:D.k===k?'2px solid #f2b14c':'none',pick:()=>this.send(D.id,{k,color:null})})),
+        facts:[['State',st],['Integration',D.integ],['Room',RN[D.room]||D.room],['Last changed',D.why.now]].map(([k,v])=>({k,v})),usedIn,usedNone:usedIn.length?'':'Not used by any mode, overlay or behaviour yet',
+        code:JSON.stringify({id:D.id,address:D.eid,type:D.type,capabilities:D.capabilities,state:D.state,integration:D.integ,room:D.room},null,2)}}
+    const tabs=['simple','details'].concat(adv?['code']:[]).map(t=>({label:t[0].toUpperCase()+t.slice(1),go:()=>this.setState({tab:t}),bg:s.tab===t?'#2a2b2f':'transparent',fg:s.tab===t?'#f1efea':'#a3a09a'}));
+    const home=H.people.filter(p=>p.home);
+    const w=H.weather;
+    const hubOk=s.conn&&!H.offline;
+    return {nav,isHome:s.screen==='home',isRooms:s.screen==='rooms',isAutos:s.screen==='autos',isImport:s.screen==='import',isDev:s.screen==='dev'&&adv,
+      homeName:H.home.name,hubTitle:hubOk?(H.demo?'Demo home':'Hub connected'):'Can’t reach the hub',hubSub:hubOk?(H.demo?'Virtual devices · safe to play with':`${list.length} devices · all local`):'Reconnecting…',hubDot:hubOk?'#7fd4a0':'#ff6b5e',
+      weatherIcon:w?w.icon:'cloud_off',weatherTemp:w?`${w.temp}°`:'—',weatherText:w?w.text:'No weather',
+      avatars:(home.length?home:H.people).slice(0,3).map((p,i)=>({initial:p.name[0],ml:i?'-8px':'0px',op:p.home?1:0.4})),
+      peopleLabel:!H.people.length?'No people yet':home.length===H.people.length?(H.people.length===2?'Both home':H.people.length===1?`${H.people[0].name} is home`:'Everyone’s home'):home.length?`${lst(home.map(p=>p.name))} home`:'Nobody home',
+      goRooms:go('rooms'),goAutos:go('autos'),lightsOnLabel:`${lightsOn} lights on`,
+      roomName:RN[room]||'',roomTabs,tiles,roomSummary:`${rDevs.length} devices · ${rOn} lights on`,
+      roomAllOff:()=>api('POST',`/api/rooms/${room}/off`,{}).then(r=>this.toast(`${RN[room]} lights off`,this.undoFn(r.undo))).catch(x=>this.err(x)),
+      autoCount:`${AUTOS.length} imported rules · now ${H.modes.length} modes and 1 behaviour`,strip,autoGroups,sel,merging:false,applyMerge:()=>{},closeMerge:()=>{},testSel:()=>this.setState({screen:'modes'}),
+      steps,importStats,review,reviewTitle:`Needs your review · ${REVIEW.length-doneN} left`,handoffs,
+      q:s.q,setQ:e=>this.setState({q:e.target.value}),entities,advanced:adv,
+      toggleAdvanced:()=>this.setState(p=>({advanced:!p.advanced,tab:'simple',screen:p.screen==='dev'?'home':p.screen})),advJustify:adv?'flex-end':'flex-start',advTrack:adv?'#f2b14c':'#35363a',
+      drawerOpen:!!D,dr,tabs,tabSimple:s.tab==='simple',tabDetails:s.tab==='details',tabCode:s.tab==='code'&&adv,closeDrawer:()=>this.setState({drawer:null}),
+      ...this.moreVals(s,H,devs,list,go),
+      ...this.v3Vals(s,H,devs,go),
+      toastOn:!!s.toast,toastText:s.toast,canUndo:!!s.undo,undo:()=>{s.undo&&s.undo();this.setState({toast:null,undo:null})}};
+  }
+}
+</script>
+</body>
+</html>
