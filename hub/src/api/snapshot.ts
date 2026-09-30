@@ -106,6 +106,8 @@ export function snapshot(hub: Hub) {
       sun: (() => { const t = SunCalc.getTimes(new Date(now), cfg.latitude, cfg.longitude); const h = (d: Date) => (isNaN(+d) ? null : localHour(+d, tz)); return { rise: h(t.sunrise), set: h(t.sunset) }; })(),
     },
     rooms: cfg.rooms,
+    // The owner's favourites (null until they pick some: the apps then suggest a few).
+    favourites: cfg.favourites ?? null,
     groups: cfg.groups,
     people: cfg.people.map(p => ({ ...p, home: engine.people[p.id]?.home ?? true, since: engine.people[p.id]?.since ?? null, sinceLabel: engine.people[p.id] ? clock(engine.people[p.id].since, tz) : '' })),
     devices: reg.list().map(d => ({ ...d, why: engine.why(d.id), usedIn: engine.usedIn(d.id) })),

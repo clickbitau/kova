@@ -25,6 +25,7 @@ import { CATALOG } from '../integrations-catalog.ts';
 import { SetupError, type IntegrationsManager } from '../integrations-store.ts';
 import type { HaImport } from '../import/ha-scan.ts';
 import { registerImportRoutes } from './import-routes.ts';
+import { registerHomeRoutes } from './home-routes.ts';
 import type { Backups } from '../services/backup.ts';
 import { KOVA_VERSION } from '../version.ts';
 import { createReadStream } from 'node:fs';
@@ -316,6 +317,7 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
 
   registerEditRoutes(app, hub);
   registerImportRoutes(app, opts.haImport);
+  registerHomeRoutes(app, hub);
 
   // Presence from a phone: the Kova app, or an iOS Shortcut / Android automation ("When I arrive home → Get contents of URL").
   // `home` can be in the body or the query (?home=1), so a Shortcut needs no request body. `?key=` is the person's own key.

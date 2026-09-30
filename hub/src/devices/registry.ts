@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import type { Adapter, AdapterContext, DeviceInfo } from '../adapters/sdk.ts';
-import type { Cause, Command, Device, DeviceState, Targets } from '../model/types.ts';
+import type { Cause, Command, Device, DeviceSettings, DeviceState, Targets } from '../model/types.ts';
 import type { Store } from '../store/db.ts';
 import { CAPS, changeSentence, fitCommand } from '../util/describe.ts';
 
@@ -27,7 +27,10 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
   /** Devices marked offline because their adapter was removed; a new adapter announcing them clears that. */
   private orphaned = new Set<string>();
 
-  constructor(private store: Store, private sourceUrl: (name: string) => string | undefined = () => undefined) {
+  /** What each integration called a device and where it put it, before the owner's settings. */
+  private origin = new Map<string, { name: string; room: string }>();
+
+  constructor(private store: Store, private sourceUrl: (name: string) => string | undefined = () => undefined, private settings: () => Record<string, DeviceSettings> = () => ({})) {
     super();
     this.saved = store.get<Record<string, DeviceState>>('deviceState') ?? {};
   }
@@ -89,14 +92,40 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
     for (const info of infos) {
       const existing = this.devices.get(info.id);
       if (existing && this.orphaned.delete(info.id)) { const { online: _gone, ...rest } = existing.state; existing.state = rest; }
-      this.devices.set(info.id, {
+      this.origin.set(info.id, { name: info.name, room: info.room });
+      this.devices.set(info.id, this.withSettings({
         ...info,
         capabilities: info.capabilities?.length ? info.capabilities : CAPS[info.type],
         adapter: a.id,
         state: { ...(info.state ?? {}), ...(this.saved[info.id] ?? {}), ...(existing?.state ?? {}) },
-      });
+      }));
     }
     this.emit('devices');
+  }
+
+  /** A device with the owner's name, room and visibility applied over what its integration reported. */
+  private withSettings(d: Device): Device {
+    const o = this.origin.get(d.id) ?? { name: d.name, room: d.room };
+    const s = this.settings()[d.id] ?? {};
+    const name = s.name?.trim() || o.name, room = s.room || o.room;
+    const out: Device = { ...d, name, room };
+    delete out.hidden; delete out.original;
+    if (s.hidden) out.hidden = true;
+    if (name !== o.name || room !== o.room) out.original = o;
+    return out;
+  }
+
+  /** Re-apply the owner's device settings (after they change). */
+  reapplySettings(): void {
+    let changed = false;
+    for (const d of this.devices.values()) {
+      const n = this.withSettings(d);
+      if (n.name !== d.name || n.room !== d.room || !!n.hidden !== !!d.hidden) changed = true;
+      d.name = n.name; d.room = n.room;
+      if (n.hidden) d.hidden = true; else delete d.hidden;
+      if (n.original) d.original = n.original; else delete d.original;
+    }
+    if (changed) this.emit('devices');
   }
 
   get(id: string): Device | undefined { return this.devices.get(id); }

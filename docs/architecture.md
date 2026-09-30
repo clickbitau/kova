@@ -26,16 +26,19 @@ add-on: nothing in Kova depends on HA. The design reference lives in
   unchanged from the design. The logic block at the bottom now reads from the
   hub (`/api/boot.js` for the first paint, `/api/ws` for live updates) and sends
   every action to the API.
-* **Phone app** (`web/phone.html`): the same, sized for a phone and installable
-  from Safari (Add to Home Screen). Its service worker (`web/sw.js`) shows push
-  notifications. The five tabs follow the phone design (Now, Rooms, Ask, Modes,
-  Activity); the ⊞ button on Now opens **More**: Security (camera live view over
-  WebRTC, who's home, today's events), Energy, Media (players, sources, stream
-  addresses), Integrations (the same setup as desktop, as a bottom sheet) and the
-  assistant settings. Each mode card has **Edit mode** (start, Light the way,
-  devices, moments). Links: `?cam=<id>` opens that camera live (the doorbell
-  notification's *View camera* uses it), `?page=security|energy|media|integrations`,
-  `?do=lights-off`. A lock-screen Live Activity needs a native app, so it isn't here.
+* **Phone app** (`web/phone.html`): installable from Safari (Add to Home Screen); its service
+  worker (`web/sw.js`) shows push notifications. Tabs: **Now** (the phone design's home screen;
+  tap the mode for Modes), **Devices** (every device by room, search, room and type filters, All
+  off per room; ⋯ opens the device panel), **Ask**, **Security** (live camera view over WebRTC, a
+  grid of all cameras with their latest event image, who's home, today's events) and **More**
+  (Modes, Activity, Energy, Media, Customise home, Integrations, Assistant). The device panel has
+  every control the device has (brightness, warmth, colour, volume and sources, purifier modes,
+  vacuum clean/dock, watch live, power readings), why it's like this and what's next, and its
+  settings: name, room, favourite, hidden. **Customise home** edits the home's name, rooms (name,
+  icon, order, delete with where their devices go), people, favourites and hidden devices. Links:
+  `?cam=<id>` opens that camera live (the doorbell notification's *View camera*),
+  `?page=security|more|modes|activity|energy|media|integrations|customise`, `?do=lights-off`.
+  A lock-screen Live Activity needs a native app, so it isn't here.
 * **Later:** Kova Cloud (accounts, remote access relay, backups, updates) and a
   native mobile app. Neither exists yet.
 
@@ -376,6 +379,12 @@ a row on the Integrations screen ("Router: 2 phones seen").
 | GET | `/api/integrations/nest/auth-url` | `?redirectUri=` → `{url, redirectUri}`: Google's page for linking Nest |
 | POST | `/api/integrations/nest/auth-code` | `{code, redirectUri}` → `{refreshToken}` to save as `nest.refreshToken`; with in-app setup it's saved for you and the answer is `{ok, linked, status}` |
 | GET | `/api/health` | `{ok, version, uptimeS}`; no token needed, no home data (for health checks) |
+| PATCH | `/api/devices/:id/settings` | `{name?, room?, hidden?, favourite?}` (`null` name or room goes back to the integration's) → `{undo}`. Devices carry `hidden` and `original: {name, room}` when changed |
+| PUT | `/api/home` | `{name}` |
+| POST, PUT, DELETE | `/api/rooms`, `/api/rooms/:id` | `{name, icon?}`; delete takes `{moveTo}` when the room still has devices |
+| PUT | `/api/rooms/order` | `{ids}`: every room id, in the new order |
+| POST, PUT, DELETE | `/api/people`, `/api/people/:id` | `{name, detail?}` |
+| PUT | `/api/favourites` | `{ids}`: the devices on Now, in order (also in the snapshot as `favourites`) |
 | GET | `/api/import/ha` | The last Home Assistant import: source, stats, integrations and where each goes (`moves`, `set-up`, `built-in`, `handoff`, `unsupported`), review items, handoffs, `applied`; `{scanned:false}` before one |
 | POST | `/api/import/ha/backup` | Body: a backup file (`application/octet-stream`, streamed); header `x-backup-key` for encrypted backups. 400 with `code` `needs-key`, `wrong-key` or `not-ha` |
 | POST | `/api/import/ha/folder` | `{path}`: read a config folder (or its `.storage`) on the hub |

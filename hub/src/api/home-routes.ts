@@ -1,0 +1,128 @@
+import type { FastifyInstance } from 'fastify';
+import type { Hub } from '../hub.ts';
+import type { HomeConfig } from '../model/types.ts';
+import { slug } from '../tools/import-ha.ts';
+
+// Customising the home: its name, rooms, people, favourites, and each device's name, room and
+// visibility. Settings live in the home config (so every phone sees the same), and every change
+// returns an undo id.
+
+type Reply = { code: (n: number) => { send: (b: { error: string }) => unknown } };
+const ROOM_ICONS = ['weekend', 'kitchen', 'desk', 'bed', 'single_bed', 'crib', 'music_note', 'local_laundry_service', 'garage_home', 'door_front', 'yard', 'bathtub', 'stairs', 'meeting_room', 'chair', 'tv', 'deck', 'balcony', 'fitness_center', 'checkroom'];
+
+export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
+  const edit = (fn: (c: HomeConfig) => void) => ({ undo: hub.engine.registerUndo(hub.config.update(fn)) });
+  const bad = (reply: Reply, msg: string, code = 400) => reply.code(code).send({ error: msg });
+  const text = (v: unknown, max = 60) => typeof v === 'string' ? v.trim().replace(/\s+/g, ' ').slice(0, max) : '';
+
+  app.get('/api/home/room-icons', async () => ({ icons: ROOM_ICONS }));
+
+  app.put<{ Body: { name?: string } }>('/api/home', async (req, reply) => {
+    const name = text(req.body?.name);
+    if (!name) return bad(reply, 'Give the home a name');
+    return edit(c => { c.name = name; });
+  });
+
+  // ---------------------------------------------------------------- devices --
+  app.patch<{ Params: { id: string }; Body: { name?: string | null; room?: string | null; hidden?: boolean; favourite?: boolean } }>('/api/devices/:id/settings', async (req, reply) => {
+    const d = hub.reg.get(req.params.id);
+    if (!d) return bad(reply, 'Unknown device', 404);
+    const b = req.body ?? {};
+    if (b.room != null && !hub.config.get().rooms.some(r => r.id === b.room)) return bad(reply, 'Unknown room');
+    if (b.name !== undefined && b.name !== null && !text(b.name)) return bad(reply, 'Give it a name');
+    return edit(c => {
+      const s = { ...(c.devices?.[d.id] ?? {}) };
+      const orig = d.original ?? { name: d.name, room: d.room };
+      if (b.name !== undefined) { const n = b.name === null ? '' : text(b.name); if (!n || n === orig.name) delete s.name; else s.name = n; }
+      if (b.room !== undefined) { if (!b.room || b.room === orig.room) delete s.room; else s.room = b.room; }
+      if (b.hidden !== undefined) { if (b.hidden) s.hidden = true; else delete s.hidden; }
+      c.devices = { ...(c.devices ?? {}) };
+      if (Object.keys(s).length) c.devices[d.id] = s; else delete c.devices[d.id];
+      if (b.favourite !== undefined) {
+        const f = (c.favourites ?? []).filter(x => x !== d.id);
+        c.favourites = b.favourite ? [...f, d.id] : f;
+      }
+    });
+  });
+
+  app.put<{ Body: { ids?: string[] } }>('/api/favourites', async (req, reply) => {
+    const ids = Array.isArray(req.body?.ids) ? [...new Set(req.body!.ids.map(String))] : null;
+    if (!ids) return bad(reply, 'ids is required');
+    const unknown = ids.find(id => !hub.reg.get(id));
+    if (unknown) return bad(reply, `Unknown device ${unknown}`);
+    return edit(c => { c.favourites = ids; });
+  });
+
+  // ------------------------------------------------------------------ rooms --
+  app.post<{ Body: { name?: string; icon?: string } }>('/api/rooms', async (req, reply) => {
+    const name = text(req.body?.name, 40);
+    if (!name) return bad(reply, 'Give the room a name');
+    const rooms = hub.config.get().rooms;
+    let id = slug(name) || 'room', n = 2;
+    while (rooms.some(r => r.id === id)) id = `${slug(name) || 'room'}_${n++}`;
+    const icon = ROOM_ICONS.includes(String(req.body?.icon)) ? String(req.body!.icon) : 'meeting_room';
+    return { id, ...edit(c => { c.rooms.push({ id, name, icon }); }) };
+  });
+
+  // Order first, so "order" isn't taken for a room id.
+  app.put<{ Body: { ids?: string[] } }>('/api/rooms/order', async (req, reply) => {
+    const ids = req.body?.ids ?? [];
+    const rooms = hub.config.get().rooms;
+    if (ids.length !== rooms.length || !rooms.every(r => ids.includes(r.id))) return bad(reply, 'Send every room id once, in the new order');
+    return edit(c => { c.rooms = ids.map(id => c.rooms.find(r => r.id === id)!); });
+  });
+
+  app.put<{ Params: { id: string }; Body: { name?: string; icon?: string } }>('/api/rooms/:id', async (req, reply) => {
+    if (!hub.config.get().rooms.some(r => r.id === req.params.id)) return bad(reply, 'Unknown room', 404);
+    const name = req.body?.name === undefined ? undefined : text(req.body.name, 40);
+    if (name === '') return bad(reply, 'Give the room a name');
+    const icon = req.body?.icon;
+    if (icon !== undefined && !ROOM_ICONS.includes(icon)) return bad(reply, 'Unknown icon');
+    return edit(c => { const r = c.rooms.find(x => x.id === req.params.id)!; if (name) r.name = name; if (icon) r.icon = icon; });
+  });
+
+  // Devices still in the room move to `moveTo`; without it, a room with devices can't be deleted.
+  app.delete<{ Params: { id: string }; Body: { moveTo?: string } }>('/api/rooms/:id', async (req, reply) => {
+    const id = req.params.id, cfg = hub.config.get();
+    if (!cfg.rooms.some(r => r.id === id)) return bad(reply, 'Unknown room', 404);
+    const inside = hub.reg.list().filter(d => d.room === id);
+    const moveTo = req.body?.moveTo;
+    if (inside.length && !moveTo) return bad(reply, `${inside.length} device${inside.length === 1 ? ' is' : 's are'} in this room. Choose where ${inside.length === 1 ? 'it goes' : 'they go'}.`);
+    if (moveTo && (moveTo === id || !cfg.rooms.some(r => r.id === moveTo))) return bad(reply, 'Unknown room to move devices to');
+    return edit(c => {
+      c.rooms = c.rooms.filter(r => r.id !== id);
+      c.devices = { ...(c.devices ?? {}) };
+      for (const d of inside) {
+        const orig = d.original?.room ?? d.room;
+        const s = { ...(c.devices[d.id] ?? {}) };
+        if (moveTo === orig) delete s.room; else s.room = moveTo;
+        if (Object.keys(s).length) c.devices[d.id] = s; else delete c.devices[d.id];
+      }
+      for (const [g, rooms] of Object.entries(c.groups)) c.groups[g] = rooms.filter(r => r !== id);
+    });
+  });
+
+  // ----------------------------------------------------------------- people --
+  app.post<{ Body: { name?: string; detail?: string } }>('/api/people', async (req, reply) => {
+    const name = text(req.body?.name, 40);
+    if (!name) return bad(reply, 'Give them a name');
+    const people = hub.config.get().people;
+    let id = slug(name) || 'person', n = 2;
+    while (people.some(p => p.id === id)) id = `${slug(name) || 'person'}_${n++}`;
+    hub.engine.people[id] ??= { home: true, since: hub.engine.now() };
+    return { id, ...edit(c => { c.people.push({ id, name, detail: text(req.body?.detail, 40) || 'Phone' }); }) };
+  });
+
+  app.put<{ Params: { id: string }; Body: { name?: string; detail?: string } }>('/api/people/:id', async (req, reply) => {
+    if (!hub.config.get().people.some(p => p.id === req.params.id)) return bad(reply, 'Unknown person', 404);
+    const name = req.body?.name === undefined ? undefined : text(req.body.name, 40);
+    if (name === '') return bad(reply, 'Give them a name');
+    const detail = req.body?.detail === undefined ? undefined : text(req.body.detail, 40);
+    return edit(c => { const p = c.people.find(x => x.id === req.params.id)!; if (name) p.name = name; if (detail !== undefined) p.detail = detail || 'Phone'; });
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/people/:id', async (req, reply) => {
+    if (!hub.config.get().people.some(p => p.id === req.params.id)) return bad(reply, 'Unknown person', 404);
+    return edit(c => { c.people = c.people.filter(p => p.id !== req.params.id); });
+  });
+}
