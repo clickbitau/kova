@@ -7,6 +7,7 @@ tested against your real history.
 
 - `hub/`: the backend that runs in the home (TypeScript, Node 22+, SQLite)
 - `web/`: the web app (the v3 design, wired to the hub)
+- `docs/install.md`: **installing it for real** (Proxmox LXC, Debian/Ubuntu, Docker), backups, restore, updates
 - `docs/architecture.md`: how it fits together
 - `docs/design/`: the design handoff (prototypes, design language, sitemap)
 
@@ -40,6 +41,10 @@ Or write `data/integrations.json` by hand: see [docs/architecture.md](docs/archi
 | `KOVA_WEATHER` | on | `0` to skip Met.no weather |
 | `KOVA_HOMEKIT` | off | `1` to publish an Apple Home (HomeKit) bridge; setup code is in the log and at `/api/integrations/homekit` |
 | `KOVA_HOMEKIT_PORT` | `51826` | TCP port for the HomeKit bridge |
+| `KOVA_HOST` | `0.0.0.0` | Address to listen on |
+| `KOVA_BACKUP_TIME` | `03:10` | Nightly backup, in the home's timezone; `off` to disable |
+| `KOVA_BACKUP_KEEP` | `14` | Backups to keep |
+| `KOVA_BACKUP_DIR` | `<KOVA_DATA>/backups` | Where backups go |
 | `KOVA_MATTER_BRIDGE` | off | `1` to run Kova as a Matter bridge for Google Home, Alexa, SmartThings and Apple Home; pairing code is in the log and at `/api/integrations/matter-bridge` (state in `<KOVA_DATA>/matter-bridge`; needs IPv6 + mDNS) |
 | `KOVA_MATTER_BRIDGE_PORT` | `5540` | UDP port for the Matter bridge |
 
@@ -51,6 +56,13 @@ In short: give Kova your OPNsense API key and each person's phone MAC, add an iO
 `GET /api/presence/setup`, and either subscribe to an [ntfy](https://ntfy.sh) topic (works over plain HTTP,
 nothing else to set up) or turn on notifications in the Kova phone app (needs HTTPS and the app on the Home Screen).
 
+## Install
+
+See **[docs/install.md](docs/install.md)**: a one-command Proxmox LXC installer
+(`deploy/proxmox/create-kova-lxc.sh`), `deploy/install.sh` for any Debian/Ubuntu
+machine (systemd service, `kova` user, data in `/var/lib/kova`), Docker, importing
+from Home Assistant, nightly backups and restore, and `deploy/update.sh`.
+
 ## Docker
 
 ```bash
@@ -58,7 +70,8 @@ docker build -t kova .
 docker run -d --name kova --network host -v kova-data:/data kova
 ```
 
-Host networking lets Kova discover devices over mDNS and SSDP.
+Host networking lets Kova discover devices over mDNS and SSDP. The container runs as
+uid 1000 and reports health from `/api/health`.
 
 ## Try the demo
 

@@ -24,6 +24,8 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
   /** Last known state per device, so a restart doesn't forget what things were doing. */
   private saved: Record<string, DeviceState>;
   private saveTimer: NodeJS.Timeout | null = null;
+  /** Devices marked offline because their adapter was removed; a new adapter announcing them clears that. */
+  private orphaned = new Set<string>();
 
   constructor(private store: Store, private sourceUrl: (name: string) => string | undefined = () => undefined) {
     super();
@@ -56,6 +58,27 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
     }
   }
 
+  /**
+   * Stop one adapter and take it out. Its devices stay (same ids, so modes and
+   * overlays that name them keep working) and show as offline until an adapter
+   * announces them again, unless `forget` is set: then they're dropped from the
+   * list, though their last state is kept for when they come back.
+   */
+  async removeAdapter(id: string, opts: { forget?: boolean } = {}): Promise<boolean> {
+    const a = this.adapters.get(id);
+    if (!a) return false;
+    this.adapters.delete(id);
+    await a.stop().catch(() => {});
+    for (const d of this.list().filter(x => x.adapter === id)) {
+      this.saved[d.id] = d.state;
+      if (opts.forget) this.devices.delete(d.id);
+      else { d.state = { ...d.state, online: false }; this.orphaned.add(d.id); }
+    }
+    this.persist();
+    this.emit('devices');
+    return true;
+  }
+
   async stop(): Promise<void> {
     if (this.saveTimer) { clearTimeout(this.saveTimer); this.saveTimer = null; }
     this.flush();
@@ -65,6 +88,7 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
   private announce(a: Adapter, infos: DeviceInfo[]): void {
     for (const info of infos) {
       const existing = this.devices.get(info.id);
+      if (existing && this.orphaned.delete(info.id)) { const { online: _gone, ...rest } = existing.state; existing.state = rest; }
       this.devices.set(info.id, {
         ...info,
         capabilities: info.capabilities?.length ? info.capabilities : CAPS[info.type],
