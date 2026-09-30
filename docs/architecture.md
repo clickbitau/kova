@@ -83,7 +83,7 @@ It never makes decisions. See `sdk.ts`.
 |---|---|
 | `virtual` | The demo home: 28 devices modelled on the owner's former setup. On by default (`KOVA_DEMO=0` turns it off). |
 | `sonos` | Local UPnP. Discovers speakers over SSDP, or uses `KOVA_SONOS_HOSTS` for speakers on another VLAN. Supports play source / pause / volume, and polls state every 5 s. Tested against a fake speaker only; not yet tried on real hardware. |
-| Matter | Next. Planned on `matter.js`. |
+| `matter` | Matter over IP as a controller on Kova's own fabric, built on matter.js (`@matter/main` 0.17). On with `KOVA_MATTER=1`; fabric and paired nodes live in `<KOVA_DATA>/matter`. Add a device with its 11/21-digit pairing code or `MT:` QR payload (`POST /api/integrations/matter/commission`); devices already in Google Home / Apple Home join through multi-admin after opening a pairing window there. No BLE, so a brand-new Wi-Fi/Thread device must first be set up by a phone app. Announces one device per On/Off light (`light`), dimmable light (`dimmer`, + `colorTemp` / `color` from ColorControl) and plug (`plug`); ids `matter_<node>_<endpoint>`, room `unassigned` unless given when adding. Follows changes through a subscription and reports `online:false` when it drops. Needs IPv6 and mDNS on the host network (use host networking in Docker). Tested against a matter.js virtual light on matter.js's simulated network; not yet tried on real hardware. |
 | Google Cast, TP-Link (Kasa/Tapo), Tuya local, Hue, VeSync, Nest, GoodWe… | Planned. |
 
 ## API
@@ -96,6 +96,7 @@ It never makes decisions. See `sdk.ts`.
 | WS | `/api/ws` | Pushes `{type:'state'}` on every change |
 | POST | `/api/devices/:id` | Command `{on, bri, k, color, mode, media, vol}` → `{undo}` |
 | POST | `/api/devices/:id/event` | Device event `{type:'person'|'ring'|…}` (webhooks, testing) |
+| POST | `/api/integrations/matter/commission` | Add a Matter device `{code, room?, name?}` → `{ok, devices}` (needs `KOVA_MATTER=1`) |
 | POST | `/api/rooms/:id/off` | Room lights off → `{undo}` |
 | POST | `/api/overlays/:id/start`, `/api/overlays/end` | |
 | POST | `/api/plan/skip` | `{id, skip}`: skip tonight |

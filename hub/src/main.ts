@@ -4,6 +4,7 @@ import { Hub } from './hub.ts';
 import { buildServer } from './api/server.ts';
 import { VirtualAdapter } from './adapters/virtual.ts';
 import { SonosAdapter } from './adapters/sonos.ts';
+import { MatterAdapter } from './adapters/matter.ts';
 import { Weather } from './services/weather.ts';
 import { demoConfig, demoDevices } from './seed/demo-home.ts';
 import type { Adapter } from './adapters/sdk.ts';
@@ -16,6 +17,7 @@ const demo = env.KOVA_DEMO !== '0';
 const adapters: Adapter[] = [];
 if (demo) adapters.push(new VirtualAdapter(demoDevices()));
 if (env.KOVA_SONOS === '1') adapters.push(new SonosAdapter());
+if (env.KOVA_MATTER === '1') adapters.push(new MatterAdapter({ storageDir: resolve(dataDir, 'matter') }));
 
 const hub = new Hub({
   dbPath: resolve(dataDir, 'kova.db'),

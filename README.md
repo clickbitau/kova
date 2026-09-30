@@ -15,7 +15,7 @@ tested against your real history.
 ```bash
 npm install
 npm run dev          # http://localhost:8140, with a demo home of virtual devices
-npm test             # engine, findings, assistant, Sonos adapter, API
+npm test             # engine, findings, assistant, Sonos and Matter adapters, API
 ```
 
 | Env var | Default | |
@@ -25,6 +25,7 @@ npm test             # engine, findings, assistant, Sonos adapter, API
 | `KOVA_DEMO` | on | `0` to run without the virtual demo home |
 | `KOVA_SONOS` | off | `1` to discover Sonos speakers |
 | `KOVA_SONOS_HOSTS` | | Comma-separated speaker IPs (for speakers on another VLAN) |
+| `KOVA_MATTER` | off | `1` to run the Matter controller (state in `<KOVA_DATA>/matter`; needs IPv6 + mDNS on the host network) |
 | `KOVA_TOKEN` | | Require a bearer token on the API |
 | `KOVA_WEATHER` | on | `0` to skip Met.no weather |
 

@@ -6,6 +6,7 @@ import type { Hub } from '../hub.ts';
 import type { Command } from '../model/types.ts';
 import type { AskAction } from '../assistant/assistant.ts';
 import { VirtualAdapter } from '../adapters/virtual.ts';
+import { MatterAdapter } from '../adapters/matter.ts';
 import { snapshot } from './snapshot.ts';
 import { isLight, isPlayer } from '../util/describe.ts';
 
@@ -74,6 +75,18 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
     if (!(v instanceof VirtualAdapter) || hub.reg.get(req.params.id)?.adapter !== 'virtual') return reply.code(400).send({ error: 'not a virtual device' });
     v.physical(req.params.id, req.body);
     return { ok: true };
+  });
+
+  // Add a Matter device with its pairing code (for one already in Google Home / Apple Home, open a pairing window there first).
+  app.post<{ Body: { code?: string; room?: string; name?: string } }>('/api/integrations/matter/commission', async (req, reply) => {
+    const m = hub.reg.adapters.get('matter');
+    if (!(m instanceof MatterAdapter)) return reply.code(400).send({ error: 'Matter is not enabled (set KOVA_MATTER=1)' });
+    const code = String(req.body?.code ?? '').trim();
+    if (!code) return reply.code(400).send({ error: 'code is required' });
+    try {
+      const devices = await m.commission(code, { room: req.body?.room || undefined, name: req.body?.name || undefined });
+      return { ok: true, devices: devices.map(d => hub.reg.get(d.id) ?? d) };
+    } catch (e) { return fail(reply, e); }
   });
 
   app.post<{ Params: { id: string }; Body: { what?: 'lights' | 'all' } }>('/api/rooms/:id/off', async req => {
