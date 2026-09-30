@@ -5,7 +5,7 @@
 #   bash deploy/install.sh                      # from a checkout (uses it in place if it's at --dir)
 #   curl -fsSL https://raw.githubusercontent.com/clickbitau/kova/main/deploy/install.sh | bash
 #
-# What it does: installs Node 22 (NodeSource) and git, gets the code into /opt/kova,
+# What it does: installs Node 22 (NodeSource), git and a C toolchain (hap-controller builds a native Bluetooth module), gets the code into /opt/kova,
 # runs `npm ci`, creates a `kova` system user, keeps data in /var/lib/kova, writes
 # /etc/kova/kova.env (with a random API token), installs and starts kova.service,
 # waits for /api/health and prints the URL.
@@ -80,7 +80,7 @@ fi
 # ---------------------------------------------------------------- packages --
 log "Installing base packages"
 run apt-get update -qq
-run env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ca-certificates curl gnupg git
+run env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ca-certificates curl gnupg git build-essential python3
 
 # -------------------------------------------------------------------- node --
 # Kova needs Node 22.13 or later on the 22 line (node:sqlite).

@@ -54,6 +54,15 @@ export function importHomeAssistant(storageDir: string): ImportResult {
     return addRoom(guess || 'Unassigned');
   };
   const byEntry = (id: string) => devices.find(d => d.config_entries.includes(id));
+  // Device ids are shared by every integration: a Nest Hub is both a Cast speaker and a Nest camera
+  // ("living_room_display" twice), and the second one would hide the first.
+  const taken = new Set<string>();
+  const unique = (id: string): string => {
+    let u = id;
+    for (let n = 2; taken.has(u); n++) u = `${id}_${n}`;
+    taken.add(u);
+    return u;
+  };
 
   const integrations: Integrations = {};
 
@@ -67,7 +76,7 @@ export function importHomeAssistant(storageDir: string): ImportResult {
         const switches: Record<string, { name: string; room: string; type: 'light' | 'plug'; id: string }> = {};
         for (const e of d.entities ?? []) {
           if (e.platform !== 'switch' && e.platform !== 'light') continue;
-          switches[String(e.id)] = { name: e.friendly_name, room, type: 'light', id: `${room}_${slug(e.friendly_name)}` };
+          switches[String(e.id)] = { name: e.friendly_name, room, type: 'light', id: unique(`${room}_${slug(e.friendly_name)}`) };
         }
         const version = d.protocol_version === '3.4' || d.protocol_version === '3.5' ? d.protocol_version : '3.3' as const;
         if (!['3.3', '3.4', '3.5'].includes(d.protocol_version ?? '3.3')) report.push(`Tuya ${d.friendly_name}: protocol ${d.protocol_version} isn't supported yet`);
@@ -88,7 +97,7 @@ export function importHomeAssistant(storageDir: string): ImportResult {
       devices: tp.map(e => {
         const alias = String(e.data.alias ?? e.title);
         const room = roomFor(alias, byEntry(e.entry_id)?.area_id);
-        return { host: String(e.data.host), room, name: alias, id: `${room}_${slug(alias)}` };
+        return { host: String(e.data.host), room, name: alias, id: unique(`${room}_${slug(alias)}`) };
       }),
     };
     report.push(`TP-Link Tapo: ${tp.length} devices${hash ? '' : ' (add your TP-Link email and password: no stored credentials found)'}`);
@@ -102,7 +111,7 @@ export function importHomeAssistant(storageDir: string): ImportResult {
     for (const d of casts) {
       const name = d.name_by_user ?? d.name ?? '';
       rooms2[name] = roomFor(name, d.area_id);
-      ids[name] = `${rooms2[name]}_${slug(name.replace(new RegExp(rooms.find(r => r.id === rooms2[name])?.name ?? '^$', 'i'), '')) || 'speaker'}`;
+      ids[name] = unique(`${rooms2[name]}_${slug(name.replace(new RegExp(rooms.find(r => r.id === rooms2[name])?.name ?? '^$', 'i'), '')) || 'speaker'}`);
     }
     integrations.cast = { rooms: rooms2, ids };
     const groups = devices.filter(d => d.config_entries.includes(castEntry.entry_id) && /group/i.test(d.model ?? ''));
@@ -138,7 +147,7 @@ export function importHomeAssistant(storageDir: string): ImportResult {
   // GoodWe solar inverter over Modbus TCP.
   const gw = entries.find(e => e.domain === 'goodwe');
   if (gw?.data.host) {
-    integrations.goodwe = { host: String(gw.data.host), port: Number(gw.data.port ?? 502), room: roomFor('Solar inverter', byEntry(gw.entry_id)?.area_id), name: 'Solar inverter', id: 'solar_inverter' };
+    integrations.goodwe = { host: String(gw.data.host), port: Number(gw.data.port ?? 502), room: roomFor('Solar inverter', byEntry(gw.entry_id)?.area_id), name: 'Solar inverter', id: unique('solar_inverter') };
     report.push(`GoodWe solar: ${gw.data.host}${gw.data.model_family && gw.data.model_family !== 'DT' ? ` (family ${gw.data.model_family}: check the register map)` : ''}`);
   }
 
@@ -183,8 +192,7 @@ export function importHomeAssistant(storageDir: string): ImportResult {
       kinds[kind] = (kinds[kind] ?? 0) + 1;
       rooms2[key] = room;
       // The first doorbell keeps the id "doorbell" so Light the way triggers written for it keep working.
-      const id = kind === 'doorbell' && !Object.values(ids).includes('doorbell') ? 'doorbell' : `${room}_${kind}`;
-      ids[key] = Object.values(ids).includes(id) ? `${id}_${Object.keys(ids).length + 1}` : id;
+      ids[key] = unique(kind === 'doorbell' && !taken.has('doorbell') ? 'doorbell' : `${room}_${kind}`);
     }
     integrations.nest = {
       projectId: String(nest.data.project_id), clientId, clientSecret, refreshToken,

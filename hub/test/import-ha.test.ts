@@ -86,3 +86,20 @@ test('imports a Nest sign-in only when it is stored in plain form, and never pri
   assert.ok(!text.includes('plain-refresh-token') && !text.includes('GOCSPX') && !text.includes('1234-abc'), 'no secrets in the report');
   assert.ok(adaptersFor(r.integrations, tmpdir()).some(a => a.id === 'nest'));
 });
+
+test('a device that is both a Cast speaker and a Nest camera gets two distinct ids', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ha-'));
+  const w = (f: string, data: unknown) => writeFileSync(join(dir, f), JSON.stringify({ version: 1, data }));
+  w('core.area_registry', { areas: [{ id: 'living_room', name: 'Living Room' }] });
+  w('core.config_entries', { entries: [
+    { entry_id: 'c', domain: 'cast', title: 'Google Cast', data: {} },
+    { entry_id: 'nest', domain: 'nest', title: 'Home', data: { project_id: 'p1' } },
+  ] });
+  w('core.device_registry', { devices: [
+    { name: 'Living Room display', area_id: null, config_entries: ['c'], model: 'Google Nest Hub Max' },
+    { name: 'Living Room', area_id: 'living_room', config_entries: ['nest'], model: 'Display' },
+  ] });
+  const r = importHomeAssistant(dir);
+  assert.equal(r.integrations.cast!.ids!['Living Room display'], 'living_room_display');
+  assert.equal(r.integrations.nest!.ids!['Living Room'], 'living_room_display_2');
+});
