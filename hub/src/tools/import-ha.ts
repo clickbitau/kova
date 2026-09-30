@@ -68,15 +68,15 @@ export function importHomeAssistant(storageDir: string): ImportResult {
           if (e.platform !== 'switch' && e.platform !== 'light') continue;
           switches[String(e.id)] = { name: e.friendly_name, room, type: 'light', id: `${room}_${slug(e.friendly_name)}` };
         }
-        const version = d.protocol_version === '3.4' ? '3.4' as const : '3.3' as const;
-        if (!['3.3', '3.4'].includes(d.protocol_version ?? '3.3')) report.push(`Tuya ${d.friendly_name}: protocol ${d.protocol_version} isn't supported yet`);
+        const version = d.protocol_version === '3.4' || d.protocol_version === '3.5' ? d.protocol_version : '3.3' as const;
+        if (!['3.3', '3.4', '3.5'].includes(d.protocol_version ?? '3.3')) report.push(`Tuya ${d.friendly_name}: protocol ${d.protocol_version} isn't supported yet`);
         return { id: d.device_id ?? key, host: d.host, key: d.local_key, version, switches };
       }),
     };
     report.push(`Tuya (local): ${integrations.tuya.devices.length} devices, ${integrations.tuya.devices.reduce((n, d) => n + Object.keys(d.switches ?? {}).length, 0)} switch channels`);
   }
   const tuyaCloud = devices.filter(d => d.config_entries.some(c => entries.find(e => e.entry_id === c)?.domain === 'tuya') && /lighting|light/i.test(d.model ?? ''));
-  if (tuyaCloud.length) report.push(`Tuya cloud-only lights to set up locally later: ${tuyaCloud.map(d => d.name_by_user ?? d.name).join(', ')}`);
+  if (tuyaCloud.length) report.push(`Tuya cloud-only lights to set up locally: ${tuyaCloud.map(d => d.name_by_user ?? d.name).join(', ')}. Fetch their local keys once with src/tools/tuya-keys.ts --merge`);
 
   // TP-Link Tapo (KLAP). HA keeps a credentials hash we can use directly.
   const tp = entries.filter(e => e.domain === 'tplink');
