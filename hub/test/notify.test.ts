@@ -141,7 +141,8 @@ test('Notify: doorbell ring → ntfy and an encrypted Web Push (RFC 8291), logge
     const msg = JSON.parse(phone.decrypt(p.body));
     assert.equal(msg.title, 'Someone’s at the front door');
     assert.equal(msg.body, n.json.message);
-    assert.equal(msg.url, '/phone.html');
+    assert.equal(msg.url, '/phone.html?cam=doorbell');
+    assert.deepEqual(msg.actions, [{ action: 'view-camera', title: 'View camera', url: '/phone.html?cam=doorbell' }]);
 
     const logged = hub.store.feed(20).find(e => e.kind === 'system' && e.what === 'Notified: Someone’s at the front door');
     assert.ok(logged, 'logged to Activity');
