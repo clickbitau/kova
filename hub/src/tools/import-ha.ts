@@ -6,7 +6,7 @@ import { defaultHome } from '../seed/default-home.ts';
 
 // One-way import from a Home Assistant `.storage` folder: rooms, people,
 // location, the local connection details for Tuya, TP-Link Tapo, Cast and
-// Samsung TVs, and the VeSync account email (not its password).
+// Samsung TVs, and the VeSync and Ecovacs account emails (not their passwords).
 // Kova never talks to Home Assistant; this only reads its files once.
 //
 //   npx tsx src/tools/import-ha.ts /path/to/homeassistant/.storage [out-dir]
@@ -141,7 +141,24 @@ export function importHomeAssistant(storageDir: string): ImportResult {
     report.push(`GoodWe solar: ${gw.data.host}${gw.data.model_family && gw.data.model_family !== 'DT' ? ` (family ${gw.data.model_family}: check the register map)` : ''}`);
   }
 
-  for (const d of ['sonos', 'matter', 'nest', 'ecovacs']) {
+  // Ecovacs (DEEBOT vacuums): cloud-only. Take the account email, country and vacuum rooms; the password stays with you.
+  const ev = entries.find(e => e.domain === 'ecovacs');
+  if (ev?.data.username) {
+    const rooms2: Record<string, string> = {};
+    for (const d of devices.filter(d => d.config_entries.includes(ev.entry_id))) {
+      const name = d.name ?? '';
+      if (name) rooms2[name] = roomFor(d.name_by_user ?? name, d.area_id);
+    }
+    const country = String(ev.data.country ?? '').toLowerCase();
+    integrations.ecovacs = {
+      email: String(ev.data.username), password: '', country: country || 'us',
+      ...(ev.data.continent ? { continent: String(ev.data.continent).toLowerCase() } : {}),
+      ...(Object.keys(rooms2).length ? { rooms: rooms2 } : {}),
+    };
+    report.push(`Ecovacs (cloud): account ${String(ev.data.username)}${country ? ` (${country})` : ' (no country found: set ecovacs.country)'}${Object.keys(rooms2).length ? `, ${Object.keys(rooms2).length} vacuums` : ''}. Enter your Ecovacs password as ecovacs.password in integrations.json: it isn't imported`);
+  }
+
+  for (const d of ['sonos', 'matter', 'nest']) {
     if (entries.some(e => e.domain === d)) report.push(`${d}: not imported yet`);
   }
 

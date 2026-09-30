@@ -19,12 +19,14 @@ function fixture() {
     { entry_id: 'c', domain: 'cast', title: 'Google Cast', data: {} },
     { entry_id: 'tv', domain: 'samsungtv', title: 'Living Room TV', data: { host: '10.0.0.20', mac: 'aa:bb:cc:dd:ee:ff', method: 'websocket', port: 8002, token: 'ha-token' } },
     { entry_id: 'vs', domain: 'vesync', title: 'VeSync', data: { username: 'me@example.com', password: 'not-imported' } },
+    { entry_id: 'ev', domain: 'ecovacs', title: 'me@example.com', data: { username: 'me@example.com', password: 'not-imported', country: 'AU', mode: 'cloud' } },
   ] });
   w('core.device_registry', { devices: [
     { name: 'Lamp', area_id: 'living_room', config_entries: ['tp1'] },
     { name: 'Music Room Speaker', area_id: null, config_entries: ['c'], model: 'Nest Audio' },
     { name: 'Home Speaker Group', area_id: null, config_entries: ['c'], model: 'Google Cast Group' },
     { name: 'Bedroom Purifier', area_id: 'living_room', config_entries: ['vs'], model: 'Core300S' },
+    { name: 'Deebot', area_id: 'living_room', config_entries: ['ev'], model: 'DEEBOT T50 OMNI' },
   ] });
   return dir;
 }
@@ -48,6 +50,9 @@ test('imports rooms, people and local device details from a Home Assistant folde
   assert.equal(r.integrations.vesync!.password, '', 'the password is never imported');
   assert.deepEqual(r.integrations.vesync!.devices, { 'Bedroom Purifier': { room: 'living_room' } });
   assert.ok(r.report.some(l => l.includes('VeSync') && l.includes('password')));
-  // VeSync waits for a password; everything else starts.
+  assert.deepEqual(r.integrations.ecovacs, { email: 'me@example.com', password: '', country: 'au', rooms: { Deebot: 'living_room' } });
+  assert.ok(r.report.some(l => l.includes('Ecovacs') && l.includes('password')));
+  assert.ok(!r.report.some(l => l.includes('ecovacs: not imported')));
+  // VeSync and Ecovacs wait for a password; everything else starts.
   assert.deepEqual(adaptersFor(r.integrations, tmpdir()).map(a => a.id), ['tuya', 'tapo', 'cast', 'samsungtv']);
 });

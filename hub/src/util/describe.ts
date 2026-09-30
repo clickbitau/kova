@@ -9,10 +9,12 @@ export const CAPS: Record<DeviceType, Capability[]> = {
   plug: ['onoff', 'power'],
   camera: ['events'],
   sensor: ['events'],
+  vacuum: ['onoff', 'vacuum', 'battery'],
 };
 
 const FIELD_CAP: Record<string, Capability> = {
   on: 'onoff', bri: 'brightness', k: 'colorTemp', color: 'color', mode: 'fanMode', media: 'media', vol: 'volume', power: 'power',
+  activity: 'vacuum', battery: 'battery',
 };
 
 /** Drop fields the device can't do, so a mode can target mixed brands safely. */
@@ -30,6 +32,7 @@ export const isPlayer = (d: Pick<Device, 'type'>) => d.type === 'media' || d.typ
 
 /** Chip text for a target: "Lamp 78% · 3000K", "Speaker · Tarateel 15%", "Ceiling off". */
 export function targetLabel(d: Device, t: Command): string {
+  if (d.type === 'vacuum') return t.on === false || t.activity === 'returning' || t.activity === 'docked' ? `${d.name} docks` : `${d.name} cleans`;
   if (d.type === 'fan') return `${d.name} on ${t.mode ?? (t.on === false ? 'off' : 'Auto')}`;
   if (isPlayer(d)) return t.on === false || t.media === null ? `${d.name} stops` : `${d.name} · ${t.media ?? 'on'}${t.vol != null ? ` ${t.vol}%` : ''}`;
   if (t.on === false) return `${d.name} off`;
@@ -39,6 +42,11 @@ export function targetLabel(d: Device, t: Command): string {
 
 /** Activity-feed sentence for a single device change: "Lamp dimmed to 78%". */
 export function changeSentence(d: Device, prev: Command, next: Command): string {
+  if (d.type === 'vacuum') {
+    const a = next.activity ?? (next.on === true ? 'cleaning' : next.on === false ? 'returning' : undefined);
+    const says: Record<string, string> = { cleaning: 'started cleaning', returning: 'heading back to its dock', docked: 'docked', paused: 'paused', idle: 'stopped', error: 'needs attention' };
+    if (a) return `${d.name} ${says[a]}`;
+  }
   if (d.type === 'fan' && next.mode) return `${d.name} set to ${next.mode}`;
   if (isPlayer(d)) {
     if (next.on === false || next.media === null) return `${d.name} stopped`;

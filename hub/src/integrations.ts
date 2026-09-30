@@ -11,6 +11,7 @@ import type { AirCastOptions } from './bridges/aircast.ts';
 import { VeSyncAdapter, type VeSyncOptions } from './adapters/vesync.ts';
 import { SamsungTvAdapter, type SamsungTvOptions } from './adapters/samsung-tv.ts';
 import { HomeKitControllerAdapter, type HomeKitAccessoryConfig } from './adapters/homekit-controller.ts';
+import { EcovacsAdapter, type EcovacsOptions } from './adapters/ecovacs.ts';
 
 /**
  * What's connected in this home, and how to reach it. Lives in
@@ -38,6 +39,8 @@ export interface Integrations {
   samsungtv?: Omit<SamsungTvOptions, 'storageDir'> & { storageDir?: string };
   /** HomeKit accessories Kova controls. Pairing happens in the app; keys live in `<KOVA_DATA>/homekit-controller/`. */
   homekit?: { accessories?: HomeKitAccessoryConfig[] };
+  /** DEEBOT robot vacuums through the Ecovacs cloud (needs the Ecovacs account). */
+  ecovacs?: EcovacsOptions;
 }
 
 export function loadIntegrations(path: string): Integrations | null {
@@ -54,6 +57,7 @@ export function adaptersFor(i: Integrations, dataDir = resolve(process.env.KOVA_
   if (i.airplay?.url) out.push(new AirPlayAdapter(i.airplay));
   if (i.goodwe?.host) out.push(new GoodWeAdapter(i.goodwe));
   if (i.vesync?.email && i.vesync.password) out.push(new VeSyncAdapter(i.vesync));
+  if (i.ecovacs?.email && i.ecovacs.password) out.push(new EcovacsAdapter(i.ecovacs));
   if (i.samsungtv?.tvs.length) out.push(new SamsungTvAdapter({ ...i.samsungtv, storageDir: i.samsungtv.storageDir ?? join(dataDir, 'samsungtv') }));
   if (i.homekit) out.push(new HomeKitControllerAdapter({ storageDir: join(dataDir, 'homekit-controller'), accessories: i.homekit.accessories }));
   return out;
