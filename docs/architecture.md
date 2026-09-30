@@ -86,6 +86,25 @@ It never makes decisions. See `sdk.ts`.
 | Matter | Next. Planned on `matter.js`. |
 | Google Cast, TP-Link (Kasa/Tapo), Tuya local, Hue, VeSync, Nest, GoodWe… | Planned. |
 
+## Bridges (`hub/src/bridges/`)
+
+A bridge is the reverse of an adapter: it exposes Kova's devices to another
+ecosystem. It sits on top of the registry, sends every write through
+`engine.command()` (so it's logged, undoable and overlay-aware, with the cause
+"Apple Home"), and pushes registry changes back out.
+
+**Apple Home** (`homekit.ts`, on `hap-nodejs`; `KOVA_HOMEKIT=1`) publishes one
+HAP bridge named after the home. Lights and dimmers become Lightbulbs (with
+Brightness, ColorTemperature and Hue/Saturation when the device has them),
+plugs become Outlets, purifiers become AirPurifiers (`Auto` ↔ AUTO, any other
+mode ↔ MANUAL), and each overlay (Movie, Date, Party…) becomes a Switch that
+starts or ends it. Speakers, TVs, cameras and sensors aren't exposed yet.
+Accessory UUIDs are derived from device ids, and the bridge's MAC, setup code
+and pairings live in `$KOVA_DATA/homekit/`, so restarts keep Home app rooms and
+scenes. `GET /api/integrations/homekit` returns the setup code and the
+`X-HM://` payload for a pairing QR code. mDNS uses ciao (pure JS), so the hub
+needs host networking (or macvlan) for iPhones to find it.
+
 ## API
 
 | Method | Path | |
@@ -104,6 +123,7 @@ It never makes decisions. See `sdk.ts`.
 | POST | `/api/people/:id/presence` | `{home, source}`, e.g. from an iOS Shortcut until the app exists |
 | POST | `/api/undo/:id` | |
 | POST | `/api/ask`, `/api/ask/act` | Ask Kova |
+| GET | `/api/integrations/homekit` | `{enabled, pincode, setupURI, paired}` for the Apple Home bridge |
 
 Set `KOVA_TOKEN` to require `Authorization: Bearer <token>` on every API call.
 Open the UI once with `?token=…` and it remembers the token. This is a stopgap

@@ -8,11 +8,14 @@ import type { AskAction } from '../assistant/assistant.ts';
 import { VirtualAdapter } from '../adapters/virtual.ts';
 import { snapshot } from './snapshot.ts';
 import { isLight, isPlayer } from '../util/describe.ts';
+import type { HomeKitBridge } from '../bridges/homekit.ts';
 
 export interface ServerOptions {
   webRoot: string;
   /** When set, every /api call needs `Authorization: Bearer <token>` (or ?token= for the WebSocket and boot script). */
   token?: string;
+  /** The Apple Home bridge, when KOVA_HOMEKIT=1. */
+  homekit?: HomeKitBridge;
 }
 
 const USER = { kind: 'user' as const, label: 'You' };
@@ -43,6 +46,13 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
   app.get('/api/boot.js', async (_req, reply) => {
     reply.type('application/javascript').header('cache-control', 'no-store');
     return `window.KOVA_BOOT=${JSON.stringify(snapshot(hub)).replace(/</g, '\\u003c')};`;
+  });
+
+  // Pairing info for the Apple Home bridge (setup code + X-HM:// payload for a QR code).
+  app.get('/api/integrations/homekit', async () => {
+    const hk = opts.homekit;
+    if (!hk) return { enabled: false };
+    return { enabled: true, ...hk.setupInfo(), paired: hk.paired };
   });
 
   app.get<{ Querystring: { at?: string; hour?: string } }>('/api/preview', async req => {

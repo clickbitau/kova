@@ -27,6 +27,8 @@ npm test             # engine, findings, assistant, Sonos adapter, API
 | `KOVA_SONOS_HOSTS` | | Comma-separated speaker IPs (for speakers on another VLAN) |
 | `KOVA_TOKEN` | | Require a bearer token on the API |
 | `KOVA_WEATHER` | on | `0` to skip Met.no weather |
+| `KOVA_HOMEKIT` | off | `1` to publish an Apple Home (HomeKit) bridge; setup code is in the log and at `/api/integrations/homekit` |
+| `KOVA_HOMEKIT_PORT` | `51826` | TCP port for the HomeKit bridge |
 
 ## Docker
 

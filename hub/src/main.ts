@@ -8,6 +8,7 @@ import { adaptersFor, loadIntegrations } from './integrations.ts';
 import { existsSync, readFileSync } from 'node:fs';
 import type { HomeConfig } from './model/types.ts';
 import { Weather } from './services/weather.ts';
+import { HomeKitBridge } from './bridges/homekit.ts';
 import { demoConfig, demoDevices } from './seed/demo-home.ts';
 import type { Adapter } from './adapters/sdk.ts';
 
@@ -42,11 +43,18 @@ if (demo && !hub.store.get('seeded')) {
   hub.store.set('seeded', true);
 }
 
-const app = await buildServer(hub, { webRoot: resolve(here, '../../web'), token: env.KOVA_TOKEN || undefined });
+let homekit: HomeKitBridge | undefined;
+if (env.KOVA_HOMEKIT === '1') {
+  homekit = new HomeKitBridge(hub, { storageDir: resolve(dataDir, 'homekit'), port: Number(env.KOVA_HOMEKIT_PORT ?? 51826) });
+  await homekit.start();
+  console.log(`Apple Home bridge published · setup code ${homekit.setupInfo().pincode}`);
+}
+
+const app = await buildServer(hub, { webRoot: resolve(here, '../../web'), token: env.KOVA_TOKEN || undefined, homekit });
 const port = Number(env.KOVA_PORT ?? 8140);
 await app.listen({ port, host: env.KOVA_HOST ?? '0.0.0.0' });
 console.log(`Kova hub listening on http://localhost:${port}${demo ? ' (demo home)' : ''}`);
 
-const shutdown = async () => { await app.close(); await hub.stop(); process.exit(0); };
+const shutdown = async () => { await app.close(); await homekit?.stop(); await hub.stop(); process.exit(0); };
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
