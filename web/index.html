@@ -8,6 +8,8 @@
 <script>try{if(matchMedia("(max-width: 640px)").matches&&!/[?&]desktop/.test(location.search))location.replace("/phone.html"+location.search)}catch(e){}</script>
 <script>(function(){var t="";try{var u=new URL(location.href);t=u.searchParams.get("token")||localStorage.getItem("kova_token")||"";if(u.searchParams.get("token"))localStorage.setItem("kova_token",t)}catch(e){}document.write('<script src="/api/boot.js'+(t?"?token="+encodeURIComponent(t):"")+'"><\/script>')})();</script>
 <script src="./support.js"></script>
+<link rel="stylesheet" href="./motion.css">
+<script src="./sting.js"></script>
 </head>
 <body>
 <x-dc>
@@ -32,7 +34,7 @@
 </div>
 <div onClick="{{ toggleAdvanced }}" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;cursor:pointer" style-hover="background:rgba(255,255,255,0.05)">
 <div style="display:flex;flex-direction:column;flex:1"><span style="font-size:13px;font-weight:600">Advanced mode</span><span style="font-size:11px;color:#a3a09a">Code, entity ids, dev tools</span></div>
-<div style="width:34px;height:20px;border-radius:10px;padding:2px;display:flex;justify-content:{{ advJustify }};background:{{ advTrack }}"><div style="width:16px;height:16px;border-radius:50%;background:#fff"></div></div>
+<div style="width:34px;height:20px;border-radius:10px;padding:2px;display:flex;justify-content:flex-start;background:{{ advTrack }}"><div style="width:16px;height:16px;border-radius:50%;background:#fff;transform:{{ advKnob }}"></div></div>
 </div>
 </div>
 </aside>
@@ -78,6 +80,7 @@
 <div style="display:flex;flex-direction:column;gap:10px">
 <h2 style="margin:0;font-size:17px;font-weight:700">Just happened</h2>
 <div style="background:#16171a;border-radius:16px;padding:4px 16px">
+<sc-if value="{{ noHappened }}" hint-placeholder-val="{{ false }}"><div style="padding:14px 0;font-size:13.5px;color:#a3a09a">Nothing yet. Changes Kova makes show up here with why.</div></sc-if>
 <sc-for list="{{ happened }}" as="hp" hint-placeholder-count="3"><div style="display:flex;gap:12px;padding:12px 0;border-top:1px solid rgba(255,255,255,0.05)"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#a3a09a;width:40px;padding-top:2px">{{ hp.t }}</span><div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:0"><span style="font-size:14px;font-weight:600">{{ hp.what }}</span><span style="font-size:12px;color:#a3a09a;display:flex;align-items:center;gap:5px"><span style="font-family:'Material Symbols Rounded';font-size:14px">subdirectory_arrow_right</span>{{ hp.why }}</span></div></div></sc-for>
 </div>
 </div>
@@ -159,7 +162,7 @@
 <sc-if value="{{ sm.editing }}" hint-placeholder-val="{{ false }}"><sc-for list="{{ ed.moments }}" as="mo" hint-placeholder-count="1"><div style="display:flex;gap:10px;align-items:center;padding:8px 10px 8px 12px;border-radius:10px;background:#1c1d20"><span style="font-size:13px;font-weight:600;flex:1">{{ mo.text }}</span><div onClick="{{ mo.remove }}" style="width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:rgba(255,255,255,0.05)"><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#ff6b5e">delete</span></div></div></sc-for>
 <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center"><input value="{{ ed.momentLabel }}" onChange="{{ ed.setMomentLabel }}" placeholder="New moment, e.g. Porch off" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px;flex:1;min-width:160px"><input type="time" value="{{ ed.momentAt }}" onChange="{{ ed.setMomentAt }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px"><select value="{{ ed.addDevice }}" onChange="{{ ed.setAddDevice }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px"><sc-for list="{{ ed.deviceOptions }}" as="o" hint-placeholder-count="6"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select><select value="{{ ed.addState }}" onChange="{{ ed.setAddState }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px"><sc-for list="{{ ed.stateOptions }}" as="o" hint-placeholder-count="4"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select><div onClick="{{ ed.addMoment }}" style="padding:8px 14px;border-radius:10px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;cursor:pointer">Add moment</div></div></sc-if>
 </div>
-<div onClick="{{ sm.toggleLtw }}" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;background:#1c1d20;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#f2b14c">footprint</span><div style="display:flex;flex-direction:column;gap:2px;flex:1"><span style="font-size:13px;font-weight:700">Light the way in this mode</span><span style="font-size:12px;color:#a3a09a">Lights follow people seen by cameras or arriving home</span></div><div style="width:34px;height:20px;border-radius:10px;padding:2px;display:flex;justify-content:{{ sm.ltwJustify }};background:{{ sm.ltwTrack }}"><div style="width:16px;height:16px;border-radius:50%;background:#fff"></div></div></div>
+<div onClick="{{ sm.toggleLtw }}" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;background:#1c1d20;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#f2b14c">footprint</span><div style="display:flex;flex-direction:column;gap:2px;flex:1"><span style="font-size:13px;font-weight:700">Light the way in this mode</span><span style="font-size:12px;color:#a3a09a">Lights follow people seen by cameras or arriving home</span></div><div style="width:34px;height:20px;border-radius:10px;padding:2px;display:flex;justify-content:flex-start;background:{{ sm.ltwTrack }}"><div style="width:16px;height:16px;border-radius:50%;background:#fff;transform:{{ sm.ltwKnob }}"></div></div></div>
 <div style="display:flex;flex-direction:column;gap:10px;padding:16px;border-radius:14px;border:1px solid rgba(255,255,255,0.08)">
 <div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#7fd4a0">history</span><span style="font-size:14px;font-weight:700;flex:1">Tested on the last 14 days</span></div>
 <div style="display:grid;grid-template-columns:repeat(14,1fr);gap:5px"><sc-for list="{{ sm.days }}" as="d" hint-placeholder-count="14"><div style="aspect-ratio:1;border-radius:5px;background:{{ d.bg }}"></div></sc-for></div>
@@ -235,7 +238,7 @@
 <div onClick="{{ a.open }}" style="display:flex;align-items:center;gap:14px;padding:13px 16px;cursor:pointer;border-top:1px solid rgba(255,255,255,0.05);background:{{ a.bg }}" style-hover="background:#1c1d21">
 <div style="width:34px;height:34px;border-radius:10px;flex:none;display:flex;align-items:center;justify-content:center;background:#222327;color:{{ a.iconFg }}"><span style="font-family:'Material Symbols Rounded';font-size:19px">{{ a.icon }}</span></div>
 <div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:14px;font-weight:700;color:{{ a.nameFg }}">{{ a.name }}</span><span style="font-size:12px;color:#a3a09a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ a.summary }}</span></div>
-<div onClick="{{ a.toggle }}" style="width:34px;height:20px;border-radius:10px;padding:2px;flex:none;display:flex;justify-content:{{ a.justify }};background:{{ a.track }}"><div style="width:16px;height:16px;border-radius:50%;background:#fff"></div></div>
+<div onClick="{{ a.toggle }}" style="width:34px;height:20px;border-radius:10px;padding:2px;flex:none;display:flex;justify-content:flex-start;background:{{ a.track }}"><div style="width:16px;height:16px;border-radius:50%;background:#fff;transform:{{ a.knob }}"></div></div>
 </div>
 </sc-for>
 </div>
@@ -367,7 +370,7 @@
 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:16px;align-items:start">
 <div style="display:flex;flex-direction:column;gap:12px">
 <div style="border-radius:18px;overflow:hidden;background:#16171a">
-<div style="aspect-ratio:16/9;background:repeating-linear-gradient(135deg,#1b1c1f 0 12px,#202125 12px 24px);display:flex;align-items:center;justify-content:center;position:relative"><sc-if value="{{ camMain.streaming }}" hint-placeholder-val="{{ false }}"><video ref="{{ camMain.videoRef }}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000"></video></sc-if><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#6f6d69;padding:0 16px;text-align:center">{{ camMain.slot }}</span><sc-if value="{{ camMain.hasCam }}" hint-placeholder-val="{{ false }}"><div onClick="{{ camMain.liveAct }}" style="position:absolute;bottom:12px;left:12px;display:flex;align-items:center;gap:6px;padding:9px 14px;border-radius:999px;background:rgba(0,0,0,0.55);font-size:12px;font-weight:700;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:18px">{{ camMain.liveIcon }}</span>{{ camMain.liveLabel }}</div></sc-if><div style="position:absolute;top:12px;left:12px;display:flex;align-items:center;gap:6px;padding:4px 9px;border-radius:999px;background:rgba(0,0,0,0.55);font-size:11px;font-weight:700"><div style="width:6px;height:6px;border-radius:50%;background:#ff6b5e"></div>LIVE</div><div style="position:absolute;bottom:12px;right:12px;display:flex;gap:8px"><div style="width:38px;height:38px;border-radius:50%;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:20px">mic</span></div><div style="width:38px;height:38px;border-radius:50%;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:20px">fullscreen</span></div></div></div>
+<div style="aspect-ratio:16/9;background:repeating-linear-gradient(135deg,#1b1c1f 0 12px,#202125 12px 24px);display:flex;align-items:center;justify-content:center;position:relative"><sc-if value="{{ camMain.streaming }}" hint-placeholder-val="{{ false }}"><video ref="{{ camMain.videoRef }}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000"></video></sc-if><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#6f6d69;padding:0 16px;text-align:center">{{ camMain.slot }}</span><sc-if value="{{ camMain.hasCam }}" hint-placeholder-val="{{ false }}"><div onClick="{{ camMain.liveAct }}" style="position:absolute;bottom:12px;left:12px;display:flex;align-items:center;gap:6px;padding:9px 14px;border-radius:999px;background:rgba(0,0,0,0.55);font-size:12px;font-weight:700;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:18px">{{ camMain.liveIcon }}</span>{{ camMain.liveLabel }}</div></sc-if><sc-if value="{{ camMain.streaming }}" hint-placeholder-val="{{ true }}"><div style="position:absolute;top:12px;left:12px;display:flex;align-items:center;gap:6px;padding:4px 9px;border-radius:999px;background:rgba(0,0,0,0.55);font-size:11px;font-weight:700"><div style="width:6px;height:6px;border-radius:50%;background:#ff6b5e"></div>LIVE</div></sc-if><sc-if value="{{ camMain.streaming }}" hint-placeholder-val="{{ true }}"><div style="position:absolute;bottom:12px;right:12px;display:flex;gap:8px"><div onClick="{{ camMain.toggleSound }}" title="Sound" style="width:38px;height:38px;border-radius:50%;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px">{{ camMain.soundIcon }}</span></div><div onClick="{{ camMain.fullscreen }}" title="Full screen" style="width:38px;height:38px;border-radius:50%;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px">fullscreen</span></div></div></sc-if></div>
 <div style="padding:12px 16px;display:flex;justify-content:space-between;align-items:center"><span style="font-size:15px;font-weight:700">{{ camMain.name }}</span><span style="font-size:12px;color:#a3a09a">{{ camMain.last }}</span></div>
 </div>
 <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
@@ -385,6 +388,7 @@
 </div>
 <div style="background:#16171a;border-radius:18px;padding:18px;display:flex;flex-direction:column;gap:4px">
 <span style="font-size:15px;font-weight:700;margin-bottom:6px">Today’s events</span>
+<sc-if value="{{ noSecEvents }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;color:#a3a09a;padding:4px 0">Nothing yet today.</span></sc-if>
 <sc-for list="{{ secEvents }}" as="se" hint-placeholder-count="5">
 <div style="display:flex;gap:12px;padding:9px 0;border-top:1px solid rgba(255,255,255,0.05);align-items:center"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#a3a09a;width:40px">{{ se.t }}</span><span style="font-family:'Material Symbols Rounded';font-size:18px;color:{{ se.fg }}">{{ se.icon }}</span><span style="font-size:13px;flex:1">{{ se.text }}</span></div>
 </sc-for>
@@ -727,7 +731,7 @@ class Component extends DCLogic {
   componentWillUnmount(){this._closed=true;try{this._ws&&this._ws.close()}catch(e){}this.stopLive(true)}
   componentDidUpdate(){if(this._pc&&this.state.screen!=='security')this.stopLive()}
   // ---- camera live view: WebRTC straight from the camera's cloud (Nest) to this browser; the hub only relays the offer/answer ----
-  videoRef=el=>{if(el&&this._stream&&el.srcObject!==this._stream){el.srcObject=this._stream;el.muted=true;el.playsInline=true;el.autoplay=true;el.play().catch(()=>{})}}
+  videoRef=el=>{if(el)this._video=el;if(el&&this._stream&&el.srcObject!==this._stream){el.srcObject=this._stream;el.muted=!this.state.sound;el.playsInline=true;el.autoplay=true;el.play().catch(()=>{})}}
   async goLive(d){
     this.stopLive(true);
     const cam=d.id,NO='Live view isn’t available for this camera yet';
@@ -881,7 +885,7 @@ class Component extends DCLogic {
       groups:SM.groups.length?SM.groups:[{room:'Everywhere',chips:['Nothing changes']}],hasInherit:SM.inherit.length>0,inherit:`Still on from earlier: ${lst(SM.inherit)}.`,
       moments:SM.moments,noMoments:SM.moments.length?'':'Nothing else happens during this mode.',
       days:(SM.test.days.length?SM.test.days:Array(14).fill('none')).map(c=>({bg:DAYC[c]})),testText:SM.test.text,
-      ltwJustify:SM.lightTheWay?'flex-end':'flex-start',ltwTrack:SM.lightTheWay?'#f2b14c':'#35363a',
+      ltwJustify:SM.lightTheWay?'flex-end':'flex-start',ltwKnob:SM.lightTheWay?'translateX(14px)':'none',ltwTrack:SM.lightTheWay?'#f2b14c':'#35363a',
       toggleLtw:()=>api('PATCH','/api/modes/'+SM.id,{lightTheWay:!SM.lightTheWay}).then(r=>this.toast(`Light the way ${SM.lightTheWay?'off':'on'} in ${SM.name}`,this.undoFn(r.undo))).catch(x=>this.err(x)),
       preview:()=>{this.setState({screen:'home'});if(SM.start!=null)this.setPreview((SM.start+0.25)%24)},
       editing:!!s.editing,notEditing:!s.editing,toggleEdit:()=>this.setState(p=>({editing:!p.editing,edStart:null})),editLabel:s.editing?'Done':'Edit',editBg:s.editing?'#f2b14c':'rgba(255,255,255,0.06)',editFg:s.editing?'#1a1408':'#f1efea'};
@@ -894,7 +898,7 @@ class Component extends DCLogic {
     return {mode,previewing:ph!=null,previewText:ph!=null?`Previewing ${fmt(ph)} · ${M.name}. This is what the home will look like.`:'',previewLeft:ph!=null?(ph/24*100)+'%':'0%',previewTime:ph!=null?fmt(ph):'',backToNow:()=>this.setPreview(null),
       nowLeft:(nowH/24*100)+'%',nowLabel:ph!=null?`Preview · ${fmt(ph)}`:`${H.home.dateLabel} · ${H.home.clock} · ${tzCity}`,lightsOnLabel:`${lightsOn} light${lightsOn===1?'':'s'} on`,
       scrub:e=>{const r=e.currentTarget.getBoundingClientRect();const hh=Math.max(0,Math.min(23.95,(e.clientX-r.left)/r.width*24));this.setPreview(Math.abs(hh-nowH)<0.3?null:hh)},
-      bands,tlEvents,happened,upcoming,overlays,overlayOn:!!ovOn,overlay:ovOn?{icon:ovOn.icon,label:`${ovOn.name} is on · ${ovOn.endsLabel.toLowerCase()}`}:{icon:'',label:''},
+      bands,tlEvents,happened,noHappened:!happened.length,upcoming,overlays,overlayOn:!!ovOn,overlay:ovOn?{icon:ovOn.icon,label:`${ovOn.name} is on · ${ovOn.endsLabel.toLowerCase()}`}:{icon:'',label:''},
       endOverlay:()=>api('POST','/api/overlays/end').then(()=>this.toast('Back to '+this.modeById(H.current.modeId).name)).catch(x=>this.err(x)),
       roomCards,findings,hasFindings:n>0,findingsHeadline:n?`${n} thing${n===1?'':'s'} worth a look: ${H.findings[0].title.charAt(0).toLowerCase()+H.findings[0].title.slice(1)}`:'',
       modeList,sm,ed,ltwText:`When someone is seen or arrives, light their way for ${range} minutes. On in ${ltwModes.join(', ')||'no modes'}.`,ltwSub:`${H.lightTheWay.length} trigger${H.lightTheWay.length===1?'':'s'}`,
@@ -926,8 +930,10 @@ class Component extends DCLogic {
     const cm=devs[camId];
     const lv=cm&&s.live&&s.live.cam===cm.id?s.live:null,liveOn=!!(lv&&(lv.streaming||lv.msg==='Connecting…'));
     const camMain=cm?{name:RN[cm.room]||cm.name,last:lastSeen(cm.id),slot:lv&&lv.msg?lv.msg:`${(RN[cm.room]||cm.name).toLowerCase()} stream`,
-      hasCam:true,streaming:!!(lv&&lv.streaming),videoRef:this.videoRef,liveIcon:liveOn?'stop':'play_arrow',liveLabel:liveOn?'Stop':'Live',liveAct:()=>liveOn?this.stopLive():this.goLive(cm)}
-      :{name:'No cameras',last:'',slot:'no camera connected',hasCam:false,streaming:false,videoRef:null,liveIcon:'',liveLabel:'',liveAct:()=>{}};
+      hasCam:true,streaming:!!(lv&&lv.streaming),videoRef:this.videoRef,soundIcon:s.sound?'volume_up':'volume_off',
+      toggleSound:()=>{const on=!s.sound;if(this._video){this._video.muted=!on;this._video.play().catch(()=>{})}this.setState({sound:on})},
+      fullscreen:()=>{const v=this._video;if(!v)return;try{(v.requestFullscreen||v.webkitRequestFullscreen||v.webkitEnterFullscreen).call(v)}catch(e){}},liveIcon:liveOn?'stop':'play_arrow',liveLabel:liveOn?'Stop':'Live',liveAct:()=>liveOn?this.stopLive():this.goLive(cm)}
+      :{name:'No cameras',last:'',slot:'no camera connected',hasCam:false,streaming:false,videoRef:null,soundIcon:'',toggleSound:()=>{},fullscreen:()=>{},liveIcon:'',liveLabel:'',liveAct:()=>{}};
     const camThumbs=cams.map(c=>({name:RN[c.room]||c.name,pick:()=>{if(c.id!==camId&&this._pc)this.stopLive();this.setState({camSel:c.id})},ring:camId===c.id?'2px solid #f2b14c':'none'}));
     const people=H.people.map(p=>({initial:p.name[0],name:p.name,detail:`${p.detail}${p.sinceLabel?` · ${p.home?'home':'left'} since ${p.sinceLabel}`:''}`,status:p.home?'Home':'Away'}));
     const secEvents=H.activity.filter(a=>a.type==='people').slice(0,6).map(a=>({t:a.t,icon:a.icon,fg:a.icon==='doorbell'?'#7cb8f0':a.icon==='person'?'#f2b14c':'#7fd4a0',text:a.what}));
@@ -958,7 +964,7 @@ class Component extends DCLogic {
     return {isEnergy:s.screen==='energy',isSecurity:s.screen==='security',isMedia:s.screen==='media',isActivity:s.screen==='activity',isAssistant:s.screen==='assistant',isIntegrations:s.screen==='integrations',
       sourceRows,editSources:!!s.editSources,toggleSources:()=>this.setState(p=>({editSources:!p.editSources})),sourcesLink:s.editSources?'Done':missingUrls?`Set stream addresses · ${missingUrls} missing`:'Edit stream addresses',
       energyBars,energyStats,energyDevices,...env,camMain,camThumbs,people,secEvents,mp,sources,players,mediaCount:`${pls.filter(d=>d.on).length} playing · ${pls.length} players`,
-      secSummary:`${cams.length} camera${cams.length===1?'':'s'} · ${H.people.length} ${H.people.length===1?'person':'people'}`,
+      noSecEvents:!secEvents.length,secSummary:`${cams.length} camera${cams.length===1?'':'s'} · ${H.people.length} ${H.people.length===1?'person':'people'}`,
       actFilters,activity,inbox,inboxEmpty:!inbox.length,inboxTitle:inbox.length?`Needs you · ${inbox.length}`:'Needs you',
       askSub:`Runs locally · knows your ${list.length} devices, ${H.rooms.length} rooms and ${H.modes.length} modes`,
       chat,asks:ASKS.map(text=>({text,ask:()=>this.reply(text)})),draft:s.draft,setDraft:e=>this.setState({draft:e.target.value}),draftKey:e=>{if(e.key==='Enter'&&s.draft.trim())this.reply(s.draft.trim())},sendDraft:()=>{if(s.draft.trim())this.reply(s.draft.trim())},
@@ -1017,7 +1023,7 @@ class Component extends DCLogic {
     // Imported rules (sample data until the Home Assistant importer lands).
     const RP=[['0px','40px','column'],['28px','12px','column'],['74px','10px','column-reverse'],['74px','38px','column-reverse']];
     const strip=AUTOS.filter(a=>a.kind==='time').sort((x,y)=>x.at-y.at).map((a,i)=>{const [top,tick,dir]=RP[i%4];return{label:a.label+' '+fmt(a.at),left:(a.at/24*100)+'%',top,tick,dir,bg:s.sel===a.id?'#f2b14c':'#26272b',fg:s.sel===a.id?'#1a1408':'#f1efea',open:()=>this.setState({sel:a.id})}});
-    const item=a=>({name:a.name,icon:a.icon,summary:a.when[0]+(a.cond.length?', '+a.cond[0].toLowerCase():'')+' → '+a.then[0],bg:s.sel===a.id?'#1f2024':'transparent',iconFg:'#6f6d69',nameFg:'#8a8781',justify:'flex-start',track:'#35363a',open:()=>this.setState({sel:a.id}),toggle:e=>e.stopPropagation()});
+    const item=a=>({name:a.name,icon:a.icon,summary:a.when[0]+(a.cond.length?', '+a.cond[0].toLowerCase():'')+' → '+a.then[0],bg:s.sel===a.id?'#1f2024':'transparent',iconFg:'#6f6d69',nameFg:'#8a8781',justify:'flex-start',knob:'none',track:'#35363a',open:()=>this.setState({sel:a.id}),toggle:e=>e.stopPropagation()});
     const autoGroups=[{title:'On a schedule',items:AUTOS.filter(a=>a.kind==='time').map(item)},{title:'When something happens',items:AUTOS.filter(a=>a.kind==='event').map(item)}];
     const A=AUTOS.find(a=>a.id===s.sel)||AUTOS[0];
     const sel={name:A.name,status:'Replaced',stBg:'rgba(255,255,255,0.06)',stFg:'#a3a09a',lastRun:A.last,code:code(A),parts:[{k:'When',chips:A.when,bg:'#f2b14c',fg:'#1a1408'}].concat(A.cond.length?[{k:'Only if',chips:A.cond,bg:'#26272b',fg:'#f1efea'}]:[]).concat([{k:'Then',chips:A.then,bg:'#26272b',fg:'#f1efea'}])};
@@ -1052,7 +1058,7 @@ class Component extends DCLogic {
       autoCount:`${AUTOS.length} imported rules · now ${H.modes.length} modes and 1 behaviour`,strip,autoGroups,sel,merging:false,applyMerge:()=>{},closeMerge:()=>{},testSel:()=>this.setState({screen:'modes'}),
       steps,importStats,review,reviewTitle:`Needs your review · ${REVIEW.length-doneN} left`,handoffs,
       q:s.q,setQ:e=>this.setState({q:e.target.value}),entities,advanced:adv,
-      toggleAdvanced:()=>this.setState(p=>({advanced:!p.advanced,tab:'simple',screen:p.screen==='dev'?'home':p.screen})),advJustify:adv?'flex-end':'flex-start',advTrack:adv?'#f2b14c':'#35363a',
+      toggleAdvanced:()=>this.setState(p=>({advanced:!p.advanced,tab:'simple',screen:p.screen==='dev'?'home':p.screen})),advJustify:adv?'flex-end':'flex-start',advKnob:adv?'translateX(14px)':'none',advTrack:adv?'#f2b14c':'#35363a',
       drawerOpen:!!D,dr,tabs,tabSimple:s.tab==='simple',tabDetails:s.tab==='details',tabCode:s.tab==='code'&&adv,closeDrawer:()=>this.setState({drawer:null}),
       ...this.moreVals(s,H,devs,list,go),
       ...this.v3Vals(s,H,devs,go),

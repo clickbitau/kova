@@ -98,7 +98,8 @@ export function snapshot(hub: Hub) {
   return {
     home: {
       name: cfg.name, timezone: tz, now, nowHour: localHour(now, tz), date: today,
-      dateLabel: new Date(now).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'short', timeZone: tz }),
+      // en-AU writes September as "Sept"; the design (and every other month) uses three letters.
+      dateLabel: new Date(now).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'short', timeZone: tz }).replace(/\bSept\b/, 'Sep'),
       clock: clock(now, tz),
     },
     rooms: cfg.rooms,

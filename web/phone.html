@@ -12,6 +12,8 @@
 <link rel="apple-touch-icon" href="./assets/logo/kova-app-icon.svg">
 <script>(function(){var t="";try{var u=new URL(location.href);t=u.searchParams.get("token")||localStorage.getItem("kova_token")||"";if(u.searchParams.get("token"))localStorage.setItem("kova_token",t)}catch(e){}document.write('<script src="/api/boot.js'+(t?"?token="+encodeURIComponent(t):"")+'"><\/script>')})();</script>
 <script src="./support.js"></script>
+<link rel="stylesheet" href="./motion.css">
+<script src="./sting.js"></script>
 </head>
 <body>
 <x-dc>
@@ -271,7 +273,7 @@
 <div onClick="{{ closeSheet }}" style="position:absolute;inset:0;background:rgba(0,0,0,0.55)"></div>
 <div style="position:absolute;left:0;right:0;bottom:0;border-radius:28px 28px 0 0;background:#141517;padding:10px 20px 40px;display:flex;flex-direction:column;gap:16px">
 <div style="width:40px;height:5px;border-radius:3px;background:#35363a;align-self:center"></div>
-<div style="display:flex;justify-content:space-between;align-items:center"><div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:12px;color:#a3a09a">{{ sh.room }}</span><span style="font-size:22px;font-weight:700">{{ sh.name }}</span></div><div onClick="{{ sh.toggle }}" style="width:52px;height:32px;border-radius:16px;padding:3px;display:flex;justify-content:{{ sh.justify }};background:{{ sh.track }};cursor:pointer"><div style="width:26px;height:26px;border-radius:50%;background:#fff"></div></div></div>
+<div style="display:flex;justify-content:space-between;align-items:center"><div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:12px;color:#a3a09a">{{ sh.room }}</span><span style="font-size:22px;font-weight:700">{{ sh.name }}</span></div><div onClick="{{ sh.toggle }}" style="width:52px;height:32px;border-radius:16px;padding:3px;display:flex;justify-content:flex-start;background:{{ sh.track }};cursor:pointer"><div style="width:26px;height:26px;border-radius:50%;background:#fff;transform:{{ sh.knob }}"></div></div></div>
 <sc-if value="{{ sh.dimmable }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:8px"><div style="display:flex;justify-content:space-between;font-size:13px;font-weight:600"><span>Brightness</span><span style="color:#a3a09a">{{ sh.briLabel }}</span></div><input type="range" min="1" max="100" value="{{ sh.bri }}" onChange="{{ sh.setBri }}" style="width:100%;height:28px"></div></sc-if>
 <div style="display:flex;flex-direction:column;border-radius:14px;background:#1c1d20;overflow:hidden"><div style="display:flex;gap:12px;padding:12px 14px"><span style="font-family:'Material Symbols Rounded';font-size:19px;color:#a3a09a">help</span><div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">Why it’s like this</span><span style="font-size:13px;line-height:1.45">{{ sh.why }}</span></div></div><div style="display:flex;gap:12px;padding:12px 14px;border-top:1px solid rgba(255,255,255,0.05)"><span style="font-family:'Material Symbols Rounded';font-size:19px;color:#f2b14c">schedule</span><div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">What’s next</span><span style="font-size:13px;line-height:1.45">{{ sh.next }}</span></div></div></div>
 </div>
@@ -294,7 +296,7 @@
 </div>
 </div>
 
-<div onClick="{{ ed.toggleLtw }}" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;background:#1c1d20;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#f2b14c">directions_walk</span><div style="display:flex;flex-direction:column;gap:2px;flex:1"><span style="font-size:14px;font-weight:700">Light the way</span><span style="font-size:12px;color:#a3a09a">Light people’s way when they’re seen or arrive</span></div><div style="width:46px;height:28px;flex:none;border-radius:14px;padding:3px;display:flex;justify-content:{{ ed.ltwJustify }};background:{{ ed.ltwTrack }}"><div style="width:22px;height:22px;border-radius:50%;background:#fff"></div></div></div>
+<div onClick="{{ ed.toggleLtw }}" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;background:#1c1d20;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#f2b14c">directions_walk</span><div style="display:flex;flex-direction:column;gap:2px;flex:1"><span style="font-size:14px;font-weight:700">Light the way</span><span style="font-size:12px;color:#a3a09a">Light people’s way when they’re seen or arrive</span></div><div style="width:46px;height:28px;flex:none;border-radius:14px;padding:3px;display:flex;justify-content:flex-start;background:{{ ed.ltwTrack }}"><div style="width:22px;height:22px;border-radius:50%;background:#fff;transform:{{ ed.ltwKnob }}"></div></div></div>
 
 <div style="display:flex;flex-direction:column;gap:8px">
 <span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">When it starts</span>
@@ -431,7 +433,7 @@
 <sc-if value="{{ usesAi }}" hint-placeholder-val="{{ false }}">
 <div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:12px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">What the AI can see</span>
 <div style="border-radius:16px;background:#1c1d20;overflow:hidden">
-<sc-for list="{{ shares }}" as="sh2" hint-placeholder-count="5"><div onClick="{{ sh2.toggle }}" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid rgba(255,255,255,0.05);cursor:pointer;opacity:{{ sh2.op }}"><span style="font-family:'Material Symbols Rounded';font-size:19px;color:#a3a09a">{{ sh2.icon }}</span><div style="display:flex;flex-direction:column;gap:2px;flex:1"><span style="font-size:13.5px;font-weight:600">{{ sh2.name }}</span><span style="font-size:11.5px;color:#8a8781">{{ sh2.note }}</span></div><div style="width:34px;height:20px;border-radius:10px;padding:2px;display:flex;justify-content:{{ sh2.justify }};background:{{ sh2.track }}"><div style="width:16px;height:16px;border-radius:50%;background:#fff"></div></div></div></sc-for>
+<sc-for list="{{ shares }}" as="sh2" hint-placeholder-count="5"><div onClick="{{ sh2.toggle }}" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid rgba(255,255,255,0.05);cursor:pointer;opacity:{{ sh2.op }}"><span style="font-family:'Material Symbols Rounded';font-size:19px;color:#a3a09a">{{ sh2.icon }}</span><div style="display:flex;flex-direction:column;gap:2px;flex:1"><span style="font-size:13.5px;font-weight:600">{{ sh2.name }}</span><span style="font-size:11.5px;color:#8a8781">{{ sh2.note }}</span></div><div style="width:34px;height:20px;border-radius:10px;padding:2px;display:flex;justify-content:flex-start;background:{{ sh2.track }}"><div style="width:16px;height:16px;border-radius:50%;background:#fff;transform:{{ sh2.knob }}"></div></div></div></sc-for>
 </div>
 <span style="font-size:11.5px;color:#8a8781;line-height:1.45">Built-in commands never go to the AI. Only requests Kova can’t understand are sent, and each one shows up in Activity.</span>
 </div>
@@ -486,6 +488,8 @@ function resRows(r){if(r==null||typeof r!=='object')return[{k:'Result',v:String(
   const show=v=>Array.isArray(v)?(v.length?v.map(x=>x&&typeof x==='object'?(x.name||x.id||JSON.stringify(x)):String(x)).join('\n'):'None'):v&&typeof v==='object'?Object.entries(v).map(([a,b])=>`${human(a)}: ${b&&typeof b==='object'?JSON.stringify(b):b}`).join('\n'):String(v);
   const rows=Object.entries(r).filter(([k])=>k!=='ok'&&k!=='enabled').map(([k,v])=>({k:human(k),v:show(v),font:/code|payload|pin|url/i.test(k)?"'JetBrains Mono',monospace":'inherit'}));
   return rows.length?rows:[{k:'Done',v:'OK',font:'inherit'}]}
+// "Wednesday 30 Sept" → "Wed 30 Sep", as in the phone design.
+const shortDate=d=>String(d||'').replace(/^(\w{3})\w*/,'$1').replace(/\bSept\b/,'Sep');
 const FAV_KEY='kova_favs';
 const loadFavs=()=>{try{return JSON.parse(localStorage.getItem(FAV_KEY)||'null')}catch(e){return null}};
 // Push notifications: service worker + Web Push subscription (iOS needs HTTPS and the app on the Home Screen).
@@ -738,7 +742,7 @@ class Component extends DCLogic {
       saveStart:()=>{const at=s.edStart?.at??(cur&&cur.kind==='time'?cur.at:'20:00');const off=Number(s.edStart?.offset??(cur&&cur.offsetMin||0))||0;
         const [kind,name]=ek.split(':');const start=kind==='time'?{kind:'time',at}:kind==='sun'?{kind:'sun',event:name,offsetMin:off}:{kind:'prayer',prayer:name,offsetMin:off};
         put('/api/modes/'+SM.id,{start},`${SM.name} start saved`).then(()=>this.setState({edStart:null}))},
-      ltwJustify:SM.lightTheWay?'flex-end':'flex-start',ltwTrack:SM.lightTheWay?'#f2b14c':'#35363a',
+      ltwJustify:SM.lightTheWay?'flex-end':'flex-start',ltwKnob:SM.lightTheWay?'translateX(18px)':'none',ltwTrack:SM.lightTheWay?'#f2b14c':'#35363a',
       toggleLtw:()=>api('PATCH','/api/modes/'+SM.id,{lightTheWay:!SM.lightTheWay}).then(r=>this.toast(`Light the way ${SM.lightTheWay?'off':'on'} in ${SM.name}`,this.undoFn(r.undo))).catch(x=>this.err(x)),
       targets,noTargets:!targets.length,
       deviceOptions:DEVS.map(d=>({v:d.id,label:`${RN[d.room]||d.room} · ${d.name}`})),addDevice:addDev,addState,stateOptions:stateOptions.map(([v,label])=>({v,label})),
@@ -770,14 +774,17 @@ class Component extends DCLogic {
       doFix:()=>api('POST',`/api/findings/${encodeURIComponent(f.id)}/fix`).then(r=>{this.setState({modeOpen:f.modeId});this.toast(f.id.startsWith("learn:moment:")?"Added to your day":`${m.name} updated`,this.undoFn(r.undo))}).catch(x=>this.err(x)),
       doAlt:()=>api('POST',`/api/findings/${encodeURIComponent(f.id)}/dismiss`).then(r=>this.toast('Kept as is',this.undoFn(r.undo))).catch(x=>this.err(x))}});
     const DAYC={ok:null,problem:'#ff6b5e',skipped:'#26272b',none:'rgba(255,255,255,0.06)'};
-    const modeList=H.modes.map(m=>{const open=s.modeOpen===m.id;const chips=[...m.groups.flatMap(g=>g.chips.map(c=>g.room==='Everywhere'?c:`${g.room}: ${c}`)),...m.moments.map(x=>`${x.t} ${x.text}`)];
+    // Like the phone design: plain on/off changes are summarised across rooms ("Kitchen, lounge, laundry on"); the rest stay as they are ("Lamp 78% · 3000K").
+    const chipsOf=m=>{const plain={},out=[];for(const g of m.groups){for(const c of g.chips){const x=/^(.*) (on|off)$/.exec(c);if(x&&g.room!=='Everywhere'){(plain[x[2]]=plain[x[2]]||[]).includes(g.room)||plain[x[2]].push(g.room)}else out.push(c)}}
+      const sum=Object.entries(plain).map(([st,rooms])=>`${rooms.map((r,i)=>i?r.toLowerCase():r).join(', ')} ${st}`);return[...sum,...out]};
+    const modeList=H.modes.map(m=>{const open=s.modeOpen===m.id;const chips=[...chipsOf(m),...m.moments.map(x=>`${x.t} ${x.text}`)];
       return{...m,span:`${m.startLabel} → ${m.endLabel}`,chips:chips.length?chips:['Nothing changes'],tint:m.color+'24',now:m.id===H.current.modeId,open,border:open?m.color+'66':'rgba(255,255,255,0.04)',
         days:(m.test.days.length?m.test.days:Array(14).fill('none')).map(c=>({bg:DAYC[c]||m.color})),test:m.test.text,pick:()=>this.setState({modeOpen:open?null:m.id}),edit:e=>{e.stopPropagation();this.setState({edit:m.id,edStart:null,momentAt:null})}}});
     const room=s.room||(H.rooms[0]||{}).id;
     const rDevs=list.filter(d=>d.room===room);
     const AF=[['all','All'],['auto','Modes'],['people','People'],['device','Devices']];
     const D=s.sheet&&devs[s.sheet];let sh={};
-    if(D)sh={name:D.name,room:RN[D.room]||'',justify:D.on?'flex-end':'flex-start',track:D.on?'#f2b14c':'#35363a',toggle:()=>this.tog(D.id),dimmable:D.type==='dimmer'&&D.on,bri:D.bri,briLabel:D.bri+'%',setBri:e=>this.patch(D.id,{bri:+e.target.value}),why:D.why.now,next:D.why.next};
+    if(D)sh={name:D.name,room:RN[D.room]||'',justify:D.on?'flex-end':'flex-start',knob:D.on?'translateX(20px)':'none',track:D.on?'#f2b14c':'#35363a',toggle:()=>this.tog(D.id),dimmable:D.type==='dimmer'&&D.on,bri:D.bri,briLabel:D.bri+'%',setBri:e=>this.patch(D.id,{bri:+e.target.value}),why:D.why.now,next:D.why.next};
     const home=H.people.filter(p=>p.home);
     const w=H.weather;
     const V='rgba(242,177,76,0.18)',VF='#f2b14c',N='#26272b',NF='#f1efea';
@@ -788,7 +795,7 @@ class Component extends DCLogic {
     return {tabs,isNow:np&&s.tab==='now',isRooms:np&&s.tab==='rooms',isModes:np&&s.tab==='modes',isActivity:np&&s.tab==='activity',isAsk:np&&s.tab==='ask',
       ...this.pagesVals(s,H,devs,list,RN),...this.edVals(s,H,devs,RN),moreDot:H.integrations.some(i=>!i.ok),scrollRef:this.scrollRef,
       homeName:H.home.name,avatars:(home.length?home:H.people).slice(0,3).map((x,i)=>({initial:x.name[0],ml:i?'-9px':'0px',op:x.home?1:0.4})),
-      dateLine:`${H.home.dateLabel} · ${H.home.clock}${w?` · ${w.temp}° ${w.text.toLowerCase()}`:''}`,
+      dateLine:`${shortDate(H.home.dateLabel)} · ${H.home.clock}${w?` · ${w.temp}° ${w.text.toLowerCase()}`:''}`,
       untilLine:H.current.waitingForSomeone?`Lights wait until someone’s home`:`Until ${H.current.untilLabel}, then ${nx.name}`,nowLeft:(H.home.nowHour/24*100)+'%',
       mode:{...M,glow:M.color+'33'},lightsOn:`${on} light${on===1?'':'s'} on`,bands:H.day.bands.map(b=>{const m=this.modeById(b.modeId);return{w:((b.end-b.start)/24*100)+'%',bg:m.color+(b.modeId===H.current.modeId?'55':'2a')}}),upcoming,favs,overlays,
       overlayOn:!!ov,ovIcon:ov?ov.icon:'',ovLabel:ov?`${ov.name} · ${ov.endsLabel.toLowerCase()}`:'',endOverlay:()=>api('POST','/api/overlays/end').then(()=>this.toast('Back to '+M.name)).catch(x=>this.err(x)),
@@ -806,7 +813,7 @@ class Component extends DCLogic {
       draft:s.draft,setDraft:e=>this.setDraft(e.target.value),draftKey:e=>{if(e.key==='Enter'&&s.draft.trim())this.ask(s.draft.trim())},send:()=>{if(s.draft.trim())this.ask(s.draft.trim())},
       engine:{label:E[0],icon:E[1],bg:E[2],fg:E[3]},openAi:()=>this.setState({aiOpen:true}),closeAi:()=>this.setState({aiOpen:false}),aiOpen:s.aiOpen,isCloud:s.ai==='cloud',usesAi:s.ai!=='builtin',
       engines:ENG.map(([id,name,tag,tagBg,tagFg,body,data])=>{const a=s.ai===id;return{name,tag,tagBg,tagFg,body,data,border:a?tagFg:'transparent',ring:a?tagFg:'#4a4b50',dot:a?tagFg:'transparent',pick:()=>this.saveAi({ai:id})}}),
-      shares:SH.map(([id,name,icon,note])=>{const locked=id==='cameras';const a=!locked&&!!s.share[id];return{name,icon,note,op:locked?0.5:1,justify:a?'flex-end':'flex-start',track:a?'#f2b14c':'#35363a',toggle:()=>{if(!locked)this.saveAi({share:{...s.share,[id]:!s.share[id]}})}}}),
+      shares:SH.map(([id,name,icon,note])=>{const locked=id==='cameras';const a=!locked&&!!s.share[id];return{name,icon,note,op:locked?0.5:1,justify:a?'flex-end':'flex-start',knob:a?'translateX(14px)':'none',track:a?'#f2b14c':'#35363a',toggle:()=>{if(!locked)this.saveAi({share:{...s.share,[id]:!s.share[id]}})}}}),
       sheetOpen:!!D,sh,closeSheet:()=>this.setState({sheet:null}),toastOn:!!s.toast,toastPos:s.edit||s.ig?'top:calc(env(safe-area-inset-top, 0px) + 12px)':'bottom:104px',toastText:s.toast,canUndo:!!s.undo,undo:()=>{s.undo&&s.undo();this.setState({toast:null,undo:null})}};
   }
 }
