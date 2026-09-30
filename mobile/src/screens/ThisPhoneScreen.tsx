@@ -6,6 +6,7 @@ import { useHub, useSnap } from '../state/hub';
 import { useNav } from '../navigation';
 import { arriveLeaveOn, startArriveLeave, stopArriveLeave } from '../native/arrive-leave';
 import { forgetPushToken, pushToken, savedPushToken } from '../native/push';
+import { endHomeActivity, liveActivityRunning, liveActivitySupported, startHomeActivity } from '../native/extensions';
 import { Icon } from '../ui/Icon';
 import { Button, Card, HScroll, PageHead, Pill, Switch } from '../ui/kit';
 import { Screen } from '../ui/Screen';
@@ -18,6 +19,8 @@ export function ThisPhoneScreen() {
   const nav = useNav();
   const [geo, setGeo] = useState(false);
   const [push, setPush] = useState(false);
+  const [lock, setLock] = useState(liveActivityRunning());
+  const canLock = Platform.OS === 'ios';
   const [busy, setBusy] = useState<string | null>(null);
   const me = s.people.find(p => p.id === cfg?.personId);
 
@@ -42,6 +45,12 @@ export function ThisPhoneScreen() {
       setGeo(true);
       say(`Kova will know when ${me.name} arrives and leaves`);
     } catch (e) { say((e as Error).message, { error: true }); } finally { setBusy(null); }
+  };
+
+  const toggleLock = async (on: boolean) => {
+    if (!on) { await endHomeActivity(); setLock(false); return; }
+    if (!liveActivitySupported()) { say('Turn on Live Activities for Kova in Settings', { error: true }); return; }
+    try { await startHomeActivity(s); setLock(true); say('Your home is on the lock screen'); } catch (e) { say((e as Error).message, { error: true }); }
   };
 
   const togglePush = async (on: boolean) => {
@@ -78,6 +87,7 @@ export function ThisPhoneScreen() {
         {([
           ['location_on', 'Arrive and leave', me ? `Tells Kova when ${me.name} gets home or goes out, even with the app closed` : 'Choose who this phone belongs to first', geo, toggleGeo, 'geo'],
           ['notifications', 'Notifications', 'The doorbell, everyone out with lights on, the internet dropping', push, togglePush, 'push'],
+          ...(canLock ? [['lock', 'Home on the lock screen', 'The mode, lights on and what’s next, with Skip, on the lock screen and in the Dynamic Island', lock, toggleLock, 'lock'] as const] : []),
         ] as const).map(([icon, title, sub, on, go, id], i) => (
           <View key={id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderTopWidth: i ? 1 : 0, borderTopColor: C.hairline, opacity: busy === id ? 0.6 : 1 }}>
             <View style={{ width: 36, height: 36, borderRadius: 11, backgroundColor: on ? 'rgba(127,212,160,0.15)' : C.selected, alignItems: 'center', justifyContent: 'center' }}>

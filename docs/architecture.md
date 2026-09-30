@@ -62,7 +62,22 @@ add-on: nothing in Kova depends on HA. The design reference lives in
   - **Notifications:** `POST /api/push/app {token, personId}` registers the phone's Expo push
     token; the notifier sends through Expo's push service alongside Web Push and ntfy. A tap on
     the doorbell opens its camera; *Turn them off* turns the lights off.
-  - Widgets, Live Activities and Siri need native extensions (Swift/Kotlin) and aren't there yet.
+  - **Widgets** (iOS, `targets/widget`, a WidgetKit extension made by `@bacons/apple-targets`):
+    *Home* (small, and the lock screen's inline, circular and rectangular) shows the mode, what's
+    next and lights on; *Favourites* (medium, large) are buttons that switch a device without
+    opening the app (App Intents). Widgets read `/api/state` themselves with the hub's address and
+    token from the App Group `group.au.clickbit.kova` (written by `modules/kova-native`), and fall
+    back to the last snapshot away from home. **Android**: one widget (`react-native-android-widget`)
+    with the mode and four favourites; a tap switches the device from a headless task.
+  - **Live Activity** (iOS): the design's lock-screen card and the Dynamic Island: the mode, lights
+    on, the next planned change with a progress bar to the next mode, and *Skip* (a
+    `LiveActivityIntent` that skips it on the hub). Started from This phone; the app updates it
+    while it runs, and it's marked stale after the next change until then.
+  - **Siri and Shortcuts**: "Ask Kova" (whatever you say goes to `/api/ask`, and Kova's answer is
+    Siri's reply), "Switch the home with Kova" (Movie, Away…), "Turn off the lights with Kova".
+    The App Shortcuts provider is in the app (`ios-app/`, added by `plugins/withSiriShortcuts.js`);
+    the intents are shared with the widget.
+  - **Quick actions** (long-press the icon, both platforms): two scenes, all lights off, Ask.
 * **Later:** Kova Cloud (accounts, remote access relay, backups, updates). It doesn't exist yet.
 
 ## Domain model (`hub/src/model/types.ts`)

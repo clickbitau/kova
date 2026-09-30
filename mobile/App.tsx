@@ -9,6 +9,8 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useLastTap } from './src/native/push';
+import { useQuickActionCallback } from 'expo-quick-actions/hooks';
+import { shareHub, syncExtensions } from './src/native/extensions';
 import { C } from './src/theme';
 import { HubProvider, useHub } from './src/state/hub';
 import { SheetProvider } from './src/state/sheet';
@@ -40,6 +42,15 @@ function Home() {
   const { cfg, loading, snap, conn, toast, undo, api, say } = useHub();
   const insets = useSafeAreaInsets();
   const nav = useRef<NavigationContainerRef<StackParams>>(null);
+
+  // Widgets, the Live Activity and the app icon's quick actions follow the hub.
+  useEffect(() => { shareHub(cfg); }, [cfg]);
+  useEffect(() => { if (snap) syncExtensions(snap); }, [snap]);
+  useQuickActionCallback(a => {
+    if (a.id === 'lights-off') void api<{ changed: string[]; undo: string }>('POST', '/api/lights/off').then(x => say(`${x.changed.length} lights off`, { undo: x.undo })).catch(e => say((e as Error).message, { error: true }));
+    else if (a.id.startsWith('overlay:')) void api<{ undo: string }>('POST', `/api/overlays/${encodeURIComponent(String(a.params?.overlay ?? ''))}/start`).then(x => say(`${a.title} is on`, { undo: x.undo })).catch(e => say((e as Error).message, { error: true }));
+    else if (a.id === 'ask') setTimeout(() => nav.current?.navigate('Tabs', { screen: 'Ask' } as never), 300);
+  });
 
   // A tapped notification: the doorbell opens its camera, "Turn them off" turns the lights off.
   const last = useLastTap();
