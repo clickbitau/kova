@@ -172,8 +172,11 @@ sync them sample-accurately.
 | POST | `/api/undo/:id` | |
 | POST | `/api/ask`, `/api/ask/act` | Ask Kova |
 | GET | `/api/integrations/homekit` | `{enabled, pincode, setupURI, paired}` for the Apple Home bridge |
+| GET | `/api/health` | `{ok, version, uptimeS}`; no token needed, no home data (for health checks) |
+| GET, POST | `/api/backups` | List backups / make one now (see [install.md](install.md#backups)) |
+| GET | `/api/backups/:name` | Download a backup (needs `KOVA_TOKEN`, or a request from the machine itself) |
 
-Set `KOVA_TOKEN` to require `Authorization: Bearer <token>` on every API call.
+Set `KOVA_TOKEN` to require `Authorization: Bearer <token>` on every API call except `/api/health`.
 Open the UI once with `?token=…` and it remembers the token. This is a stopgap
 until real accounts exist.
 

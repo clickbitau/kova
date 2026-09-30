@@ -1,0 +1,17 @@
+# Keep secrets and local state out of the build context.
+.git
+.claude
+**/node_modules
+data
+hub/data
+**/*.db
+**/*.db-*
+homeassistant
+home-assistant-setup.md
+ct105-lxc.conf
+docker-containers.txt
+airconnect
+owntone
+hub/test
+deploy
+docs

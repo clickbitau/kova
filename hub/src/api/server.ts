@@ -11,6 +11,9 @@ import { snapshot } from './snapshot.ts';
 import { AiAssistant, loadSettings, publicSettings, saveSettings, type AiOptions, type SettingsPatch } from '../assistant/ai.ts';
 import { isLight, isPlayer } from '../util/describe.ts';
 import type { HomeKitBridge } from '../bridges/homekit.ts';
+import type { Backups } from '../services/backup.ts';
+import { KOVA_VERSION } from '../version.ts';
+import { createReadStream } from 'node:fs';
 
 export interface ServerOptions {
   webRoot: string;
@@ -20,6 +23,8 @@ export interface ServerOptions {
   homekit?: HomeKitBridge;
   /** Optional AI engine options, e.g. the Anthropic base URL (tests point it at a fake server). */
   ai?: AiOptions;
+  /** Nightly backups; when absent the backup endpoints answer 404. */
+  backups?: Backups;
 }
 
 const USER = { kind: 'user' as const, label: 'You' };
@@ -30,14 +35,24 @@ function tokenOk(req: FastifyRequest, token: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
+const isLoopback = (ip: string) => ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+
 export async function buildServer(hub: Hub, opts: ServerOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
   await app.register(fastifyWebsocket);
   await app.register(fastifyStatic, { root: opts.webRoot, index: ['index.html'] });
 
+  // For Docker / systemd health checks. Unauthenticated on purpose, so it says nothing about the home.
+  const startedAt = Date.now();
+  app.get('/api/health', async (_req, reply) => {
+    reply.header('cache-control', 'no-store');
+    return { ok: true, version: KOVA_VERSION, uptimeS: Math.floor((Date.now() - startedAt) / 1000) };
+  });
+
   if (opts.token) {
     app.addHook('onRequest', async (req, reply) => {
-      if (req.url.startsWith('/api/') && !tokenOk(req, opts.token!)) return reply.code(401).send({ error: 'unauthorised' });
+      const path = req.url.split('?')[0];
+      if (path.startsWith('/api/') && path !== '/api/health' && !tokenOk(req, opts.token!)) return reply.code(401).send({ error: 'unauthorised' });
     });
   }
 
@@ -164,6 +179,32 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
     return { understood: !!i, kind: i?.kind ?? null, chips: hub.assistant.chips(i) };
   });
   app.post<{ Body: { action: AskAction } }>('/api/ask/act', async req => hub.assistant.act(req.body.action));
+
+  // ------------------------------------------------------------- backups --
+  const noBackups = (reply: { code: (n: number) => { send: (b: unknown) => unknown } }) => reply.code(404).send({ error: 'Backups are not enabled' });
+  app.get('/api/backups', async (_req, reply) => {
+    const b = opts.backups;
+    if (!b) return noBackups(reply);
+    return { keep: b.keep, nextAt: b.nextAt, ...b.status(), backups: b.list() };
+  });
+  app.post('/api/backups', async (_req, reply) => {
+    const b = opts.backups;
+    if (!b) return noBackups(reply);
+    try { return { ok: true, backup: await b.run('manual') }; } catch (e) { return reply.code(500).send({ error: e instanceof Error ? e.message : String(e) }); }
+  });
+  // A backup holds device keys and account passwords: downloading one always needs the API token,
+  // or, when no token is set, a request from this machine.
+  app.get<{ Params: { name: string } }>('/api/backups/:name', async (req, reply) => {
+    const b = opts.backups;
+    if (!b) return noBackups(reply);
+    if (!opts.token && !isLoopback(req.ip)) return reply.code(403).send({ error: 'Set KOVA_TOKEN to download backups over the network' });
+    const file = b.file(req.params.name);
+    if (!file) return reply.code(404).send({ error: 'No such backup' });
+    reply.header('content-type', 'application/gzip')
+      .header('content-disposition', `attachment; filename="${req.params.name}"`)
+      .header('cache-control', 'no-store');
+    return reply.send(createReadStream(file));
+  });
 
   // ------------------------------------------------------------ realtime --
   const clients = new Set<{ send: (s: string) => void }>();

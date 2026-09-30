@@ -5,7 +5,7 @@ import { buildServer } from './api/server.ts';
 import { VirtualAdapter } from './adapters/virtual.ts';
 import { SonosAdapter } from './adapters/sonos.ts';
 import { adaptersFor, loadIntegrations } from './integrations.ts';
-import { existsSync, readFileSync } from 'node:fs';
+import { accessSync, constants, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import type { HomeConfig } from './model/types.ts';
 import { MatterAdapter } from './adapters/matter.ts';
 import { Weather } from './services/weather.ts';
@@ -13,10 +13,28 @@ import { HomeKitBridge } from './bridges/homekit.ts';
 import { AirCastBridge } from './bridges/aircast.ts';
 import { demoConfig, demoDevices, DEMO_SOLAR } from './seed/demo-home.ts';
 import type { Adapter } from './adapters/sdk.ts';
+import { Backups, parseBackupTime } from './services/backup.ts';
+import { acquireLock, LockedError, type HeldLock } from './util/lock.ts';
+import { KOVA_VERSION } from './version.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const env = process.env;
 const dataDir = resolve(env.KOVA_DATA ?? resolve(here, '../../data'));
+
+// Everything Kova writes (database, pairings, backups) is private to the user it runs as.
+process.umask(0o077);
+
+// One hub per data folder, and never while a restore is running.
+let lock: HeldLock;
+try {
+  mkdirSync(dataDir, { recursive: true });
+  accessSync(dataDir, constants.W_OK);
+  lock = acquireLock(dataDir, 'hub');
+} catch (err) {
+  if (err instanceof LockedError) console.error(`${err.message}. Not starting.`);
+  else console.error(`Can't write to the data folder ${dataDir} (${(err as Error).message}). It must belong to the user Kova runs as${process.getuid ? ` (uid ${process.getuid()})` : ''}.`);
+  process.exit(1);
+}
 // Real devices come from integrations.json (see src/tools/import-ha.ts). Without one, run the demo home.
 const integrations = loadIntegrations(resolve(dataDir, 'integrations.json'));
 const demo = env.KOVA_DEMO ? env.KOVA_DEMO !== '0' : !integrations;
@@ -66,11 +84,50 @@ if (env.KOVA_HOMEKIT === '1') {
   console.log(`Apple Home bridge published · setup code ${homekit.setupInfo().pincode}`);
 }
 
-const app = await buildServer(hub, { webRoot: resolve(here, '../../web'), token: env.KOVA_TOKEN || undefined, homekit });
-const port = Number(env.KOVA_PORT ?? 8140);
-await app.listen({ port, host: env.KOVA_HOST ?? '0.0.0.0' });
-console.log(`Kova hub listening on http://localhost:${port}${demo ? ' (demo home)' : ''}`);
+// Nightly backups of the database, integrations.json, home.json and pairing folders.
+const backups = new Backups({
+  db: hub.store.db,
+  dataDir,
+  dir: env.KOVA_BACKUP_DIR ? resolve(env.KOVA_BACKUP_DIR) : undefined,
+  hour: parseBackupTime(env.KOVA_BACKUP_TIME),
+  keep: Number(env.KOVA_BACKUP_KEEP ?? 14) || 14,
+  timezone: () => hub.config.get().timezone,
+  version: KOVA_VERSION,
+  log: e => hub.store.append(e),
+  beforeBackup: () => hub.reg.flush(),
+  onChange: () => hub.emit('changed'),
+});
+backups.start();
+hub.services.push({ id: 'backups', name: 'Backups', icon: 'backup', kind: 'Local', status: () => backups.status() });
 
-const shutdown = async () => { await app.close(); await homekit?.stop(); await aircast?.stop(); await hub.stop(); process.exit(0); };
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+const app = await buildServer(hub, { webRoot: resolve(here, '../../web'), token: env.KOVA_TOKEN || undefined, homekit, backups });
+await app.listen({ port: Number(env.KOVA_PORT ?? 8140), host: env.KOVA_HOST ?? '0.0.0.0' });
+const addr = app.server.address();
+const port = typeof addr === 'object' && addr ? addr.port : Number(env.KOVA_PORT ?? 8140);
+console.log(`Kova ${KOVA_VERSION} hub listening on http://localhost:${port}${demo ? ' (demo home)' : ''}`);
+
+// Stop cleanly: no new requests, bridges down, a backup in progress finished, device
+// state flushed, the database closed (which checkpoints its WAL), then the lock released.
+// Each step is guarded so one failure doesn't stop the rest, and a watchdog exits if something hangs.
+let stopping = false;
+const shutdown = async (signal: string) => {
+  if (stopping) return;
+  stopping = true;
+  console.log(`${signal}: stopping Kova…`);
+  const watchdog = setTimeout(() => { console.error('Shutdown took too long; exiting.'); try { hub.reg.flush(); } catch { /* best effort */ } lock.release(); process.exit(1); }, 15_000);
+  watchdog.unref();
+  const step = async (name: string, fn: () => Promise<unknown> | unknown) => {
+    try { await fn(); } catch (err) { console.error(`Stopping ${name} failed:`, err); }
+  };
+  await step('web server', () => app.close());
+  await step('Apple Home bridge', () => homekit?.stop());
+  await step('aircast', () => aircast?.stop());
+  await step('backups', () => backups.stop());
+  await step('hub', () => hub.stop()); // flushes device state and closes kova.db
+  lock.release();
+  clearTimeout(watchdog);
+  console.log('Kova stopped.');
+  process.exit(0);
+};
+process.on('SIGINT', () => void shutdown('SIGINT'));
+process.on('SIGTERM', () => void shutdown('SIGTERM'));
