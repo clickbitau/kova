@@ -15,14 +15,24 @@ tested against your real history.
 ```bash
 npm install
 npm run dev          # http://localhost:8140, with a demo home of virtual devices
-npm test             # engine, findings, assistant, Sonos adapter, API
+npm test             # engine, findings, assistant, adapters (against fake devices), API
 ```
+
+### Your own devices
+
+```bash
+cd hub
+npx tsx src/tools/import-ha.ts /path/to/homeassistant/.storage ../data   # one-time import
+npm run dev                                                              # now runs your real home
+```
+
+Or write `data/integrations.json` by hand: see [docs/architecture.md](docs/architecture.md#integrationsjson).
 
 | Env var | Default | |
 |---|---|---|
 | `KOVA_PORT` | `8140` | |
 | `KOVA_DATA` | `./data` | Where `kova.db` lives |
-| `KOVA_DEMO` | on | `0` to run without the virtual demo home |
+| `KOVA_DEMO` | on when there's no `integrations.json` | Force the virtual demo home on (`1`) or off (`0`) |
 | `KOVA_SONOS` | off | `1` to discover Sonos speakers |
 | `KOVA_SONOS_HOSTS` | | Comma-separated speaker IPs (for speakers on another VLAN) |
 | `KOVA_TOKEN` | | Require a bearer token on the API |
