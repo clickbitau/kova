@@ -7,6 +7,7 @@ import type { Command } from '../model/types.ts';
 import type { AskAction } from '../assistant/assistant.ts';
 import { VirtualAdapter } from '../adapters/virtual.ts';
 import { MatterAdapter } from '../adapters/matter.ts';
+import { HomeKitControllerAdapter } from '../adapters/homekit-controller.ts';
 import { snapshot } from './snapshot.ts';
 import { AiAssistant, loadSettings, publicSettings, saveSettings, type AiOptions, type SettingsPatch } from '../assistant/ai.ts';
 import { isLight, isPlayer } from '../util/describe.ts';
@@ -57,6 +58,23 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
     const hk = opts.homekit;
     if (!hk) return { enabled: false };
     return { enabled: true, ...hk.setupInfo(), paired: hk.paired };
+  });
+
+  // HomeKit accessories Kova controls (the reverse of the bridge above): find them, then pair with the code on the label.
+  const hkc = () => {
+    const a = hub.reg.adapters.get('homekit');
+    if (!(a instanceof HomeKitControllerAdapter)) throw new Error('HomeKit devices aren’t set up: add "homekit": {} to integrations.json');
+    return a;
+  };
+  app.get('/api/integrations/homekit-devices/discover', async (_req, reply) => {
+    try { return { accessories: await hkc().discover() }; } catch (e) { return fail(reply, e); }
+  });
+  app.post<{ Body: { id?: string; code?: string; room?: string; name?: string } }>('/api/integrations/homekit-devices/pair', async (req, reply) => {
+    try {
+      const { id, code, room, name } = req.body ?? {};
+      if (!id || !code) throw new Error('id and code are required');
+      return { ok: true, devices: await hkc().pair(id, code, { room, name }) };
+    } catch (e) { return fail(reply, e); }
   });
 
   app.get<{ Querystring: { at?: string; hour?: string } }>('/api/preview', async req => {
