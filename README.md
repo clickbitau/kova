@@ -31,7 +31,7 @@ Or write `data/integrations.json` by hand: see [docs/architecture.md](docs/archi
 | Env var | Default | |
 |---|---|---|
 | `KOVA_PORT` | `8140` | |
-| `KOVA_DATA` | `./data` | Where `kova.db` lives |
+| `KOVA_DATA` | `./data` | Where `kova.db`, `integrations.json` and pairing data (HomeKit, Samsung TV tokens) live |
 | `KOVA_DEMO` | on when there's no `integrations.json` | Force the virtual demo home on (`1`) or off (`0`) |
 | `KOVA_SONOS` | off | `1` to discover Sonos speakers |
 | `KOVA_SONOS_HOSTS` | | Comma-separated speaker IPs (for speakers on another VLAN) |
