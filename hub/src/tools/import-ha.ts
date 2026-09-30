@@ -5,7 +5,8 @@ import type { Integrations } from '../integrations.ts';
 import { defaultHome } from '../seed/default-home.ts';
 
 // One-way import from a Home Assistant `.storage` folder: rooms, people,
-// location and the local connection details for Tuya, TP-Link Tapo and Cast.
+// location, the local connection details for Tuya, TP-Link Tapo, Cast and
+// Samsung TVs, and the VeSync account email (not its password).
 // Kova never talks to Home Assistant; this only reads its files once.
 //
 //   npx tsx src/tools/import-ha.ts /path/to/homeassistant/.storage [out-dir]
@@ -107,7 +108,40 @@ export function importHomeAssistant(storageDir: string): ImportResult {
     report.push(`Google Cast: ${casts.length} speakers/displays${groups.length ? `, ${groups.length} groups for synced audio (${groups.map(g => g.name).join(', ')})` : ''}`);
   }
 
-  for (const d of ['sonos', 'matter', 'vesync', 'nest', 'goodwe', 'samsungtv', 'ecovacs']) {
+  // Samsung TVs: host, MAC (for Wake-on-LAN) and name. HA's token was issued to Home Assistant,
+  // so Kova pairs itself: the TV asks to allow Kova the first time.
+  const tvs = entries.filter(e => e.domain === 'samsungtv' && e.data.host);
+  if (tvs.length) {
+    integrations.samsungtv = {
+      tvs: tvs.map(e => {
+        const name = String(e.title || e.data.name || 'TV');
+        const room = roomFor(name, byEntry(e.entry_id)?.area_id);
+        return { host: String(e.data.host), name, room, ...(e.data.mac ? { mac: String(e.data.mac) } : {}) };
+      }),
+    };
+    report.push(`Samsung TV: ${tvs.length} TV${tvs.length === 1 ? '' : 's'} (each asks you to allow Kova the first time it connects)`);
+  }
+
+  // VeSync (Levoit purifiers): cloud-only. Take the account email and purifier rooms; the password stays with you.
+  const vs = entries.find(e => e.domain === 'vesync');
+  if (vs?.data.username) {
+    const vsDevices: Record<string, { room: string }> = {};
+    for (const d of devices.filter(d => d.config_entries.includes(vs.entry_id))) {
+      const name = d.name ?? '';
+      if (name) vsDevices[name] = { room: roomFor(d.name_by_user ?? name, d.area_id) };
+    }
+    integrations.vesync = { email: String(vs.data.username), password: '', ...(Object.keys(vsDevices).length ? { devices: vsDevices } : {}) };
+    report.push(`VeSync (cloud): account ${String(vs.data.username)}${Object.keys(vsDevices).length ? `, ${Object.keys(vsDevices).length} devices` : ''}. Enter your VeSync password as vesync.password in integrations.json: it isn't imported`);
+  }
+
+  // GoodWe solar inverter over Modbus TCP.
+  const gw = entries.find(e => e.domain === 'goodwe');
+  if (gw?.data.host) {
+    integrations.goodwe = { host: String(gw.data.host), port: Number(gw.data.port ?? 502), room: roomFor('Solar inverter', byEntry(gw.entry_id)?.area_id), name: 'Solar inverter', id: 'solar_inverter' };
+    report.push(`GoodWe solar: ${gw.data.host}${gw.data.model_family && gw.data.model_family !== 'DT' ? ` (family ${gw.data.model_family}: check the register map)` : ''}`);
+  }
+
+  for (const d of ['sonos', 'matter', 'nest', 'ecovacs']) {
     if (entries.some(e => e.domain === d)) report.push(`${d}: not imported yet`);
   }
 

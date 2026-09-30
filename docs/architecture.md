@@ -86,8 +86,12 @@ It never makes decisions. See `sdk.ts`.
 | `tapo` | TP-Link Tapo plugs and bulbs over KLAP v2 (local HTTP, AES). On/off, brightness, warmth and colour. Needs the TP-Link account credentials, or the credentials hash Home Assistant stored. Polls every 10 s. |
 | `cast` | Google Cast speakers, displays and TVs over Cast v2 (TLS on port 8009) with mDNS discovery. Plays a source's stream URL, sets volume, stops. **Perfect sync:** commands that arrive together (e.g. a mode starting) and play the same source on several speakers go to the Cast group whose members are exactly those speakers, so the speakers sync themselves. Cast groups are made in the Google Home app; Google offers no API to create them. |
 | `sonos` | Local UPnP. SSDP discovery or `KOVA_SONOS_HOSTS`. Play source / pause / volume. |
-| `matter` | See below. |
-| VeSync, Nest, GoodWe, Samsung TV, Ecovacs | Planned. |
+| `airplay` | Kova → AirPlay (Apple TV, HomePod, AirPlay speakers) through an [OwnTone](https://github.com/owntone/owntone-server) server, driven over its JSON API. OwnTone plays one source at a time to any set of AirPlay devices and keeps them in sync; playing the same source on another AirPlay device joins the running stream. OwnTone is GPL, so it runs as its own process (see `docker-compose.yml`). |
+| `matter` | Matter over IP as a controller on Kova's own fabric, built on matter.js (`@matter/main` 0.17). On with `KOVA_MATTER=1`; fabric and paired nodes live in `<KOVA_DATA>/matter`. Add a device with its 11/21-digit pairing code or `MT:` QR payload (`POST /api/integrations/matter/commission`); devices already in Google Home / Apple Home join through multi-admin after opening a pairing window there. No BLE, so a brand-new Wi-Fi/Thread device must first be set up by a phone app. Announces one device per On/Off light (`light`), dimmable light (`dimmer`, + `colorTemp` / `color` from ColorControl) and plug (`plug`); ids `matter_<node>_<endpoint>`, room `unassigned` unless given when adding. Follows changes through a subscription and reports `online:false` when it drops. Needs IPv6 and mDNS on the host network (use host networking in Docker). Tested against a matter.js virtual light on matter.js's simulated network; not yet tried on real hardware. |
+| `vesync` | Levoit Core 200S/300S/400S/600S purifiers through the **VeSync cloud** (these purifiers have no local API, so this one needs the internet). Logs in like the VeSync app (v1 login, MD5 password), lists devices, and relays `getPurifierStatus` / `setSwitch` / `setPurifierMode` / `setLevel` through `bypassV2`. Kova `fan` devices: on/off and mode `Auto` / `Sleep` / `Manual` (Manual = the last fan speed). Polls every 30 s; a purifier the cloud calls offline is `online: false`. Logs in again once when the token is rejected. `region: "eu"` uses smartapi.vesync.eu. |
+| `samsungtv` | Samsung Tizen TVs (2016+) locally. Power state from `http://tv:8001/api/v2/` (`PowerState` on/standby; unreachable = off and offline), polled every 10 s. Keys over the remote-control WebSocket on `wss://tv:8002` (self-signed TLS): the first connection makes the TV ask to allow Kova, and the token it returns is kept in `<KOVA_DATA>/samsungtv/tokens.json` (0600). Off = `KEY_POWER`; on = Wake-on-LAN to the TV's MAC (from config or the info endpoint); volume = DLNA RenderingControl `SetVolume` on port 9197, falling back to `KEY_VOLUP`/`KEY_VOLDOWN` steps from the last volume DLNA reported. Playing sources isn't supported. |
+| `goodwe` | GoodWe solar inverters over Modbus TCP (port 502, unit 247), read-only. Default register map is the DT family (PV strings 30103–30108, energy today 30144); every address can be overridden in `integrations.json` because maps differ between families and firmware. An inverter asleep at night reads as 0 W. Feeds the Energy screen. |
+| Nest, Ecovacs | Planned. |
 
 All adapters except `virtual` are tested against fake devices that speak the protocol; none has been tried on real hardware yet.
 
@@ -100,13 +104,15 @@ Real devices are configured in `<KOVA_DATA>/integrations.json` (created with own
   "tuya": { "devices": [{ "id": "bf…", "host": "192.168.1.230", "key": "16-char-local-key", "version": "3.3",
                           "switches": { "2": { "name": "Kitchen light", "room": "kitchen", "id": "kitchen_ceiling" } } }] },
   "tapo": { "username": "you@example.com", "password": "…", "devices": [{ "host": "10.10.30.218", "room": "lounge", "id": "lamp" }] },
-  "cast": { "rooms": { "Music Room Speaker": "music" } }
+  "cast": { "rooms": { "Music Room Speaker": "music" } },
+  "vesync": { "email": "you@example.com", "password": "…", "region": "us", "devices": { "Bedroom Purifier": { "room": "bedroom", "id": "bedroom_purifier" } } },
+  "samsungtv": { "tvs": [{ "host": "10.10.30.40", "mac": "a0:d7:f3:11:22:33", "room": "lounge", "id": "lounge_tv" }] }
 }
 ```
 
 `id` is optional everywhere; giving a device the id your modes already use lets you swap simulated devices for real ones without editing the modes.
 
-`npx tsx src/tools/import-ha.ts <homeassistant/.storage> ../data` (from `hub/`) writes `integrations.json` and `home.json` from a Home Assistant install: rooms from areas, people, location, localtuya devices with their keys, Tapo hosts plus HA's credentials hash, and Cast names mapped to rooms. It only reads files; Kova never talks to Home Assistant.
+`npx tsx src/tools/import-ha.ts <homeassistant/.storage> ../data` (from `hub/`) writes `integrations.json` and `home.json` from a Home Assistant install: rooms from areas, people, location, localtuya devices with their keys, Tapo hosts plus HA's credentials hash, Cast names mapped to rooms, Samsung TV hosts and MACs, and the VeSync account email with purifier rooms. The VeSync password is not imported: add it as `vesync.password` (the adapter stays off until you do). Samsung TVs ask to allow Kova once, since HA's token belongs to HA. It only reads files; Kova never talks to Home Assistant.
 
 ## Bridges (`hub/src/bridges/`)
 
@@ -127,6 +133,25 @@ scenes. `GET /api/integrations/homekit` returns the setup code and the
 `X-HM://` payload for a pairing QR code. mDNS uses ciao (pure JS), so the hub
 needs host networking (or macvlan) for iPhones to find it.
 
+**AirPlay → Cast** (`aircast.ts`) runs AirConnect's `aircast` (MIT) as a
+supervised child process, so every Cast speaker, display and Cast group appears
+as an AirPlay speaker on iPhones, iPads and Macs. Pick a Cast group in AirPlay
+and its speakers play in perfect sync. Kova writes aircast's config, restarts it
+with backoff if it dies, and shows its status on the Integrations screen.
+Configure it in `integrations.json`:
+
+```json
+"aircast": { "binary": "/opt/airconnect/aircast-linux-x86_64", "bind": "eth0", "exclude": ["Bedroom Oled"] },
+"airplay": { "url": "http://localhost:3689", "rooms": { "Apple TV": "lounge" } }
+```
+
+Sync across brands: speakers of one ecosystem sync with each other (Cast with
+Cast through Cast groups, AirPlay with AirPlay through OwnTone). A Cast speaker
+and an AirPlay speaker playing together are started at the same moment but
+drift apart by up to a second or two; no public protocol lets a third party
+sync them sample-accurately.
+
+
 ## API
 
 | Method | Path | |
@@ -137,6 +162,7 @@ needs host networking (or macvlan) for iPhones to find it.
 | WS | `/api/ws` | Pushes `{type:'state'}` on every change |
 | POST | `/api/devices/:id` | Command `{on, bri, k, color, mode, media, vol}` → `{undo}` |
 | POST | `/api/devices/:id/event` | Device event `{type:'person'|'ring'|…}` (webhooks, testing) |
+| POST | `/api/integrations/matter/commission` | Add a Matter device `{code, room?, name?}` → `{ok, devices}` (needs `KOVA_MATTER=1`) |
 | POST | `/api/rooms/:id/off` | Room lights off → `{undo}` |
 | POST | `/api/overlays/:id/start`, `/api/overlays/end` | |
 | POST | `/api/plan/skip` | `{id, skip}`: skip tonight |

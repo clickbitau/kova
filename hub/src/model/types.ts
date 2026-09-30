@@ -20,10 +20,16 @@ export interface DeviceState {
   media?: string | null;
   vol?: number | null;
   power?: number | null;
+  /** Energy produced (inverters) or used today, in kWh. */
+  energy?: number | null;
+  /** Grid power in W from a meter: positive = importing, negative = exporting. */
+  grid?: number | null;
+  /** Whole-home consumption in W, when a meter or hybrid inverter reports it. */
+  load?: number | null;
   online?: boolean;
 }
 
-export type Capability = 'onoff' | 'brightness' | 'colorTemp' | 'color' | 'fanMode' | 'media' | 'volume' | 'power' | 'events';
+export type Capability = 'onoff' | 'brightness' | 'colorTemp' | 'color' | 'fanMode' | 'media' | 'volume' | 'power' | 'energy' | 'events';
 
 export interface Device {
   id: string;

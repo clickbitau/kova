@@ -319,19 +319,19 @@
 </sc-if>
 
 <sc-if value="{{ isEnergy }}" hint-placeholder-val="{{ false }}">
-<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:12px"><div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;color:#a3a09a">Today so far · GoodWe inverter</span><h1 style="margin:0;font-size:30px;font-weight:700;letter-spacing:-0.02em">Energy</h1></div>
+<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:12px"><div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;color:#a3a09a">{{ enSub }}</span><h1 style="margin:0;font-size:30px;font-weight:700;letter-spacing:-0.02em">Energy</h1></div>
 </div>
 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr));gap:16px;align-items:stretch">
 <div style="background:#16171a;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:18px">
 <span style="font-size:15px;font-weight:700">Right now</span>
 <div style="display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:center;gap:8px">
-<div style="display:flex;flex-direction:column;align-items:center;gap:8px"><div style="width:64px;height:64px;border-radius:50%;background:#1c1d20;display:flex;align-items:center;justify-content:center;color:#6f6d69"><span style="font-family:'Material Symbols Rounded';font-size:28px">solar_power</span></div><span style="font-size:13px;font-weight:700">0 W</span><span style="font-size:11px;color:#a3a09a">Solar · night</span></div>
+<div style="display:flex;flex-direction:column;align-items:center;gap:8px"><div style="width:64px;height:64px;border-radius:50%;background:#1c1d20;display:flex;align-items:center;justify-content:center;color:#6f6d69"><span style="font-family:'Material Symbols Rounded';font-size:28px">solar_power</span></div><span style="font-size:13px;font-weight:700">{{ enSolarNow }}</span><span style="font-size:11px;color:#a3a09a">{{ enSolarLabel }}</span></div>
 <span style="font-family:'Material Symbols Rounded';font-size:20px;color:#35363a">arrow_forward</span>
-<div style="display:flex;flex-direction:column;align-items:center;gap:8px"><div style="width:76px;height:76px;border-radius:50%;background:rgba(242,177,76,0.13);border:1px solid rgba(242,177,76,0.35);display:flex;align-items:center;justify-content:center;color:#f2b14c"><span style="font-family:'Material Symbols Rounded';font-size:32px;font-variation-settings:'FILL' 1">home</span></div><span style="font-size:15px;font-weight:700">1.4 kW</span><span style="font-size:11px;color:#a3a09a">Home using</span></div>
+<div style="display:flex;flex-direction:column;align-items:center;gap:8px"><div style="width:76px;height:76px;border-radius:50%;background:rgba(242,177,76,0.13);border:1px solid rgba(242,177,76,0.35);display:flex;align-items:center;justify-content:center;color:#f2b14c"><span style="font-family:'Material Symbols Rounded';font-size:32px;font-variation-settings:'FILL' 1">home</span></div><span style="font-size:15px;font-weight:700">{{ enLoadNow }}</span><span style="font-size:11px;color:#a3a09a">Home using</span></div>
 <span style="font-family:'Material Symbols Rounded';font-size:20px;color:#a3a09a">arrow_back</span>
-<div style="display:flex;flex-direction:column;align-items:center;gap:8px"><div style="width:64px;height:64px;border-radius:50%;background:#1c1d20;display:flex;align-items:center;justify-content:center;color:#d8d5cf"><span style="font-family:'Material Symbols Rounded';font-size:28px">electrical_services</span></div><span style="font-size:13px;font-weight:700">1.4 kW</span><span style="font-size:11px;color:#a3a09a">From grid</span></div>
+<div style="display:flex;flex-direction:column;align-items:center;gap:8px"><div style="width:64px;height:64px;border-radius:50%;background:#1c1d20;display:flex;align-items:center;justify-content:center;color:#d8d5cf"><span style="font-family:'Material Symbols Rounded';font-size:28px">electrical_services</span></div><span style="font-size:13px;font-weight:700">{{ enGridNow }}</span><span style="font-size:11px;color:#a3a09a">{{ enGridLabel }}</span></div>
 </div>
-<div style="font-size:13px;color:#a3a09a;line-height:1.5;padding:12px;border-radius:12px;background:#1c1d20">Solar stopped at 18:04. Tomorrow’s forecast is sunny, so the dishwasher and laundry are cheapest to run after 10:00.</div>
+<div style="font-size:13px;color:#a3a09a;line-height:1.5;padding:12px;border-radius:12px;background:#1c1d20">{{ enInsight }}</div>
 </div>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
 <sc-for list="{{ energyStats }}" as="es" hint-placeholder-count="4">
@@ -353,7 +353,7 @@
 <sc-for list="{{ energyDevices }}" as="ed" hint-placeholder-count="5">
 <div style="display:grid;grid-template-columns:minmax(120px,1fr) 2fr 70px;gap:14px;align-items:center;font-size:13px"><span style="font-weight:600">{{ ed.name }}</span><div style="height:8px;border-radius:4px;background:#232428;overflow:hidden"><div style="height:100%;border-radius:4px;width:{{ ed.w }};background:{{ ed.bg }}"></div></div><span style="text-align:right;color:#a3a09a;font-family:'JetBrains Mono',monospace;font-size:12px">{{ ed.v }}</span></div>
 </sc-for>
-<span style="font-size:12px;color:#8a8781">Only 2 plugs and 2 purifiers report power. Add a whole-home meter or smart plugs to see the rest.</span>
+<span style="font-size:12px;color:#8a8781">{{ enFoot }}</span>
 </div>
 </sc-if>
 
@@ -577,9 +577,6 @@ const REVIEW=[
 {id:'hacs',icon:'extension',title:'HACS and opnsense_v060_backup',detail:'Not needed in Kova. localtuya and browser_mod become built-in features.',btn:'Skip',done:'Skipped'}];
 const HAND=[{id:'warden',letter:'W',app:'Warden',what:'OPNsense firewall at 10.10.0.1'},{id:'helix',letter:'H',app:'Helix',what:'Plex and qBittorrent'},{id:'dockbit',letter:'D',app:'Dockbit',what:'Matter server and go2rtc containers'}];
 const code=a=>`automation "${a.name}"\n  when: ${a.when.join(', ')}${a.cond.length?`\n  only_if: ${a.cond.join(', ').toLowerCase()}`:''}\n  do:\n${a.then.map(t=>'    - '+t).join('\n')}\n  mode: ${a.kind==='event'?'restart':'single'}`;
-// Energy (needs an inverter / meter integration, next milestone).
-const SOLAR=[0,0,0,0,0,0,0.1,0.6,1.3,2.0,2.5,2.8,2.9,2.8,2.5,2.0,1.3,0.6,0.1,0,0,0,0,0];
-const USE=[0.5,0.4,0.4,0.4,0.4,0.5,0.9,1.2,0.8,0.7,0.7,0.8,0.9,0.8,0.7,0.8,1.1,1.6,2.1,1.4,null,null,null,null];
 const ASKS=['Turn off downstairs','Why is the garage light on?','What lights are on?','Start Movie'];
 const ACT_STYLE={auto:['rgba(242,177,76,0.13)','#f2b14c'],people:['rgba(127,212,160,0.14)','#7fd4a0'],device:['rgba(124,184,240,0.13)','#7cb8f0'],system:['#232428','#a3a09a']};
 
@@ -672,10 +669,22 @@ class Component extends DCLogic {
   moreVals(s,H,devs,list,go){
     const RN=Object.fromEntries(H.rooms.map(r=>[r.id,r.name]));
     const pct=v=>Math.round(v/3*100)+'%';
-    const energyBars=SOLAR.map((sv,h)=>({solar:pct(sv),use:USE[h]==null?'3%':pct(USE[h]),useBg:USE[h]==null?'#1f2023':'#4a4b50',op:USE[h]==null?0.25:1}));
-    const energyStats=[['Solar made','21.5 kWh','#f2b14c','Sample data'],['Home used','17.1 kWh','#f1efea','Sample data'],['From grid','8.4 kWh','#f1efea','Sample data'],['Cost so far','$2.34','#f1efea','Connect an inverter to track']].map(([label,v,fg,sub])=>({label,v,fg,sub}));
-    const plugs=list.filter(d=>d.power!=null);const maxP=Math.max(1,...plugs.map(d=>d.on?d.power:0));
-    const energyDevices=plugs.map((d,i)=>({name:d.name,v:(d.on?d.power:0)+' W',w:((d.on?d.power:0)/maxP*100)+'%',bg:i===0?'#f2b14c':'#6f6d69'}));
+    // Energy: real numbers from the hub's inverter/meter samples.
+    const E=H.energy||{available:false,now:{solar:0,load:null,grid:null},solarKwh:0,usedKwh:null,fromGridKwh:null,exportedKwh:null,hours:[],peak:null,devices:[]};
+    const kw=w=>w==null?'—':Math.abs(w)>=1000?(Math.abs(w)/1000).toFixed(1)+' kW':Math.round(Math.abs(w))+' W';
+    const maxH=Math.max(0.3,...E.hours.map(x=>Math.max(x.solar,x.use||0)));
+    const nowHr=Math.floor(H.home.nowHour);
+    const energyBars=(E.hours.length?E.hours:Array(24).fill({solar:0,use:null})).map((x,h)=>({solar:(x.solar/maxH*100)+'%',use:x.use==null?'3%':(x.use/maxH*100)+'%',useBg:x.use==null?'#1f2023':'#4a4b50',op:h>nowHr?0.25:1}));
+    const energyStats=[['Solar made',E.solarKwh.toFixed(1)+' kWh','#f2b14c',E.peak&&E.peak.w>0?`Peak ${kw(E.peak.w)} at ${String(E.peak.hour).padStart(2,'0')}:00`:'No production yet today'],
+      ['Home used',E.usedKwh==null?'—':E.usedKwh.toFixed(1)+' kWh','#f1efea',E.usedKwh==null?'Needs a grid meter':E.usedKwh>0?Math.round(Math.min(100,(E.solarKwh-(E.exportedKwh||0))/E.usedKwh*100))+'% from your own solar':''],
+      ['From grid',E.fromGridKwh==null?'—':E.fromGridKwh.toFixed(1)+' kWh','#f1efea',E.exportedKwh==null?'Needs a grid meter':`Sent back ${E.exportedKwh.toFixed(1)} kWh`],
+      ['Right now',kw(E.now.solar),'#f1efea','Solar production']].map(([label,v,fg,sub])=>({label,v,fg,sub}));
+    const maxP=Math.max(1,...E.devices.map(d=>d.w));
+    const energyDevices=E.devices.slice(0,6).map((d,i)=>({name:d.name,v:kw(d.w),w:(d.w/maxP*100)+'%',bg:i===0?'#f2b14c':'#6f6d69'}));
+    const env={enSub:E.available?`Today so far · ${(H.integrations.find(i=>i.id==='goodwe'||i.id==='virtual')||{name:'inverter'}).name}`:'Connect a solar inverter or grid meter to see this',
+      enSolarNow:kw(E.now.solar),enSolarLabel:E.now.solar>0?'Solar':'Solar · not producing',enLoadNow:kw(E.now.load),enGridNow:kw(E.now.grid),enGridLabel:E.now.grid==null?'Grid':E.now.grid<0?'To grid':'From grid',
+      enInsight:!E.available?'No energy source connected yet. Add your inverter in Integrations.':E.now.solar>0?`Producing ${kw(E.now.solar)} now${E.now.load!=null&&E.now.solar>E.now.load?`, more than the home is using: a good time to run the dishwasher or laundry.`:'.'}`:E.solarKwh>0?`Solar made ${E.solarKwh.toFixed(1)} kWh today and has stopped for the day.`:'Solar hasn’t started yet today.',
+      enFoot:E.devices.length?`${E.devices.length} device${E.devices.length===1?'':'s'} report power. Add a whole-home meter or smart plugs to see the rest.`:'Nothing reports its own power yet. Smart plugs with energy monitoring or a whole-home meter fill this in.'};
     const cams=list.filter(d=>d.type==='camera');const camId=s.camSel||(cams[0]&&cams[0].id);
     const lastSeen=id=>{const a=H.activity.find(x=>x.what.startsWith((devs[id]||{}).name||'~')&&(x.icon==='person'||x.icon==='doorbell'));return a?`${a.what.includes('rang')?'Rang':'Person'} at ${a.t}`:'No activity today'};
     const cm=devs[camId];
@@ -702,7 +711,7 @@ class Component extends DCLogic {
     const INTEG=H.integrations.map(i=>({name:i.name,icon:i.icon,sub:`${i.devices} device${i.devices===1?'':'s'}`,st:i.ok?'ok':'attention',kind:i.kind,note:i.note}));
     const integrations=INTEG.filter(i=>(!iq||(i.name+' '+i.sub).toLowerCase().includes(iq))&&(s.intF==='All'||(s.intF==='Needs attention'?i.st==='attention':i.kind===s.intF))).map(i=>({...i,status:i.note||(i.st==='ok'?'Connected':'Needs attention'),dot:i.st==='ok'?'#7fd4a0':'#f2b14c',stFg:i.st==='attention'?'#f2b14c':'#a3a09a',border:i.st==='attention'?'rgba(242,177,76,0.3)':'rgba(255,255,255,0.05)'}));
     return {isEnergy:s.screen==='energy',isSecurity:s.screen==='security',isMedia:s.screen==='media',isActivity:s.screen==='activity',isAssistant:s.screen==='assistant',isIntegrations:s.screen==='integrations',
-      energyBars,energyStats,energyDevices,camMain,camThumbs,people,secEvents,mp,sources,players,mediaCount:`${pls.filter(d=>d.on).length} playing · ${pls.length} players`,
+      energyBars,energyStats,energyDevices,...env,camMain,camThumbs,people,secEvents,mp,sources,players,mediaCount:`${pls.filter(d=>d.on).length} playing · ${pls.length} players`,
       secSummary:`${cams.length} camera${cams.length===1?'':'s'} · ${H.people.length} ${H.people.length===1?'person':'people'}`,
       actFilters,activity,inbox,inboxEmpty:!inbox.length,inboxTitle:inbox.length?`Needs you · ${inbox.length}`:'Needs you',
       askSub:`Runs locally · knows your ${list.length} devices, ${H.rooms.length} rooms and ${H.modes.length} modes`,

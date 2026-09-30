@@ -36,17 +36,21 @@ const ROWS: Row[] = [
   ['front_1', 'Porch light', 'front', 'light', T],
   ['front_2', 'Path lights', 'front', 'light', T],
   ['doorbell', 'Doorbell', 'front', 'camera', 'Google Nest'],
+  ['solar_inverter', 'Solar inverter', 'garage', 'sensor', 'GoodWe (simulated)'],
 ];
+
+/** The demo home's simulated solar array (about 3 kW, like the real one). */
+export const DEMO_SOLAR = { id: 'solar_inverter', lat: -31.95, lon: 115.86, peakW: 2900, tz: 'Australia/Perth' };
 
 export function demoDevices(): DeviceInfo[] {
   return ROWS.map(([id, name, room, type, integration]) => ({
     id, name, room, type, integration, address: `demo.${id}`,
-    capabilities: type === 'dimmer' ? (id === 'lamp' ? ['onoff', 'brightness', 'colorTemp', 'color'] : ['onoff', 'brightness']) : [],
+    capabilities: id === 'solar_inverter' ? ['power', 'energy'] : type === 'dimmer' ? (id === 'lamp' ? ['onoff', 'brightness', 'colorTemp', 'color'] : ['onoff', 'brightness']) : [],
     state: type === 'fan' ? { on: true, mode: 'Auto' }
       : type === 'media' || type === 'tv' ? { on: false, media: null, vol: 30 }
       : type === 'dimmer' ? { on: false, bri: 100, k: id === 'lamp' ? 3000 : null, color: null }
       : type === 'plug' ? { on: true, power: 14 }
-      : type === 'camera' ? { online: true }
+      : type === 'camera' || type === 'sensor' ? { online: true }
       : { on: false },
   }));
 }

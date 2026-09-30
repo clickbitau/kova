@@ -1,0 +1,20 @@
+# Kova plus OwnTone (AirPlay output). Host networking so both can see mDNS.
+services:
+  kova:
+    build: .
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - ./data:/data                 # kova.db, integrations.json, home.json
+      - ./airconnect:/opt/airconnect # put aircast-linux-<cpu> here to bridge AirPlay → Cast
+    environment:
+      TZ: Australia/Perth
+
+  owntone:
+    image: lscr.io/linuxserver/daapd:latest   # OwnTone
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - ./owntone:/config
+    environment:
+      TZ: Australia/Perth

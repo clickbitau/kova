@@ -15,7 +15,7 @@ tested against your real history.
 ```bash
 npm install
 npm run dev          # http://localhost:8140, with a demo home of virtual devices
-npm test             # engine, findings, assistant, adapters (against fake devices), API
+npm test             # engine, findings, assistant, adapters (against fake devices, Matter on a simulated network), API
 ```
 
 ### Your own devices
@@ -31,10 +31,11 @@ Or write `data/integrations.json` by hand: see [docs/architecture.md](docs/archi
 | Env var | Default | |
 |---|---|---|
 | `KOVA_PORT` | `8140` | |
-| `KOVA_DATA` | `./data` | Where `kova.db` lives |
+| `KOVA_DATA` | `./data` | Where `kova.db`, `integrations.json` and pairing data (HomeKit, Samsung TV tokens) live |
 | `KOVA_DEMO` | on when there's no `integrations.json` | Force the virtual demo home on (`1`) or off (`0`) |
 | `KOVA_SONOS` | off | `1` to discover Sonos speakers |
 | `KOVA_SONOS_HOSTS` | | Comma-separated speaker IPs (for speakers on another VLAN) |
+| `KOVA_MATTER` | off | `1` to run the Matter controller (state in `<KOVA_DATA>/matter`; needs IPv6 + mDNS on the host network) |
 | `KOVA_TOKEN` | | Require a bearer token on the API |
 | `KOVA_WEATHER` | on | `0` to skip Met.no weather |
 | `KOVA_HOMEKIT` | off | `1` to publish an Apple Home (HomeKit) bridge; setup code is in the log and at `/api/integrations/homekit` |
