@@ -104,16 +104,20 @@ export function Slider({ value, min = 0, max = 100, color = C.amber, onChange, o
   const [w, setW] = useState(1);
   const [live, setLive] = useState<number | null>(null);
   const v = live ?? value;
-  const at = (x: number) => Math.round(min + Math.max(0, Math.min(1, x / w)) * (max - min));
-  const ref = useRef({ w, onChange, onRelease });
-  ref.current = { w, onChange, onRelease };
+  // The responder is made once, so it reads the width and range through a ref: from the first render's
+  // state it would keep a width of 1 and snap every touch to the ends. A drag is where the finger first
+  // touched plus how far it has moved (locationX alone jumps about once the finger leaves the track).
+  const ref = useRef({ w, min, max, onChange, onRelease, x0: 0 });
+  Object.assign(ref.current, { w, min, max, onChange, onRelease });
+  const at = (x: number) => { const r = ref.current; return Math.round(r.min + Math.max(0, Math.min(1, x / r.w)) * (r.max - r.min)); };
   const pan = useRef(PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: () => true,
     onPanResponderTerminationRequest: () => false,
-    onPanResponderGrant: e => { const n = at(e.nativeEvent.locationX); setLive(n); ref.current.onChange?.(n); },
-    onPanResponderMove: e => { const n = at(e.nativeEvent.locationX); setLive(n); ref.current.onChange?.(n); },
-    onPanResponderRelease: e => { const n = at(e.nativeEvent.locationX); setLive(null); ref.current.onRelease(n); },
+    onShouldBlockNativeResponder: () => true,
+    onPanResponderGrant: e => { ref.current.x0 = e.nativeEvent.locationX; const n = at(ref.current.x0); setLive(n); ref.current.onChange?.(n); },
+    onPanResponderMove: (_e, g) => { const n = at(ref.current.x0 + g.dx); setLive(n); ref.current.onChange?.(n); },
+    onPanResponderRelease: (_e, g) => { const n = at(ref.current.x0 + g.dx); setLive(null); ref.current.onRelease(n); },
     onPanResponderTerminate: () => setLive(null),
   })).current;
   const pct = (v - min) / (max - min);
@@ -127,7 +131,7 @@ export function Slider({ value, min = 0, max = 100, color = C.amber, onChange, o
   );
 }
 
-/** A bottom sheet: 28 px top corners on #141517 over the scrim, rising in 280 ms. The grabber closes it too. */
+/** A bottom sheet: 28 px top corners on #141517 over the scrim, rising in 280 ms. Tap the grabber or swipe it down to close. */
 export function Sheet({ open, onClose, children }: { open: boolean; onClose: () => void; children: ReactNode }) {
   const insets = useSafeAreaInsets();
   const y = useRef(new Animated.Value(1)).current;
@@ -136,6 +140,19 @@ export function Sheet({ open, onClose, children }: { open: boolean; onClose: () 
     if (open) { setShown(true); Animated.timing(y, { toValue: 0, duration: 280, easing: OUT, useNativeDriver: true }).start(); }
     else Animated.timing(y, { toValue: 1, duration: 220, easing: Easing.in(Easing.quad), useNativeDriver: true }).start(() => setShown(false));
   }, [open, y]);
+  // Swiping down from the top of the sheet (or pulling past the top of its content) closes it.
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  const drag = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => false,
+    onMoveShouldSetPanResponder: (_e, g) => g.dy > 6 && Math.abs(g.dy) > Math.abs(g.dx),
+    onPanResponderMove: (_e, g) => y.setValue(Math.max(0, g.dy) / 800),
+    onPanResponderRelease: (_e, g) => {
+      if (g.dy > 110 || g.vy > 0.9) closeRef.current();
+      else Animated.spring(y, { toValue: 0, useNativeDriver: true, bounciness: 4 }).start();
+    },
+    onPanResponderTerminate: () => Animated.spring(y, { toValue: 0, useNativeDriver: true }).start(),
+  })).current;
   if (!shown) return null;
   return (
     <Modal transparent visible animationType="none" onRequestClose={onClose} statusBarTranslucent>
@@ -143,10 +160,14 @@ export function Sheet({ open, onClose, children }: { open: boolean; onClose: () 
         <Pressable style={{ flex: 1 }} onPress={onClose} accessibilityLabel="Close" />
       </Animated.View>
       <Animated.View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: '92%', borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: C.sheet, transform: [{ translateY: y.interpolate({ inputRange: [0, 1], outputRange: [0, 800] }) }] }}>
-        <Pressable onPress={onClose} accessibilityLabel="Close" style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 8 }}>
-          <View style={{ width: 40, height: 5, borderRadius: 3, backgroundColor: C.switchOff }} />
-        </Pressable>
-        <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 34, gap: 18 }} keyboardShouldPersistTaps="handled">
+        <View {...drag.panHandlers}>
+          <Pressable onPress={onClose} accessibilityLabel="Close" style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 14 }}>
+            <View style={{ width: 40, height: 5, borderRadius: 3, backgroundColor: C.switchOff }} />
+          </Pressable>
+        </View>
+        <ScrollView
+          onScrollEndDrag={e => { if (e.nativeEvent.contentOffset.y < -70) onClose(); }}
+          contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 34, gap: 18 }} keyboardShouldPersistTaps="handled">
           {children}
         </ScrollView>
       </Animated.View>

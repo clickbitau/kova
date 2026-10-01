@@ -1,7 +1,7 @@
 // The hub's live snapshot (GET /api/state, and every /api/ws message), as far as the app uses it.
 // Source of truth: hub/src/api/snapshot.ts.
 
-export type DeviceType = 'light' | 'dimmer' | 'fan' | 'media' | 'tv' | 'plug' | 'camera' | 'sensor' | 'vacuum' | 'internet';
+export type DeviceType = 'light' | 'dimmer' | 'fan' | 'media' | 'tv' | 'plug' | 'camera' | 'sensor' | 'vacuum' | 'internet' | 'climate';
 
 export interface DeviceState {
   on?: boolean;
@@ -26,6 +26,11 @@ export interface DeviceState {
   energy?: number | null;
   activity?: string;
   battery?: number | null;
+  /** Air conditioners (`climate`): cool/heat/dry/fan/auto, the temperature it aims for and the room's (°C), and its fan. */
+  hvac?: 'cool' | 'heat' | 'dry' | 'fan' | 'auto' | null;
+  target?: number | null;
+  temp?: number | null;
+  fanSpeed?: 'auto' | 'quiet' | 'low' | 'medium' | 'high' | 'turbo' | null;
   online?: boolean;
 }
 

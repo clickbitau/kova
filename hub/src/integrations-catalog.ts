@@ -262,6 +262,20 @@ export const CATALOG: CatalogItem[] = [
     ],
   },
   {
+    id: 'connectlife', name: 'Hisense ConnectLife', icon: 'ac_unit', kind: 'Cloud', apply: 'hot',
+    description: 'Hisense air conditioners (split, window and portable): on and off, cool, heat, dry, fan and auto, the temperature, and fan speed, with the room’s temperature. Through your ConnectLife account, the one the ConnectLife app uses.',
+    fields: [
+      {
+        key: 'rooms', label: 'Rooms', type: 'list', shape: 'map', mapKey: 'device', mapValue: 'room', addLabel: 'Put an air conditioner in a room',
+        item: [{ key: 'device', label: 'ConnectLife device id', type: 'text', required: true, help: 'Shown on the air conditioner in Kova, under Address.' }, room()],
+      },
+    ],
+    actions: [
+      { id: 'link', label: 'Link ConnectLife', icon: 'link', method: 'GET', path: '/api/integrations/connectlife/auth-url', opensUrl: true, help: 'Sign in with your ConnectLife account. The page after that won’t load: that’s expected. Copy its whole address (it has ?code=…) into Finish linking.' },
+      { id: 'code', label: 'Finish linking', icon: 'key', method: 'POST', path: '/api/integrations/connectlife/auth-code', help: 'Kova keeps the sign-in and finds your air conditioners.', fields: [{ key: 'code', label: 'Address or code', type: 'text', required: true }] },
+    ],
+  },
+  {
     id: 'ecovacs', name: 'Ecovacs DEEBOT', icon: 'cleaning_services', kind: 'Cloud', apply: 'hot',
     description: 'DEEBOT robot vacuums through your Ecovacs account.',
     fields: [

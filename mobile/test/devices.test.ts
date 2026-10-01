@@ -49,6 +49,15 @@ test('tapping a tile: lights switch, speakers start the first source, a Helix bo
   assert.equal(stateOf({ ...bar, on: false } as Dev)[0], 'Off');
 });
 
+test('an air conditioner: mode, target and the room; a tap switches it', () => {
+  const ac = { id: 'ac', name: 'Bedroom AC', room: 'bedroom', type: 'climate', capabilities: ['onoff', 'climate'], on: true, hvac: 'cool', target: 24, temp: 27, state: {} } as unknown as Dev;
+  assert.deepEqual(stateOf(ac), ['Cool · 24° · room 27°', '#7cb8f0']);
+  assert.equal(stateOf({ ...ac, hvac: 'heat', target: 21 } as Dev)[0], 'Heat · 21° · room 27°');
+  assert.deepEqual(stateOf({ ...ac, on: false } as Dev), ['Off · room 27°', '#a3a09a']);
+  assert.deepEqual(toggleCommand(ac, []), { on: false });
+  assert.equal(tint(ac).iconFg, '#7cb8f0');
+});
+
 test('devices by room, filtered and searched; hidden ones only on request', () => {
   const rooms = [{ id: 'lounge', name: 'Lounge', icon: 'weekend' }, { id: 'kitchen', name: 'Kitchen', icon: 'kitchen' }];
   const g = groupDevices(Object.values(all), rooms, {});
