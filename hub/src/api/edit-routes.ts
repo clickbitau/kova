@@ -10,6 +10,9 @@ import { cleanTarget, validRhythm } from '../engine/validate.ts';
 // Editing the home's behaviour: modes, moments, overlays and media sources.
 // Every edit returns an undo id, like device commands do.
 
+/** How long Run now waits for a run to end before answering "running". */
+const RUN_ANSWER_MS = 1500;
+
 type Err = { error: string };
 
 export function registerEditRoutes(app: FastifyInstance, hub: Hub): void {
@@ -137,12 +140,17 @@ export function registerEditRoutes(app: FastifyInstance, hub: Hub): void {
     hub.engine.automations.prune();
     return r;
   });
-  // Run now. With ?check=1 its conditions are checked first, as when a trigger starts it.
+  // Run now. With ?check=1 its conditions are checked first, as when a trigger starts it. Answers when the run
+  // ends, or after a moment with `running: true` when it's still going (a wait or a delay): the history shows the rest.
   app.post<{ Params: { id: string }; Querystring: { check?: string } }>('/api/automations/:id/run', async (req, reply) => {
     const a = autos().find(x => x.id === req.params.id);
     if (!a) return reply.code(404).send({ error: 'unknown automation' });
     const engine = hub.engine.automations;
-    const run = req.query.check ? await engine.start(a, 'Run by hand') : await engine.runNow(a, 'Run by hand');
+    const going = req.query.check ? engine.start(a, 'Run by hand') : engine.runNow(a, 'Run by hand');
+    going.catch(() => {});
+    const quick = await Promise.race([going.then(run => ({ run })), new Promise<null>(r => setTimeout(() => r(null), RUN_ANSWER_MS).unref?.())]);
+    if (!quick) return { ok: true, ran: true, running: true, run: engine.lastRun(a.id) ?? null };
+    const run = quick.run;
     const last = engine.lastRun(a.id);
     if (!run) return { ok: false, ran: false, why: last?.result === 'skipped' ? last.detail : engine.running(a.id) ? 'It’s already running' : 'It didn’t start' };
     return { ok: run.result === 'done' || run.result === 'stopped', ran: true, run };

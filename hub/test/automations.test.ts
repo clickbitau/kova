@@ -286,6 +286,15 @@ test('the API: checked when saved, duplicate, history, run now (with or without 
     r = await h.app.inject({ url: `/api/automations/${id}` });
     assert.deepEqual(r.json().runs.map((x: { result: string }) => x.result), ['done', 'skipped']);
 
+    // One with a delay: Run now answers once it has started, without waiting out the delay.
+    const slow = await h.add({ name: 'Slow', triggers: [{ kind: 'hub', event: 'start' }], actions: [{ kind: 'delay', seconds: 600 }, { kind: 'stop' }] });
+    const t0 = Date.now();
+    r = await h.app.inject({ method: 'POST', url: `/api/automations/${slow}/run` });
+    assert.ok(Date.now() - t0 < 5000);
+    assert.deepEqual([r.json().ran, r.json().running, r.json().run.result], [true, true, 'running']);
+    await h.later(601);
+    assert.equal(h.runs(slow)[0].result, 'stopped');
+
     r = await h.app.inject({ method: 'POST', url: `/api/automations/${id}/duplicate` });
     const copy = h.hub.engine.automations.list().find(a => a.id === r.json().id)!;
     assert.deepEqual([copy.name, copy.enabled], ['Porch (copy)', false]);

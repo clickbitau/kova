@@ -211,6 +211,7 @@ test('run times and the snapshot’s lists', () => {
 
 test('run now messages', () => {
   assert.deepEqual(runMessage('Porch', 'running'), { text: 'Porch is running', ok: true, error: false });
+  assert.deepEqual(runMessage('Porch', { ran: true, running: true, run: null }), { text: 'Porch is running', ok: true, error: false }, 'the hub answered before the run ended');
   assert.deepEqual(runMessage('Porch', { ran: false, why: 'No one is home' }), { text: 'Porch: No one is home', ok: false, error: false });
   assert.equal(runMessage('Porch', { ran: true, run: { result: 'failed', detail: 'Lamp is offline' } as never }).text, 'Porch: failed · Lamp is offline');
   assert.equal(runMessage('Porch', { ran: true, run: { result: 'done' } as never }).text, 'Porch: done');

@@ -518,10 +518,10 @@ export function startRun<T>(p: Promise<T>, ms = 4000): Promise<T | 'running'> {
 }
 
 /** What POST /api/automations/:id/run answers. */
-export interface RunAnswer { ran: boolean; run?: AutomationRun; why?: string }
+export interface RunAnswer { ran: boolean; run?: AutomationRun | null; why?: string; /** Still going (a wait or a delay): the hub answered early. */ running?: boolean }
 /** The toast after Run now: done, failed (and why), still running, or why it didn't start. */
 export function runMessage(name: string, r: RunAnswer | 'running'): { text: string; ok: boolean; error: boolean } {
-  if (r === 'running') return { text: `${name} is running`, ok: true, error: false };
+  if (r === 'running' || r.running || r.run?.result === 'running') return { text: `${name} is running`, ok: true, error: false };
   if (!r.ran) return { text: `${name}: ${r.why ?? 'it didn’t start'}`, ok: false, error: false };
   if (r.run?.result === 'failed') return { text: `${name}: failed${r.run.detail ? ` · ${r.run.detail}` : ''}`, ok: false, error: true };
   return { text: `${name}: done`, ok: true, error: false };
