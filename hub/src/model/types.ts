@@ -77,7 +77,7 @@ export interface Device {
 }
 
 /** What the owner changed about a device: a better name, the right room, or hidden from lists. */
-export interface DeviceSettings { name?: string; room?: string; hidden?: boolean }
+export interface DeviceSettings { name?: string; room?: string; hidden?: boolean; /** What it draws while on, in W, for the Energy page (devices with no meter). */ watts?: number }
 
 /**
  * A partial state change requested of a device. Momentary, never kept as state: `skip` 1 = next track, -1 = previous

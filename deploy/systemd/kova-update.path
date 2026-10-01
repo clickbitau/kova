@@ -1,0 +1,11 @@
+[Unit]
+Description=Kova's Update button: run kova-update.service when the hub asks
+Documentation=https://github.com/clickbitau/kova/blob/main/docs/install.md
+
+[Path]
+# The hub (user kova) writes "check" or "apply" here; the updater runs as root and removes it.
+PathExists=/var/lib/kova/update/request
+Unit=kova-update.service
+
+[Install]
+WantedBy=multi-user.target

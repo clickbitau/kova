@@ -2,8 +2,8 @@
   "expo": {
     "name": "Kova",
     "slug": "kova",
-    "version": "0.1.0",
-    "runtimeVersion": "kova-mobile-0.1",
+    "version": "0.2.0",
+    "runtimeVersion": "kova-mobile-0.2",
     "updates": {
       "enabled": true,
       "url": "https://updates.invalid/api/app/manifest",
@@ -113,6 +113,8 @@
       ],
       "@bacons/apple-targets",
       "./plugins/withSiriShortcuts",
+      "./plugins/withIOSSceneLifecycle",
+      "./plugins/withWidgetVersion",
       "expo-quick-actions",
       [
         "react-native-android-widget",

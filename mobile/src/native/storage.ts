@@ -14,9 +14,12 @@ export async function setItem(key: string, value: string | null): Promise<void> 
   if (value == null) await SecureStore.deleteItemAsync(key); else await SecureStore.setItemAsync(key, value);
 }
 
+/** A stored value, or null when there's none, it isn't JSON, or the keychain won't read (e.g. -34018). */
 export async function getJson<T>(key: string): Promise<T | null> {
-  const s = await getItem(key);
-  try { return s ? JSON.parse(s) as T : null; } catch { return null; }
+  try {
+    const s = await getItem(key);
+    return s ? JSON.parse(s) as T : null;
+  } catch { return null; }
 }
 
 export const setJson = (key: string, v: unknown) => setItem(key, v == null ? null : JSON.stringify(v));

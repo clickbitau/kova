@@ -134,6 +134,7 @@ export function snapshot(hub: Hub) {
     sources: cfg.sources,
     // Helix music any speaker can play: Shuffle all, Loved, each playlist (empty until Helix is paired).
     music: hub.music?.cached() ?? [],
+    update: hub.updates?.status() ?? null,
     findings,
     activity,
     integrations: [
