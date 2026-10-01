@@ -8,6 +8,7 @@ tested against your real history.
 - `hub/`: the backend that runs in the home (TypeScript, Node 22+, SQLite)
 - `web/`: the web app (the v3 design, wired to the hub)
 - `docs/install.md`: **installing it for real** (Proxmox LXC, Debian/Ubuntu, Docker), backups, restore, updates
+- `docs/DOCKBIT.md`: how releases are built (`scripts/build-release.sh`) and how hubs get them from ClickBit's catalog
 - `docs/architecture.md`: how it fits together
 - `docs/design/`: the design handoff (prototypes, design language, sitemap)
 

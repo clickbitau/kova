@@ -109,3 +109,42 @@ test('Hub updates: overnight at the hour set, not while something plays; and aft
     await t.hub.stop();
   }
 });
+
+test('Hub updates: the licence key is activated with ClickBit from the hub, never shown back, and the updater asked to check', async () => {
+  const t = await testHub(12);
+  const dataDir = mkdtempSync(join(tmpdir(), 'kova-upd-'));
+  const asked: string[] = [];
+  const fakeFetch = (async (url: string | URL, init?: RequestInit) => {
+    asked.push(String(url));
+    const body = JSON.parse(String(init?.body ?? '{}'));
+    return body.licenceKey === 'KOVA-1234-GOOD'
+      ? new Response(JSON.stringify({ status: 'active', edition: 'home', deviceToken: 'tok' }), { status: 200 })
+      : new Response(JSON.stringify({ error: 'Licence not found' }), { status: 403 });
+  }) as typeof fetch;
+  const u = new Updates(t.hub, { dataDir, now: () => t.clock.t, everyMs: 0, catalog: { url: 'https://catalog.test/api', fetch: fakeFetch } });
+  t.hub.updates = u;
+  const app = await buildServer(t.hub, { webRoot });
+  try {
+    writeStatus(dataDir, { updater: 1, state: 'idle', source: 'release', soft: 'No device token — install a licence to enable updates', current: { version: KOVA_VERSION }, available: null });
+    const before = (await app.inject({ method: 'GET', url: '/api/update' })).json();
+    assert.deepEqual({ source: before.source, note: before.note, licence: before.licence.installed }, { source: 'release', note: 'No device token — install a licence to enable updates', licence: false });
+
+    const bad = await app.inject({ method: 'PUT', url: '/api/update/licence', payload: { key: 'nope' } });
+    assert.equal(bad.statusCode, 400);
+    assert.match(bad.json().error, /403 Licence not found/);
+
+    const r = await app.inject({ method: 'PUT', url: '/api/update/licence', payload: { key: ' KOVA-1234-GOOD ' } });
+    assert.equal(r.statusCode, 200, r.body);
+    assert.deepEqual(r.json().licence, { installed: true, activated: true, status: 'active', edition: 'home', key: '…GOOD', error: null });
+    assert.equal(asked.at(-1), 'https://catalog.test/api/v1/device/activate');
+    assert.equal(readFileSync(join(dataDir, 'update', 'request'), 'utf8'), 'check\n');
+    // The key and the token stay on the box: not in the API, nor the snapshot.
+    const state = (await app.inject({ method: 'GET', url: '/api/state' })).body;
+    assert.doesNotMatch(state + r.body, /KOVA-1234-GOOD|"tok"/);
+
+    assert.equal((await app.inject({ method: 'DELETE', url: '/api/update/licence' })).json().licence.installed, false);
+  } finally {
+    await app.close();
+    await t.hub.stop();
+  }
+});

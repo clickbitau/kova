@@ -5,11 +5,17 @@
       "id": "hub",
       "name": "Kova hub",
       "versionFile": "hub/package.json",
-      "ships": "git pull (deploy/update.sh) and the Docker image",
+      "ships": "Release bundles from ClickBit's catalog (scripts/build-release.sh, docs/DOCKBIT.md), git pull while boxes move over, and the Docker image",
       "paths": [
         "hub/",
         "web/",
         "deploy/",
+        "ota/",
+        "package.json",
+        "package-lock.json",
+        "scripts/build-release.sh",
+        "scripts/pack-release.mjs",
+        "scripts/version.sh",
         "Dockerfile",
         "docker-compose.yml"
       ],

@@ -483,6 +483,12 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
   app.get('/api/update', async (_req, reply) => hub.updates ? hub.updates.status() : noUpdater(reply));
   app.post('/api/update/check', async (_req, reply) => { if (!hub.updates) return noUpdater(reply); try { return hub.updates.request('check'); } catch (e) { return fail(reply, e); } });
   app.post('/api/update/apply', async (_req, reply) => { if (!hub.updates) return noUpdater(reply); try { return hub.updates.request('apply'); } catch (e) { return fail(reply, e); } });
+  // The licence key ClickBit's release catalog wants (the key itself never comes back out).
+  app.put<{ Body: { key?: string } }>('/api/update/licence', async (req, reply) => {
+    if (!hub.updates) return noUpdater(reply);
+    try { return await hub.updates.setLicence(String(req.body?.key ?? '')); } catch (e) { return fail(reply, e); }
+  });
+  app.delete('/api/update/licence', async (_req, reply) => hub.updates ? hub.updates.forgetLicence() : noUpdater(reply));
   app.put<{ Body: { on?: boolean; hour?: number } }>('/api/update/settings', async (req, reply) => {
     if (!hub.updates) return noUpdater(reply);
     try { return { auto: hub.updates.setAuto(req.body ?? {}) }; } catch (e) { return fail(reply, e); }

@@ -169,7 +169,9 @@ fi
 log "Installing $UNIT"
 src_unit="$KOVA_DIR/deploy/systemd/kova.service"
 [[ $DRY == 1 || -f "$src_unit" ]] || die "$src_unit is missing"
-run_sh "sed -e 's|^WorkingDirectory=.*|WorkingDirectory=$KOVA_DIR/hub|' \
+# The running Kova is $KOVA_DIR/current: "." (this checkout) until the first release is installed.
+[[ -e "$KOVA_DIR/current" ]] || run ln -s . "$KOVA_DIR/current"
+run_sh "sed -e 's|^WorkingDirectory=.*|WorkingDirectory=$KOVA_DIR/current/hub|' \
   -e 's|^ExecStart=[^ ]*|ExecStart=$NODE_BIN|' \
   -e 's|^Environment=KOVA_DATA=.*|Environment=KOVA_DATA=$DATA_DIR|' \
   -e 's|^ReadWritePaths=.*|ReadWritePaths=$DATA_DIR|' \

@@ -158,7 +158,11 @@ hub.services.push({ id: 'presence', name: 'Presence', icon: 'person_pin_circle',
 // Notifications: Web Push to the phone app needs no config (VAPID keys are made on first run); ntfy when configured.
 const notifier = new Notifier(hub, integrations?.notify ?? {}, { dataDir });
 // Updating the hub itself, through the updater on the box (deploy/updater.sh): what's new, the Update button, overnight updates.
-hub.updates = new Updates(hub, { dataDir, notify: n => notifier.notify(n) });
+hub.updates = new Updates(hub, {
+  dataDir, notify: n => notifier.notify(n),
+  // ClickBit's release catalog (the defaults are production); the root updater reads the same from kova.env.
+  catalog: { url: env.KOVA_UPDATE_URL || undefined, channel: env.KOVA_UPDATE_CHANNEL || undefined, product: env.KOVA_PRODUCT || env.CLICKBIT_PRODUCT_ID || undefined },
+});
 hub.updates.start();
 notifier.start();
 // Cloud: Web Push is delivered by Apple's / Google's push service (and ntfy.sh unless self-hosted).

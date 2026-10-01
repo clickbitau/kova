@@ -4,7 +4,7 @@ Kova ships two things that move independently:
 
 | Component | Version file | Ships as |
 | --- | --- | --- |
-| Kova hub | `hub/package.json` | `git pull` (`deploy/update.sh`) and the Docker image |
+| Kova hub | `hub/package.json` | Release bundles from ClickBit's catalog (`scripts/build-release.sh`, [DOCKBIT.md](DOCKBIT.md)); `git pull` while boxes move over; the Docker image |
 | Kova (phone app) | `mobile/src/version.json` | a TestFlight / App Store / Play binary per native train, and JavaScript over the air from the hub |
 
 `release/components.json` maps source paths to components. `node scripts/check-versions.mjs
@@ -80,7 +80,7 @@ down.
 
 | What | Command |
 | --- | --- |
-| Over-the-air release | `node scripts/export-ota.mjs "What changed"`. It checks the native lock, bumps PATCH, adds the history entry, runs `expo export` (iOS and Android) into `ota/<train>/<timestamp>/` with the bundle's version in `expoConfig.json`, and keeps the newest 2 per train. Commit `mobile/src/version.json` and `ota/` together; hubs get it with their next update. |
+| Over-the-air release | `node scripts/export-ota.mjs "What changed"`. It checks the native lock, bumps PATCH, adds the history entry, runs `expo export` (iOS and Android) into `ota/<train>/<timestamp>/` with the bundle's version in `expoConfig.json`, and keeps the newest 2 per train. Commit `mobile/src/version.json` and `ota/` together, with a hub PATCH bump (`ota/` ships in the hub's release bundle); hubs get it with their next update. |
 | New native build (MINOR) | `node scripts/store-release.mjs mobile "What's new"`. It moves to `X.(Y+1).0` on train `kova-mobile-X.(Y+1)`, and rewrites app.json, version.json and `mobile/native-lock.json`. It refuses when nothing native changed since the last store build. |
 | New App Store line (MAJOR) | `node scripts/store-release.mjs mobile --major "Kova 1.0"`, giving `(X+1).0.0` on `kova-mobile-(X+1).0`. |
 | Before a store build (DockBit) | `node scripts/check-versions.mjs --store-build mobile` |
