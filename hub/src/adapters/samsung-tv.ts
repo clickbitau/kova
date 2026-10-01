@@ -75,6 +75,14 @@ export function parseInfo(j: { name?: string; device?: { PowerState?: string; na
   return { on: d.PowerState ? d.PowerState.toLowerCase() === 'on' : true, name: d.name ?? j.name, model: d.modelName, mac: d.wifiMac };
 }
 
+/** The remote key that switches to an input ("hdmi1".."hdmi4", "tv"). */
+export function inputKey(input: string): string {
+  const m = /^hdmi([1-4])$/.exec(input);
+  if (m) return `KEY_HDMI${m[1]}`;
+  if (input === 'tv') return 'KEY_TV';
+  throw new Error(`Unknown TV input ${input}: use hdmi1..hdmi4 or tv`);
+}
+
 /** Which key to press, and how often, to go from one volume to another. */
 export function volumeSteps(from: number, to: number): { key: 'KEY_VOLUP' | 'KEY_VOLDOWN'; n: number } {
   return to >= from ? { key: 'KEY_VOLUP', n: Math.round(to - from) } : { key: 'KEY_VOLDOWN', n: Math.round(from - to) };
@@ -153,7 +161,7 @@ export class SamsungTvAdapter implements Adapter {
       const info = await this.info(tv).catch(() => null);
       ctx.announce([{
         id, name: cfg.name ?? info?.name ?? 'Samsung TV', room: cfg.room, type: 'tv',
-        integration: `Samsung ${info?.model ?? 'TV'}`, address: cfg.host, capabilities: ['onoff', 'volume'],
+        integration: `Samsung ${info?.model ?? 'TV'}`, address: cfg.host, capabilities: ['onoff', 'volume', 'input'],
       }]);
       await this.refresh(tv, info);
       // Ask for permission while the TV is on, so the Allow prompt appears now rather than on the first command.
@@ -314,7 +322,7 @@ export class SamsungTvAdapter implements Adapter {
 
   // ------------------------------------------------------------ commands --
 
-  async command(d: Device, cmd: Command): Promise<void> {
+  async command(d: Device, cmd: Command): Promise<void | DeviceState> {
     const tv = this.tvs.get(d.address);
     if (!tv) throw new Error(`Unknown Samsung TV ${d.id}`);
     if (cmd.on === false) {
@@ -328,6 +336,13 @@ export class SamsungTvAdapter implements Adapter {
       return;
     }
     if (cmd.vol != null) await this.setVolume(tv, cmd.vol);
+    if (cmd.input) {
+      // The remote API has no way to read the current source, so the input is not
+      // kept as state: the next request for the same input still presses the key.
+      if (!tv.on) throw new Error(`${tv.cfg.name ?? tv.cfg.host} is off: switch it on before changing input`);
+      await this.key(tv, inputKey(cmd.input));
+      return { input: null };
+    }
     // media: not supported yet (would need app launch by id); ignored.
   }
 

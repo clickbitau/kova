@@ -15,7 +15,7 @@ export const CAPS: Record<DeviceType, Capability[]> = {
 
 const FIELD_CAP: Record<string, Capability> = {
   on: 'onoff', bri: 'brightness', k: 'colorTemp', color: 'color', mode: 'fanMode', media: 'media', vol: 'volume', power: 'power',
-  activity: 'vacuum', battery: 'battery', paused: 'pause',
+  activity: 'vacuum', battery: 'battery', paused: 'pause', input: 'input',
 };
 
 /** Drop fields the device can't do, so a mode can target mixed brands safely. */

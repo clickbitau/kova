@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import type { AddressInfo } from 'node:net';
 import { Store } from '../src/store/db.ts';
 import { Registry } from '../src/devices/registry.ts';
-import { SamsungTvAdapter, keyMessage, magicPacket, parseInfo, remoteUrl, renderingControlUrl, volumeSteps, type SamsungTvOptions } from '../src/adapters/samsung-tv.ts';
+import { SamsungTvAdapter, inputKey, keyMessage, magicPacket, parseInfo, remoteUrl, renderingControlUrl, volumeSteps, type SamsungTvOptions } from '../src/adapters/samsung-tv.ts';
 
 // `ws` comes with @fastify/websocket; the fake TV uses it so the adapter's own WebSocket client is tested against another implementation.
 const { WebSocketServer } = (await import('ws' as string)) as { WebSocketServer: any };
@@ -109,7 +109,7 @@ test('Samsung TV: pairs, saves the token, reads power and volume, sets volume, s
     assert.equal(d.type, 'tv');
     assert.equal(d.name, '[TV] Samsung S90D');
     assert.equal(d.integration, 'Samsung QA55S90DAWXXY');
-    assert.deepEqual(d.capabilities, ['onoff', 'volume']);
+    assert.deepEqual(d.capabilities, ['onoff', 'volume', 'input']);
     assert.equal(d.state.on, true);
     assert.equal(d.state.online, true);
     assert.equal(d.state.vol, 12);
@@ -164,6 +164,28 @@ test('Samsung TV: on when in standby sends Wake-on-LAN to the MAC it reported', 
   } finally { await reg.stop(); f.close(); }
 });
 
+test('Samsung TV: input presses the HDMI / TV key every time, and refuses while off', { timeout: 15_000 }, async () => {
+  const f = await fakeTv();
+  const reg = new Registry(new Store(':memory:'));
+  const a = new SamsungTvAdapter(opts(f, mkdtempSync(join(tmpdir(), 'tv-'))));
+  try {
+    await reg.addAdapter(a);
+    await reg.command('lounge_tv', { input: 'hdmi2' }, you);
+    await until('KEY_HDMI2', () => f.tv.keys.length === 1);
+    assert.equal(reg.get('lounge_tv')!.state.input, null, 'not kept: the TV cannot be asked');
+    // Someone used the TV's own remote since; asking again presses the key again.
+    await reg.command('lounge_tv', { input: 'hdmi2' }, you);
+    await reg.command('lounge_tv', { input: 'tv' }, you);
+    await until('three keys', () => f.tv.keys.length === 3);
+    assert.deepEqual(f.tv.keys, ['KEY_HDMI2', 'KEY_HDMI2', 'KEY_TV']);
+    await assert.rejects(reg.command('lounge_tv', { input: 'hdmi9' }, you), /Unknown TV input/);
+
+    f.tv.power = 'standby';
+    await a.poll();
+    await assert.rejects(reg.command('lounge_tv', { input: 'hdmi1' }, you), /is off/);
+  } finally { await reg.stop(); f.close(); }
+});
+
 test('Samsung TV: falls back to volume keys when DLNA SetVolume fails', { timeout: 15_000 }, async () => {
   const f = await fakeTv();
   f.tv.failSetVolume = true;
@@ -195,6 +217,10 @@ test('Samsung TV helpers', () => {
   assert.equal(remoteUrl('10.0.0.20', 8002, 'Kova', 'abc'), 'wss://10.0.0.20:8002/api/v2/channels/samsung.remote.control?name=S292YQ%3D%3D&token=abc');
   assert.equal(remoteUrl('10.0.0.20', 8002, 'Kova', undefined, false), 'ws://10.0.0.20:8002/api/v2/channels/samsung.remote.control?name=S292YQ%3D%3D');
   assert.deepEqual(JSON.parse(keyMessage('KEY_POWER')), { method: 'ms.remote.control', params: { Cmd: 'Click', DataOfCmd: 'KEY_POWER', Option: 'false', TypeOfRemote: 'SendRemoteKey' } });
+  assert.equal(inputKey('hdmi1'), 'KEY_HDMI1');
+  assert.equal(inputKey('hdmi4'), 'KEY_HDMI4');
+  assert.equal(inputKey('tv'), 'KEY_TV');
+  assert.throws(() => inputKey('hdmi5'));
   const p = magicPacket('AA-BB-CC-DD-EE-FF');
   assert.equal(p.length, 102);
   assert.equal(p.subarray(96).toString('hex'), 'aabbccddeeff');
