@@ -350,6 +350,23 @@ export class CastAdapter implements Adapter {
   private speakerId(d: Device) { return this.castOf.get(d.id) ?? d.id.replace(/^cast_/, ''); }
   private kovaId(castId: string) { return this.kova.get(castId) ?? `cast_${castId}`; }
 
+  /**
+   * Cast ids (the udn AirConnect knows a device by) for device names, e.g. the speakers to leave out of AirPlay.
+   * A name matches with or without aircast's trailing "+", in any case.
+   */
+  castIdsByName(names: string[]): Record<string, string> {
+    const norm = (n: string) => n.trim().replace(/\+$/, '').toLowerCase();
+    const out: Record<string, string> = {};
+    for (const n of names) {
+      const r = [...this.receivers.values()].find(x => norm(x.ep.name) === norm(n));
+      if (!r) continue;
+      // Speakers are 32 hex digits; groups' ids are the UUID form, upper case.
+      const id = r.ep.id;
+      out[n] = r.ep.group && /^[0-9a-f]{32}$/i.test(id) ? id.toUpperCase().replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, '$1-$2-$3-$4-$5') : id;
+    }
+    return out;
+  }
+
   /** The name of the Cast group (made in Google Home) whose members are exactly these Kova devices: plays through it are in perfect sync. */
   castGroupFor(devices: Device[]): string | undefined {
     const gid = devices.length > 1 ? this.groupFor(devices.map(d => this.speakerId(d))) : undefined;

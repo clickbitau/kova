@@ -79,7 +79,11 @@ if (demo && !hub.store.get('seeded')) {
 // iPhone → Cast speakers: AirConnect's aircast, supervised by Kova.
 let aircast: AirCastBridge | undefined;
 if (integrations?.aircast?.binary) {
-  aircast = new AirCastBridge({ ...integrations.aircast, workDir: integrations.aircast.workDir ?? resolve(dataDir, 'aircast') });
+  aircast = new AirCastBridge({
+    ...integrations.aircast, workDir: integrations.aircast.workDir ?? resolve(dataDir, 'aircast'),
+    // Leaving a speaker out needs its Cast id: Kova's Cast adapter has it (started above).
+    castIds: names => (hub.reg.adapters.get('cast') as { castIdsByName?: (n: string[]) => Record<string, string> } | undefined)?.castIdsByName?.(names) ?? {},
+  });
   aircast.on('status', () => hub.emit('changed'));
   aircast.start();
   const ac = aircast;

@@ -126,7 +126,8 @@ test('Warden link: a restart request switches the plug off, waits, on, and answe
     assert.deepEqual(lan.got, ['hallway_plug off', 'hallway_plug on']);
     assert.ok(Date.now() - t0 >= 1000, 'waited offSeconds');
     assert.deepEqual(w.last('/power-cycles/pc_1')!.body, { status: 'done' });
-    assert.ok(t.hub.store.feed(20).some(e => e.what === 'Restarted Hallway AP by switching Hallway plug off and on'), 'in Activity');
+    // Activity is written around the answer, not necessarily before it: wait for it rather than assume (busy build machines).
+    await until('in Activity', () => t.hub.store.feed(20).some(e => e.what === 'Restarted Hallway AP by switching Hallway plug off and on'));
 
     // The same request again (a replay after reconnecting): nothing happens twice.
     req('pc_1', 'hallway_plug');
