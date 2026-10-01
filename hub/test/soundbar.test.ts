@@ -129,7 +129,9 @@ test('Samsung soundbar through SmartThings: found on the account, read, and powe
 test('SmartThings linking, inputs and what counts as a soundbar', async () => {
   const st = await fakeSmartThings();
   try {
-    const url = new URL(smartThingsAuthUrl({ clientId: 'cid' }));
+    const link = smartThingsAuthUrl({ clientId: 'cid' });
+    assert.ok(!link.includes('*') && link.endsWith('x%3Adevices%3A%2A'), 'no bare "*" at the end to lose when copied');
+    const url = new URL(link);
     assert.equal(url.origin + url.pathname, 'https://api.smartthings.com/oauth/authorize');
     assert.deepEqual(Object.fromEntries(url.searchParams), { client_id: 'cid', response_type: 'code', redirect_uri: 'https://httpbin.org/get', scope: 'r:devices:* x:devices:*' });
     assert.deepEqual(await exchangeSmartThingsCode({ code: 'abc', clientId: 'cid', clientSecret: 'secret', tokenUrl: `${st.url}/oauth/token` }), { refreshToken: 'r1' });

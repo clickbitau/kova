@@ -12,6 +12,7 @@ import { isScreen } from '../src/adapters/helix.ts';
 import { HelixLink, SOUNDBAR_INPUTS, SOUNDBAR_MODES, TV_INPUTS, helixScreens, kovaAddress } from '../src/services/helix-link.ts';
 import type { Adapter, AdapterContext } from '../src/adapters/sdk.ts';
 import type { Command, Device } from '../src/model/types.ts';
+import { automationIdeas, carryOverTvOff } from '../src/engine/automation-ideas.ts';
 
 const webRoot = resolve(import.meta.dirname, '../../web');
 
@@ -231,7 +232,7 @@ test('Helix boxes: a box that gets a stable id is followed, and the old entry go
   }
 });
 
-test('Helix link: a box that shuts down turns its TV and soundbar off, only while the TV is on the box’s input', async () => {
+test('Helix link: the old built-in “TV off when the box shuts down” carries over once, as an automation that does the same', async () => {
   // A Helix box as the Helix adapter announces it; the test switches it offline like Helix's feed does.
   class Box implements Adapter {
     id = 'helix'; name = 'Helix'; icon = 'movie'; kind = 'Local' as const; ctx!: AdapterContext;
@@ -252,19 +253,44 @@ test('Helix link: a box that shuts down turns its TV and soundbar off, only whil
   const tvs = new SeenTvs(), box = new Box();
   await t.hub.reg.addAdapter(tvs);
   await t.hub.reg.addAdapter(box);
-  let cfg: Record<string, unknown> = { url: 'http://helix', token: 'hxd', screens: { 'Lounge box': { tv: 'lounge_tv', input: 'hdmi4', soundbar: 'lounge_bar' } } };
+  const cfg: Record<string, unknown> = { url: 'http://helix', token: 'hxd', screens: { 'Lounge box': { tv: 'lounge_tv', input: 'hdmi4', soundbar: 'lounge_bar' } } };
   const dir = mkdtempSync(join(tmpdir(), 'kova-helix-off-'));
   const link = new HelixLink(t.hub, { helix: () => cfg, dataDir: dir, port: () => 8140, debounceMs: 60_000 });
   const settle = () => new Promise(r => setTimeout(r, 30));
   const offs = () => tvs.got.filter(g => g.cmd.on === false).map(g => g.id).sort();
+  t.hub.screens = () => link.screens().flatMap(s => {
+    const b = [...t.hub.reg.devices.values()].find(d => d.adapter === 'helix' && d.address === s.playerId);
+    return b ? [{ player: b.id, tv: s.tvDeviceId, input: s.helixInput, soundbar: s.soundbarDeviceId }] : [];
+  });
+  let done = false;
+  const carry = (wasOff = false) => carryOverTvOff({
+    done: () => done, markDone: () => { done = true; }, wasOff: () => wasOff, graceMs: 1000,
+    ideas: () => automationIdeas(t.hub.config.get(), t.hub.reg.devices, t.hub.screens()),
+    add: a => { t.hub.config.update(c => { (c.automations ??= []).push({ id: 'carried', ...a }); }); },
+    on: fn => { t.hub.reg.on('devices', fn); return () => t.hub.reg.off('devices', fn); },
+  });
   try {
+    // Turned off in the old setting: nothing carried over, and it's only suggested.
+    carry(true);
+    assert.equal(done, true);
+    assert.equal(t.hub.config.get().automations?.length ?? 0, 0);
+    done = false;
+    carry();
+    assert.equal(done, true);
+    const a = t.hub.config.get().automations!;
+    assert.equal(a.length, 1);
+    assert.deepEqual([a[0].when, a[0].if, a[0].then], [{ device: 'helix_lounge_box', becomes: 'offline' }, [{ device: 'lounge_tv', is: { on: true, input: 'hdmi4' } }], { lounge_tv: { on: false }, lounge_bar: { on: false } }]);
+    // Once only.
+    carry();
+    assert.equal(t.hub.config.get().automations!.length, 1);
+
     // The TV is on the box's input (hdmi4), the soundbar on: the box goes offline → both off.
     tvs.ctx.report('lounge_tv', { on: true, input: 'hdmi4' });
     tvs.ctx.report('lounge_bar', { on: true });
     box.ctx.report('helix_lounge_box', { online: false, on: false });
     await settle();
     assert.deepEqual(offs(), ['lounge_bar', 'lounge_tv']);
-    assert.ok(t.hub.store.feed(20).some(e => /Helix box shut down/.test(JSON.stringify(e))), 'in Activity, with why');
+    assert.ok(t.hub.store.feed(20).some(e => /Lounge box went offline/.test(e.what)), 'in Activity, with why');
 
     // Someone switched the TV to another input (or its own apps): left alone.
     tvs.got.length = 0;
@@ -274,8 +300,8 @@ test('Helix link: a box that shuts down turns its TV and soundbar off, only whil
     await settle();
     assert.deepEqual(offs(), []);
 
-    // Turned off in the settings: left alone.
-    cfg = { ...cfg, tvOffWithBox: 'off' };
+    // The automation switched off: left alone.
+    t.hub.config.update(c => { c.automations![0].enabled = false; });
     box.ctx.report('helix_lounge_box', { online: true });
     tvs.ctx.report('lounge_tv', { on: true, input: 'hdmi4' });
     box.ctx.report('helix_lounge_box', { online: false });
@@ -283,7 +309,6 @@ test('Helix link: a box that shuts down turns its TV and soundbar off, only whil
     assert.deepEqual(offs(), []);
 
     // Coming back (screen.awake) does nothing on Kova's side: Helix sends on/input itself.
-    cfg = { ...cfg, tvOffWithBox: 'on' };
     tvs.ctx.report('lounge_tv', { on: false });
     box.ctx.report('helix_lounge_box', { online: true, on: true });
     await settle();

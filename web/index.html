@@ -188,6 +188,47 @@
 </div>
 </div>
 </div>
+<div style="display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:17px;font-weight:700">When, if, then</span><span style="font-size:13px;color:#a3a09a">When a device does something, check others, then act.</span></div><div onClick="{{ kaNew }}" style="padding:8px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:#f2b14c;color:#1a1408;display:flex;align-items:center;gap:6px"><span style="font-family:'Material Symbols Rounded';font-size:18px">add</span>New automation</div></div>
+
+<sc-if value="{{ ka.open }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:14px;padding:18px;border-radius:16px;background:#16171a;border:1px solid rgba(242,177,76,0.3)">
+<span style="font-size:15px;font-weight:700">{{ ka.title }}</span>
+<input value="{{ ka.name }}" onChange="{{ ka.setName }}" placeholder="Name, e.g. TV off when the box shuts down" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px;padding:10px 12px">
+<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">When</span>
+<div style="display:flex;flex-wrap:wrap;gap:8px"><select value="{{ ka.dev }}" onChange="{{ ka.setDev }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px;flex:1;min-width:180px"><sc-for list="{{ ka.devOptions }}" as="o" hint-placeholder-count="6"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select><select value="{{ ka.what }}" onChange="{{ ka.setWhat }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px;flex:1;min-width:180px"><sc-for list="{{ ka.whatOptions }}" as="o" hint-placeholder-count="6"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select></div></div>
+<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">If (all of these)</span>
+<sc-for list="{{ ka.ifs }}" as="c" hint-placeholder-count="1"><div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center"><select value="{{ c.device }}" onChange="{{ c.setDevice }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px;flex:1;min-width:180px"><sc-for list="{{ c.devOptions }}" as="o" hint-placeholder-count="6"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select><select value="{{ c.is }}" onChange="{{ c.setIs }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px;min-width:140px"><sc-for list="{{ c.isOptions }}" as="o" hint-placeholder-count="4"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select><span onClick="{{ c.remove }}" role="button" aria-label="Remove" style="font-family:'Material Symbols Rounded';font-size:20px;color:#a3a09a;cursor:pointer">close</span></div></sc-for>
+<span onClick="{{ ka.addIf }}" style="font-size:13px;font-weight:700;color:#f2b14c;cursor:pointer">+ Add a check</span></div>
+<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">Then</span>
+<sc-for list="{{ ka.then }}" as="t" hint-placeholder-count="1"><div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center"><select value="{{ t.device }}" onChange="{{ t.setDevice }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px;flex:1;min-width:180px"><sc-for list="{{ t.devOptions }}" as="o" hint-placeholder-count="6"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select><select value="{{ t.act }}" onChange="{{ t.setAct }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px;min-width:140px"><sc-for list="{{ t.actOptions }}" as="o" hint-placeholder-count="4"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select><span onClick="{{ t.remove }}" role="button" aria-label="Remove" style="font-family:'Material Symbols Rounded';font-size:20px;color:#a3a09a;cursor:pointer">close</span></div></sc-for>
+<span onClick="{{ ka.addThen }}" style="font-size:13px;font-weight:700;color:#f2b14c;cursor:pointer">+ Add something to do</span></div>
+<div style="display:flex;gap:8px;justify-content:flex-end"><div onClick="{{ ka.cancel }}" style="padding:8px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:rgba(255,255,255,0.06);color:#f1efea">Cancel</div><div onClick="{{ ka.save }}" style="padding:8px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:#f2b14c;color:#1a1408">Save</div></div>
+</div>
+</sc-if>
+
+<sc-if value="{{ kaHasIdeas }}" hint-placeholder-val="{{ false }}">
+<sc-for list="{{ kaIdeas }}" as="i" hint-placeholder-count="1">
+<div style="display:flex;flex-direction:column;gap:10px;padding:16px;border-radius:16px;background:rgba(242,177,76,0.07);border:1px solid rgba(242,177,76,0.25)">
+<div style="display:flex;gap:10px;align-items:flex-start"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#f2b14c">lightbulb</span><div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:0"><span style="font-size:12px;font-weight:700;color:#f2b14c">Suggested</span><span style="font-size:14px;font-weight:700">{{ i.name }}</span><span style="font-size:13px;color:#d8d5cf;line-height:1.5">{{ i.text }}</span><span style="font-size:12px;color:#a3a09a;line-height:1.5">{{ i.why }}</span></div></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><div onClick="{{ i.dismiss }}" style="padding:8px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:transparent;color:#a3a09a">Not now</div><div onClick="{{ i.edit }}" style="padding:8px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:rgba(255,255,255,0.06);color:#f1efea">Change first</div><div onClick="{{ i.add }}" style="padding:8px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:#f2b14c;color:#1a1408">Add</div></div>
+</div>
+</sc-for>
+</sc-if>
+
+<sc-if value="{{ kaHas }}" hint-placeholder-val="{{ false }}">
+<div style="background:#16171a;border-radius:16px;overflow:hidden">
+<sc-for list="{{ kaList }}" as="a" hint-placeholder-count="2">
+<div style="display:flex;flex-direction:column;gap:10px;padding:14px 16px;border-top:1px solid rgba(255,255,255,0.05)">
+<div style="display:flex;gap:12px;align-items:flex-start;opacity:{{ a.op }}"><div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:0"><span style="font-size:14px;font-weight:700">{{ a.name }}</span><span style="font-size:13px;color:#a3a09a;line-height:1.5">{{ a.text }}</span></div>
+<div onClick="{{ a.toggle }}" role="switch" aria-label="On" style="flex:none;width:36px;height:22px;border-radius:11px;padding:3px;background:{{ a.track }};cursor:pointer;box-sizing:border-box"><div style="width:16px;height:16px;border-radius:8px;background:#fff;transform:{{ a.knob }};transition:transform .2s"></div></div></div>
+<div style="display:flex;gap:14px;font-size:13px;font-weight:700"><span onClick="{{ a.run }}" style="color:#f2b14c;cursor:pointer">Run now</span><span onClick="{{ a.edit }}" style="color:#d8d5cf;cursor:pointer">Edit</span><span onClick="{{ a.remove }}" style="color:#ff6b5e;cursor:pointer">Delete</span></div>
+</div>
+</sc-for>
+</div>
+</sc-if>
+<sc-if value="{{ kaNone }}" hint-placeholder-val="{{ false }}"><div style="padding:16px;border-radius:16px;background:#16171a;font-size:13px;color:#a3a09a;line-height:1.5">No automations yet. For example: when the TV box shuts down, if the TV is still on its input, turn the TV and soundbar off.</div></sc-if>
+</div>
 </sc-if>
 
 <sc-if value="{{ isRooms }}" hint-placeholder-val="{{ false }}">
@@ -722,6 +763,18 @@ const ICON={light:'lightbulb',dimmer:'lightbulb',fan:'air_purifier',media:'speak
 // Air conditioners: what each mode is called, its colour, and the fan speeds in order.
 const HVAC=[['cool','Cool','ac_unit','#7cb8f0'],['heat','Heat','local_fire_department','#f2b14c'],['dry','Dry','water_drop','#7fd4a0'],['fan','Fan','mode_fan','#a3a09a'],['auto','Auto','autorenew','#c9a0f0']];
 const FANSPEEDS=[['auto','Auto'],['quiet','Quiet'],['low','Low'],['medium','Medium'],['high','High'],['turbo','Turbo']];
+// What a mode, moment or automation can set a device to: [command as JSON, words].
+const actionOptions=(AD,sources)=>!AD?[]:AD.type==='fan'?[['{"mode":"Auto"}','Auto'],['{"mode":"Sleep"}','Sleep'],['{"on":false}','Off']]
+  :AD.type==='climate'?[['{"on":true,"hvac":"cool","target":24}','Cool to 24°'],['{"on":true,"hvac":"heat","target":21}','Heat to 21°'],['{"on":true,"hvac":"auto","target":23}','Auto at 23°'],['{"on":false}','Off']]
+  :AD.type==='internet'?[['{"on":false}','Pause internet'],['{"on":true}','Internet on']]
+  :(AD.capabilities||[]).includes('library')?[['{"paused":true}','Pause'],['{"on":false,"media":null}','Stop']]
+  :isPlayer(AD)&&!(AD.capabilities||[]).includes('media')?[['{"on":false}','Off'],['{"on":true}','On']]
+  :isPlayer(AD)?[['{"on":false,"media":null}','Stop'],...sources.map(so=>[JSON.stringify({on:true,media:so.name,vol:30}),`Play ${so.name} at 30%`])]
+  :AD.type==='dimmer'?[['{"on":false}','Off'],...[5,10,25,50,78,100].map(b=>[JSON.stringify({on:true,bri:b}),`On at ${b}%`])]
+  :[['{"on":true}','On'],['{"on":false}','Off']];
+// Automations: what starts one, and what an "if" can check.
+const AUTO_WHEN=[['becomes:offline','shuts down or goes offline'],['becomes:online','comes back online'],['becomes:on','switches on'],['becomes:off','switches off'],['event:person','sees a person'],['event:ring','rings'],['event:motion','detects motion'],['event:video-started','starts playing a video'],['event:music-started','starts playing music'],['event:stopped','stops playing']];
+const AUTO_IS=[['{"on":true}','is on'],['{"on":false}','is off'],['{"online":false}','is offline'],['{"online":true}','is online'],...['tv','hdmi1','hdmi2','hdmi3','hdmi4'].map(i=>[JSON.stringify({on:true,input:i}),`is on ${i==='tv'?'TV':'HDMI '+i.slice(4)}`])];
 const climateLine=d=>{const m=HVAC.find(h=>h[0]===d.hvac);const room=d.temp!=null?`room ${d.temp}°`:'';return d.on?[[m?m[1]:'On',d.target!=null?`${d.target}°`:'',room].filter(Boolean).join(' · '),m?m[3]:'#7cb8f0']:[['Off',room].filter(Boolean).join(' · '),'#a3a09a']};
 const VAC={cleaning:'Cleaning',returning:'Returning to dock',docked:'Docked',paused:'Paused',idle:'Idle',error:'Needs attention'};
 const fmt=h=>{const m=Math.round(h*60);return String(Math.floor(m/60)%24).padStart(2,'0')+':'+String(m%60).padStart(2,'0')};
@@ -985,13 +1038,7 @@ class Component extends DCLogic {
     const DEVS=Object.values(devs).filter(d=>d.type!=='camera'&&d.type!=='sensor').sort((a,b)=>(RN[a.room]||'').localeCompare(RN[b.room]||'')||a.name.localeCompare(b.name));
     const addDev=devs[s.addDevice]?s.addDevice:(DEVS[0]||{}).id;
     const AD=devs[addDev];
-    const stateOptions=!AD?[]:AD.type==='fan'?[['{"mode":"Auto"}','Auto'],['{"mode":"Sleep"}','Sleep'],['{"on":false}','Off']]
-      :AD.type==='climate'?[['{"on":true,"hvac":"cool","target":24}','Cool to 24°'],['{"on":true,"hvac":"heat","target":21}','Heat to 21°'],['{"on":true,"hvac":"auto","target":23}','Auto at 23°'],['{"on":false}','Off']]
-      :AD.type==='internet'?[['{"on":false}','Pause internet'],['{"on":true}','Internet on']]
-      :(AD.capabilities||[]).includes('library')?[['{"paused":true}','Pause'],['{"on":false,"media":null}','Stop']]
-      :isPlayer(AD)?[['{"on":false,"media":null}','Stop'],...H.sources.map(so=>[JSON.stringify({on:true,media:so.name,vol:30}),`Play ${so.name} at 30%`])]
-      :AD.type==='dimmer'?[['{"on":false}','Off'],...[5,10,25,50,78,100].map(b=>[JSON.stringify({on:true,bri:b}),`On at ${b}%`])]
-      :[['{"on":true}','On'],['{"on":false}','Off']];
+    const stateOptions=actionOptions(AD,H.sources);
     const addState=stateOptions.some(o=>o[0]===s.addState)?s.addState:(stateOptions[0]||[''])[0];
     const put=(url,body,msg)=>api('PUT',url,body).then(r=>this.toast(msg,this.undoFn(r.undo))).catch(x=>this.err(x));
     const ed={
@@ -1162,6 +1209,48 @@ class Component extends DCLogic {
       addInteg:()=>{if(!s.igCat)this.loadInteg();this.setState(p=>({igPick:!p.igPick}))}};
   }
 
+  // Kova's own automations (when / if / then): the ones Kova suggests, the owner's list, and the editor.
+  kovaAutoVals(s,H,devs,RN){
+    const DEVS=Object.values(devs).sort((a,b)=>(RN[a.room]||'').localeCompare(RN[b.room]||'')||a.name.localeCompare(b.name));
+    const ACT=DEVS.filter(d=>d.type!=='camera'&&d.type!=='sensor');
+    const opt=l=>l.map(d=>({v:d.id,label:`${RN[d.room]?RN[d.room]+' · ':''}${d.name}`}));
+    const done=(msg)=>r=>this.toast(msg,this.undoFn(r.undo));
+    const sentence=a=>[a.whenLabel,...(a.ifLabels||[]).map(x=>'if '+x)].join(', ')+' → '+(a.thenLabels||[]).join(', ');
+    const fromAuto=a=>({id:a.id||null,name:a.name,dev:a.when.device,what:'becomes' in a.when?`becomes:${a.when.becomes}`:`event:${a.when.event}`,
+      ifs:(a.if||[]).map(c=>({device:c.device,is:JSON.stringify(c.is)})),then:Object.entries(a.then||{}).map(([device,cmd])=>({device,act:JSON.stringify(cmd)}))});
+    const K=s.ka;
+    const setK=fn=>this.setState(p=>({ka:fn(structuredClone(p.ka))}));
+    const toBody=k=>{const [kind,val]=k.what.split(':');return{name:k.name,enabled:true,when:kind==='becomes'?{device:k.dev,becomes:val}:{device:k.dev,event:val},
+      if:k.ifs.filter(c=>c.device).map(c=>({device:c.device,is:JSON.parse(c.is)})),then:Object.fromEntries(k.then.filter(t=>t.device).map(t=>[t.device,JSON.parse(t.act)]))}};
+    const editor=!K?{open:false}:{open:true,title:K.id?'Edit automation':'New automation',name:K.name,setName:e=>{const v=e.target.value;setK(k=>({...k,name:v}))},
+      devOptions:opt(DEVS),dev:K.dev,setDev:e=>{const v=e.target.value;setK(k=>({...k,dev:v}))},
+      whatOptions:AUTO_WHEN.map(([v,label])=>({v,label})),what:K.what,setWhat:e=>{const v=e.target.value;setK(k=>({...k,what:v}))},
+      ifs:K.ifs.map((c,i)=>({devOptions:opt(DEVS),device:c.device,isOptions:AUTO_IS.map(([v,label])=>({v,label})),is:c.is,
+        setDevice:e=>{const v=e.target.value;setK(k=>{k.ifs[i].device=v;return k})},setIs:e=>{const v=e.target.value;setK(k=>{k.ifs[i].is=v;return k})},
+        remove:()=>setK(k=>{k.ifs.splice(i,1);return k})})),
+      addIf:()=>setK(k=>{k.ifs.push({device:(ACT[0]||{}).id,is:AUTO_IS[0][0]});return k}),
+      then:K.then.map((t,i)=>{const o=actionOptions(devs[t.device],H.sources);return{devOptions:opt(ACT),device:t.device,actOptions:o.map(([v,label])=>({v,label})),act:o.some(x=>x[0]===t.act)?t.act:(o[0]||[''])[0],
+        setDevice:e=>{const v=e.target.value;setK(k=>{k.then[i]={device:v,act:(actionOptions(devs[v],H.sources)[0]||[''])[0]};return k})},setAct:e=>{const v=e.target.value;setK(k=>{k.then[i].act=v;return k})},
+        remove:()=>setK(k=>{k.then.splice(i,1);return k})}}),
+      addThen:()=>setK(k=>{const d=ACT[0];k.then.push({device:d&&d.id,act:(actionOptions(d,H.sources)[0]||[''])[0]});return k}),
+      cancel:()=>this.setState({ka:null}),
+      save:()=>{const k=s.ka;if(!k.name.trim()){this.toast('Give the automation a name');return}
+        k.then=k.then.map(t=>{const o=actionOptions(devs[t.device],H.sources);return{...t,act:o.some(x=>x[0]===t.act)?t.act:(o[0]||[''])[0]}});
+        (k.id?api('PUT','/api/automations/'+k.id,toBody(k)):api('POST','/api/automations',toBody(k))).then(r=>{this.setState({ka:null});done(k.id?`${k.name} saved`:`${k.name} added`)(r)}).catch(x=>this.err(x))}};
+    const autos=(H.automations||[]).map(a=>({name:a.name,text:sentence(a),on:a.enabled!==false,op:a.enabled!==false?1:0.55,
+      track:a.enabled!==false?'#f2b14c':'#35363a',knob:a.enabled!==false?'translateX(14px)':'none',
+      toggle:()=>api('PATCH','/api/automations/'+a.id,{enabled:a.enabled===false}).then(done(`${a.name} ${a.enabled===false?'on':'off'}`)).catch(x=>this.err(x)),
+      run:()=>api('POST',`/api/automations/${a.id}/run`).then(r=>this.toast(r.ran?`${a.name}: done`:`${a.name}: ${r.why}`)).catch(x=>this.err(x)),
+      edit:()=>this.setState({ka:fromAuto(a)}),
+      remove:()=>api('DELETE','/api/automations/'+a.id).then(done(`${a.name} deleted`)).catch(x=>this.err(x))}));
+    const ideas=(H.automationIdeas||[]).map(i=>({name:i.name,text:sentence(i),why:i.why,
+      add:()=>api('POST','/api/automations',{name:i.name,enabled:true,when:i.when,if:i.if,then:i.then}).then(done(`${i.name} added`)).catch(x=>this.err(x)),
+      edit:()=>this.setState({ka:fromAuto({...i,id:null})}),
+      dismiss:()=>api('POST',`/api/findings/${encodeURIComponent('idea:'+i.key)}/dismiss`).then(done('Not suggested again')).catch(x=>this.err(x))}));
+    return{ka:editor,kaList:autos,kaHas:autos.length>0,kaNone:!autos.length&&!ideas.length&&!K,kaIdeas:ideas,kaHasIdeas:ideas.length>0,
+      kaNew:()=>this.setState({ka:{id:null,name:'',dev:(DEVS[0]||{}).id,what:AUTO_WHEN[0][0],ifs:[],then:[]}})};
+  }
+
   renderVals(){
     const s=this.state,H=s.hub,devs=this.devs(),list=Object.values(devs),adv=s.advanced;
     const RN=Object.fromEntries(H.rooms.map(r=>[r.id,r.name]));
@@ -1224,7 +1313,7 @@ class Component extends DCLogic {
     const home=H.people.filter(p=>p.home);
     const w=H.weather;
     const hubOk=s.conn&&!H.offline;
-    return {nav,isHome:s.screen==='home',isRooms:s.screen==='rooms',isAutos:s.screen==='autos',isImport:s.screen==='import',isDev:s.screen==='dev'&&adv,
+    return {...this.kovaAutoVals(s,H,devs,RN),nav,isHome:s.screen==='home',isRooms:s.screen==='rooms',isAutos:s.screen==='autos',isImport:s.screen==='import',isDev:s.screen==='dev'&&adv,
       homeName:H.home.name,hubTitle:hubOk?(H.demo?'Demo home':'Hub connected'):'Can’t reach the hub',hubSub:hubOk?(H.demo?'Virtual devices · safe to play with':`${list.length} devices · all local`):'Reconnecting…',hubDot:hubOk?'#7fd4a0':'#ff6b5e',
       weatherIcon:w?w.icon:'cloud_off',weatherTemp:w?`${w.temp}°`:'—',weatherText:w?w.text:'No weather',
       avatars:(home.length?home:H.people).slice(0,3).map((p,i)=>({initial:p.name[0],ml:i?'-8px':'0px',op:p.home?1:0.4})),

@@ -219,7 +219,16 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
     const patch = this.diff(d, state);
     if (!Object.keys(patch).length) return;
     const onlyOnline = Object.keys(patch).every(k => MEASUREMENTS.has(k));
-    if (onlyOnline) { d.state = { ...d.state, ...patch }; this.emit('measure'); return; }
+    if (onlyOnline) {
+      const wasOnline = d.state.online;
+      d.state = { ...d.state, ...patch };
+      this.emit('measure');
+      // Going offline or coming back isn't news for Activity, but automations start on it.
+      if ('online' in patch && patch.online !== wasOnline) {
+        this.emit('change', { device: d, prev: { online: wasOnline }, patch: { online: patch.online }, cause: { kind: 'device', label: d.integration, detail: patch.online ? 'back online' : 'went offline' } });
+      }
+      return;
+    }
     // The next song in a queue isn't news for Activity: keep it quiet, but let listeners (play counts) hear it.
     if (Object.keys(patch).every(k => k === 'track' || k === 'shuffle' || MEASUREMENTS.has(k))) {
       const prev: DeviceState = {};

@@ -1,3 +1,4 @@
+import type { Screen } from './engine/automation-ideas.ts';
 import { EventEmitter } from 'node:events';
 import type { Updates } from './services/updates.ts';
 import { Store } from './store/db.ts';
@@ -50,6 +51,8 @@ export class Hub extends EventEmitter<{ changed: [] }> {
   music: HelixMusic | null = null;
   /** Updating the hub itself (services/updates.ts); null without an updater set up (tests, Docker). */
   updates: Updates | null = null;
+  /** Which media players sit on which TV (and soundbar), for suggested automations. Helix's screens once it's linked. */
+  screens: () => Screen[] = () => [];
 
   /** Let speakers play Helix music: names → play queues, for adapters, the snapshot and Ask. */
   useMusic(m: HelixMusic): void {
