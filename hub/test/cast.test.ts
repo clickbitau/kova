@@ -10,7 +10,7 @@ import { encodeMessage, decodeMessage, NS } from '../src/adapters/cast/channel.t
 /** A fake Cast receiver: enough of receiver, media and multizone to drive the adapter. */
 function fakeCast(name: string, members: string[] = []) {
   const log: { ns: string; type: string; data: Record<string, unknown> }[] = [];
-  const st = { app: null as null | { appId: string; sessionId: string; transportId: string }, level: 0.3, muted: false, url: '' };
+  const st = { app: null as null | { appId: string; sessionId: string; transportId: string }, level: 0.3, muted: false, url: '', paused: false };
   const server = net.createServer(sock => {
     let buf = Buffer.alloc(0);
     const reply = (m: { source: string; namespace: string; data: Record<string, unknown> }) =>
@@ -31,7 +31,11 @@ function fakeCast(name: string, members: string[] = []) {
           reply({ source: 'receiver-0', namespace: NS.receiver, data: status(rid) });
         } else if (m.namespace === NS.media && type === 'LOAD') {
           st.url = String((m.data.media as { contentId: string }).contentId);
-          reply({ source: 'web-1', namespace: NS.media, data: { type: 'MEDIA_STATUS', requestId: rid, status: [{ playerState: 'PLAYING' }] } });
+          st.paused = false;
+          reply({ source: 'web-1', namespace: NS.media, data: { type: 'MEDIA_STATUS', requestId: rid, status: [{ mediaSessionId: 7, playerState: 'PLAYING' }] } });
+        } else if (m.namespace === NS.media && (type === 'GET_STATUS' || type === 'PAUSE' || type === 'PLAY')) {
+          if (type !== 'GET_STATUS') { assert.equal(m.data.mediaSessionId, 7); st.paused = type === 'PAUSE'; }
+          reply({ source: 'web-1', namespace: NS.media, data: { type: 'MEDIA_STATUS', requestId: rid, status: st.app ? [{ mediaSessionId: 7, playerState: st.paused ? 'PAUSED' : 'PLAYING' }] : [] } });
         } else if (m.namespace === NS.multizone) {
           reply({ source: 'receiver-0', namespace: NS.multizone, data: { type: 'MULTIZONE_STATUS', requestId: rid, status: { devices: members.map(id => ({ deviceId: id, name: id })) } } });
         }
@@ -91,6 +95,65 @@ test('Cast: several speakers playing the same thing use their Cast group (perfec
   } finally {
     await reg.stop();
     for (const f of [a, b, c, g]) f.server.close();
+  }
+});
+
+test('Cast: a speaker taken out of a playing group goes quiet and off, and back in rejoins without a restart', async () => {
+  const a = fakeCast('Music Room Speaker'), b = fakeCast('Baby Room speaker');
+  const g = fakeCast('Home Speaker Group', ['aaaa0000-0000-0000-0000-000000000001', 'bbbb0000-0000-0000-0000-000000000002']);
+  const ep = async (f: ReturnType<typeof fakeCast>, id: string, model: string) => ({ id, name: f.name, model, host: '127.0.0.1', port: await listen(f) });
+  const reg = new Registry(new Store(':memory:'), n => (n === 'Tarateel' ? 'https://stream.example/tarateel.mp3' : undefined));
+  const cast = new CastAdapter({
+    discover: false, insecure: true, pollMs: 0, batchMs: 20,
+    endpoints: [await ep(a, 'aaaa0000000000000000000000000001', 'Nest Audio'), await ep(b, 'bbbb0000000000000000000000000002', 'Nest Audio'), await ep(g, 'dddd0000000000000000000000000004', 'Google Cast Group')],
+  });
+  await reg.addAdapter(cast);
+  const A = 'cast_aaaa0000000000000000000000000001', B = 'cast_bbbb0000000000000000000000000002';
+  const poll = () => (cast as unknown as { poll(): Promise<void> }).poll();
+  try {
+    await reg.applyTargets({ [A]: { on: true, media: 'Tarateel' }, [B]: { on: true, media: 'Tarateel' } }, { kind: 'user', label: 'You' });
+    assert.equal(g.loads(), 1);
+    // The speakers say they're in the group's session.
+    a.st.app = b.st.app = { appId: 'MZ', sessionId: 's', transportId: 't' };
+
+    await reg.command(A, { on: false, media: null }, { kind: 'user', label: 'You' });
+    assert.equal(a.st.muted, true, 'muted, not stopping the group');
+    assert.ok(g.st.app, 'the group plays on for the other speaker');
+    await poll();
+    assert.equal(reg.get(A)!.state.on, false, 'shown as off while taken out');
+    assert.equal(reg.get(B)!.state.on, true);
+
+    await reg.command(A, { on: true }, { kind: 'user', label: 'You' });
+    assert.equal(a.st.muted, false, 'unmuted');
+    assert.equal(g.loads() + a.loads(), 1, 'no new stream: it rejoins the group');
+    await poll();
+    assert.equal(reg.get(A)!.state.on, true);
+  } finally {
+    await reg.stop();
+    for (const f of [a, b, g]) f.server.close();
+  }
+});
+
+test('Cast: pause keeps the music on hold, and play carries on (not stop)', async () => {
+  const a = fakeCast('Kitchen Speaker');
+  const reg = new Registry(new Store(':memory:'), n => (n === 'Tarateel' ? 'https://stream.example/tarateel.mp3' : undefined));
+  const cast = new CastAdapter({ discover: false, insecure: true, pollMs: 0, batchMs: 20, endpoints: [{ id: 'aaaa0000000000000000000000000001', name: a.name, model: 'Nest Audio', host: '127.0.0.1', port: await listen(a) }] });
+  await reg.addAdapter(cast);
+  const id = 'cast_aaaa0000000000000000000000000001';
+  try {
+    assert.ok(reg.get(id)!.capabilities.includes('pause'));
+    await reg.command(id, { on: true, media: 'Tarateel' }, { kind: 'user', label: 'You' });
+    await reg.command(id, { paused: true }, { kind: 'user', label: 'You' });
+    assert.equal(a.st.paused, true, 'PAUSE sent to the media session');
+    assert.ok(a.st.app, 'the session is kept, not stopped');
+    assert.equal(reg.get(id)!.state.paused, true);
+    assert.equal(reg.get(id)!.state.on, true, 'paused is still on');
+    await reg.command(id, { paused: false }, { kind: 'user', label: 'You' });
+    assert.equal(a.st.paused, false, 'PLAY carries on');
+    assert.equal(a.loads(), 1, 'nothing reloaded');
+  } finally {
+    await reg.stop();
+    a.server.close();
   }
 });
 
