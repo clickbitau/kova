@@ -2,8 +2,8 @@
 // Moving the phone app between store builds (docs/VERSIONING.md).
 //
 //   node scripts/store-release.mjs mobile [--major] ["What's new"]
-//       Start the next native train for a new store binary: kova-mobile-<n+1>, store version MINOR + 1
-//       (X.Y.0), or with --major a new App Store line (X+1.0.0). Updates app.json (version,
+//       Start the next native train for a new store binary: store version MINOR + 1 (X.Y+1.0 on train
+//       kova-mobile-X.Y+1), or with --major a new App Store line (X+1.0.0 on kova-mobile-X+1.0). Updates app.json (version,
 //       runtimeVersion), mobile/src/version.json and mobile/native-lock.json. Refused when the native
 //       code is the same as the last store build's: ship it over the air instead (rule 3).
 //

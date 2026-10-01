@@ -9,7 +9,7 @@ update comes from the hub on your network, not a cloud service.
         _expo/static/js/…
         assets/…
 
-`<train>` is the native runtime (`kova-mobile-0`): a bundle only reaches binaries built from the
+`<train>` is the native runtime (`kova-mobile-0.1`): a bundle only reaches binaries built from the
 same native code. The newest `<update>` wins; deleting it rolls phones back to the one before.
 
 Made by `node scripts/export-ota.mjs "What changed"` (docs/VERSIONING.md), committed with the

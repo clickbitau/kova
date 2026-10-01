@@ -1,5 +1,5 @@
 {
-  "runtimeVersion": "kova-mobile-0",
+  "runtimeVersion": "kova-mobile-0.1",
   "fingerprint": "82e6df3a97450d73c82cafeaa39eee65898eca4a165bdea2bd35a95900620181",
   "inputs": {
     "dependency expo": "9b788954798e4a2638457d014c6d74cd64b6acd9108f06a02ee332807fcc92d3",

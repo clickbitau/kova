@@ -30,8 +30,12 @@ The owner's standard for every app (the same as Helix and Warden):
    over the air.
 4. Never reuse an approved version; versions only go up.
 5. A new MAJOR is a new App Store line, starting at `X.0.0` (`store-release.mjs mobile --major`).
-6. Each binary has a native **train**, `kova-mobile-<n>`. It is app.json's `runtimeVersion` and
-   `mobile/src/version.json`'s `train`. A bundle only reaches binaries on its train.
+6. Each binary has a native **train** named after the version line it builds:
+   `kova-mobile-<MAJOR>.<MINOR>` of its store version. `kova-mobile-0.1` builds 0.1.0 and its
+   updates 0.1.x; `kova-mobile-0.2` builds 0.2.0; `kova-mobile-1.0` builds 1.0.0. The train is
+   app.json's `runtimeVersion` and `mobile/src/version.json`'s `train`, and a bundle only reaches
+   binaries on its train. `check-versions.mjs` refuses a train that doesn't name its store
+   version's line.
 7. Build numbers (iOS `CFBundleVersion`, Android `versionCode`) only go up, per platform. EAS keeps
    them (`appVersionSource: remote`, `autoIncrement`), and `release/store-builds.json` records each
    one.
@@ -77,8 +81,8 @@ down.
 | What | Command |
 | --- | --- |
 | Over-the-air release | `node scripts/export-ota.mjs "What changed"`. It checks the native lock, bumps PATCH, adds the history entry, runs `expo export` (iOS and Android) into `ota/<train>/<timestamp>/` with the bundle's version in `expoConfig.json`, and keeps the newest 2 per train. Commit `mobile/src/version.json` and `ota/` together; hubs get it with their next update. |
-| New native build (MINOR) | `node scripts/store-release.mjs mobile "What's new"`. It moves to `kova-mobile-<n+1>` and `X.(Y+1).0`, and rewrites app.json, version.json and `mobile/native-lock.json`. It refuses when nothing native changed since the last store build. |
-| New App Store line (MAJOR) | `node scripts/store-release.mjs mobile --major "Kova 1.0"` |
+| New native build (MINOR) | `node scripts/store-release.mjs mobile "What's new"`. It moves to `X.(Y+1).0` on train `kova-mobile-X.(Y+1)`, and rewrites app.json, version.json and `mobile/native-lock.json`. It refuses when nothing native changed since the last store build. |
+| New App Store line (MAJOR) | `node scripts/store-release.mjs mobile --major "Kova 1.0"`, giving `(X+1).0.0` on `kova-mobile-(X+1).0`. |
 | Before a store build (DockBit) | `node scripts/check-versions.mjs --store-build mobile` |
 | After an upload (DockBit) | `node scripts/store-release.mjs --shipped mobile <build> --platform ios --channel testflight` |
 | After App Review approves | `node scripts/store-release.mjs --approved mobile <version> <build>` |
