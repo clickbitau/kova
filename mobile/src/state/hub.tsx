@@ -44,7 +44,8 @@ export function HubProvider({ children }: { children: ReactNode }) {
   const retry = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => { void getJson<HubConfig>(KEY).then(c => { setCfg(c); setLoading(false); }); }, []);
+  // Whatever the keychain says (or fails to), the app moves on from the splash.
+  useEffect(() => { void getJson<HubConfig>(KEY).catch(() => null).then(c => { setCfg(c); setLoading(false); }); }, []);
 
   // Live state over the hub's socket, reconnecting with backoff and whenever the app comes back to the front.
   useEffect(() => {
