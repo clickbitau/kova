@@ -1,3 +1,5 @@
+import { convertHaAutomation } from './ha-automations.ts';
+import type { Automation } from '../model/types.ts';
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import SunCalc from 'suncalc';
@@ -60,6 +62,12 @@ export interface HaAutomation {
   /** How Kova covers this kind of rule. */
   kova: string;
   yaml: string;
+  /** The Kova automation made from it, once converted. */
+  converted: string | null;
+  /** What converting it would leave out. */
+  notes: string[];
+  /** Kova can convert it (something starts it and something it does maps over). */
+  convertible: boolean;
 }
 
 export interface ImportSummary {
@@ -354,8 +362,49 @@ export class HaImport {
         when: when.length ? when : ['No trigger'], cond, then: then.length ? then : ['Nothing'],
         enabled, lastRun: typeof last === 'string' && last ? `Last ran ${new Date(last).toLocaleString('en-AU', { timeZone: tz, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).replace(/\bSept\b/, 'Sep')}` : enabled ? 'Hasn’t run yet' : 'Turned off in Home Assistant',
         kova, yaml: toYaml(a, { lineWidth: 0 }).trimEnd(),
+        converted: (this.hub.config.get().automations ?? []).find(x => x.origin?.from === 'home-assistant' && x.origin.id === id)?.id ?? null,
+        ...(() => { const c = convertHaAutomation(a, this.lookup(name)); return { notes: c.notes, convertible: !!c.automation }; })(),
       };
     });
+  }
+
+  private lookup(name: (eid: string) => string) {
+    return { name, devices: this.hub.reg.list(), people: this.hub.config.get().people };
+  }
+
+  /**
+   * Make Kova automations from Home Assistant ones (all that can be, or the ids given). Each is checked like one made
+   * in Kova and starts switched off; ones already converted are skipped.
+   */
+  convert(ids: string[] | undefined, save: (a: Omit<Automation, 'id'>) => string): { made: { from: string; id: string; name: string; notes: string[] }[]; skipped: { from: string; name: string; why: string }[] } {
+    const text = this.config('automations.yaml');
+    if (!text) throw new Error('No Home Assistant automations imported');
+    const list = (parseYaml(text) as Json[] | null) ?? [];
+    const summary = new Map(this.automations().map(x => [x.id, x]));
+    const made: { from: string; id: string; name: string; notes: string[] }[] = [], skipped: { from: string; name: string; why: string }[] = [];
+    list.forEach((a, i) => {
+      const from = String(a.id ?? `automation_${i + 1}`);
+      const s = summary.get(from);
+      if (ids && !ids.includes(from)) return;
+      if (s?.converted) { skipped.push({ from, name: s.name, why: 'already converted' }); return; }
+      const names = new Map(this.automations().map(x => [x.id, x.name]));
+      const c = convertHaAutomation(a, this.lookup(this.entityName()));
+      if (!c.automation) { skipped.push({ from, name: names.get(from) ?? from, why: c.notes.join('; ') }); return; }
+      try { made.push({ from, id: save(c.automation), name: c.automation.name, notes: c.notes }); }
+      catch (e) { skipped.push({ from, name: c.automation.name, why: (e as Error).message }); }
+    });
+    return { made, skipped };
+  }
+
+  /** Entity id → friendly name, from the imported registries. */
+  private entityName(): (eid: string) => string {
+    const ents = ((this.storage('core.entity_registry')?.data as Json | undefined)?.entities ?? []) as { entity_id: string; name?: string | null; original_name?: string | null }[];
+    const states = ((this.storage('core.restore_state')?.data ?? []) as { state?: { entity_id: string; attributes?: Json } }[]).map(s => s.state).filter(Boolean) as { entity_id: string; attributes?: Json }[];
+    return eid => {
+      const e = ents.find(x => x.entity_id === eid);
+      const n = e?.name ?? e?.original_name ?? states.find(x => x.entity_id === eid)?.attributes?.friendly_name;
+      return typeof n === 'string' && n ? n : eid.replace(/^[a-z_]+\./, '').replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());
+    };
   }
 
   // ------------------------------------------------------------------ apply --

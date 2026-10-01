@@ -279,7 +279,7 @@ test('Helix link: the old built-in “TV off when the box shuts down” carries 
     assert.equal(done, true);
     const a = t.hub.config.get().automations!;
     assert.equal(a.length, 1);
-    assert.deepEqual([a[0].when, a[0].if, a[0].then], [{ device: 'helix_lounge_box', becomes: 'offline' }, [{ device: 'lounge_tv', is: { on: true, input: 'hdmi4' } }], { lounge_tv: { on: false }, lounge_bar: { on: false } }]);
+    assert.deepEqual([a[0].triggers, a[0].conditions, a[0].actions], [[{ kind: 'device', device: 'helix_lounge_box', to: { online: false } }], [{ kind: 'device', device: 'lounge_tv', is: { on: true, input: 'hdmi4' } }], [{ kind: 'set', targets: { lounge_tv: { on: false }, lounge_bar: { on: false } } }]]);
     // Once only.
     carry();
     assert.equal(t.hub.config.get().automations!.length, 1);
@@ -290,7 +290,7 @@ test('Helix link: the old built-in “TV off when the box shuts down” carries 
     box.ctx.report('helix_lounge_box', { online: false, on: false });
     await settle();
     assert.deepEqual(offs(), ['lounge_bar', 'lounge_tv']);
-    assert.ok(t.hub.store.feed(20).some(e => /Lounge box went offline/.test(e.what)), 'in Activity, with why');
+    assert.ok(t.hub.store.feed(20).some(e => /Lounge box turned offline/.test(e.what)), 'in Activity, with why');
 
     // Someone switched the TV to another input (or its own apps): left alone.
     tvs.got.length = 0;

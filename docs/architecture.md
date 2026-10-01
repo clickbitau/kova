@@ -134,6 +134,51 @@ add-on: nothing in Kova depends on HA. The design reference lives in
 * **Preview**: replays today's plan up to any hour to show what the home will
   look like.
 
+### Automations (`automations.ts`, `automation-check.ts`, `automation-ideas.ts`)
+
+The owner's own rules, next to modes, moments and overlays: **when** (any of its triggers), **only if** (all
+of its conditions), **then** (steps in order). Kept in the home's config (`automations`), on or off.
+
+- **Triggers:**
+  - a device changing to or from a state (`to` / `from`, optionally "for" a while);
+  - a reading crossing above or below a value (temperature, power, battery…), with an optional "for";
+  - a device event;
+  - a clock, sun or prayer time on chosen days, or every N minutes;
+  - someone arriving or leaving, the first home, the last out;
+  - a mode starting;
+  - an overlay starting or ending;
+  - the hub starting.
+- **Conditions:** device state, a reading, a time window (which may cross midnight) and days, who's home,
+  the mode, an overlay, and nested `all` / `any` / `not` groups.
+- **Steps:**
+  - set devices (targets, as modes use);
+  - wait a while;
+  - wait until a condition holds (with a timeout, then carry on or stop);
+  - notify (push, to everyone or some people);
+  - start or end an overlay;
+  - if / otherwise;
+  - repeat;
+  - run another automation;
+  - stop.
+- **Run modes** for a start while it's still running: `single` ignores it, `restart` cancels the run, `queued`
+  runs after, `parallel` runs alongside.
+- **Time** comes from the engine's clock. Delays, "for" and timeouts fall due on a tick, so tests move time
+  exactly and a hub has one-second resolution.
+- **Loops:** an automation is never started by its own change. One that starts more than 30 times in a minute
+  is switched off, and Activity says why.
+- **History:** each run is kept with what started it, the result (done, stopped, skipped and why, cancelled,
+  failed) and every step, the last 30 per automation (store key `automation-runs`). Activity gets an entry
+  when devices change.
+- **Checked on save** against the home: devices exist and can do what's asked, rhythms are valid, and modes,
+  overlays, people and automations exist. Nesting is limited.
+- **Suggestions** come from how devices are connected: a player on a TV's input suggests "TV off when the player
+  shuts down". The owner adds it, changes it first, or dismisses it.
+- **Home Assistant** automations convert into Kova ones (`import/ha-automations.ts`). Entities are matched to
+  Kova devices by name or id, and anything Kova can't do is listed on the automation (`origin.notes`).
+  Converted ones start switched off.
+- **Older shapes:** automations saved by hub 0.7.6 (one when / ifs / targets) are rewritten in this shape on
+  start.
+
 ### Teach, test, trust (`findings.ts`)
 
 * **Static check**: walks the day's modes and flags a bright light that one mode

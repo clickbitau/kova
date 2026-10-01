@@ -188,47 +188,6 @@
 </div>
 </div>
 </div>
-<div style="display:flex;flex-direction:column;gap:12px">
-<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:17px;font-weight:700">When, if, then</span><span style="font-size:13px;color:#a3a09a">When a device does something, check others, then act.</span></div><div onClick="{{ kaNew }}" style="padding:8px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:#f2b14c;color:#1a1408;display:flex;align-items:center;gap:6px"><span style="font-family:'Material Symbols Rounded';font-size:18px">add</span>New automation</div></div>
-
-<sc-if value="{{ ka.open }}" hint-placeholder-val="{{ false }}">
-<div style="display:flex;flex-direction:column;gap:14px;padding:18px;border-radius:16px;background:#16171a;border:1px solid rgba(242,177,76,0.3)">
-<span style="font-size:15px;font-weight:700">{{ ka.title }}</span>
-<input value="{{ ka.name }}" onChange="{{ ka.setName }}" placeholder="Name, e.g. TV off when the box shuts down" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px;padding:10px 12px">
-<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">When</span>
-<div style="display:flex;flex-wrap:wrap;gap:8px"><select value="{{ ka.dev }}" onChange="{{ ka.setDev }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px;flex:1;min-width:180px"><sc-for list="{{ ka.devOptions }}" as="o" hint-placeholder-count="6"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select><select value="{{ ka.what }}" onChange="{{ ka.setWhat }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px;flex:1;min-width:180px"><sc-for list="{{ ka.whatOptions }}" as="o" hint-placeholder-count="6"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select></div></div>
-<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">If (all of these)</span>
-<sc-for list="{{ ka.ifs }}" as="c" hint-placeholder-count="1"><div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center"><select value="{{ c.device }}" onChange="{{ c.setDevice }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px;flex:1;min-width:180px"><sc-for list="{{ c.devOptions }}" as="o" hint-placeholder-count="6"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select><select value="{{ c.is }}" onChange="{{ c.setIs }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px;min-width:140px"><sc-for list="{{ c.isOptions }}" as="o" hint-placeholder-count="4"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select><span onClick="{{ c.remove }}" role="button" aria-label="Remove" style="font-family:'Material Symbols Rounded';font-size:20px;color:#a3a09a;cursor:pointer">close</span></div></sc-for>
-<span onClick="{{ ka.addIf }}" style="font-size:13px;font-weight:700;color:#f2b14c;cursor:pointer">+ Add a check</span></div>
-<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">Then</span>
-<sc-for list="{{ ka.then }}" as="t" hint-placeholder-count="1"><div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center"><select value="{{ t.device }}" onChange="{{ t.setDevice }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px;flex:1;min-width:180px"><sc-for list="{{ t.devOptions }}" as="o" hint-placeholder-count="6"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select><select value="{{ t.act }}" onChange="{{ t.setAct }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px;min-width:140px"><sc-for list="{{ t.actOptions }}" as="o" hint-placeholder-count="4"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select><span onClick="{{ t.remove }}" role="button" aria-label="Remove" style="font-family:'Material Symbols Rounded';font-size:20px;color:#a3a09a;cursor:pointer">close</span></div></sc-for>
-<span onClick="{{ ka.addThen }}" style="font-size:13px;font-weight:700;color:#f2b14c;cursor:pointer">+ Add something to do</span></div>
-<div style="display:flex;gap:8px;justify-content:flex-end"><div onClick="{{ ka.cancel }}" style="padding:8px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:rgba(255,255,255,0.06);color:#f1efea">Cancel</div><div onClick="{{ ka.save }}" style="padding:8px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:#f2b14c;color:#1a1408">Save</div></div>
-</div>
-</sc-if>
-
-<sc-if value="{{ kaHasIdeas }}" hint-placeholder-val="{{ false }}">
-<sc-for list="{{ kaIdeas }}" as="i" hint-placeholder-count="1">
-<div style="display:flex;flex-direction:column;gap:10px;padding:16px;border-radius:16px;background:rgba(242,177,76,0.07);border:1px solid rgba(242,177,76,0.25)">
-<div style="display:flex;gap:10px;align-items:flex-start"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#f2b14c">lightbulb</span><div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:0"><span style="font-size:12px;font-weight:700;color:#f2b14c">Suggested</span><span style="font-size:14px;font-weight:700">{{ i.name }}</span><span style="font-size:13px;color:#d8d5cf;line-height:1.5">{{ i.text }}</span><span style="font-size:12px;color:#a3a09a;line-height:1.5">{{ i.why }}</span></div></div>
-<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><div onClick="{{ i.dismiss }}" style="padding:8px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:transparent;color:#a3a09a">Not now</div><div onClick="{{ i.edit }}" style="padding:8px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:rgba(255,255,255,0.06);color:#f1efea">Change first</div><div onClick="{{ i.add }}" style="padding:8px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:#f2b14c;color:#1a1408">Add</div></div>
-</div>
-</sc-for>
-</sc-if>
-
-<sc-if value="{{ kaHas }}" hint-placeholder-val="{{ false }}">
-<div style="background:#16171a;border-radius:16px;overflow:hidden">
-<sc-for list="{{ kaList }}" as="a" hint-placeholder-count="2">
-<div style="display:flex;flex-direction:column;gap:10px;padding:14px 16px;border-top:1px solid rgba(255,255,255,0.05)">
-<div style="display:flex;gap:12px;align-items:flex-start;opacity:{{ a.op }}"><div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:0"><span style="font-size:14px;font-weight:700">{{ a.name }}</span><span style="font-size:13px;color:#a3a09a;line-height:1.5">{{ a.text }}</span></div>
-<div onClick="{{ a.toggle }}" role="switch" aria-label="On" style="flex:none;width:36px;height:22px;border-radius:11px;padding:3px;background:{{ a.track }};cursor:pointer;box-sizing:border-box"><div style="width:16px;height:16px;border-radius:8px;background:#fff;transform:{{ a.knob }};transition:transform .2s"></div></div></div>
-<div style="display:flex;gap:14px;font-size:13px;font-weight:700"><span onClick="{{ a.run }}" style="color:#f2b14c;cursor:pointer">Run now</span><span onClick="{{ a.edit }}" style="color:#d8d5cf;cursor:pointer">Edit</span><span onClick="{{ a.remove }}" style="color:#ff6b5e;cursor:pointer">Delete</span></div>
-</div>
-</sc-for>
-</div>
-</sc-if>
-<sc-if value="{{ kaNone }}" hint-placeholder-val="{{ false }}"><div style="padding:16px;border-radius:16px;background:#16171a;font-size:13px;color:#a3a09a;line-height:1.5">No automations yet. For example: when the TV box shuts down, if the TV is still on its input, turn the TV and soundbar off.</div></sc-if>
-</div>
 </sc-if>
 
 <sc-if value="{{ isRooms }}" hint-placeholder-val="{{ false }}">
@@ -253,7 +212,79 @@
 </sc-if>
 
 <sc-if value="{{ isAutos }}" hint-placeholder-val="{{ false }}">
-<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:12px"><div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;color:#a3a09a">{{ autoCount }}</span><h1 style="margin:0;font-size:30px;font-weight:700;letter-spacing:-0.02em">Automations</h1></div><div onClick="{{ autoCta.go }}" style="padding:9px 16px;border-radius:12px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:18px">move_down</span>{{ autoCta.label }}</div></div>
+<sc-if value="{{ ae.open }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:16px;max-width:980px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span onClick="{{ ae.cancel }}" role="button" aria-label="Back" style="font-family:'Material Symbols Rounded';font-size:24px;cursor:pointer;color:#a3a09a">arrow_back</span><h1 style="margin:0;font-size:26px;font-weight:700;letter-spacing:-0.02em;flex:1">{{ ae.title }}</h1>
+<sc-if value="{{ ae.canTry }}" hint-placeholder-val="{{ false }}"><div onClick="{{ ae.tryNow }}" style="padding:8px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:rgba(255,255,255,0.06);color:#f1efea;display:flex;align-items:center;gap:6px"><span style="font-family:'Material Symbols Rounded';font-size:18px">play_arrow</span>Run now</div></sc-if>
+<div onClick="{{ ae.save }}" style="padding:8px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:#f2b14c;color:#1a1408">Save</div></div>
+<sc-if value="{{ ae.canHistory }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:4px;padding:4px;border-radius:12px;background:#16171a;align-self:flex-start"><div onClick="{{ ae.tabEdit }}" style="padding:7px 14px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;background:{{ ae.editBg }}">Edit</div><div onClick="{{ ae.tabHistory }}" style="padding:7px 14px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;background:{{ ae.histBg }}">History</div></div></sc-if>
+<sc-if value="{{ ae.isEdit }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-direction:column;gap:10px;padding:16px;border-radius:16px;background:#16171a">
+<input value="{{ ae.name }}" onChange="{{ ae.setName }}" placeholder="Name, e.g. Porch light at dusk" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px;padding:11px 12px;font-size:15px;font-weight:600">
+<input value="{{ ae.desc }}" onChange="{{ ae.setDesc }}" placeholder="What it’s for (optional)" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px">
+<select value="{{ ae.mode }}" onChange="{{ ae.setMode }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px"><sc-for list="{{ ae.modeOptions }}" as="o" hint-placeholder-count="4"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select>
+</div>
+<sc-if value="{{ ae.hasNotes }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:6px;padding:14px 16px;border-radius:14px;background:rgba(242,177,76,0.08);border:1px solid rgba(242,177,76,0.25)"><span style="font-size:13px;font-weight:700;color:#f2b14c">Converted from Home Assistant: left out</span><sc-for list="{{ ae.notes }}" as="n" hint-placeholder-count="2"><span style="font-size:12.5px;color:#d8d5cf;line-height:1.5">• {{ n }}</span></sc-for></div></sc-if>
+<div style="display:flex;flex-direction:column;gap:6px;padding:16px;border-radius:16px;background:#16171a">
+<sc-for list="{{ ae.rows }}" as="r" hint-placeholder-count="8">
+<sc-if value="{{ r.isHead }}" hint-placeholder-val="{{ false }}"><div style="padding-left:{{ r.pad }};margin-top:10px"><span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em;color:#f2b14c">{{ r.text }}</span></div></sc-if>
+<sc-if value="{{ r.isNote }}" hint-placeholder-val="{{ false }}"><div style="padding-left:{{ r.pad }};font-size:13px;color:#6f6d69">{{ r.text }}</div></sc-if>
+<sc-if value="{{ r.isAdd }}" hint-placeholder-val="{{ false }}"><div style="padding-left:{{ r.pad }}"><span onClick="{{ r.add }}" style="font-size:13px;font-weight:700;color:#f2b14c;cursor:pointer">{{ r.text }}</span></div></sc-if>
+<sc-if value="{{ r.isTarget }}" hint-placeholder-val="{{ false }}"><div style="padding-left:{{ r.pad }};display:flex;flex-wrap:wrap;gap:8px;align-items:center"><select value="{{ r.device }}" onChange="{{ r.setDevice }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px;flex:1 1 200px"><sc-for list="{{ r.devOptions }}" as="o" hint-placeholder-count="6"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select><select value="{{ r.act }}" onChange="{{ r.setAct }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px;flex:0 1 180px"><sc-for list="{{ r.actOptions }}" as="o" hint-placeholder-count="4"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select><span onClick="{{ r.remove }}" role="button" aria-label="Remove device" style="font-family:'Material Symbols Rounded';font-size:20px;color:#a3a09a;cursor:pointer">close</span></div></sc-if>
+<sc-if value="{{ r.isRow }}" hint-placeholder-val="{{ false }}"><div style="margin-left:{{ r.pad }};display:flex;flex-direction:column;gap:8px;padding:10px 12px;border-radius:12px;background:#1c1d20;border:1px solid rgba(255,255,255,0.05)">
+<div style="display:flex;gap:8px;align-items:center"><span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em;min-width:20px">{{ r.tag }}</span><select value="{{ r.kind }}" onChange="{{ r.setKind }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px;flex:1;min-width:0;background:#232428;font-weight:600"><sc-for list="{{ r.kindOptions }}" as="o" hint-placeholder-count="6"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select><span onClick="{{ r.up }}" role="button" aria-label="Move up" style="font-family:'Material Symbols Rounded';font-size:20px;color:#6f6d69;cursor:pointer">arrow_upward</span><span onClick="{{ r.down }}" role="button" aria-label="Move down" style="font-family:'Material Symbols Rounded';font-size:20px;color:#6f6d69;cursor:pointer">arrow_downward</span><sc-if value="{{ r.canRemove }}" hint-placeholder-val="{{ true }}"><span onClick="{{ r.remove }}" role="button" aria-label="Remove" style="font-family:'Material Symbols Rounded';font-size:20px;color:#a3a09a;cursor:pointer">delete</span></sc-if></div>
+<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end">
+<sc-for list="{{ r.fields }}" as="f" hint-placeholder-count="3">
+<sc-if value="{{ f.isSel }}" hint-placeholder-val="{{ false }}"><label style="display:flex;flex-direction:column;gap:3px;flex:{{ f.wide }};min-width:120px"><span style="font-size:11px;color:#8a8781">{{ f.label }}</span><select value="{{ f.value }}" onChange="{{ f.set }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px"><sc-for list="{{ f.options }}" as="o" hint-placeholder-count="5"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select></label></sc-if>
+<sc-if value="{{ f.isNum }}" hint-placeholder-val="{{ false }}"><label style="display:flex;flex-direction:column;gap:3px;width:110px"><span style="font-size:11px;color:#8a8781">{{ f.label }} <span style="color:#6f6d69">{{ f.unit }}</span></span><input type="number" value="{{ f.value }}" onChange="{{ f.set }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px;width:100%;box-sizing:border-box"></label></sc-if>
+<sc-if value="{{ f.isText }}" hint-placeholder-val="{{ false }}"><label style="display:flex;flex-direction:column;gap:3px;flex:1 1 220px"><span style="font-size:11px;color:#8a8781">{{ f.label }}</span><input value="{{ f.value }}" onChange="{{ f.set }}" placeholder="{{ f.ph }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px"></label></sc-if>
+<sc-if value="{{ f.isTime }}" hint-placeholder-val="{{ false }}"><label style="display:flex;flex-direction:column;gap:3px"><span style="font-size:11px;color:#8a8781">{{ f.label }}</span><input type="time" value="{{ f.value }}" onChange="{{ f.set }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px"></label></sc-if>
+<sc-if value="{{ f.isChips }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:3px;flex:1 1 100%"><span style="font-size:11px;color:#8a8781">{{ f.label }}</span><div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ f.items }}" as="c" hint-placeholder-count="7"><div onClick="{{ c.toggle }}" style="min-width:30px;text-align:center;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer;background:{{ c.bg }};color:{{ c.fg }}">{{ c.label }}</div></sc-for></div></div></sc-if>
+</sc-for>
+</div></div></sc-if>
+</sc-for>
+</div>
+</sc-if>
+<sc-if value="{{ ae.isHistory }}" hint-placeholder-val="{{ false }}">
+<sc-if value="{{ ae.hasRuns }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:10px"><sc-for list="{{ ae.runs }}" as="u" hint-placeholder-count="3">
+<div style="display:flex;flex-direction:column;gap:8px;padding:14px 16px;border-radius:14px;background:#16171a"><div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap"><span style="font-size:13px;font-weight:700;color:{{ u.fg }}">{{ u.result }}</span><span style="font-size:13px;color:#d8d5cf;flex:1">{{ u.why }}</span><span style="font-size:12px;color:#8a8781;font-family:'JetBrains Mono',monospace">{{ u.when }}</span></div>
+<span style="font-size:12.5px;color:#a3a09a">{{ u.detail }}</span>
+<sc-for list="{{ u.steps }}" as="st" hint-placeholder-count="2"><div style="display:flex;gap:8px;align-items:flex-start;font-size:12.5px"><span style="font-family:'Material Symbols Rounded';font-size:16px;color:{{ st.fg }}">{{ st.icon }}</span><span style="color:{{ st.fg }};flex:1">{{ st.text }}</span><span style="color:#6f6d69">{{ st.detail }}</span></div></sc-for>
+</div></sc-for></div></sc-if>
+<sc-if value="{{ ae.noRuns }}" hint-placeholder-val="{{ false }}"><div style="padding:16px;border-radius:14px;background:#16171a;font-size:13px;color:#a3a09a">It hasn’t run yet.</div></sc-if>
+</sc-if>
+</div>
+</sc-if>
+<sc-if value="{{ aeClosed }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:12px"><div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;color:#a3a09a">{{ al.count }}</span><h1 style="margin:0;font-size:30px;font-weight:700;letter-spacing:-0.02em">Automations</h1></div><div onClick="{{ al.add }}" style="padding:8px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;padding:9px 16px;background:#f2b14c;color:#1a1408;display:flex;align-items:center;gap:6px"><span style="font-family:'Material Symbols Rounded';font-size:18px">add</span>New automation</div></div>
+<input value="{{ al.q }}" onInput="{{ al.setQ }}" placeholder="Search automations" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px;padding:10px 12px">
+<sc-if value="{{ al.hasIdeas }}" hint-placeholder-val="{{ false }}"><sc-for list="{{ al.ideas }}" as="i" hint-placeholder-count="1">
+<div style="display:flex;flex-direction:column;gap:10px;padding:16px;border-radius:16px;background:rgba(242,177,76,0.07);border:1px solid rgba(242,177,76,0.25)">
+<div style="display:flex;gap:10px;align-items:flex-start"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#f2b14c">lightbulb</span><div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:0"><span style="font-size:12px;font-weight:700;color:#f2b14c">Suggested</span><span style="font-size:14px;font-weight:700">{{ i.name }}</span><span style="font-size:13px;color:#d8d5cf;line-height:1.5">{{ i.text }}</span><span style="font-size:12px;color:#a3a09a;line-height:1.5">{{ i.why }}</span></div></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><div onClick="{{ i.dismiss }}" style="padding:8px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;color:#a3a09a">Not now</div><div onClick="{{ i.edit }}" style="padding:8px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:rgba(255,255,255,0.06);color:#f1efea">Change first</div><div onClick="{{ i.add }}" style="padding:8px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:#f2b14c;color:#1a1408">Add</div></div>
+</div></sc-for></sc-if>
+<sc-if value="{{ al.has }}" hint-placeholder-val="{{ false }}"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,420px),1fr));gap:12px">
+<sc-for list="{{ al.items }}" as="a" hint-placeholder-count="3">
+<div style="display:flex;flex-direction:column;gap:10px;padding:16px;border-radius:16px;background:#16171a;border:1px solid rgba(255,255,255,0.05)">
+<div style="display:flex;gap:12px;align-items:flex-start;opacity:{{ a.op }}"><div onClick="{{ a.edit }}" style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:0;cursor:pointer"><span style="font-size:15px;font-weight:700">{{ a.name }}</span>
+<span style="font-size:12.5px;color:#d8d5cf;line-height:1.45"><span style="color:#f2b14c;font-weight:700">When </span>{{ a.when }}</span>
+<sc-if value="{{ a.hasCond }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;color:#a3a09a;line-height:1.45">{{ a.cond }}</span></sc-if>
+<span style="font-size:12.5px;color:#d8d5cf;line-height:1.45"><span style="color:#f2b14c;font-weight:700">Then </span>{{ a.then }}</span></div>
+<div onClick="{{ a.toggle }}" role="switch" aria-label="On" style="flex:none;width:36px;height:22px;border-radius:11px;padding:3px;background:{{ a.track }};cursor:pointer;box-sizing:border-box"><div style="width:16px;height:16px;border-radius:8px;background:#fff;transform:{{ a.knob }};transition:transform .2s"></div></div></div>
+<div style="display:flex;gap:6px;align-items:center;font-size:12px;color:{{ a.statusFg }}"><span style="font-family:'Material Symbols Rounded';font-size:15px">history</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ a.status }}</span></div>
+<div style="display:flex;gap:14px;font-size:13px;font-weight:700;flex-wrap:wrap"><span onClick="{{ a.run }}" style="color:#f2b14c;cursor:pointer">Run now</span><span onClick="{{ a.edit }}" style="color:#d8d5cf;cursor:pointer">Edit</span><span onClick="{{ a.dup }}" style="color:#d8d5cf;cursor:pointer">Duplicate</span><span onClick="{{ a.remove }}" style="color:#ff6b5e;cursor:pointer">Delete</span></div>
+</div>
+</sc-for></div></sc-if>
+<sc-if value="{{ al.none }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:6px;padding:20px;border-radius:16px;background:#16171a"><span style="font-size:15px;font-weight:700">No automations yet</span><span style="font-size:13px;color:#a3a09a;line-height:1.5">Automations react to what happens at home: when the last person leaves, turn everything off; when the doorbell rings after dark, turn the porch light on for five minutes; when it gets hot, cool the bedroom before bedtime.</span></div></sc-if>
+<sc-if value="{{ al.haHas }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px"><div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:17px;font-weight:700">From Home Assistant</span><span style="font-size:13px;color:#a3a09a">Converted ones start switched off, so they don’t run twice while Home Assistant still runs the originals.</span></div><sc-if value="{{ al.haCanAll }}" hint-placeholder-val="{{ false }}"><div onClick="{{ al.haAll }}" style="padding:8px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:#f2b14c;color:#1a1408">{{ al.haAllLabel }}</div></sc-if></div>
+<div style="background:#16171a;border-radius:16px;overflow:hidden"><sc-for list="{{ al.ha }}" as="h" hint-placeholder-count="3">
+<div style="display:flex;gap:12px;align-items:flex-start;padding:12px 16px;border-top:1px solid rgba(255,255,255,0.05)"><div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:0"><span style="font-size:14px;font-weight:700">{{ h.name }}</span><span style="font-size:12.5px;color:#a3a09a;line-height:1.45">{{ h.text }}</span><span style="font-size:12px;font-weight:700;color:{{ h.stateFg }}">{{ h.state }}</span><sc-if value="{{ h.hasNotes }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:#8a8781;line-height:1.45">{{ h.notes }}</span></sc-if></div>
+<sc-if value="{{ h.canConvert }}" hint-placeholder-val="{{ false }}"><div onClick="{{ h.convert }}" style="padding:8px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;flex:none;background:rgba(255,255,255,0.06);color:#f1efea">Convert</div></sc-if></div>
+</sc-for></div>
+</sc-if>
+<sc-if value="{{ hasAutos }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:12px"><div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;color:#a3a09a">{{ autoCount }}</span><h2 style="margin:0;font-size:17px;font-weight:700">Home Assistant, in plain words</h2></div><div onClick="{{ autoCta.go }}" style="padding:9px 16px;border-radius:12px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:18px">move_down</span>{{ autoCta.label }}</div></div>
 
 <div style="background:#16171a;border-radius:18px;padding:18px 20px 14px;display:flex;flex-direction:column;gap:10px">
 <div style="display:flex;justify-content:space-between;font-size:13px"><span style="font-weight:700">Your day</span><span style="color:#a3a09a">{{ stripNote }}</span></div>
@@ -312,6 +343,8 @@
 <div style="display:flex;gap:8px;flex-wrap:wrap"><div onClick="{{ sel.go }}" style="padding:9px 16px;border-radius:10px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px"><span style="font-family:'Material Symbols Rounded';font-size:18px">arrow_forward</span>{{ sel.goLabel }}</div><div onClick="{{ sel.toggleCode }}" style="padding:9px 16px;border-radius:10px;background:rgba(255,255,255,0.06);font-size:13px;font-weight:600;cursor:pointer">{{ sel.codeLabel }}</div></div>
 </div>
 </div>
+</sc-if>
+</sc-if>
 </sc-if>
 </sc-if>
 
@@ -1209,46 +1242,171 @@ class Component extends DCLogic {
       addInteg:()=>{if(!s.igCat)this.loadInteg();this.setState(p=>({igPick:!p.igPick}))}};
   }
 
-  // Kova's own automations (when / if / then): the ones Kova suggests, the owner's list, and the editor.
+  // Kova's own automations: the list, suggestions, Home Assistant ones to convert, and the editor (when / only if / then).
   kovaAutoVals(s,H,devs,RN){
-    const DEVS=Object.values(devs).sort((a,b)=>(RN[a.room]||'').localeCompare(RN[b.room]||'')||a.name.localeCompare(b.name));
-    const ACT=DEVS.filter(d=>d.type!=='camera'&&d.type!=='sensor');
-    const opt=l=>l.map(d=>({v:d.id,label:`${RN[d.room]?RN[d.room]+' · ':''}${d.name}`}));
-    const done=(msg)=>r=>this.toast(msg,this.undoFn(r.undo));
-    const sentence=a=>[a.whenLabel,...(a.ifLabels||[]).map(x=>'if '+x)].join(', ')+' → '+(a.thenLabels||[]).join(', ');
-    const fromAuto=a=>({id:a.id||null,name:a.name,dev:a.when.device,what:'becomes' in a.when?`becomes:${a.when.becomes}`:`event:${a.when.event}`,
-      ifs:(a.if||[]).map(c=>({device:c.device,is:JSON.stringify(c.is)})),then:Object.entries(a.then||{}).map(([device,cmd])=>({device,act:JSON.stringify(cmd)}))});
-    const K=s.ka;
-    const setK=fn=>this.setState(p=>({ka:fn(structuredClone(p.ka))}));
-    const toBody=k=>{const [kind,val]=k.what.split(':');return{name:k.name,enabled:true,when:kind==='becomes'?{device:k.dev,becomes:val}:{device:k.dev,event:val},
-      if:k.ifs.filter(c=>c.device).map(c=>({device:c.device,is:JSON.parse(c.is)})),then:Object.fromEntries(k.then.filter(t=>t.device).map(t=>[t.device,JSON.parse(t.act)]))}};
-    const editor=!K?{open:false}:{open:true,title:K.id?'Edit automation':'New automation',name:K.name,setName:e=>{const v=e.target.value;setK(k=>({...k,name:v}))},
-      devOptions:opt(DEVS),dev:K.dev,setDev:e=>{const v=e.target.value;setK(k=>({...k,dev:v}))},
-      whatOptions:AUTO_WHEN.map(([v,label])=>({v,label})),what:K.what,setWhat:e=>{const v=e.target.value;setK(k=>({...k,what:v}))},
-      ifs:K.ifs.map((c,i)=>({devOptions:opt(DEVS),device:c.device,isOptions:AUTO_IS.map(([v,label])=>({v,label})),is:c.is,
-        setDevice:e=>{const v=e.target.value;setK(k=>{k.ifs[i].device=v;return k})},setIs:e=>{const v=e.target.value;setK(k=>{k.ifs[i].is=v;return k})},
-        remove:()=>setK(k=>{k.ifs.splice(i,1);return k})})),
-      addIf:()=>setK(k=>{k.ifs.push({device:(ACT[0]||{}).id,is:AUTO_IS[0][0]});return k}),
-      then:K.then.map((t,i)=>{const o=actionOptions(devs[t.device],H.sources);return{devOptions:opt(ACT),device:t.device,actOptions:o.map(([v,label])=>({v,label})),act:o.some(x=>x[0]===t.act)?t.act:(o[0]||[''])[0],
-        setDevice:e=>{const v=e.target.value;setK(k=>{k.then[i]={device:v,act:(actionOptions(devs[v],H.sources)[0]||[''])[0]};return k})},setAct:e=>{const v=e.target.value;setK(k=>{k.then[i].act=v;return k})},
-        remove:()=>setK(k=>{k.then.splice(i,1);return k})}}),
-      addThen:()=>setK(k=>{const d=ACT[0];k.then.push({device:d&&d.id,act:(actionOptions(d,H.sources)[0]||[''])[0]});return k}),
-      cancel:()=>this.setState({ka:null}),
-      save:()=>{const k=s.ka;if(!k.name.trim()){this.toast('Give the automation a name');return}
-        k.then=k.then.map(t=>{const o=actionOptions(devs[t.device],H.sources);return{...t,act:o.some(x=>x[0]===t.act)?t.act:(o[0]||[''])[0]}});
-        (k.id?api('PUT','/api/automations/'+k.id,toBody(k)):api('POST','/api/automations',toBody(k))).then(r=>{this.setState({ka:null});done(k.id?`${k.name} saved`:`${k.name} added`)(r)}).catch(x=>this.err(x))}};
-    const autos=(H.automations||[]).map(a=>({name:a.name,text:sentence(a),on:a.enabled!==false,op:a.enabled!==false?1:0.55,
-      track:a.enabled!==false?'#f2b14c':'#35363a',knob:a.enabled!==false?'translateX(14px)':'none',
-      toggle:()=>api('PATCH','/api/automations/'+a.id,{enabled:a.enabled===false}).then(done(`${a.name} ${a.enabled===false?'on':'off'}`)).catch(x=>this.err(x)),
-      run:()=>api('POST',`/api/automations/${a.id}/run`).then(r=>this.toast(r.ran?`${a.name}: done`:`${a.name}: ${r.why}`)).catch(x=>this.err(x)),
-      edit:()=>this.setState({ka:fromAuto(a)}),
-      remove:()=>api('DELETE','/api/automations/'+a.id).then(done(`${a.name} deleted`)).catch(x=>this.err(x))}));
-    const ideas=(H.automationIdeas||[]).map(i=>({name:i.name,text:sentence(i),why:i.why,
-      add:()=>api('POST','/api/automations',{name:i.name,enabled:true,when:i.when,if:i.if,then:i.then}).then(done(`${i.name} added`)).catch(x=>this.err(x)),
-      edit:()=>this.setState({ka:fromAuto({...i,id:null})}),
+    const ALL=Object.values(devs).sort((a,b)=>(RN[a.room]||'').localeCompare(RN[b.room]||'')||a.name.localeCompare(b.name));
+    const ACT=ALL.filter(d=>d.type!=='camera'&&d.type!=='sensor');
+    const devOpts=l=>l.map(d=>({v:d.id,label:`${RN[d.room]?RN[d.room]+' · ':''}${d.name}`}));
+    const opts=l=>l.map(([v,label])=>({v,label}));
+    const done=msg=>r=>this.toast(msg,this.undoFn(r&&r.undo));
+    const E=s.ae; // the automation being edited: {a, id, runs, tab}
+    // ---------------------------------------------------------------- list
+    const q=(s.aq||'').toLowerCase();
+    const RES={done:['Ran','#7fd4a0'],stopped:['Ran','#7fd4a0'],skipped:['Skipped','#a3a09a'],cancelled:['Cancelled','#a3a09a'],failed:['Failed','#ff6b5e'],running:['Running','#f2b14c']};
+    const autos=(H.automations||[]).filter(a=>!q||[a.name,a.description,...(a.triggerLabels||[]),...(a.actionLabels||[])].join(' ').toLowerCase().includes(q)).map(a=>{
+      const on=a.enabled!==false,lr=a.lastRun,[rl,rc]=lr?RES[lr.result]||['','#a3a09a']:['Not run yet','#6f6d69'];
+      return{name:a.name,when:(a.triggerLabels||[]).join(' · or · '),cond:(a.conditionLabels||[]).length?'Only if '+a.conditionLabels.join(', '):'',then:(a.actionLabels||[]).join(' → '),
+        status:lr?`${rl} ${lr.atLabel}${lr.result==='skipped'&&lr.detail?' · '+lr.detail:lr.result==='failed'&&lr.detail?' · '+lr.detail:''}`:rl,statusFg:rc,running:a.running>0,
+        hasCond:(a.conditionLabels||[]).length>0,op:on?1:0.55,track:on?'#f2b14c':'#35363a',knob:on?'translateX(14px)':'none',fromHa:!!a.origin,
+        toggle:()=>api('PATCH','/api/automations/'+a.id,{enabled:!on}).then(done(`${a.name} ${on?'off':'on'}`)).catch(x=>this.err(x)),
+        run:()=>api('POST',`/api/automations/${a.id}/run`).then(r=>this.toast(r.ran?`${a.name}: ${r.run.result==='failed'?'failed':'done'}`:`${a.name}: ${r.why}`)).catch(x=>this.err(x)),
+        edit:()=>this.openAuto(a),
+        dup:()=>api('POST',`/api/automations/${a.id}/duplicate`).then(done(`Copied ${a.name} (off until you turn it on)`)).catch(x=>this.err(x)),
+        remove:()=>api('DELETE','/api/automations/'+a.id).then(done(`${a.name} deleted`)).catch(x=>this.err(x))}});
+    const ideas=(H.automationIdeas||[]).map(i=>({name:i.name,text:[(i.triggerLabels||[]).join(' or '),(i.conditionLabels||[]).length?'only if '+i.conditionLabels.join(', '):'',(i.actionLabels||[]).join(', ')].filter(Boolean).join(' → '),why:i.why,
+      add:()=>api('POST','/api/automations',{name:i.name,enabled:true,mode:i.mode,triggers:i.triggers,conditions:i.conditions,actions:i.actions}).then(done(`${i.name} added`)).catch(x=>this.err(x)),
+      edit:()=>this.openAuto({name:i.name,enabled:true,mode:i.mode,triggers:i.triggers,conditions:i.conditions,actions:i.actions}),
       dismiss:()=>api('POST',`/api/findings/${encodeURIComponent('idea:'+i.key)}/dismiss`).then(done('Not suggested again')).catch(x=>this.err(x))}));
-    return{ka:editor,kaList:autos,kaHas:autos.length>0,kaNone:!autos.length&&!ideas.length&&!K,kaIdeas:ideas,kaHasIdeas:ideas.length>0,
-      kaNew:()=>this.setState({ka:{id:null,name:'',dev:(DEVS[0]||{}).id,what:AUTO_WHEN[0][0],ifs:[],then:[]}})};
+    const HA=(s.impAutos||[]);
+    const haList=HA.map(a=>({name:a.name,text:`${a.when[0]}${a.cond.length?', '+a.cond[0].toLowerCase():''} → ${a.then[0]}`,enabled:a.enabled,
+      state:a.converted?'Converted':a.convertible?(a.notes.length?`Can convert · ${a.notes.length} part${a.notes.length===1?'':'s'} left out`:'Can convert'):'Needs rebuilding in Kova',
+      stateFg:a.converted?'#7fd4a0':a.convertible?'#f2b14c':'#a3a09a',notes:a.notes.join(' · '),hasNotes:a.notes.length>0,canConvert:a.convertible&&!a.converted,
+      convert:()=>this.convertHa([a.id])}));
+    const haLeft=HA.filter(a=>a.convertible&&!a.converted).length;
+    const list={has:autos.length>0,none:!autos.length&&!(H.automations||[]).length,items:autos,ideas,hasIdeas:ideas.length>0,q:s.aq||'',setQ:e=>this.setState({aq:e.target.value}),
+      count:`${(H.automations||[]).length} automation${(H.automations||[]).length===1?'':'s'} · ${(H.automations||[]).filter(a=>a.enabled!==false).length} on`,
+      add:()=>this.openAuto(null),
+      haHas:HA.length>0,ha:haList,haLeft,haCanAll:haLeft>0,haAllLabel:`Convert ${haLeft}`,haAll:()=>this.convertHa(null)};
+    if(!E)return{ae:{open:false},al:list,aeClosed:true};
+    // --------------------------------------------------------------- editor
+    const A=E.a;
+    const get=(o,p)=>p.reduce((x,k)=>x==null?x:x[k],o);
+    const edit=fn=>this.setState(st=>{const a=structuredClone(st.ae.a);fn(a);return{ae:{...st.ae,a,dirty:true}}});
+    const setAt=(p,v)=>edit(a=>{get(a,p.slice(0,-1))[p[p.length-1]]=v});
+    const delAt=p=>edit(a=>{const l=get(a,p.slice(0,-1));if(Array.isArray(l))l.splice(p[p.length-1],1);else delete l[p[p.length-1]]});
+    const pushAt=(p,v)=>edit(a=>{const l=get(a,p);if(Array.isArray(l))l.push(v);else{const parent=get(a,p.slice(0,-1));parent[p[p.length-1]]=[v]}});
+    const moveAt=(p,d)=>edit(a=>{const l=get(a,p.slice(0,-1)),i=p[p.length-1],j=i+d;if(j<0||j>=l.length)return;[l[i],l[j]]=[l[j],l[i]]});
+    const firstDev=(ALL[0]||{}).id,firstAct=(ACT[0]||{}).id;
+    const people=H.people||[],modes=H.modes||[],overlays=H.overlays||[];
+    const STATES=[['{"on":true}','on'],['{"on":false}','off'],['{"online":false}','offline'],['{"online":true}','online'],['{"playing":true}','playing'],['{"playing":false}','not playing'],
+      ...['tv','hdmi1','hdmi2','hdmi3','hdmi4'].map(i=>[JSON.stringify({on:true,input:i}),`on ${i==='tv'?'TV':'HDMI '+i.slice(4)}`]),
+      ['{"on":true,"hvac":"cool"}','cooling'],['{"on":true,"hvac":"heat"}','heating'],['{"activity":"cleaning"}','cleaning'],['{"activity":"docked"}','docked'],['{"muted":true}','muted']];
+    const stateOpts=(cur)=>{const o=STATES.slice();if(cur&&!o.some(x=>x[0]===cur))o.push([cur,cur]);return opts(o)};
+    const FIELDS=[['temp','temperature'],['target','set temperature'],['power','power (W)'],['energy','energy today (kWh)'],['battery','battery (%)'],['bri','brightness (%)'],['vol','volume (%)']];
+    const EVENTS=[['person','sees a person'],['ring','rings'],['motion','detects motion'],['video-started','starts a video'],['music-started','starts music'],['paused','pauses'],['stopped','stops playing'],['internet-down','internet goes down'],['internet-up','internet comes back'],['new-device','a new device joins']];
+    const RH=[['time','At a time'],['sun:sunrise','Sunrise'],['sun:sunset','Sunset'],['sun:dawn','First light'],['sun:dusk','Dusk'],['prayer:fajr','Fajr'],['prayer:dhuhr','Dhuhr'],['prayer:asr','Asr'],['prayer:maghrib','Maghrib'],['prayer:isha','Isha']];
+    const rk=r=>!r?'time':r.kind==='time'?'time':`${r.kind}:${r.kind==='sun'?r.event:r.prayer}`;
+    const mkR=(k,at,off)=>{const [kind,name]=k.split(':');return kind==='time'?{kind:'time',at:at||'21:00'}:kind==='sun'?{kind:'sun',event:name,...(off?{offsetMin:off}:{})}:{kind:'prayer',prayer:name,...(off?{offsetMin:off}:{})}};
+    // Fields: one row of inputs each. {t:'select'|'number'|'text'|'time'|'chips', label, value, options, set, items, wide}
+    const F={
+      sel:(label,value,options,set,wide)=>({isSel:true,label,value:value==null?'':String(value),options,set:e=>set(e.target.value),wide:wide?'1 1 220px':'0 1 auto'}),
+      num:(label,value,set,unit)=>({isNum:true,label,value:value==null?'':String(value),unit:unit||'',set:e=>{const v=e.target.value;set(v===''?undefined:Number(v))}}),
+      text:(label,value,set,ph)=>({isText:true,label,value:value||'',ph:ph||'',set:e=>set(e.target.value)}),
+      time:(label,value,set)=>({isTime:true,label,value:value||'21:00',set:e=>set(e.target.value)}),
+      chips:(label,items)=>({isChips:true,label,items})};
+    const rhythmFields=(label,r,set)=>{const k=rk(r);return[F.sel(label,k,opts(RH),v=>set(mkR(v,r&&r.kind==='time'?r.at:'21:00',r&&r.offsetMin))),
+      k==='time'?F.time('',r&&r.at,v=>set({kind:'time',at:v})):F.num('min after (− before)',r&&r.offsetMin||0,v=>set({...r,offsetMin:Number(v)||0}))]};
+    const dayChips=(days,set)=>F.chips('Days',['S','M','T','W','T','F','S'].map((l,i)=>{const on=!days||!days.length||days.includes(i);return{label:l,bg:on&&days&&days.length?'#f2b14c':on?'#2a2b2f':'transparent',fg:on&&days&&days.length?'#1a1408':on?'#f1efea':'#6f6d69',
+      toggle:()=>{let d=days&&days.length?days.slice():[0,1,2,3,4,5,6];d=d.includes(i)?d.filter(x=>x!==i):[...d,i].sort();set(d.length===7?undefined:d)}}}));
+    const minsField=(label,sec,set)=>F.num(label,sec?Math.round(sec/60*10)/10:'',v=>set(v?Math.round(v*60):undefined),'min');
+    const NEW_T={device:()=>({kind:'device',device:firstDev,to:{on:true}}),numeric:()=>({kind:'numeric',device:firstDev,field:'temp',above:28}),event:()=>({kind:'event',device:firstDev,event:'person'}),
+      time:()=>({kind:'time',at:{kind:'time',at:'21:00'}}),every:()=>({kind:'every',minutes:15}),presence:()=>({kind:'presence',event:'arrives'}),mode:()=>({kind:'mode',mode:(modes[0]||{}).id}),
+      overlay:()=>({kind:'overlay',overlay:(overlays[0]||{}).id,event:'starts'}),hub:()=>({kind:'hub',event:'start'})};
+    const T_KINDS=[['device','A device changes'],['numeric','A reading goes above or below'],['event','A device event'],['time','A time of day'],['every','Every few minutes'],['presence','Someone comes or goes'],['mode','A mode starts'],['overlay','An overlay starts or ends'],['hub','Kova starts']];
+    const NEW_C={device:()=>({kind:'device',device:firstDev,is:{on:true}}),numeric:()=>({kind:'numeric',device:firstDev,field:'temp',above:25}),time:()=>({kind:'time',after:{kind:'time',at:'18:00'},before:{kind:'time',at:'23:00'}}),
+      presence:()=>({kind:'presence',who:'anyone',home:true}),mode:()=>({kind:'mode',modes:[(modes[0]||{}).id]}),overlay:()=>({kind:'overlay',active:true}),any:()=>({kind:'any',conditions:[NEW_C.device()]}),all:()=>({kind:'all',conditions:[NEW_C.device()]}),not:()=>({kind:'not',conditions:[NEW_C.device()]})};
+    const C_KINDS=[['device','A device is'],['numeric','A reading is above or below'],['time','The time or day'],['presence','Who’s home'],['mode','The mode'],['overlay','An overlay'],['any','Any of these'],['all','All of these'],['not','None of these']];
+    const NEW_A={set:()=>({kind:'set',targets:firstAct?{[firstAct]:JSON.parse((actionOptions(devs[firstAct],H.sources)[0]||['{"on":true}'])[0])}:{}}),delay:()=>({kind:'delay',seconds:300}),
+      wait:()=>({kind:'wait',until:NEW_C.device(),timeoutSec:600}),notify:()=>({kind:'notify',message:''}),overlay:()=>({kind:'overlay',overlay:(overlays[0]||{}).id,op:'start'}),
+      if:()=>({kind:'if',conditions:[NEW_C.device()],then:[],else:[]}),repeat:()=>({kind:'repeat',times:2,actions:[]}),run:()=>({kind:'run',automation:((H.automations||[]).find(x=>x.id!==E.id)||{}).id}),stop:()=>({kind:'stop'})};
+    const A_KINDS=[['set','Set devices'],['delay','Wait a while'],['wait','Wait until something is true'],['notify','Send a notification'],['overlay','Start or end an overlay'],['if','If … otherwise …'],['repeat','Repeat'],['run','Run another automation'],['stop','Stop here']];
+    const rows=[];
+    const row=(depth,tag,kinds,kind,path,fields,newOf,extra={})=>rows.push({isRow:true,pad:(depth*22)+'px',tag,kindOptions:opts(kinds),kind,setKind:e=>setAt(path,newOf[e.target.value]()),fields,
+      remove:()=>delAt(path),up:()=>moveAt(path,-1),down:()=>moveAt(path,1),...extra});
+    const head=(depth,text)=>rows.push({isHead:true,pad:(depth*22)+'px',text});
+    const add=(depth,text,fn)=>rows.push({isAdd:true,pad:(depth*22)+'px',text,add:fn});
+    // Triggers
+    const trigFields=(t,p)=>{const set=(k,v)=>setAt([...p,k],v);switch(t.kind){
+      case 'device':return[F.sel('Device',t.device,devOpts(ALL),v=>set('device',v),1),F.sel('turns',JSON.stringify(t.to||{}),stateOpts(t.to&&JSON.stringify(t.to)),v=>set('to',JSON.parse(v))),F.sel('from',t.from?JSON.stringify(t.from):'',[{v:'',label:'any state'},...stateOpts(t.from&&JSON.stringify(t.from))],v=>set('from',v?JSON.parse(v):undefined)),minsField('for',t.forSec,v=>set('forSec',v))];
+      case 'numeric':return[F.sel('Device',t.device,devOpts(ALL),v=>set('device',v),1),F.sel('reading',t.field,opts(FIELDS),v=>set('field',v)),F.num('above',t.above,v=>set('above',v)),F.num('below',t.below,v=>set('below',v)),minsField('for',t.forSec,v=>set('forSec',v))];
+      case 'event':return[F.sel('Device',t.device,devOpts(ALL),v=>set('device',v),1),F.sel('event',t.event,opts(EVENTS.some(x=>x[0]===t.event)?EVENTS:[...EVENTS,[t.event,t.event]]),v=>set('event',v))];
+      case 'time':return[...rhythmFields('When',t.at,v=>set('at',v)),dayChips(t.days,v=>set('days',v))];
+      case 'every':return[F.num('Every',t.minutes,v=>set('minutes',v),'min')];
+      case 'presence':return[F.sel('Who',t.event==='first-arrives'||t.event==='last-leaves'?'':t.person||'',[{v:'',label:'Anyone'},...people.map(p=>({v:p.id,label:p.name}))],v=>set('person',v||undefined)),F.sel('',t.event,opts([['arrives','comes home'],['leaves','leaves'],['first-arrives','first home (nobody was)'],['last-leaves','last one out']]),v=>set('event',v))];
+      case 'mode':return[F.sel('Mode',t.mode,modes.map(m=>({v:m.id,label:m.name})),v=>set('mode',v),1)];
+      case 'overlay':return[F.sel('Overlay',t.overlay,overlays.map(o=>({v:o.id,label:o.name})),v=>set('overlay',v),1),F.sel('',t.event,opts([['starts','starts'],['ends','ends']]),v=>set('event',v))];
+      default:return[]}};
+    head(0,'When');
+    (A.triggers||[]).forEach((t,i)=>row(0,i?'or':'',T_KINDS,t.kind,['triggers',i],trigFields(t,['triggers',i]),NEW_T));
+    add(0,'+ Add a trigger',()=>pushAt(['triggers'],NEW_T.device()));
+    // Conditions (nested)
+    const condFields=(c,p)=>{const set=(k,v)=>setAt([...p,k],v);switch(c.kind){
+      case 'device':return[F.sel('Device',c.device,devOpts(ALL),v=>set('device',v),1),F.sel('is',JSON.stringify(c.is||{}),stateOpts(c.is&&JSON.stringify(c.is)),v=>set('is',JSON.parse(v)))];
+      case 'numeric':return[F.sel('Device',c.device,devOpts(ALL),v=>set('device',v),1),F.sel('reading',c.field,opts(FIELDS),v=>set('field',v)),F.num('above',c.above,v=>set('above',v)),F.num('below',c.below,v=>set('below',v))];
+      case 'time':return[F.sel('From',c.after?'on':'',opts([['','any time'],['on','a time']]),v=>set('after',v?{kind:'time',at:'18:00'}:undefined)),...(c.after?rhythmFields('',c.after,v=>set('after',v)):[]),
+        F.sel('until',c.before?'on':'',opts([['','any time'],['on','a time']]),v=>set('before',v?{kind:'time',at:'23:00'}:undefined)),...(c.before?rhythmFields('',c.before,v=>set('before',v)):[]),dayChips(c.days,v=>set('days',v))];
+      case 'presence':return[F.sel('Who',c.who,[{v:'anyone',label:'Anyone'},{v:'no-one',label:'No one'},...people.map(p=>({v:p.id,label:p.name}))],v=>set('who',v)),F.sel('is',c.home===false?'out':'home',opts([['home','home'],['out','out']]),v=>set('home',v==='home'))];
+      case 'mode':return[F.chips('In',modes.map(m=>{const on=(c.modes||[]).includes(m.id);return{label:m.name,bg:on?'#f2b14c':'#2a2b2f',fg:on?'#1a1408':'#f1efea',toggle:()=>set('modes',on?c.modes.filter(x=>x!==m.id):[...(c.modes||[]),m.id])}}))];
+      case 'overlay':return[F.sel('Overlay',c.overlay||'',[{v:'',label:'Any overlay'},...overlays.map(o=>({v:o.id,label:o.name}))],v=>set('overlay',v||undefined),1),F.sel('is',c.active===false?'off':'on',opts([['on','on'],['off','off']]),v=>set('active',v==='on'))];
+      default:return[]}};
+    const condRow=(c,pp,depth,tag,extra)=>{row(depth,tag,C_KINDS,c.kind,pp,condFields(c,pp),NEW_C,extra);
+      if(c.kind==='any'||c.kind==='all'||c.kind==='not'){condRows(c.conditions||[],[...pp,'conditions'],depth+1);add(depth+1,'+ Add to this group',()=>pushAt([...pp,'conditions'],NEW_C.device()))}};
+    const condRows=(list,p,depth)=>list.forEach((c,i)=>condRow(c,[...p,i],depth,i?'and':''));
+    head(0,'Only if');
+    if(!(A.conditions||[]).length)rows.push({isNote:true,pad:'0px',text:'Always: no conditions.'});
+    condRows(A.conditions||[],['conditions'],0);
+    add(0,'+ Add a condition',()=>pushAt(['conditions'],NEW_C.device()));
+    // Steps (nested)
+    const targetRows=(a,p,depth)=>{Object.entries(a.targets||{}).forEach(([id,cmd])=>{const o=actionOptions(devs[id],H.sources);const cur=JSON.stringify(cmd);const os=o.some(x=>x[0]===cur)?o:[[cur,'(as set)'],...o];
+      rows.push({isTarget:true,pad:((depth+1)*22)+'px',device:id,devOptions:devOpts(ACT),setDevice:e=>{const v=e.target.value;edit(x=>{const t=get(x,[...p,'targets']);const n={};for(const [k,c] of Object.entries(t))n[k===id?v:k]=k===id?JSON.parse((actionOptions(devs[v],H.sources)[0]||['{"on":true}'])[0]):c;get(x,p).targets=n})},
+        act:cur,actOptions:opts(os),setAct:e=>setAt([...p,'targets',id],JSON.parse(e.target.value)),remove:()=>delAt([...p,'targets',id])})});
+      add(depth+1,'+ Add a device',()=>{const free=ACT.find(d=>!(d.id in (a.targets||{})));if(free)setAt([...p,'targets',free.id],JSON.parse((actionOptions(free,H.sources)[0]||['{"on":true}'])[0]))})};
+    const actFields=(a,p)=>{const set=(k,v)=>setAt([...p,k],v);switch(a.kind){
+      case 'delay':{const u=a.seconds%3600===0&&a.seconds>=3600?'h':a.seconds%60===0&&a.seconds>=60?'min':'s';const n=u==='h'?a.seconds/3600:u==='min'?a.seconds/60:a.seconds;
+        return[F.num('For',n,v=>set('seconds',Math.round((v||0)*(u==='h'?3600:u==='min'?60:1)))),F.sel('',u,opts([['s','seconds'],['min','minutes'],['h','hours']]),v=>set('seconds',Math.round(n*(v==='h'?3600:v==='min'?60:1))))]}
+      case 'wait':return[minsField('At most',a.timeoutSec,v=>set('timeoutSec',v)),F.sel('then',a.stopOnTimeout?'stop':'carry',opts([['carry','carry on anyway'],['stop','stop']]),v=>set('stopOnTimeout',v==='stop'))];
+      case 'notify':return[F.text('Title',a.title,v=>set('title',v||undefined),'Optional'),F.text('Message',a.message,v=>set('message',v),'What it says'),
+        F.chips('To',[{label:'Everyone',bg:!(a.people||[]).length?'#f2b14c':'#2a2b2f',fg:!(a.people||[]).length?'#1a1408':'#f1efea',toggle:()=>set('people',undefined)},...people.map(pp=>{const on=(a.people||[]).includes(pp.id);return{label:pp.name,bg:on?'#f2b14c':'#2a2b2f',fg:on?'#1a1408':'#f1efea',toggle:()=>set('people',on?a.people.filter(x=>x!==pp.id):[...(a.people||[]),pp.id])}})])];
+      case 'overlay':return[F.sel('',a.op,opts([['start','Start'],['end','End']]),v=>set('op',v)),F.sel('Overlay',a.overlay,overlays.map(o=>({v:o.id,label:o.name})),v=>set('overlay',v),1)];
+      case 'repeat':return[F.num('Times',a.times,v=>set('times',v))];
+      case 'run':return[F.sel('Automation',a.automation,(H.automations||[]).filter(x=>x.id!==E.id).map(x=>({v:x.id,label:x.name})),v=>set('automation',v),1)];
+      default:return[]}};
+    const actRows=(list,p,depth)=>{list.forEach((a,i)=>{const pp=[...p,i];row(depth,'',A_KINDS,a.kind,pp,actFields(a,pp),NEW_A);
+      if(a.kind==='set')targetRows(a,pp,depth);
+      if(a.kind==='wait'&&a.until){head(depth+1,'Until');condRow(a.until,[...pp,'until'],depth+1,'',{canRemove:false})}
+      if(a.kind==='if'){head(depth+1,'If');condRows(a.conditions||[],[...pp,'conditions'],depth+1);add(depth+1,'+ Add a condition',()=>pushAt([...pp,'conditions'],NEW_C.device()));
+        head(depth+1,'Then');actRows(a.then||[],[...pp,'then'],depth+1);add(depth+1,'+ Add a step',()=>pushAt([...pp,'then'],NEW_A.set()));
+        head(depth+1,'Otherwise');actRows(a.else||[],[...pp,'else'],depth+1);add(depth+1,'+ Add a step',()=>pushAt([...pp,'else'],NEW_A.set()))}
+      if(a.kind==='repeat'){actRows(a.actions||[],[...pp,'actions'],depth+1);add(depth+1,'+ Add a step',()=>pushAt([...pp,'actions'],NEW_A.set()))}})};
+    head(0,'Then');
+    actRows(A.actions||[],['actions'],0);
+    add(0,'+ Add a step',()=>pushAt(['actions'],NEW_A.set()));
+    // History
+    const runs=(E.runs||[]).map(r=>{const [rl,rc]=RES[r.result]||['','#a3a09a'];return{when:new Date(r.at).toLocaleString('en-AU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}),why:r.why,result:rl,fg:rc,detail:r.detail||'',
+      steps:(r.steps||[]).map(st=>({text:st.text,detail:st.detail||'',fg:st.ok?'#d8d5cf':'#ff6b5e',icon:st.ok?'check':'error'}))}});
+    const tab=E.tab||'edit';
+    return{al:list,aeClosed:false,ae:{open:true,title:E.id?'Edit automation':'New automation',name:A.name||'',setName:e=>setAt(['name'],e.target.value),desc:A.description||'',setDesc:e=>setAt(['description'],e.target.value||undefined),
+      mode:A.mode||'single',modeOptions:opts([['single','If it’s already running: ignore the new start'],['restart','If it’s already running: start over'],['queued','If it’s already running: run again after'],['parallel','If it’s already running: run alongside']]),setMode:e=>setAt(['mode'],e.target.value),
+      rows:rows.map(r=>r.isRow?{canRemove:true,...r}:r),
+      notes:(A.origin&&A.origin.notes)||[],hasNotes:!!(A.origin&&A.origin.notes&&A.origin.notes.length),
+      isEdit:tab==='edit',isHistory:tab==='history',canHistory:!!E.id,runs,hasRuns:runs.length>0,noRuns:!runs.length,
+      tabEdit:()=>this.setState(st=>({ae:{...st.ae,tab:'edit'}})),tabHistory:()=>this.setState(st=>({ae:{...st.ae,tab:'history'}})),
+      editBg:tab==='edit'?'#2a2b2f':'transparent',histBg:tab==='history'?'#2a2b2f':'transparent',
+      cancel:()=>this.setState({ae:null}),
+      save:()=>{const body=JSON.parse(JSON.stringify(A));(E.id?api('PUT','/api/automations/'+E.id,body):api('POST','/api/automations',body)).then(r=>{this.setState({ae:null});done(E.id?`${A.name} saved`:`${A.name} added`)(r)}).catch(x=>this.err(x))},
+      tryNow:E.id?()=>api('POST',`/api/automations/${E.id}/run`).then(r=>{this.toast(r.ran?'Ran it':r.why);this.openAuto((this.state.hub.automations||[]).find(x=>x.id===E.id),'history')}).catch(x=>this.err(x)):null,canTry:!!E.id}};
+  }
+  openAuto(a,tab){
+    const blank={name:'',enabled:true,mode:'single',triggers:[],conditions:[],actions:[]};
+    const draft=a?{name:a.name,description:a.description,enabled:a.enabled!==false,mode:a.mode||'single',triggers:a.triggers||[],conditions:a.conditions||[],actions:a.actions||[],...(a.origin?{origin:a.origin}:{})}:blank;
+    this.setState({ae:{a:structuredClone(draft),id:a&&a.id||null,runs:[],tab:tab||'edit'},screen:'autos'});
+    if(a&&a.id)api('GET','/api/automations/'+a.id).then(r=>this.setState(st=>st.ae&&st.ae.id===a.id?{ae:{...st.ae,runs:r.runs||[]}}:null)).catch(()=>{});
+  }
+  convertHa(ids){
+    api('POST','/api/import/ha/automations/convert',ids?{ids}:{}).then(r=>{
+      const n=r.made.length;this.toast(n?`${n} converted · switched off until you check them`:(r.skipped[0]&&r.skipped[0].why)||'Nothing to convert',this.undoFn(r.undo));
+      this.loadImport();
+    }).catch(x=>this.err(x));
   }
 
   renderVals(){
@@ -1257,7 +1415,7 @@ class Component extends DCLogic {
     const go=screen=>()=>this.setState({screen});
     const lightsOn=list.filter(d=>isLight(d)&&d.on).length;
     const inboxLeft=H.findings.length+H.integrations.filter(i=>!i.ok).length;
-    const nav=[['home','Now','home'],['modes','Modes','routine'],['rooms','Rooms','meeting_room'],['energy','Energy','electric_meter'],['security','Security','shield'],['media','Media','play_circle'],['activity','Activity','history',inboxLeft||''],['assistant','Ask Kova','graphic_eq'],['integrations','Integrations','extension','',1],['import','Import','move_down',(s.imp&&s.imp.review.filter(r=>!r.done).length)||'']].concat(adv?[['dev','Developer','code']]:[]).map(([id,label,icon,badge,gap])=>({label,icon,badge:badge||'',mt:gap?'14px':'0px',go:go(id),bg:s.screen===id?'rgba(242,177,76,0.12)':'transparent',fg:s.screen===id?'#f2b14c':'#d8d5cf'}));
+    const nav=[['home','Now','home'],['modes','Modes','routine'],['autos','Automations','account_tree'],['rooms','Rooms','meeting_room'],['energy','Energy','electric_meter'],['security','Security','shield'],['media','Media','play_circle'],['activity','Activity','history',inboxLeft||''],['assistant','Ask Kova','graphic_eq'],['integrations','Integrations','extension','',1],['import','Import','move_down',(s.imp&&s.imp.review.filter(r=>!r.done).length)||'']].concat(adv?[['dev','Developer','code']]:[]).map(([id,label,icon,badge,gap])=>({label,icon,badge:badge||'',mt:gap?'14px':'0px',go:go(id),bg:s.screen===id?'rgba(242,177,76,0.12)':'transparent',fg:s.screen===id?'#f2b14c':'#d8d5cf'}));
     const room=s.room||(H.rooms[0]||{}).id;
     const tiles=list.filter(d=>d.room===room).map(d=>{const [st,sf]=this.stateOf(d);return{...d,...this.tint(d),icon:ICON[d.type],state:st,stateFg:sf,showId:adv,toggle:()=>this.toggleDev(d.id),open:()=>this.setState({drawer:d.id,tab:'simple'})}});
     const rDevs=list.filter(d=>d.room===room);const rOn=rDevs.filter(d=>isLight(d)&&d.on).length;

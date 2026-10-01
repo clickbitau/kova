@@ -184,6 +184,8 @@ hub.updates = new Updates(hub, {
 });
 hub.updates.start();
 notifier.start();
+// Automations' "Notify" steps go to the same phones.
+hub.engine.automations.notify = n => notifier.notify(n);
 // Cloud: Web Push is delivered by Apple's / Google's push service (and ntfy.sh unless self-hosted).
 hub.services.push({ id: 'notify', name: 'Notifications', icon: 'notifications', kind: 'Cloud', status: () => notifier.status() });
 
