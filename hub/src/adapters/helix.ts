@@ -63,6 +63,18 @@ export interface PlaybackEvent {
   state?: string; positionMs?: number; durationMs?: number; reason?: string;
 }
 
+/**
+ * Is this paired device a screen (a TV box), rather than Kova itself, a phone or the desktop app? Helix's
+ * /v1/boxes lists every paired device. A box is a TV client (helix-tv, helix-atv) or the box's own shell
+ * (helix-desk, not helix-desktop); a device that hasn't said what it is counts as a box.
+ */
+export function isScreen(b: { name?: string; client?: string }): boolean {
+  const c = (b.client ?? '').toLowerCase(), n = (b.name ?? '').trim().toLowerCase();
+  if (c.startsWith('kova') || n === 'kova') return false;
+  if (!c) return true;
+  return /tv\b|atv|^helix-desk(?!top)/.test(c);
+}
+
 /** "S01E02" for an episode, else nothing. */
 const episodeTag = (i?: HelixItem) => i?.kind === 'episode' && i.season && i.episode ? `S${String(i.season).padStart(2, '0')}E${String(i.episode).padStart(2, '0')}` : '';
 
@@ -212,7 +224,7 @@ export class HelixAdapter implements Adapter {
   async refreshBoxes(): Promise<void> {
     try {
       // A box that hasn't been paired by name shows up by its address.
-      const boxes = (await this.api.boxes()).map(b => ({ ...b, name: b.name?.trim() || `Helix box ${b.address ?? ''}`.trim() }));
+      const boxes = (await this.api.boxes()).filter(isScreen).map(b => ({ ...b, name: b.name?.trim() || `Helix box ${b.address ?? ''}`.trim() }));
       const fresh = boxes.filter(b => !this.boxes.has(boxDeviceId(b.name)));
       for (const b of boxes) this.boxes.set(boxDeviceId(b.name), b);
       if (fresh.length) {

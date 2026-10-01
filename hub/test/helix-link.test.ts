@@ -8,6 +8,7 @@ import { join, resolve } from 'node:path';
 import { testHub } from './helpers.ts';
 import { buildServer } from '../src/api/server.ts';
 import { IntegrationsManager } from '../src/integrations-store.ts';
+import { isScreen } from '../src/adapters/helix.ts';
 import { HelixLink, SOUNDBAR_INPUTS, SOUNDBAR_MODES, TV_INPUTS, helixScreens, kovaAddress } from '../src/services/helix-link.ts';
 import type { Adapter, AdapterContext } from '../src/adapters/sdk.ts';
 import type { Command, Device } from '../src/model/types.ts';
@@ -169,7 +170,26 @@ test('Helix link: which TV a box is on, and Kova’s address', () => {
   assert.deepEqual(helixScreens([...boxes, ...tvs]).map(s => [s.playerId, s.tvDeviceId]), [['d1', 'tv1']]);
   assert.deepEqual(helixScreens([...boxes, ...tvs], { 'den helix': { tv: 'tv3', input: 'hdmi9' } }).map(s => [s.playerId, s.tvDeviceId, s.helixInput]), [['d1', 'tv1', undefined], ['d2', 'tv3', undefined]]);
 
+  // One box and one TV in the home: they go together without rooms, and so does the one soundbar.
+  const kam = dev('kam', 'unassigned', 'helix', { address: 'addr:10.10.30.224', name: 'Helix box 10.10.30.224' });
+  const s90d = dev('s90d', 'living_room', 'samsungtv', { name: 'S90D', capabilities: ['onoff', 'volume', 'input'] });
+  const q930b = dev('q930b', 'living_room', 'smartthings', { type: 'media', name: 'Soundbar Q930B', capabilities: ['onoff', 'volume', 'mute', 'input', 'sound'] });
+  assert.deepEqual(helixScreens([kam, s90d, q930b]).map(s => [s.playerId, s.tvDeviceId, s.soundbarDeviceId]), [['addr:10.10.30.224', 's90d', 'q930b']]);
+  // Two TVs (or two boxes): no guess.
+  assert.deepEqual(helixScreens([kam, s90d, dev('tv9', 'bedroom', 'samsungtv')]), []);
+
   const nets = { eth0: [{ family: 'IPv4', address: '10.10.10.5', internal: false }], docker0: [{ family: 'IPv4', address: '172.17.0.1', internal: false }] } as any;
   assert.equal(kovaAddress('http://10.10.10.101:8090', 8140, nets), 'http://10.10.10.5:8140');
   assert.equal(kovaAddress('http://helix.local:8090', 8140, { docker0: nets.docker0 }), 'http://172.17.0.1:8140');
+});
+
+test('Helix boxes: only screens are TVs, not Kova itself, a phone or the desktop app', () => {
+  assert.equal(isScreen({ name: 'Helix box 10.10.30.224', client: 'helix-tv' }), true);
+  assert.equal(isScreen({ name: 'kam-lx', client: 'helix-desk' }), true);
+  assert.equal(isScreen({ name: 'Lounge', client: 'helix-atv' }), true);
+  assert.equal(isScreen({ name: 'Old box' }), true);
+  assert.equal(isScreen({ name: 'Helix on macbookpro', client: 'helix-desktop' }), false);
+  assert.equal(isScreen({ name: 'Phone', client: 'helix-mobile' }), false);
+  assert.equal(isScreen({ name: 'Kova', client: 'kova/1' }), false);
+  assert.equal(isScreen({ name: 'Kova' }), false);
 });

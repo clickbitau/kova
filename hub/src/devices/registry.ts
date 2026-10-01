@@ -62,6 +62,7 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
       sourceUrl: this.sourceUrl,
       queueFor: (media, opts) => this.queues ? this.queues(media, opts ?? {}) : Promise.resolve(null),
       derive: (id, state) => { const d = this.devices.get(id); if (!d) return; const patch = this.diff(d, state); if (!Object.keys(patch).length) return; d.state = { ...d.state, ...patch }; this.emit('measure'); },
+      peer: id => this.adapters.get(id),
       retract: ids => { let n = 0; for (const id of ids) if (this.devices.get(id)?.adapter === a.id) { this.devices.delete(id); n++; } if (n) this.emit('devices'); },
     };
     try {

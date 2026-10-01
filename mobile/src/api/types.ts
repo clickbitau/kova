@@ -16,7 +16,7 @@ export interface DeviceState {
   track?: { title: string; artist?: string; album?: string; art?: string } | null;
   /** The queue plays shuffled. */
   shuffle?: boolean;
-  /** TV input to switch to: hdmi1..hdmi4 or tv (TVs with `input`). The TV can't say which it's on, so this reads back null. */
+  /** TV input to switch to: hdmi1..hdmi4 or tv (TVs with `input`). Read back when SmartThings knows the TV, else null. */
   input?: string | null;
   /** Soundbars (`mute`, `sound`): muted, sound mode, night mode. Their input reads back: tv (eARC), hdmi1, hdmi2, bluetooth, wifi. */
   muted?: boolean;

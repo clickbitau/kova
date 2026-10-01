@@ -220,8 +220,8 @@ export const CATALOG: CatalogItem[] = [
     }],
   },
   {
-    id: 'smartthings', name: 'Samsung soundbar', icon: 'speaker', kind: 'Cloud', apply: 'hot',
-    description: 'Samsung soundbars through SmartThings: power, input, volume, mute, sound mode and night mode. Soundbars before the 2024 models have no local control, so this goes through your Samsung account.',
+    id: 'smartthings', name: 'Samsung SmartThings', icon: 'speaker', kind: 'Cloud', apply: 'hot',
+    description: 'Samsung soundbars (power, input, volume, mute, sound mode, night mode), and your Samsung TVs’ source: switched directly and read back, which the TV’s network remote can’t do. Through your Samsung account.',
     fields: [
       { key: 'clientId', label: 'SmartThings app client id', type: 'text', help: 'Make an OAuth-In app once with the SmartThings CLI: smartthings apps:create, scopes r:devices:* and x:devices:*, redirect URI https://httpbin.org/get.' },
       { key: 'clientSecret', label: 'Client secret', type: 'password' },

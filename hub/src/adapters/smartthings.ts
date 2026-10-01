@@ -151,15 +151,36 @@ export async function exchangeSmartThingsCode(o: { code: string; clientId: strin
 }
 
 interface Bar { id: string; st: string; name: string; sound: string | null; night: boolean | null }
+/** A Samsung TV on the account. Kova's Samsung TV adapter owns the TV; SmartThings sets and reads its source. */
+interface StTv { st: string; label: string; model: string; caps: Set<string> }
+
+/** Is this SmartThings device a TV? */
+export function isTv(d: StDevice): boolean {
+  const caps = new Set((d.components ?? []).find(c => c.id === 'main')?.capabilities?.map(c => c.id) ?? []);
+  return d.ocf?.deviceType === 'oic.d.tv' || caps.has('samsungvd.mediaInputSource') || (caps.has('tvChannel') && caps.has('mediaInputSource'));
+}
+
+/** A TV source by Kova's name (hdmi1..hdmi4, tv) as the TV's own id, from the ids it lists. */
+export function toTvSource(input: string, supported: string[]): string {
+  const want = /^hdmi([1-4])$/.exec(input) ? [`HDMI${input.slice(4)}`] : input === 'tv' ? ['dtv', 'digitalTv', 'TV', 'atv'] : [input];
+  for (const w of want) { const hit = supported.find(x => x.toLowerCase() === w.toLowerCase()); if (hit) return hit; }
+  return want[0];
+}
+/** A TV's own source id as Kova's name. */
+export function fromTvSource(v: string): string {
+  const m = /^hdmi\s*([1-4])$/i.exec(v.trim());
+  return m ? `hdmi${m[1]}` : /^(dtv|digitaltv|tv|atv|analogtv)$/i.test(v.trim()) ? 'tv' : v.toLowerCase();
+}
 
 export class SmartThingsAdapter implements Adapter {
   id = 'smartthings';
-  name = 'Samsung soundbar (SmartThings)';
+  name = 'Samsung SmartThings (soundbar, TV source)';
   icon = 'speaker';
   kind = 'Cloud' as const;
   private ctx?: AdapterContext;
   private auth: SmartThingsAuth;
   private bars = new Map<string, Bar>();
+  private tvs: StTv[] = [];
   private poller: NodeJS.Timeout | null = null;
   private error: string | null = null;
 
@@ -197,6 +218,10 @@ export class SmartThingsAdapter implements Adapter {
   private async discover(): Promise<void> {
     const { items = [] } = await this.api<{ items?: StDevice[] }>('GET', '/devices');
     const want = this.o.devices?.length ? new Set(this.o.devices) : null;
+    this.tvs = items.filter(isTv).map(d => ({
+      st: d.deviceId, label: d.label || d.name || '', model: (d.ocf?.modelNumber ?? '').split('|')[0],
+      caps: new Set((d.components ?? []).find(c => c.id === 'main')?.capabilities?.map(c => c.id) ?? []),
+    }));
     const found = items.filter(d => want ? want.has(d.deviceId) : isSoundbar(d));
     const fresh = found.filter(d => !this.bars.has(this.kovaId(d)));
     for (const d of found) {
@@ -213,7 +238,7 @@ export class SmartThingsAdapter implements Adapter {
         };
       }));
     }
-    this.error = found.length ? null : 'No soundbar on this SmartThings account';
+    this.error = found.length || this.tvs.length ? null : 'No soundbar or TV on this SmartThings account';
   }
 
   private kovaId(d: StDevice): string {
@@ -264,9 +289,49 @@ export class SmartThingsAdapter implements Adapter {
     }
   }
 
+  // ------------------------------------------------------------- TVs' sources --
+
+  /** Which SmartThings TV is this one: same model, else same name, else the only TV on the account. */
+  private tvFor(tv: { name?: string; model?: string }): StTv | null {
+    const model = (tv.model ?? '').toLowerCase(), name = (tv.name ?? '').toLowerCase();
+    return (model && this.tvs.find(t => t.model.toLowerCase() === model || (t.model && model.startsWith(t.model.toLowerCase())) || (t.model && t.model.toLowerCase().startsWith(model))))
+      || (name && this.tvs.find(t => t.label.toLowerCase() === name))
+      || (this.tvs.length === 1 ? this.tvs[0] : null);
+  }
+
+  /** Does SmartThings know this TV? */
+  hasTv(tv: { name?: string; model?: string }): boolean { return !!this.tvFor(tv); }
+
+  private tvCap(t: StTv) { return t.caps.has('samsungvd.mediaInputSource') ? 'samsungvd.mediaInputSource' : 'mediaInputSource'; }
+
+  private async tvStatus(t: StTv): Promise<{ input: string | null; supported: string[] }> {
+    const st = await this.api<{ components?: Record<string, Status> }>('GET', `/devices/${encodeURIComponent(t.st)}/status`);
+    const c = st.components?.main?.[this.tvCap(t)];
+    const map = c?.supportedInputSourcesMap?.value;
+    const supported = Array.isArray(map) ? map.map(x => String((x as { id?: unknown }).id ?? '')) : Array.isArray(c?.supportedInputSources?.value) ? (c!.supportedInputSources!.value as unknown[]).map(String) : [];
+    const v = c?.inputSource?.value;
+    return { input: typeof v === 'string' && v ? fromTvSource(v) : null, supported };
+  }
+
+  /** The source the TV is on (hdmi1..hdmi4, tv, …), or undefined when SmartThings doesn't know this TV. */
+  async tvInput(tv: { name?: string; model?: string }): Promise<string | null | undefined> {
+    const t = this.tvFor(tv);
+    return t ? (await this.tvStatus(t)).input : undefined;
+  }
+
+  /** Switch the TV to a source directly. False when SmartThings doesn't know this TV. */
+  async setTvInput(tv: { name?: string; model?: string }, input: string): Promise<boolean> {
+    const t = this.tvFor(tv);
+    if (!t) return false;
+    const { supported } = await this.tvStatus(t).catch(() => ({ supported: [] as string[] }));
+    await this.api('POST', `/devices/${encodeURIComponent(t.st)}/commands`, { commands: [{ component: 'main', capability: this.tvCap(t), command: 'setInputSource', arguments: [toTvSource(input, supported)] }] });
+    return true;
+  }
+
   status(): AdapterStatus {
     if (this.error) return { ok: false, note: this.error };
     const n = this.bars.size;
-    return { ok: n > 0, note: n ? `${n} soundbar${n === 1 ? '' : 's'}` : 'Looking for soundbars…' };
+    const parts = [n && `${n} soundbar${n === 1 ? '' : 's'}`, this.tvs.length && `the source of ${this.tvs.length} TV${this.tvs.length === 1 ? '' : 's'}`].filter(Boolean);
+    return { ok: n > 0 || this.tvs.length > 0, note: parts.length ? parts.join(', ') : 'Looking for soundbars and TVs…' };
   }
 }

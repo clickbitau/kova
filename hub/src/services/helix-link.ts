@@ -69,15 +69,17 @@ export function helixScreens(devices: Iterable<Device>, screens: HelixLinkConfig
   const tvs = all.filter(d => d.type === 'tv' && d.adapter !== 'helix' && d.capabilities.includes('onoff'));
   const named = (box: string) => screens[box] ?? Object.entries(screens).find(([k]) => k.toLowerCase() === box.toLowerCase())?.[1];
   const out: HelixScreen[] = [];
-  for (const box of all.filter(d => d.adapter === 'helix' && d.type === 'tv')) {
+  const boxes = all.filter(d => d.adapter === 'helix' && d.type === 'tv');
+  for (const box of boxes) {
     const set = named(box.original?.name ?? box.name) ?? named(box.name);
     const inRoom = box.room && box.room !== 'unassigned' ? tvs.filter(t => t.room === box.room) : [];
-    const tv = set?.tv ? tvs.find(t => t.id === set.tv) : inRoom.length === 1 ? inRoom[0] : undefined;
+    // The TV named in settings, else the one in the box's room, else (one box, one TV in the home) that TV.
+    const tv = set?.tv ? tvs.find(t => t.id === set.tv) : inRoom.length === 1 ? inRoom[0] : !inRoom.length && boxes.length === 1 && tvs.length === 1 ? tvs[0] : undefined;
     if (!tv) continue;
     const input = set?.input && INPUTS.has(set.input) && set.input !== 'helix' ? set.input : undefined;
     const bars = all.filter(isSoundbar);
     const barsInRoom = tv.room && tv.room !== 'unassigned' ? bars.filter(b => b.room === tv.room) : [];
-    const bar = set?.soundbar ? bars.find(b => b.id === set.soundbar) : barsInRoom.length === 1 ? barsInRoom[0] : undefined;
+    const bar = set?.soundbar ? bars.find(b => b.id === set.soundbar) : barsInRoom.length === 1 ? barsInRoom[0] : !barsInRoom.length && boxes.length === 1 && bars.length === 1 ? bars[0] : undefined;
     const adapterInput = set?.soundbarInput && SOUNDBAR_INPUTS.some(i => i.id === set.soundbarInput && i.id.startsWith('hdmi')) ? set.soundbarInput : 'hdmi1';
     out.push({
       playerId: box.address, tvDeviceId: tv.id, tvName: tv.name, ...(input ? { helixInput: input } : {}), inputs: TV_INPUTS,
@@ -199,7 +201,7 @@ export class HelixLink {
   /**
    * The linked TVs and soundbars only, in the shape of /api/state, for a request made with Helix's token, with the
    * state by Helix's names: on, input, volume, muted, mode, nightMode, inputChangedAt (Unix ms), inputChangedBy.
-   * A TV can't say its input, so it's the one last asked for through Kova (by whom and when).
+   * A TV's input is read back through SmartThings when it knows the TV, else it's the one last asked for through Kova.
    */
   state(): { devices: { id: string; name: string; type: string; state: Record<string, unknown> }[] } {
     const ids = new Set(this.screens().flatMap(s => [s.tvDeviceId, ...(s.soundbarDeviceId ? [s.soundbarDeviceId] : [])]));
@@ -210,7 +212,8 @@ export class HelixLink {
         const st = d.state;
         const bar = isSoundbar(d);
         const changed = this.inputs.get(id);
-        const input = bar ? st.input ?? null : changed?.input ?? null;
+        // A TV's source is read back where SmartThings knows the TV, else it's the one last asked for through Kova.
+        const input = st.input ?? (bar ? null : changed?.input ?? null);
         return [{
           id, name: d.name, type: bar ? 'soundbar' : d.type,
           state: {

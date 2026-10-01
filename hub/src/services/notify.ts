@@ -18,7 +18,9 @@ export interface NotifyOptions {
   /** Kova's address as your phone reaches it (e.g. https://kova.example.com), for links in ntfy notifications. */
   publicUrl?: string;
   /** Built-in rules, all on by default. */
-  rules?: { doorbell?: boolean; everyoneOut?: boolean; offline?: boolean; network?: boolean };
+  rules?: { doorbell?: boolean; everyoneOut?: boolean; offline?: boolean; network?: boolean; links?: boolean };
+  /** A link that worked (Helix, SmartThings, OwnTone, Warden…) must be failing this long before "Kova lost Helix". Default 5. */
+  linkAfterMin?: number;
   /** A device must be offline this long before "X isn't responding". Default 10. */
   offlineAfterMin?: number;
   /** Wait this long after the last person leaves before "Everyone's out" (lets an Away overlay turn lights off first). Default 60 s. */
@@ -64,6 +66,8 @@ export class Notifier {
   private subject: string;
   private offlineSince = new Map<string, number>();
   private offlineNotified = new Set<string>();
+  /** Integrations and services: whether each has worked since the hub started, since when it's failing, and whether that was said. */
+  private links = new Map<string, { worked: boolean; failingSince: number | null; told: boolean }>();
   /** Pending delayed rules, with how to cancel each. */
   private timers = new Map<NodeJS.Timeout, () => void>();
   private interval: NodeJS.Timeout | null = null;
@@ -94,7 +98,7 @@ export class Notifier {
     this.off.push(() => this.hub.reg.off('event', onEvent), () => this.hub.engine.off('changed', onChanged), () => this.hub.reg.off('measure', onMeasure));
     this.anyoneHome = this.hub.engine.anyoneHome();
     const every = (this.opts.checkSec ?? 60) * 1000;
-    if (every > 0) { this.interval = setInterval(() => this.checkDevices(), every); this.interval.unref?.(); }
+    if (every > 0) { this.interval = setInterval(() => { this.checkDevices(); this.checkLinks(); }, every); this.interval.unref?.(); }
   }
 
   async stop(): Promise<void> {
@@ -198,6 +202,42 @@ export class Notifier {
           title: `${d.name} isn’t responding`,
           body: `${room ? room + ' · ' : ''}${d.integration}, offline for ${Math.round((t - since) / 60_000)} min.`,
           tag: `offline-${d.id}`, url: '/phone.html',
+        }));
+      }
+    }
+  }
+
+  /**
+   * A link that worked and broke: Helix, SmartThings, OwnTone, Warden, the Helix TV link… Once it has been failing
+   * for `linkAfterMin`, say so (with its own words), and say again when it's back. Something never set up, or
+   * failing since the hub started, isn't news: Integrations shows it.
+   */
+  checkLinks(): void {
+    if (!this.rule('links')) return;
+    const t = this.now;
+    const limit = (this.opts.linkAfterMin ?? 5) * 60_000;
+    const all: { id: string; name: string; status: () => { ok: boolean; note?: string } }[] = [
+      ...[...this.hub.reg.adapters.values()].filter(a => a.id !== 'virtual').map(a => ({ id: `adapter:${a.id}`, name: a.name, status: () => a.status() })),
+      ...this.hub.services.map(sv => ({ id: `service:${sv.id}`, name: sv.name, status: () => sv.status() })),
+    ];
+    for (const l of all) {
+      let st: { ok: boolean; note?: string };
+      try { st = l.status(); } catch (e) { st = { ok: false, note: (e as Error).message }; }
+      const k = this.links.get(l.id) ?? { worked: false, failingSince: null, told: false };
+      this.links.set(l.id, k);
+      if (st.ok) {
+        if (k.told) this.track(this.notify({ title: `${l.name} is back`, body: st.note ? `${st.note}.` : 'Working again.', tag: `link-${l.id}`, url: '/phone.html' }));
+        Object.assign(k, { worked: true, failingSince: null, told: false });
+        continue;
+      }
+      if (!k.worked) continue;
+      k.failingSince ??= t;
+      if (!k.told && t - k.failingSince >= limit) {
+        k.told = true;
+        this.track(this.notify({
+          title: `Kova lost ${l.name}`,
+          body: `${st.note ?? 'It stopped answering'}. Things that need it won’t work until it’s back.`,
+          tag: `link-${l.id}`, url: '/phone.html',
         }));
       }
     }

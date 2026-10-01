@@ -33,6 +33,8 @@ export interface AdapterContext {
   derive(deviceId: string, state: DeviceState): void;
   /** Remove devices this adapter no longer has (a deleted group). */
   retract(deviceIds: string[]): void;
+  /** Another running adapter, by id (a Samsung TV asks SmartThings to switch its source). */
+  peer(adapterId: string): Adapter | undefined;
 }
 
 /**
