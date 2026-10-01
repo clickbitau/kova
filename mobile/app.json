@@ -133,6 +133,11 @@
         }
       ]
     ],
-    "owner": "dkathel"
+    "owner": "dkathel",
+    "extra": {
+      "eas": {
+        "projectId": "8f877da4-d63a-49ef-9561-cd3e8fc9a9df"
+      }
+    }
   }
 }
