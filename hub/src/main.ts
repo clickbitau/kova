@@ -18,6 +18,7 @@ import { demoConfig, demoDevices, DEMO_SOLAR } from './seed/demo-home.ts';
 import type { Adapter } from './adapters/sdk.ts';
 import { Presence } from './services/presence.ts';
 import { HelixLink } from './services/helix-link.ts';
+import { HelixAutoSwitch, autoSwitchOn } from './services/helix-autoswitch.ts';
 import { HelixMusic } from './services/helix-music.ts';
 import { WardenLink } from './services/warden-link.ts';
 import { Notifier } from './services/notify.ts';
@@ -138,6 +139,9 @@ setInterval(refreshMusic, 5 * 60_000).unref();
 // Helix: once paired, Kova tells Helix Server where it is and which TV each box is on.
 const helixLink = new HelixLink(hub, { helix: () => setup.raw('helix'), dataDir, port: () => Number(env.KOVA_PORT ?? 8140) });
 helixLink.start();
+// Auto-switch when Helix plays: TV on and to the box, soundbar on and to where the sound goes.
+const helixSwitch = new HelixAutoSwitch(hub, { screens: () => helixLink.screens(), enabled: () => autoSwitchOn((setup.raw('helix') as { autoSwitch?: unknown } | undefined)?.autoSwitch) });
+helixSwitch.start();
 hub.services.push({ id: 'helix-link', name: 'Helix TVs', icon: 'tv', kind: 'Local', get devices() { return helixLink.screens().length; }, status: () => helixLink.status() ?? { ok: true, note: 'Pair with Helix to turn TVs on from Helix' } });
 
 // Warden: Kova shares its devices, people, house mode and plugs, and restarts frozen equipment when Warden asks.
@@ -198,6 +202,7 @@ const shutdown = async (signal: string) => {
   };
   presence.stop();
   helixLink.stop();
+  helixSwitch.stop();
   wardenLink.stop();
   await step('web server', () => app.close());
   await step('notifications', () => notifier.stop());

@@ -18,6 +18,10 @@ export interface DeviceState {
   shuffle?: boolean;
   /** TV input to switch to: hdmi1..hdmi4 or tv (TVs with `input`). The TV can't say which it's on, so this reads back null. */
   input?: string | null;
+  /** Soundbars (`mute`, `sound`): muted, sound mode, night mode. Their input reads back: tv (eARC), hdmi1, hdmi2, bluetooth, wifi. */
+  muted?: boolean;
+  sound?: string | null;
+  night?: boolean;
   power?: number | null;
   energy?: number | null;
   activity?: string;
@@ -25,8 +29,8 @@ export interface DeviceState {
   online?: boolean;
 }
 
-/** `skip`: 1 = next song, -1 = previous (speakers with `queue`). */
-export type Command = Partial<DeviceState> & { skip?: number };
+/** `skip`: 1 = next song, -1 = previous (speakers with `queue`). `volStep`: 1 = volume up a step, -1 = down. */
+export type Command = Partial<DeviceState> & { skip?: number; volStep?: number };
 
 export interface Device {
   id: string;

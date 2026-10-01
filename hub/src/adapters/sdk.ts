@@ -75,6 +75,6 @@ export interface QueueTrack extends Track { id: string; url: string; contentType
 /** A play queue: what was asked for, and the songs in playing order. */
 export interface Queue {
   label: string; tracks: QueueTrack[]; shuffle: boolean;
-  /** Make the URLs of tracks[from..to) ready to hand to a speaker (Helix signs each song's URL just before it's queued). */
+  /** Make the URLs of tracks[from..to) ready to hand to a speaker (Helix signs each song's URL just before it's queued). Of this queue's own tracks, so a copy with the songs reordered signs its own. */
   prepare?(from: number, to: number): Promise<void>;
 }

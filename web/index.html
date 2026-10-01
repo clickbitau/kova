@@ -443,6 +443,7 @@
 <span style="width:22px"></span>
 </div>
 <div style="display:flex;align-items:center;gap:12px"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#a3a09a">volume_down</span><input type="range" min="0" max="100" value="{{ mp.vol }}" onChange="{{ mp.setVol }}" style="flex:1;accent-color:#7cb8f0"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#a3a09a;width:36px;text-align:right">{{ mp.volLabel }}</span></div>
+<sc-if value="{{ mp.isBar }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:12px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">Soundbar</span><div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ mp.barItems }}" as="bi" hint-placeholder-count="6"><div onClick="{{ bi.pick }}" style="padding:8px 12px;border-radius:10px;background:{{ bi.bg }};color:{{ bi.fg }};font-size:13px;font-weight:600;cursor:pointer">{{ bi.label }}</div></sc-for></div></div></sc-if>
 <sc-if value="{{ hasMusic }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:8px">
 <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:12px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">Helix music</span><span onClick="{{ toggleMusicShuffle }}" style="display:flex;align-items:center;gap:4px;font-size:12.5px;font-weight:700;cursor:pointer;color:{{ musicShuffleFg }}"><span style="font-family:'Material Symbols Rounded';font-size:17px">shuffle</span>{{ musicShuffleLabel }}</span></div>
 <div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ musicItems }}" as="mu" hint-placeholder-count="4"><div onClick="{{ mu.play }}" style="padding:8px 12px;border-radius:10px;background:#1c1d20;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px" style-hover="background:#232428"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#c79bf2">{{ mu.icon }}</span>{{ mu.name }}</div></sc-for></div>
@@ -703,6 +704,12 @@ const fmt=h=>{const m=Math.round(h*60);return String(Math.floor(m/60)%24).padSta
 const lst=xs=>xs.length<=1?xs.join(''):xs.slice(0,-1).join(', ')+' and '+xs[xs.length-1];
 const isLight=d=>d.type==='light'||d.type==='dimmer';
 const isPlayer=d=>d.type==='media'||d.type==='tv';
+/** A soundbar's controls (input, mute, night mode, sound mode), as pills. */
+const barItems=(D,send)=>{const c=D.capabilities||[];if(!c.includes('sound')||!D.on)return[];const on=a=>({bg:a?'rgba(124,184,240,0.2)':'#1c1d20',fg:a?'#7cb8f0':'#d8d5cf'});
+  return[...[['tv','TV'],['hdmi1','HDMI in'],['bluetooth','Bluetooth'],['wifi','Wi-Fi']].map(([id,label])=>({label,...on(D.input===id),pick:()=>send({input:id})})),
+    {label:D.muted?'Muted':'Mute',...on(!!D.muted),pick:()=>send({muted:!D.muted})},{label:'Night mode',...on(!!D.night),pick:()=>send({night:!D.night})},
+    ...[['standard','Standard'],['surround','Surround'],['game','Game'],['adaptive','Adaptive']].map(([id,label])=>({label,...on(D.sound===id),pick:()=>send({sound:id})}))]};
+
 const flat=d=>({...d,...d.state,eid:d.address,integ:d.integration,bri:d.state.bri??100});
 
 // ---- Screens that don't have a backend yet keep the design's sample data. ----
@@ -1012,10 +1019,11 @@ class Component extends DCLogic {
       mp={name:T?T.title:P.name,room:T?`${RN[P.room]||''} · ${P.name}`:RN[P.room]||'',state:T?[T.artist,P.media].filter(Boolean).join(' · ')+(P.shuffle?' · shuffled':''):pst,fg:pfg,
         hasArt:!!(T&&T.art),noArt:!(T&&T.art),art:T&&T.art||'',playIcon:P.on?'pause':'play_arrow',vol:P.vol??30,volLabel:(P.vol??30)+'%',toggle:()=>this.toggleDev(P.id),setVol:e=>this.patch(P.id,{vol:+e.target.value}),
         qOp:q?1:0.3,qCursor:q?'pointer':'default',prev:()=>{if(q)this.send(P.id,{skip:-1})},next:()=>{if(q)this.send(P.id,{skip:1})},
-        shuffle:()=>{if(q)this.send(P.id,{shuffle:!P.shuffle},P.shuffle?'Back in order':'Shuffled')},shuffleFg:P.shuffle&&q?'#c79bf2':'#a3a09a'}}
+        shuffle:()=>{if(q)this.send(P.id,{shuffle:!P.shuffle},P.shuffle?'Back in order':'Shuffled')},shuffleFg:P.shuffle&&q?'#c79bf2':'#a3a09a',
+        ...(()=>{const b=barItems(P,cmd=>this.send(P.id,cmd));return{isBar:b.length>0,barItems:b}})()}}
     // Helix music: on speakers that play a queue (Cast, Sonos, their groups)
     const PQ=P&&(P.capabilities||[]).includes('queue');
-    const playMusic=(name,shuffle)=>{if(!P)return;if(!PQ){this.toast(`${P.name} can’t play Helix music yet (Google Cast and Sonos speakers can)`);return}
+    const playMusic=(name,shuffle)=>{if(!P)return;if(!PQ){this.toast(`${P.name} can’t play Helix music yet (Google Cast, Sonos and AirPlay speakers can)`);return}
       this.send(P.id,{on:true,media:name,shuffle:!!shuffle},`Playing ${name}${shuffle&&name!=='Shuffle all'?' on shuffle':''} on ${P.name}`)};
     const musicItems=(H.music||[]).map(m=>({name:m.name,icon:m.icon,play:()=>playMusic(m.name,m.kind==='all'||!!s.musicShuffle)}));
     const musicUi={hasMusic:!!(H.music&&H.music.length),musicItems,musicShuffleLabel:s.musicShuffle?'Shuffle on':'Shuffle off',musicShuffleFg:s.musicShuffle?'#c79bf2':'#a3a09a',toggleMusicShuffle:()=>this.setState(p=>({musicShuffle:!p.musicShuffle})),

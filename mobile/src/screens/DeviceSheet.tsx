@@ -13,6 +13,9 @@ import { T } from '../ui/Text';
 const TEMPS: [number, string][] = [[2200, '#ffb56b'], [2700, '#ffc98a'], [3000, '#ffd9a8'], [4000, '#fff1dc'], [5000, '#f4f7ff']];
 /** Inputs a TV with `input` can switch to (the TV can't say which it's on, so none shows as selected). */
 const INPUTS: [string, string][] = [['hdmi1', 'HDMI 1'], ['hdmi2', 'HDMI 2'], ['hdmi3', 'HDMI 3'], ['hdmi4', 'HDMI 4'], ['tv', 'TV']];
+/** A soundbar's inputs (it says which it's on) and sound modes. */
+const BAR_INPUTS: [string, string][] = [['tv', 'TV'], ['hdmi1', 'HDMI in'], ['bluetooth', 'Bluetooth'], ['wifi', 'Wi-Fi']];
+const SOUNDS: [string, string][] = [['standard', 'Standard'], ['surround', 'Surround'], ['game', 'Game'], ['adaptive', 'Adaptive']];
 const COLOURS = ['#ff5a4e', '#ff9f43', '#ffd93d', '#6bd968', '#3fd0c9', '#4aa3ff', '#8b6bff', '#ff6bd6'];
 
 const Label = ({ children }: { children: string }) => <T size={13} weight={600}>{children}</T>;
@@ -140,7 +143,20 @@ export function DeviceSheet() {
               </View>
             </View>
           ) : null}
-          {has(D, 'input') && D.on ? (
+          {has(D, 'sound') && D.on ? (
+            <View style={{ gap: 8 }}>
+              <Label>Soundbar</Label>
+              <HScroll>
+                {BAR_INPUTS.map(([id, label]) => <Pill key={id} label={label} on={D.input === id} onPress={() => void send(D.id, { input: id })} />)}
+              </HScroll>
+              <HScroll>
+                <Pill label={D.muted ? 'Muted' : 'Mute'} on={!!D.muted} onPress={() => void send(D.id, { muted: !D.muted })} />
+                <Pill label="Night mode" on={!!D.night} onPress={() => void send(D.id, { night: !D.night })} />
+                {SOUNDS.map(([id, label]) => <Pill key={id} label={label} on={D.sound === id} onPress={() => void send(D.id, { sound: id })} />)}
+              </HScroll>
+            </View>
+          ) : null}
+          {has(D, 'input') && !has(D, 'sound') && D.on ? (
             <View style={{ gap: 8 }}>
               <Label>Source</Label>
               <HScroll>

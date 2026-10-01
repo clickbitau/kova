@@ -8,6 +8,7 @@ import { Registry } from '../src/devices/registry.ts';
 import { HelixMusic, shuffled } from '../src/services/helix-music.ts';
 import { CastAdapter, CAST_WINDOW } from '../src/adapters/cast/index.ts';
 import { SonosAdapter } from '../src/adapters/sonos.ts';
+import { AirPlayAdapter, OWNTONE_WINDOW } from '../src/adapters/airplay.ts';
 import { encodeMessage, decodeMessage, NS } from '../src/adapters/cast/channel.ts';
 
 const TOKEN = 'hxd_' + 'm'.repeat(64);
@@ -366,6 +367,128 @@ test('Sonos: Helix music plays from the speaker’s own queue, with titles; next
   } finally {
     await reg.stop();
     sonos.server.close();
+    await h.close();
+  }
+});
+
+test('A speaker that reorders a queue (shuffle on or off) gets the songs of its own order signed', async () => {
+  const h = await fakeHelix(60, { modern: true });
+  const music = new HelixMusic(() => ({ url: h.url, token: TOKEN }), { random: seq() });
+  try {
+    const all = (await music.queueFor('Shuffle all', { shuffle: true }))!;
+    await all.prepare!(0, 5);
+    // The same songs, the other way round, as Cast, Sonos and AirPlay do when shuffle changes.
+    const copy = { ...all, tracks: [...all.tracks].reverse() };
+    await copy.prepare!(0, 5);
+    assert.ok(copy.tracks.slice(0, 5).every(t => !t.url.includes('token=') && !(t.art ?? '').includes('token=')), copy.tracks.slice(0, 5).map(t => t.url).join('\n'));
+    assert.equal(h.signed.length, 10);
+  } finally { await h.close(); }
+});
+
+/** OwnTone's JSON API with a queue: items/add (comma-separated uris), play by position, next song, seek, shuffle. */
+function fakeOwnTone() {
+  const outputs = [
+    { id: '200', name: 'Kitchen HomePod', type: 'AirPlay 2', selected: false, volume: 30 },
+    { id: '300', name: 'Lounge', type: 'AirPlay 2', selected: false, volume: 30 },
+  ];
+  let nextId = 1;
+  const st = { state: 'stop', items: [] as { id: number; position: number; uri: string }[], at: 0, shuffle: true, seekMs: 0, adds: 0 };
+  const server = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', c => (body += c));
+    req.on('end', () => {
+      const u = new URL(req.url!, 'http://x');
+      const q = u.searchParams;
+      const j = body ? JSON.parse(body) : {};
+      const send = (x: unknown = {}) => { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(x)); };
+      const p = `${req.method} ${u.pathname}`;
+      if (p === 'GET /api/outputs') return send({ outputs });
+      if (p === 'GET /api/player') return send({ state: st.state, item_id: st.items[st.at]?.id, item_progress_ms: 65_000 });
+      if (p === 'GET /api/queue') return send({ count: st.items.length, items: st.items });
+      if (p === 'PUT /api/outputs/set') { outputs.forEach(o => (o.selected = j.outputs.includes(o.id))); return send(); }
+      const m = u.pathname.match(/^\/api\/outputs\/(\d+)$/);
+      if (req.method === 'PUT' && m) { Object.assign(outputs.find(o => o.id === m[1])!, j); return send(); }
+      if (p === 'POST /api/queue/items/add') {
+        st.adds++;
+        if (q.get('clear') === 'true') { st.items = []; st.at = 0; }
+        const uris = q.get('uris')!.split(',');
+        for (const uri of uris) st.items.push({ id: nextId++, position: st.items.length, uri });
+        if (q.get('playback') === 'start') st.state = 'play';
+        return send({ count: uris.length });
+      }
+      if (p === 'PUT /api/player/play') { if (q.has('position')) st.at = Number(q.get('position')); st.state = 'play'; return send(); }
+      if (p === 'PUT /api/player/seek') { st.seekMs = Number(q.get('position_ms')); return send(); }
+      if (p === 'PUT /api/player/shuffle') { st.shuffle = q.get('state') === 'true'; return send(); }
+      if (p === 'PUT /api/player/stop') { st.state = 'stop'; return send(); }
+      res.statusCode = 404; res.end();
+    });
+  });
+  return { server, outputs, st };
+}
+
+test('AirPlay: Helix music plays as OwnTone’s queue on every AirPlay speaker in sync; next and previous; Kova follows it; shuffle', { timeout: 20_000 }, async () => {
+  const h = await fakeHelix(80, { modern: true });
+  const music = new HelixMusic(() => ({ url: h.url, token: TOKEN }), { random: seq() });
+  const ot = fakeOwnTone();
+  await new Promise<void>(r => ot.server.listen(0, '127.0.0.1', r));
+  const reg = new Registry(new Store(':memory:'), n => (n === 'Radio' ? 'http://s/radio.mp3' : undefined));
+  reg.queues = (m, o) => music.queueFor(m, o);
+  const adapter = new AirPlayAdapter({ url: `http://127.0.0.1:${(ot.server.address() as AddressInfo).port}`, pollMs: 0, batchMs: 20, ids: { 'Kitchen HomePod': 'kitchen', Lounge: 'lounge' } });
+  const titleOf = (uri: string) => { const id = /\/v1\/play\/t(\d+)/.exec(uri)?.[1]; return id ? `Song ${id}` : uri; };
+  const now = () => titleOf(ot.st.items[ot.st.at]?.uri ?? '');
+  try {
+    await reg.addAdapter(adapter);
+    assert.ok(reg.get('kitchen')!.capabilities.includes('queue'));
+    // A playlist on two speakers: one queue, both speakers on it, the songs in order (signed, no token).
+    await reg.applyTargets({ kitchen: { on: true, media: 'Bangla Collection' }, lounge: { on: true, media: 'Bangla Collection' } }, you);
+    assert.deepEqual(ot.st.items.map(i => titleOf(i.uri)), ['Song 5', 'Song 6', 'Song 7']);
+    assert.ok(ot.st.items.every(i => !i.uri.includes('token=')));
+    assert.equal(ot.st.adds, 1, 'one call for the window');
+    assert.equal(ot.st.shuffle, false, 'OwnTone’s own shuffle is off: Kova shuffles');
+    assert.deepEqual(ot.outputs.map(o => o.selected), [true, true]);
+    for (const id of ['kitchen', 'lounge']) assert.deepEqual({ media: reg.get(id)!.state.media, track: reg.get(id)!.state.track?.title }, { media: 'Bangla Collection', track: 'Song 5' });
+    // Next song, asked of both speakers of a group: one move.
+    await reg.applyTargets({ kitchen: { skip: 1 }, lounge: { skip: 1 } }, you);
+    assert.equal(now(), 'Song 6');
+    assert.equal(reg.get('lounge')!.state.track?.title, 'Song 6');
+
+    // OwnTone plays one queue: other music on one speaker while the other plays is refused, clearly.
+    await assert.rejects(reg.command('kitchen', { media: 'Shuffle all' }, you), /playing Bangla Collection in other rooms/);
+    await reg.command('lounge', { on: false, media: null }, you);
+    assert.equal(reg.get('kitchen')!.state.track?.title, 'Song 6', 'the kitchen plays on');
+    // Shuffle all: 50 songs at a time; OwnTone moves on by itself and Kova follows, adding more before it runs out.
+    await reg.command('kitchen', { media: 'Shuffle all' }, you);
+    assert.equal(ot.st.items.length, OWNTONE_WINDOW);
+    assert.equal(reg.get('kitchen')!.state.shuffle, true);
+    ot.st.at = 46;
+    await adapter['refresh']();
+    assert.equal(reg.get('kitchen')!.state.track?.title, now());
+    assert.equal(ot.st.items.length, 80);
+    await reg.command('kitchen', { skip: -1 }, you);
+    assert.equal(ot.st.at, 45);
+    assert.equal(reg.get('kitchen')!.state.track?.title, now());
+    // Shuffle on (Loved, in order until now): the rest in a new order, carrying on with the same song where it was.
+    await reg.command('kitchen', { media: 'Loved' }, you);
+    assert.equal(reg.get('kitchen')!.state.shuffle, false);
+    const inOrder = ot.st.items.map(i => titleOf(i.uri));
+    await reg.command('kitchen', { skip: 1 }, you);
+    const playing = now();
+    await reg.command('kitchen', { shuffle: true }, you);
+    assert.equal(now(), playing);
+    assert.equal(ot.st.seekMs, 65_000);
+    assert.equal(reg.get('kitchen')!.state.shuffle, true);
+    assert.notDeepEqual(ot.st.items.map(i => titleOf(i.uri)), inOrder);
+    assert.deepEqual(ot.st.items.map(i => titleOf(i.uri)).sort(), [...inOrder].sort());
+    // A stream again ends the queue.
+    await reg.command('kitchen', { media: 'Radio' }, you);
+    assert.deepEqual(ot.st.items.map(i => i.uri), ['http://s/radio.mp3']);
+    await adapter['refresh']();
+    assert.equal(reg.get('kitchen')!.state.track, null);
+    await reg.applyTargets({ kitchen: { on: false, media: null }, lounge: { on: false, media: null } }, you);
+    assert.equal(ot.st.state, 'stop');
+  } finally {
+    await reg.stop();
+    ot.server.close();
     await h.close();
   }
 });

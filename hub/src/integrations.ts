@@ -18,6 +18,7 @@ import type { NotifyOptions } from './services/notify.ts';
 import { MatterAdapter } from './adapters/matter.ts';
 import { WardenAdapter, type WardenOptions } from './adapters/warden.ts';
 import { HelixAdapter, type HelixOptions } from './adapters/helix.ts';
+import { SmartThingsAdapter, type SmartThingsOptions } from './adapters/smartthings.ts';
 
 /**
  * What's connected in this home, and how to reach it. Lives in
@@ -58,6 +59,8 @@ export interface Integrations {
   warden?: WardenOptions;
   /** Helix, the media server and TV boxes: what's playing, pause, play by name, Movie mode by itself. */
   helix?: HelixOptions;
+  /** Samsung soundbars through SmartThings (power, input, volume, mute, sound and night mode). Sign-in kept in <KOVA_DATA>/smartthings/. */
+  smartthings?: Omit<SmartThingsOptions, 'storageDir'>;
   /** Who's home: phone MACs from the router (Warden or OPNsense), a TCP ping, and phone automations. */
   presence?: PresenceOptions;
   /** Push notifications: Web Push to the phone app (no config needed) and/or ntfy, plus which built-in rules run. */
@@ -99,6 +102,7 @@ export const ADAPTER_FACTORIES: Factories = {
   nest: c => c.projectId && c.refreshToken ? new NestAdapter(c) : null,
   warden: c => c.url && c.token ? new WardenAdapter(c) : null,
   helix: c => c.url ? new HelixAdapter(c) : null,
+  smartthings: (c, dataDir) => c.token || (c.clientId && c.clientSecret) ? new SmartThingsAdapter({ ...c, storageDir: join(dataDir, 'smartthings') }) : null,
   homekitBridge: null,
   matterBridge: null,
   presence: null,

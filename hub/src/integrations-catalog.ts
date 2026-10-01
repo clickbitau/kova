@@ -220,6 +220,23 @@ export const CATALOG: CatalogItem[] = [
     }],
   },
   {
+    id: 'smartthings', name: 'Samsung soundbar', icon: 'speaker', kind: 'Cloud', apply: 'hot',
+    description: 'Samsung soundbars through SmartThings: power, input, volume, mute, sound mode and night mode. Soundbars before the 2024 models have no local control, so this goes through your Samsung account.',
+    fields: [
+      { key: 'clientId', label: 'SmartThings app client id', type: 'text', help: 'Make an OAuth-In app once with the SmartThings CLI: smartthings apps:create, scopes r:devices:* and x:devices:*, redirect URI https://httpbin.org/get.' },
+      { key: 'clientSecret', label: 'Client secret', type: 'password' },
+      { key: 'token', label: 'Or a personal access token', type: 'password', help: 'From account.smartthings.com/tokens. SmartThings ends these after 24 hours, so the app above is better.' },
+      {
+        key: 'rooms', label: 'Rooms', type: 'list', shape: 'map', mapKey: 'name', mapValue: 'room', addLabel: 'Put a soundbar in a room',
+        item: [{ key: 'name', label: 'Name in SmartThings', type: 'text', required: true, placeholder: 'Soundbar Q930B' }, room()],
+      },
+    ],
+    actions: [
+      { id: 'link', label: 'Link SmartThings', icon: 'link', method: 'GET', path: '/api/integrations/smartthings/auth-url', opensUrl: true, help: 'Save first. Allow Kova, then copy the code from the address bar (?code=…) below.' },
+      { id: 'code', label: 'Finish linking', icon: 'key', method: 'POST', path: '/api/integrations/smartthings/auth-code', help: 'Kova keeps the sign-in and starts straight away.', fields: [{ key: 'code', label: 'Code', type: 'text', required: true }] },
+    ],
+  },
+  {
     id: 'ecovacs', name: 'Ecovacs DEEBOT', icon: 'cleaning_services', kind: 'Cloud', apply: 'hot',
     description: 'DEEBOT robot vacuums through your Ecovacs account.',
     fields: [
@@ -329,7 +346,13 @@ export const CATALOG: CatalogItem[] = [
           { key: 'box', label: 'Box name', type: 'text', required: true, placeholder: 'Lounge' },
           { key: 'tv', label: 'TV (Kova id)', type: 'text', placeholder: 'lounge_tv' },
           { key: 'input', label: 'Box is on', type: 'select', options: [{ value: 'hdmi1', label: 'HDMI 1' }, { value: 'hdmi2', label: 'HDMI 2' }, { value: 'hdmi3', label: 'HDMI 3' }, { value: 'hdmi4', label: 'HDMI 4' }] },
+          { key: 'soundbar', label: 'Soundbar (Kova id)', type: 'text', placeholder: 'found in the TV’s room', help: 'Helix’s remote controls it, and auto-switching sets its input.' },
+          { key: 'soundbarInput', label: 'Box’s sound goes to the soundbar’s', type: 'select', options: [{ value: 'hdmi1', label: 'HDMI in 1' }, { value: 'hdmi2', label: 'HDMI in 2' }], help: 'For films whose 7.1 or DTS sound the box sends straight to the soundbar. Otherwise the soundbar listens to the TV (eARC).' },
         ],
+      },
+      {
+        key: 'autoSwitch', label: 'Auto-switch when Helix plays', type: 'select', options: [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }],
+        help: 'When a box plays: the TV comes on and goes to the box, and the soundbar comes on and goes to where the sound is. An input you choose during playback is left alone.',
       },
       { key: 'kovaUrl', label: 'Kova’s address for Helix', type: 'text', placeholder: 'http://10.10.10.5:8140', help: 'Optional. Kova uses its own address on Helix Server’s network.' },
     ],

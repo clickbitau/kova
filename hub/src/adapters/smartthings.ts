@@ -1,0 +1,272 @@
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import type { Adapter, AdapterContext, AdapterStatus } from './sdk.ts';
+import type { Command, Device, DeviceState } from '../model/types.ts';
+
+// Samsung soundbars through SmartThings: power, input, volume, mute, sound mode and night mode.
+//
+// Samsung's local soundbar API (JSON-RPC) only exists on the 2024 "D" models and later; a Q930B (2022) and the
+// other A/B/C models are only reachable through Samsung's SmartThings cloud, the way Home Assistant does it.
+// Sound mode and night mode aren't SmartThings capabilities: they go through the soundbar's `execute` capability
+// with Samsung's own resource paths (/sec/networkaudio/soundmode and /advancedaudio).
+//
+// Signing in: a SmartThings OAuth app (`smartthings apps:create`, an OAuth-In app with r:devices:* and x:devices:*)
+// linked once, after which Kova keeps the refresh token, which SmartThings replaces on every use, in
+// <KOVA_DATA>/smartthings/token.json. A personal access token works too, but SmartThings now ends those after 24 h.
+
+export const SMARTTHINGS_URLS = { api: 'https://api.smartthings.com/v1', authorize: 'https://api.smartthings.com/oauth/authorize', token: 'https://api.smartthings.com/oauth/token' };
+export const SMARTTHINGS_DEFAULT_REDIRECT = 'https://httpbin.org/get';
+const SCOPES = 'r:devices:* x:devices:*';
+
+export interface SmartThingsOptions {
+  /** A personal access token (account.smartthings.com/tokens). Lasts 24 h when made after December 2024. */
+  token?: string;
+  /** An OAuth-In app's client id and secret, from `smartthings apps:create`. */
+  clientId?: string;
+  clientSecret?: string;
+  /** From linking (Link SmartThings). Kova keeps the newest one in storageDir, since SmartThings replaces it on every refresh. */
+  refreshToken?: string;
+  /** SmartThings device ids to use. Default: every soundbar on the account. */
+  devices?: string[];
+  /** SmartThings name → Kova room id. */
+  rooms?: Record<string, string>;
+  /** SmartThings name → Kova device id. */
+  ids?: Record<string, string>;
+  /** How often to read the soundbars, in seconds. Default 15; 0 = only after commands. */
+  pollSec?: number;
+  storageDir: string;
+  apiUrl?: string;
+  tokenUrl?: string;
+  timeoutMs?: number;
+}
+
+interface StDevice { deviceId: string; label?: string; name?: string; manufacturerName?: string; ocf?: { deviceType?: string; modelNumber?: string }; components?: { id: string; capabilities?: { id: string }[] }[] }
+type Status = Record<string, Record<string, { value?: unknown }>>;
+
+/** Kova's names for soundbar inputs ↔ SmartThings's. "tv" is the TV's eARC/ARC or optical ("digital"). */
+const TO_ST: Record<string, string> = { tv: 'digital', hdmi1: 'HDMI1', hdmi2: 'HDMI2', bluetooth: 'bluetooth', wifi: 'wifi' };
+export function toStInput(input: string): string { return TO_ST[input] ?? input; }
+export function fromStInput(v: string): string {
+  const hit = Object.entries(TO_ST).find(([, st]) => st.toLowerCase() === v.toLowerCase());
+  return hit ? hit[0] : /^(arc|earc|optical|d\.in)$/i.test(v) ? 'tv' : v.toLowerCase();
+}
+
+/** Is this SmartThings device a soundbar (Samsung's "network audio")? */
+export function isSoundbar(d: StDevice): boolean {
+  const caps = new Set((d.components ?? []).find(c => c.id === 'main')?.capabilities?.map(c => c.id) ?? []);
+  if (!caps.has('audioVolume')) return false;
+  return d.ocf?.deviceType === 'oic.d.networkaudio' || caps.has('samsungvd.soundFrom') || /soundbar|\bhw-/i.test(`${d.label ?? ''} ${d.name ?? ''} ${d.ocf?.modelNumber ?? ''}`);
+}
+
+/** The state a soundbar's SmartThings status describes. */
+export function soundbarState(st: Status | undefined): DeviceState {
+  const v = (cap: string, attr: string) => st?.[cap]?.[attr]?.value;
+  const out: DeviceState = { online: true };
+  const sw = v('switch', 'switch');
+  if (sw === 'on' || sw === 'off') out.on = sw === 'on';
+  const vol = Number(v('audioVolume', 'volume'));
+  if (Number.isFinite(vol)) out.vol = vol;
+  const mute = v('audioMute', 'mute');
+  if (mute === 'muted' || mute === 'unmuted') out.muted = mute === 'muted';
+  const input = v('mediaInputSource', 'inputSource') ?? v('samsungvd.audioInputSource', 'inputSource');
+  if (typeof input === 'string' && input) out.input = fromStInput(input);
+  return out;
+}
+
+export class SmartThingsError extends Error { constructor(message: string, readonly status: number) { super(message); } }
+
+/** Access tokens: a personal token as it is, or from the OAuth refresh token (kept on disk, replaced on every refresh). */
+export class SmartThingsAuth {
+  private access = '';
+  private expires = 0;
+  private refreshing: Promise<string> | null = null;
+  private file: string;
+
+  constructor(private o: Pick<SmartThingsOptions, 'token' | 'clientId' | 'clientSecret' | 'refreshToken' | 'storageDir' | 'tokenUrl' | 'timeoutMs'>, private now = () => Date.now()) {
+    this.file = join(o.storageDir, 'token.json');
+  }
+
+  /** The refresh token to use: the one Kova kept, unless the settings carry a newer link. */
+  private stored(): { refreshToken?: string; seed?: string } {
+    try { return existsSync(this.file) ? JSON.parse(readFileSync(this.file, 'utf8')) : {}; } catch { return {}; }
+  }
+  private refreshTokenNow(): string | undefined {
+    const s = this.stored();
+    // Linked again in the app: the settings' token is new, so it wins over the one kept from the old link.
+    if (this.o.refreshToken && s.seed !== this.o.refreshToken) return this.o.refreshToken;
+    return s.refreshToken ?? this.o.refreshToken;
+  }
+  private keep(refreshToken: string): void {
+    mkdirSync(this.o.storageDir, { recursive: true });
+    writeFileSync(this.file, JSON.stringify({ refreshToken, seed: this.o.refreshToken }, null, 2) + '\n', { mode: 0o600 });
+    chmodSync(this.file, 0o600);
+  }
+
+  get linked(): boolean { return !!this.o.token || !!(this.o.clientId && this.o.clientSecret && this.refreshTokenNow()); }
+  invalidate(): void { this.access = ''; this.expires = 0; }
+
+  async token(): Promise<string> {
+    if (this.o.clientId && this.o.clientSecret && this.refreshTokenNow()) {
+      if (this.access && this.now() < this.expires - 60_000) return this.access;
+      this.refreshing ??= (async () => {
+        try {
+          const j = await smartThingsToken(this.o, { grant_type: 'refresh_token', refresh_token: this.refreshTokenNow()!, client_id: this.o.clientId! });
+          if (j.refresh_token) this.keep(j.refresh_token);
+          this.access = j.access_token;
+          this.expires = this.now() + (j.expires_in ?? 86_400) * 1000;
+          return this.access;
+        } finally { this.refreshing = null; }
+      })();
+      return this.refreshing;
+    }
+    if (this.o.token) return this.o.token;
+    throw new SmartThingsError('Link SmartThings first', 401);
+  }
+}
+
+async function smartThingsToken(o: Pick<SmartThingsOptions, 'clientId' | 'clientSecret' | 'tokenUrl' | 'timeoutMs'>, form: Record<string, string>): Promise<{ access_token: string; refresh_token?: string; expires_in?: number }> {
+  const res = await fetch(o.tokenUrl ?? SMARTTHINGS_URLS.token, {
+    method: 'POST', signal: AbortSignal.timeout(o.timeoutMs ?? 10_000),
+    headers: { 'content-type': 'application/x-www-form-urlencoded', authorization: `Basic ${Buffer.from(`${o.clientId}:${o.clientSecret}`).toString('base64')}` },
+    body: new URLSearchParams(form).toString(),
+  });
+  const j = await res.json().catch(() => ({})) as { access_token?: string; refresh_token?: string; expires_in?: number; error?: string; error_description?: string };
+  if (!res.ok || !j.access_token) {
+    throw new SmartThingsError(j.error === 'invalid_grant' ? 'SmartThings sign-in has ended: link SmartThings again' : `SmartThings sign-in failed: ${j.error_description ?? j.error ?? `HTTP ${res.status}`}`, res.status);
+  }
+  return j as { access_token: string; refresh_token?: string; expires_in?: number };
+}
+
+/** Where to send the owner to allow Kova (then they paste the code from the address bar). */
+export function smartThingsAuthUrl(o: { clientId: string; redirectUri?: string }): string {
+  const q = new URLSearchParams({ client_id: o.clientId, response_type: 'code', redirect_uri: o.redirectUri ?? SMARTTHINGS_DEFAULT_REDIRECT, scope: SCOPES });
+  return `${SMARTTHINGS_URLS.authorize}?${q}`;
+}
+
+/** Swap the one-time code for a refresh token. */
+export async function exchangeSmartThingsCode(o: { code: string; clientId: string; clientSecret: string; redirectUri?: string; tokenUrl?: string }): Promise<{ refreshToken: string }> {
+  const j = await smartThingsToken(o, { grant_type: 'authorization_code', code: o.code, client_id: o.clientId, redirect_uri: o.redirectUri ?? SMARTTHINGS_DEFAULT_REDIRECT });
+  if (!j.refresh_token) throw new SmartThingsError('SmartThings returned no refresh token', 0);
+  return { refreshToken: j.refresh_token };
+}
+
+interface Bar { id: string; st: string; name: string; sound: string | null; night: boolean | null }
+
+export class SmartThingsAdapter implements Adapter {
+  id = 'smartthings';
+  name = 'Samsung soundbar (SmartThings)';
+  icon = 'speaker';
+  kind = 'Cloud' as const;
+  private ctx?: AdapterContext;
+  private auth: SmartThingsAuth;
+  private bars = new Map<string, Bar>();
+  private poller: NodeJS.Timeout | null = null;
+  private error: string | null = null;
+
+  constructor(private o: SmartThingsOptions) { this.auth = new SmartThingsAuth(o); }
+
+  private async api<T>(method: string, path: string, body?: unknown, retry = true): Promise<T> {
+    const res = await fetch(`${(this.o.apiUrl ?? SMARTTHINGS_URLS.api).replace(/\/$/, '')}${path}`, {
+      method, signal: AbortSignal.timeout(this.o.timeoutMs ?? 10_000),
+      headers: { authorization: `Bearer ${await this.auth.token()}`, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    if (res.status === 401 && retry) { this.auth.invalidate(); return this.api(method, path, body, false); }
+    const text = await res.text();
+    if (!res.ok) {
+      let msg = `HTTP ${res.status}`;
+      try { const e = JSON.parse(text) as { error?: { message?: string } }; if (e.error?.message) msg = e.error.message; } catch { /* plain text */ }
+      throw new SmartThingsError(res.status === 401 ? 'SmartThings no longer accepts Kova’s sign-in: link SmartThings again' : `SmartThings ${method} ${path.split('?')[0]} failed: ${msg}`, res.status);
+    }
+    return (text ? JSON.parse(text) : {}) as T;
+  }
+
+  async start(ctx: AdapterContext): Promise<void> {
+    this.ctx = ctx;
+    if (!this.auth.linked) { this.error = 'Not linked yet: use Link SmartThings'; return; }
+    try {
+      await this.discover();
+      await this.poll();
+    } catch (e) { this.error = (e as Error).message; }
+    const every = (this.o.pollSec ?? 15) * 1000;
+    if (every > 0) this.poller = setInterval(() => void this.poll(), every);
+  }
+
+  async stop(): Promise<void> { if (this.poller) clearInterval(this.poller); this.poller = null; }
+
+  private async discover(): Promise<void> {
+    const { items = [] } = await this.api<{ items?: StDevice[] }>('GET', '/devices');
+    const want = this.o.devices?.length ? new Set(this.o.devices) : null;
+    const found = items.filter(d => want ? want.has(d.deviceId) : isSoundbar(d));
+    const fresh = found.filter(d => !this.bars.has(this.kovaId(d)));
+    for (const d of found) {
+      const id = this.kovaId(d);
+      if (!this.bars.has(id)) this.bars.set(id, { id, st: d.deviceId, name: d.label || d.name || 'Soundbar', sound: null, night: null });
+    }
+    if (fresh.length) {
+      this.ctx!.announce(fresh.map(d => {
+        const name = d.label || d.name || 'Soundbar';
+        return {
+          id: this.kovaId(d), name, type: 'media' as const, room: this.o.rooms?.[name] ?? name.toLowerCase().replace(/[^a-z0-9]+/g, '_'),
+          integration: `Samsung soundbar${d.ocf?.modelNumber ? ` · ${d.ocf.modelNumber.split('|')[0]}` : ''}`, address: d.deviceId,
+          capabilities: ['onoff', 'volume', 'mute', 'input', 'sound'],
+        };
+      }));
+    }
+    this.error = found.length ? null : 'No soundbar on this SmartThings account';
+  }
+
+  private kovaId(d: StDevice): string {
+    return this.o.ids?.[d.label ?? ''] ?? this.o.ids?.[d.name ?? ''] ?? `soundbar_${d.deviceId.replace(/-/g, '').slice(0, 12).toLowerCase()}`;
+  }
+
+  private async read(b: Bar): Promise<DeviceState> {
+    const st = await this.api<{ components?: Record<string, Status> }>('GET', `/devices/${encodeURIComponent(b.st)}/status`);
+    const s = soundbarState(st.components?.main);
+    // Sound mode and night mode can't be read back: what Kova last set.
+    if (b.sound) s.sound = b.sound;
+    if (b.night !== null) s.night = b.night;
+    return s;
+  }
+
+  private async poll(): Promise<void> {
+    let failed = 0;
+    await Promise.all([...this.bars.values()].map(async b => {
+      try { this.ctx!.report(b.id, await this.read(b)); }
+      catch (e) { failed++; if ((e as SmartThingsError).status === 401) this.error = (e as Error).message; else this.ctx!.report(b.id, { online: false }); }
+    }));
+    if (!failed && this.bars.size) this.error = null;
+  }
+
+  async command(d: Device, cmd: Command): Promise<void | DeviceState> {
+    const b = this.bars.get(d.id);
+    if (!b) throw new Error(`Unknown soundbar ${d.name}`);
+    const commands: { component: 'main'; capability: string; command: string; arguments?: unknown[] }[] = [];
+    const c = (capability: string, command: string, args?: unknown[]) => commands.push({ component: 'main', capability, command, ...(args ? { arguments: args } : {}) });
+    const exec = (path: string, body: Record<string, unknown>) => c('execute', 'execute', [path, body]);
+    // On first, so the rest lands on a soundbar that's listening.
+    if (cmd.on === true) c('switch', 'on');
+    if (cmd.input) c('mediaInputSource', 'setInputSource', [toStInput(cmd.input)]);
+    if (cmd.vol != null) c('audioVolume', 'setVolume', [Math.max(0, Math.min(100, Math.round(cmd.vol)))]);
+    if (cmd.volStep) c('audioVolume', cmd.volStep > 0 ? 'volumeUp' : 'volumeDown');
+    if (cmd.muted !== undefined) c('audioMute', cmd.muted ? 'mute' : 'unmute');
+    if (cmd.sound) exec('/sec/networkaudio/soundmode', { 'x.com.samsung.networkaudio.soundmode': cmd.sound });
+    if (cmd.night !== undefined) exec('/sec/networkaudio/advancedaudio', { 'x.com.samsung.networkaudio.nightmode': cmd.night ? 1 : 0 });
+    if (cmd.on === false) c('switch', 'off');
+    if (!commands.length) return;
+    await this.api('POST', `/devices/${encodeURIComponent(b.st)}/commands`, { commands });
+    if (cmd.sound) b.sound = cmd.sound;
+    if (cmd.night !== undefined) b.night = cmd.night;
+    // A volume step lands somewhere Kova can only read: read it, and the rest, back.
+    if (cmd.volStep) {
+      const now = await this.read(b).catch(() => null);
+      if (now?.vol != null) return { vol: now.vol };
+    }
+  }
+
+  status(): AdapterStatus {
+    if (this.error) return { ok: false, note: this.error };
+    const n = this.bars.size;
+    return { ok: n > 0, note: n ? `${n} soundbar${n === 1 ? '' : 's'}` : 'Looking for soundbars…' };
+  }
+}

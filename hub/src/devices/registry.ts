@@ -12,12 +12,14 @@ const MEASUREMENTS = new Set(['online', 'power', 'energy', 'grid', 'load', 'batt
 
 export interface ChangeEvent { device: Device; prev: DeviceState; patch: Command; cause: Cause }
 export interface DeviceEvent { device: Device; type: string; data: Record<string, unknown> }
+/** A command on its way to a device, and who asked. */
+export interface SentEvent { device: Device; cmd: Command; cause: Cause }
 
 /**
  * Holds every device and its live state. All changes go through here so each
  * one is written to the event log with its cause.
  */
-export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [DeviceEvent]; devices: []; measure: [] }> {
+export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [DeviceEvent]; devices: []; measure: []; sent: [SentEvent] }> {
   readonly devices = new Map<string, Device>();
   readonly adapters = new Map<string, Adapter>();
 
@@ -143,8 +145,8 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
   diff(d: Device, patch: Command): Command {
     const out: Command = {};
     for (const [k, v] of Object.entries(patch)) {
-      // A skip is momentary: always sent, never kept as state.
-      if (k === 'skip' || (d.state as Record<string, unknown>)[k] !== v) (out as Record<string, unknown>)[k] = v;
+      // A skip or volume step is momentary: always sent, never kept as state.
+      if (k === 'skip' || k === 'volStep' || (d.state as Record<string, unknown>)[k] !== v) (out as Record<string, unknown>)[k] = v;
     }
     return out;
   }
@@ -153,27 +155,31 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
    * Send a command to a device and record it. Returns the previous values of
    * the fields that changed, which is exactly what an undo needs.
    */
-  async command(id: string, cmd: Command, cause: Cause, opts: { quiet?: boolean } = {}): Promise<Command> {
+  /** `retrying`: the caller tries again on failure, so a failure isn't logged (its last try is). */
+  async command(id: string, cmd: Command, cause: Cause, opts: { quiet?: boolean; retrying?: boolean } = {}): Promise<Command> {
     const d = this.devices.get(id);
     if (!d) throw new Error(`Unknown device ${id}`);
     if (typeof cmd.media === 'string' && !d.capabilities.includes('queue') && !d.capabilities.includes('library') && !this.sourceUrl(cmd.media) && this.isMusic?.(cmd.media)) {
-      throw new Error(`${d.name} can’t play Helix music yet (Google Cast and Sonos speakers can)`);
+      throw new Error(`${d.name} can’t play Helix music yet (Google Cast, Sonos and AirPlay speakers can)`);
     }
     const patch = this.diff(d, fitCommand(d, cmd));
     if (!Object.keys(patch).length) return {};
     const adapter = this.adapters.get(d.adapter);
     if (!adapter) throw new Error(`No adapter ${d.adapter} for ${id}`);
+    // Who asked a device for what, before it's done (Helix auto-switching notices an input someone chose by hand).
+    this.emit('sent', { device: d, cmd: patch, cause });
     let did: void | DeviceState;
     try {
       did = await adapter.command(d, patch, cause);
     } catch (err) {
-      this.store.append({ kind: 'system', device: id, feed: 'system', what: `${d.name} didn't respond`, data: { error: String(err), patch }, cause });
+      if (!opts.retrying) this.store.append({ kind: 'system', device: id, feed: 'system', what: `${d.name} didn't respond`, data: { error: String(err), patch }, cause });
       throw err;
     }
-    const { skip: _skip, ...kept } = did ? { ...patch, ...did } : patch;
-    // A skip changes the song (which the speaker reports), not a setting: log it, keep no state for it.
-    if (_skip && !Object.keys(kept).length) {
-      this.store.append({ kind: 'state', device: d.id, feed: cause.kind === 'user' || cause.kind === 'assistant' ? 'device' : null, what: `${d.name}: ${_skip > 0 ? 'next song' : 'previous song'}`, data: { patch }, cause });
+    const { skip: _skip, volStep: _step, ...kept } = did ? { ...patch, ...did } : patch;
+    // A skip changes the song (which the speaker reports), a step the volume: log it, keep no state for it.
+    if ((_skip || _step) && !Object.keys(kept).length) {
+      const what = _skip ? (_skip > 0 ? 'next song' : 'previous song') : `volume ${_step! > 0 ? 'up' : 'down'}`;
+      this.store.append({ kind: 'state', device: d.id, feed: cause.kind === 'user' || cause.kind === 'assistant' ? 'device' : null, what: `${d.name}: ${what}`, data: { patch }, cause });
       return {};
     }
     return this.apply(d, kept, cause, opts.quiet);
