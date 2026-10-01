@@ -230,7 +230,7 @@ export class Engine extends EventEmitter<{ changed: [] }> {
   private async onDeviceEvent(e: DeviceEvent): Promise<void> {
     const labels: Record<string, string> = {
       person: 'saw a person', ring: 'rang', motion: 'detected motion',
-      'internet-down': 'is down', 'internet-up': 'is back', 'new-device': 'saw a new device join', threat: 'blocked an attack',
+      'internet-down': 'is down', 'internet-up': 'is back', 'internet-failover': 'switched to the backup connection', 'new-device': 'saw a new device join', threat: 'blocked an attack',
       'video-started': 'started playing', 'music-started': 'started playing', paused: 'paused', resumed: 'carried on playing', stopped: 'stopped',
     };
     const title = typeof e.data?.title === 'string' && e.data.title && /started$/.test(e.type) ? ` ${e.data.title}` : '';

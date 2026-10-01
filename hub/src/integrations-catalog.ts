@@ -269,15 +269,16 @@ export const CATALOG: CatalogItem[] = [
   },
   {
     id: 'warden', name: 'Warden', icon: 'router', kind: 'Local', apply: 'hot', testable: true,
-    description: 'Your Warden router: internet down and new-device alerts, pause a device’s internet from modes, and who’s home from phones on the network.',
+    description: 'Your Warden router, live: internet down, failover, new-device and attack alerts, pause a device’s internet from modes, and who’s home from Warden’s people and their phones.',
     fields: [
       { key: 'url', label: 'Warden address', type: 'text', required: true, placeholder: 'https://10.10.0.1', help: 'Where you open Warden in a browser.' },
-      { key: 'token', label: 'API token', type: 'password', help: 'Filled in by Link with Warden below (or make one in Warden → System → API tokens, role Operator).' },
+      { key: 'token', label: 'API token', type: 'password', help: 'Filled in by Pair with Warden below. A token made by signing in, or by hand in Warden → System → API tokens (role Operator), works too.' },
       {
         key: 'devices', label: 'Internet switches', type: 'list', addLabel: 'Add a device',
         help: 'Devices whose internet Kova can pause, e.g. a child’s tablet at bedtime. “Devices on your network” below lists them.',
         item: [
-          { key: 'mac', label: 'MAC address', type: 'text', required: true, placeholder: 'aa:bb:cc:dd:ee:ff' },
+          { key: 'deviceId', label: 'Warden device', type: 'text', placeholder: 'dev_…', help: 'From “Devices on your network”. It follows the device when its address changes.' },
+          { key: 'mac', label: 'or a MAC address', type: 'text', placeholder: 'aa:bb:cc:dd:ee:ff' },
           { key: 'name', label: 'Name', type: 'text', required: true, placeholder: 'Aisha’s iPad' },
           room(),
         ],
@@ -285,8 +286,13 @@ export const CATALOG: CatalogItem[] = [
     ],
     actions: [
       {
-        id: 'link', label: 'Link with Warden', icon: 'link', method: 'POST', path: '/api/integrations/warden/link',
-        help: 'Sign in with a Warden admin account once. Kova makes its own token and doesn’t keep the password.',
+        id: 'pair', label: 'Pair with Warden', icon: 'add_link', method: 'POST', path: '/api/integrations/warden/pair',
+        help: 'Kova shows a code. Open Warden’s /apps page (System → Accounts → Apps), check the code matches and approve Kova. Kova only gets what it needs: devices, pausing, events, discovery, people and the network’s health.',
+        fields: [{ key: 'url', label: 'Warden address', type: 'text', placeholder: 'leave empty to use the one above' }],
+      },
+      {
+        id: 'link', label: 'Link by signing in', icon: 'link', method: 'POST', path: '/api/integrations/warden/link',
+        help: 'Or sign in with a Warden admin account once. Kova makes its own operator token and doesn’t keep the password.',
         fields: [
           { key: 'url', label: 'Warden address', type: 'text', required: true, placeholder: 'https://10.10.0.1' },
           { key: 'username', label: 'Username', type: 'text', required: true },
@@ -294,7 +300,7 @@ export const CATALOG: CatalogItem[] = [
           { key: 'totp', label: 'One-time code', type: 'text', placeholder: 'if you use two-step sign-in' },
         ],
       },
-      { id: 'clients', label: 'Devices on your network', icon: 'devices', method: 'GET', path: '/api/integrations/warden/clients', help: 'Names and MAC addresses, for internet switches and for people’s phones in Presence.' },
+      { id: 'clients', label: 'Devices on your network', icon: 'devices', method: 'GET', path: '/api/integrations/warden/clients', help: 'Warden’s device records: name, owner, type, network and MAC, for internet switches and for people’s phones in Presence.' },
     ],
   },
   {
@@ -329,7 +335,7 @@ export const CATALOG: CatalogItem[] = [
   },
   {
     id: 'presence', name: 'Presence', icon: 'person_pin_circle', kind: 'Local', apply: 'restart',
-    description: 'Who’s home, from phones on your Wi-Fi (through Warden or OPNsense) and phone automations.',
+    description: 'Who’s home, from Warden’s people and phones on your Wi-Fi (through Warden or OPNsense) and phone automations.',
     fields: [
       { key: 'opnsense.url', label: 'OPNsense address', type: 'text', placeholder: 'https://10.10.0.1', help: 'Not needed with Warden: Kova reads phones from Warden once it’s linked.' },
       { key: 'opnsense.key', label: 'OPNsense API key', type: 'password' },
@@ -338,6 +344,7 @@ export const CATALOG: CatalogItem[] = [
         key: 'people', label: 'Phones', type: 'list', shape: 'map', mapKey: 'person', addLabel: 'Add person',
         item: [
           { key: 'person', label: 'Person', type: 'select', options: 'people', required: true },
+          { key: 'wardenPerson', label: 'Person in Warden', type: 'text', placeholder: 'same name by default', help: 'With Warden, Kova uses Warden’s own “who’s home” for the person with the same name. Set this when the names differ.' },
           { key: 'phones', label: 'Phone MAC addresses', type: 'text', multiple: true, placeholder: 'aa:bb:cc:dd:ee:ff', help: 'Turn off “Private Wi-Fi address” for your home network on iPhone, or use the private address it shows.' },
         ],
       },

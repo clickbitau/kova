@@ -247,7 +247,7 @@ const PROBES: Record<string, (cfg: Obj) => Promise<string>> = {
   async warden(cfg) {
     const c = cfg as Integrations['warden'] & object;
     if (!c.url) throw new Error('Enter Warden’s address first');
-    if (!c.token) throw new Error('Link with Warden first (below)');
+    if (!c.token) throw new Error('Pair with Warden first (below)');
     const w = new Warden(c);
     const d = await w.dashboard().catch(e => { throw new Error(`Couldn’t read Warden at ${w.url}: ${friendly(e)}`); });
     return `Connected to Warden. Internet ${d.wanUp === false ? 'is down' : 'is up'}, ${d.clientCount ?? 0} devices online.`;

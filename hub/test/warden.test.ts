@@ -151,7 +151,7 @@ test('Warden: link once, internet status and alerts, pause a device’s internet
       { mac: 'aa:bb:cc:dd:ee:09', hostname: 'old-laptop', lastSeenAt: new Date(Date.now() - 3600_000).toISOString(), online: true },
     ];
     const list = (await app.inject({ method: 'GET', url: '/api/integrations/warden/clients' })).json();
-    assert.deepEqual(list.devices.map((d: { name: string }) => d.name), ['Methel’s iPhone · aa:bb:cc:dd:ee:02 · 10.10.0.52', 'old-laptop · aa:bb:cc:dd:ee:09 · not seen lately']);
+    assert.deepEqual(list.devices.map((d: { name: string }) => d.name), ['Methel’s iPhone · aa:bb:cc:dd:ee:02 · 10.10.0.52', 'old-laptop · aa:bb:cc:dd:ee:09 · not here now']);
 
     // Who's home: a phone Warden saw lately is home; one it hasn't seen for a while is away.
     const presence = new Presence(t.hub, { people: { methel: { phones: ['AA:BB:CC:DD:EE:02'] } }, pollSec: 0, awayAfterMin: 0 }, { warden: () => manager.raw('warden') });

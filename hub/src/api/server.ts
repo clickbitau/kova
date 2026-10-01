@@ -59,7 +59,7 @@ export interface ServerOptions {
   /** In-app setup of integrations.json. Without it the setup routes answer 503. */
   integrations?: IntegrationsManager;
   /** Tests: where to look for Helix Server. */
-  lanApps?: { helixFindHosts?: string[]; helixFindPort?: number };
+  lanApps?: { helixFindHosts?: string[]; helixFindPort?: number; wardenPollMs?: number };
   /** Import from Home Assistant (backup upload or config folder). */
   haImport?: HaImport;
   /** Nightly backups; when absent the backup endpoints answer 404. */
