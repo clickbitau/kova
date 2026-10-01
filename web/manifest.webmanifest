@@ -1,7 +1,7 @@
 {
   "name": "Kova",
   "short_name": "Kova",
-  "start_url": "/phone.html",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#0e0f10",
   "theme_color": "#0e0f10",

@@ -26,8 +26,14 @@ add-on: nothing in Kova depends on HA. The design reference lives in
   unchanged from the design. The logic block at the bottom now reads from the
   hub (`/api/boot.js` for the first paint, `/api/ws` for live updates) and sends
   every action to the API.
-* **Phone app** (`web/phone.html`): installable from Safari (Add to Home Screen); its service
-  worker (`web/sw.js`) shows push notifications. Tabs: **Now** (the phone design's home screen;
+* **On a phone** the web app is the same `web/index.html`: below 760px wide, `web/responsive.css`
+  folds the sidebar into a menu behind a top bar, stacks side-by-side layouts and tightens the
+  page (`web/responsive.js` opens the menu). Hooks are `data-kova-*` attributes, so the desktop
+  layout is untouched. It's installable from Safari (Add to Home Screen); its service worker
+  (`web/sw.js`) shows push notifications, and Activity has the switch to turn them on.
+* **Phone app page** (`web/phone.html`): now only used inside the Kova phone app
+  (`?embed=1`); in a browser it forwards to `/`, keeping notification links
+  (`?cam=`, `?do=lights-off`, `?page=`). Tabs: **Now** (the phone design's home screen;
   tap the mode for Modes), **Devices** (every device by room, search, room and type filters, All
   off per room; ⋯ opens the device panel), **Ask**, **Security** (live camera view over WebRTC, a
   grid of all cameras with their latest event image, who's home, today's events) and **More**
