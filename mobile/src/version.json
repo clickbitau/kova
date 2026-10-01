@@ -2,8 +2,12 @@
   "//": "The Kova app's version (docs/VERSIONING.md). store: the X.Y.0 a store binary on this train carries (app.json version). version: what runs, store or over the air (X.Y.Z, PATCH only). train: the native runtime (app.json runtimeVersion). history: newest first; an over-the-air release adds an entry.",
   "train": "kova-mobile-0.2",
   "store": "0.2.0",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "history": [
+    {
+      "version": "0.2.1",
+      "title": "Soundbar panel redesigned: input and sound as tiles, night mode switch, mute by the volume; soundbars show On · input, not Playing"
+    },
     {
       "version": "0.2.0",
       "title": "Launches on iOS 27 (UIScene life cycle); no splash hang when the keychain won't read; the widget's build number follows the app's"
