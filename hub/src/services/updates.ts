@@ -1,8 +1,9 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Hub } from '../hub.ts';
-import { KOVA_VERSION } from '../version.ts';
+import { KOVA_COMMIT, KOVA_VERSION } from '../version.ts';
 import { isPlayer } from '../util/describe.ts';
+import { Catalog } from './release-client.ts';
 import { localDate, localHour } from '../util/time.ts';
 
 /**
@@ -10,7 +11,9 @@ import { localDate, localHour } from '../util/time.ts';
  * updater runs as root on the box (deploy/updater.sh, installed by install.sh and update.sh as systemd units).
  *
  * - The updater looks for a newer Kova every 6 hours (kova-update-check.timer) and writes what it found to
- *   <KOVA_DATA>/update/status.json, which this reads.
+ *   <KOVA_DATA>/update/status.json, which this reads. Releases come from ClickBit's catalog with the licence's
+ *   device token (services/release-client.ts; the licence key is entered here and kept in update/licence.json for
+ *   the updater); a git checkout without a licence still updates from git while boxes move over.
  * - Check now / Update: this writes "check" or "apply" to <KOVA_DATA>/update/request; kova-update.path sees it and
  *   runs the updater, which backs up, pulls, restarts Kova, and goes back to the old version (and the backup) by
  *   itself when the new one doesn't come up healthy.
@@ -22,6 +25,11 @@ export interface UpdateStatus {
   /** The updater is installed and has run at least once. */
   updater: boolean;
   state: 'idle' | 'checking' | 'updating' | 'requested';
+  /** Where updates come from: ClickBit's release catalog, or (while boxes move over) git. */
+  source: 'release' | 'git' | null;
+  /** Not an error, but why nothing is offered (no licence yet; a release that was undone here). */
+  note: string | null;
+  licence: ReturnType<Catalog['licenceView']>;
   current: { version: string; commit?: string };
   available: { version: string; commit: string; behind: number; changes: string[] } | null;
   checkedAt: number | null;
@@ -31,7 +39,7 @@ export interface UpdateStatus {
 }
 
 interface Raw {
-  updater?: number; state?: string; checkedAt?: number; checkError?: string[] | null;
+  updater?: number; state?: string; source?: string; soft?: string | null; checkedAt?: number; checkError?: string[] | null;
   current?: { version: string; commit: string };
   available?: UpdateStatus['available'];
   last?: UpdateStatus['last'];
@@ -44,8 +52,26 @@ export class Updates {
   private timer: NodeJS.Timeout | null = null;
   private lastAutoDay = '';
 
-  constructor(private hub: Hub, private o: { dataDir: string; notify?: Notify; now?: () => number; everyMs?: number }) {
+  readonly catalog: Catalog;
+
+  constructor(private hub: Hub, private o: { dataDir: string; notify?: Notify; now?: () => number; everyMs?: number; catalog?: { url?: string; channel?: string; product?: string; fetch?: typeof fetch } }) {
     this.dir = join(o.dataDir, 'update');
+    this.catalog = new Catalog({ ...o.catalog, version: KOVA_VERSION, dir: this.dir, now: o.now });
+  }
+
+  /** Install the licence key: activated with ClickBit now, so a wrong key is said here, then the updater checks. */
+  async setLicence(key: string): Promise<UpdateStatus> {
+    if (!key.trim()) throw new Error('Enter the licence key');
+    await this.catalog.activate(key);
+    try { this.request('check'); } catch { /* no updater yet: the status says so */ }
+    this.hub.emit('changed');
+    return this.status();
+  }
+
+  forgetLicence(): UpdateStatus {
+    this.catalog.forget();
+    this.hub.emit('changed');
+    return this.status();
   }
 
   private get now() { return this.o.now?.() ?? Date.now(); }
@@ -78,8 +104,11 @@ export class Updates {
     return {
       updater: !!r?.updater,
       state: req ? 'requested' : (r?.state === 'checking' || r?.state === 'updating' ? r.state : 'idle'),
+      source: r?.source === 'release' || r?.source === 'git' ? r.source : null,
+      note: r?.soft ?? null,
+      licence: this.catalog.licenceView(),
       // The running code's version; the updater's commit when it describes this version.
-      current: { version: KOVA_VERSION, ...(r?.current?.version === KOVA_VERSION && r.current.commit ? { commit: r.current.commit } : {}) },
+      current: { version: KOVA_VERSION, ...(r?.current?.version === KOVA_VERSION && r.current.commit ? { commit: r.current.commit } : KOVA_COMMIT ? { commit: KOVA_COMMIT.slice(0, 7) } : {}) },
       available: r?.available && r.available.version !== undefined && (r.available.behind ?? 0) > 0 ? r.available : null,
       checkedAt: r?.checkedAt ?? null,
       checkError: r?.checkError?.length ? r.checkError.join(' ').slice(0, 300) : null,

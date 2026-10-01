@@ -7,7 +7,8 @@
 //
 // Refused when the native code changed since the train was locked (the bundle would reach binaries
 // that can't run it) or the versions are off. Keeps the newest --keep (default 2) bundles per train.
-// Commit ota/ with the version bump: hubs get it with the next update (git pull or the Docker image).
+// Commit ota/ with the version bump, and bump the hub's PATCH too (ota/ ships in the hub's release): hubs get it
+// with their next update.
 import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -47,7 +48,7 @@ try {
   cpSync(out, dest, { recursive: true });
   const all = readdirSync(join(ROOT, 'ota', vf.train)).filter(n => existsSync(join(ROOT, 'ota', vf.train, n, 'metadata.json'))).sort();
   for (const old of all.slice(0, Math.max(0, all.length - keep))) rmSync(join(ROOT, 'ota', vf.train, old), { recursive: true, force: true });
-  process.stdout.write(`\nexport-ota: Kova ${vf.version} for ${vf.train} → ota/${vf.train}/${id}\nCommit mobile/src/version.json and ota/ together.\n`);
+  process.stdout.write(`\nexport-ota: Kova ${vf.version} for ${vf.train} → ota/${vf.train}/${id}\nCommit mobile/src/version.json and ota/ together, with a hub PATCH bump (ota/ ships in the hub release).\n`);
 } finally {
   rmSync(out, { recursive: true, force: true });
 }

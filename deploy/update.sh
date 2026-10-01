@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Update a native Kova install: back up, pull, install dependencies, restart, check health, and if the new
-# version doesn't come up, go back to the old one (and the backup) by itself.
+# Update a native Kova install from git (only while boxes move to releases, deploy/updater.sh): back up, pull,
+# install dependencies, restart, check health, and if the new version doesn't come up, go back to the old one (and
+# the backup) by itself.
 # Run as root inside the Kova machine/LXC:  bash /opt/kova/deploy/update.sh
 # (The Update button runs this through deploy/updater.sh.) Exit 0: updated. 3: rolled back. Else: failed.
 set -euo pipefail
@@ -16,6 +17,7 @@ log() { printf '%s==>%s %s\n' "$B" "$N" "$*"; }
 die() { printf '%sError:%s %s\n' "$R" "$N" "$*" >&2; exit 1; }
 
 [[ $EUID -eq 0 ]] || die "Run as root"
+[[ "$(readlink "$KOVA_DIR/current" 2>/dev/null || true)" != releases/* ]] || die "This box runs Kova releases now: update from Integrations → Kova updates, or run $KOVA_DIR/current/deploy/updater.sh apply"
 [[ -d "$KOVA_DIR/.git" ]] || die "$KOVA_DIR isn't a git checkout (installed with --source? copy the new code over and re-run deploy/install.sh instead)"
 
 log "Backing up $DATA_DIR"

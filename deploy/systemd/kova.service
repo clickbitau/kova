@@ -8,8 +8,9 @@ Wants=network-online.target
 Type=simple
 User=kova
 Group=kova
-# deploy/install.sh rewrites these two paths if you install somewhere else.
-WorkingDirectory=/opt/kova/hub
+# deploy/install.sh rewrites these two paths if you install somewhere else. current is the running release
+# ($KOVA_DIR/releases/<version>, or "." on a git checkout): deploy/install-release.sh switches it.
+WorkingDirectory=/opt/kova/current/hub
 ExecStart=/usr/bin/node --import tsx src/main.ts
 Environment=NODE_ENV=production
 Environment=KOVA_DATA=/var/lib/kova

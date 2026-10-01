@@ -8,6 +8,6 @@ After=network-online.target
 Type=oneshot
 Environment=KOVA_DIR=/opt/kova
 Environment=KOVA_DATA=/var/lib/kova
-ExecStart=/bin/bash /opt/kova/deploy/updater.sh request
+ExecStart=/bin/bash /opt/kova/current/deploy/updater.sh request
 # Updating restarts kova.service; this unit isn't part of it, so it carries on through the restart.
 TimeoutStartSec=30min

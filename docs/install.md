@@ -204,27 +204,39 @@ Docker: `docker compose stop kova && docker compose run --rm kova node --import 
 button, **Check now**, and *Overnight updates* (off by default: at 3:00, when an update is waiting and nothing is
 playing). You get a notification when a new version is out, and after an update, whether it worked.
 
+**Releases come from ClickBit**, like Helix's and Warden's: tap **Add licence key** on that card and enter the
+hub's licence key. The hub activates it with ClickBit (`POST /v1/device/activate`) and keeps the key and the
+device token it gets in `/var/lib/kova/update/licence.json` (never shown back); updates then come from ClickBit's
+release catalog. Without a licence the card says *No device token — install a licence to enable updates*.
+
 How it works: the hub runs as the unprivileged `kova` user, so it can't update itself. A small updater runs as root
-on the box instead (`deploy/updater.sh`, installed by `install.sh` and `update.sh` as systemd units):
+on the box instead (`deploy/updater.sh`, installed by `install.sh` as systemd units):
 
-- `kova-update-check.timer` looks for a newer Kova every 6 hours (`git fetch`) and writes what it found to
+- `kova-update-check.timer` asks the catalog for a newer Kova every 6 hours and writes what it found to
   `/var/lib/kova/update/status.json`, which the hub shows.
-- **Update** and **Check now** make the hub write `check` or `apply` to `/var/lib/kova/update/request`;
-  `kova-update.path` sees it and runs `kova-update.service`, which runs `update.sh` (log in
-  `/var/lib/kova/update/last-update.log`).
+- **Update** and **Check now** make the hub write `apply` or `check` to `/var/lib/kova/update/request`;
+  `kova-update.path` sees it and runs `kova-update.service` (log in `/var/lib/kova/update/last-update.log`).
+- An update downloads the release, keeps it only when its bytes are exactly the sha256 and size the catalog
+  lists, and `deploy/install-release.sh` checks every part against the release's `manifest.json`, unpacks it
+  **beside the running one** in `/opt/kova/releases/<version>`, makes a backup, switches `/opt/kova/current` to it
+  (`kova.service` runs `/opt/kova/current/hub`) and restarts.
+- **If Kova doesn't come back** (`/api/health` with the new version within a minute), it switches back to the
+  release before, restores the backup it just made and starts that again; the app says so, and that version isn't
+  offered again (`/var/lib/kova/update/bad-versions`). The last three releases stay in `/opt/kova/releases`.
 
-By hand, as root inside the container (this also installs the updater on a box that predates it):
+Settings in `/etc/kova/kova.env` (all optional): `KOVA_UPDATE_URL` (the catalog, default
+`https://admin.clickbit.com.au/api`), `KOVA_UPDATE_CHANNEL` (`stable`), `KOVA_PRODUCT` (`kova`).
 
-```bash
-bash /opt/kova/deploy/update.sh
-```
+By hand, as root inside the container: `bash /opt/kova/current/deploy/updater.sh apply` (or `check`), or install a
+release file you have: `bash /opt/kova/current/deploy/install-release.sh kova-release.tar.gz`.
 
-It makes a backup, `git pull --ff-only`, `npm ci`, restarts the service and waits for `/api/health`. **If Kova
-doesn't come back, it goes back by itself**: the previous code, its dependencies and the backup it just made, then
-starts that again (exit code 3, and the app says so). If the update changed `deploy/systemd/kova.service`, run
-`bash /opt/kova/deploy/install.sh` once more to reinstall it (it keeps your settings and data).
+**Boxes installed from git** (before releases) keep updating from GitHub until a licence is added: the updater
+then does `git fetch`, and `bash /opt/kova/deploy/update.sh` pulls, runs `npm ci`, restarts and goes back by itself
+the same way. That update also moves the box onto `/opt/kova/current` (pointing at the checkout itself), so once a
+licence is in, the next update installs the first release beside the checkout. `KOVA_UPDATE_SOURCE=git` in
+`kova.env` keeps a box on git.
 
-From the Proxmox host: `pct exec 106 -- bash /opt/kova/deploy/update.sh`. For a
+From the Proxmox host: `pct exec 106 -- bash /opt/kova/current/deploy/updater.sh apply`. For a
 risky update, `pct snapshot 106 pre-update` first (ZFS makes that instant).
 
 Docker: `git pull && docker compose up -d --build kova` (the Update button is for native installs).
