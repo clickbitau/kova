@@ -157,6 +157,30 @@ test('Cast: pause keeps the music on hold, and play carries on (not stop)', asyn
   }
 });
 
+test('Cast: a group that gave no members at start is read again, so its Kova group gets perfect sync later', async () => {
+  const a = fakeCast('Music Room Speaker'), b = fakeCast('Baby Room speaker');
+  const members: string[] = []; // the group doesn't list its speakers yet (busy, or just changed in Google Home)
+  const g = fakeCast('Home Speaker Group', members);
+  const ep = async (f: ReturnType<typeof fakeCast>, id: string, model: string) => ({ id, name: f.name, model, host: '127.0.0.1', port: await listen(f) });
+  const reg = new Registry(new Store(':memory:'));
+  const cast = new CastAdapter({
+    discover: false, insecure: true, pollMs: 0, batchMs: 20,
+    endpoints: [await ep(a, 'aaaa0000000000000000000000000001', 'Nest Audio'), await ep(b, 'bbbb0000000000000000000000000002', 'Nest Audio'), await ep(g, 'dddd0000000000000000000000000004', 'Google Cast Group')],
+  });
+  await reg.addAdapter(cast);
+  const both = () => [reg.get('cast_aaaa0000000000000000000000000001')!, reg.get('cast_bbbb0000000000000000000000000002')!];
+  try {
+    assert.equal(cast.castGroupFor(both()), undefined, 'no members known yet');
+    members.push('aaaa0000-0000-0000-0000-000000000001', 'bbbb0000-0000-0000-0000-000000000002');
+    await (cast as unknown as { poll(): Promise<void> }).poll();
+    assert.equal(cast.castGroupFor(both()), 'Home Speaker Group');
+  } finally {
+    await reg.stop();
+    for (const f of [a, b, g]) f.server.close();
+  }
+});
+
+
 test('Cast: a Kova speaker group whose speakers are a Cast group plays through it (perfect sync)', async () => {
   const a = fakeCast('Music Room Speaker'), b = fakeCast('Baby Room speaker');
   const g = fakeCast('Home Speaker Group', ['aaaa0000-0000-0000-0000-000000000001', 'bbbb0000-0000-0000-0000-000000000002']);
