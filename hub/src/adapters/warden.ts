@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import type { Adapter, AdapterContext, AdapterStatus } from './sdk.ts';
 import type { Command, Device } from '../model/types.ts';
 import { LanHttpError, lanJson, lanStream, trimUrl, type SseEvent } from '../util/lan-http.ts';
@@ -38,7 +39,10 @@ export interface WardenOptions {
 }
 
 /** What Kova asks Warden for when pairing. */
-export const WARDEN_SCOPES = ['devices:read', 'devices:write', 'pause', 'events', 'discovery', 'people:read', 'network:read'];
+export const WARDEN_SCOPES = ['devices:read', 'devices:write', 'pause', 'events', 'discovery', 'people:read', 'network:read', 'integration'];
+
+/** Every event on Warden's feed, for the parts of Kova that answer Warden (services/warden-link.ts: power-cycle requests). */
+export const wardenFeed = new EventEmitter<{ event: [FeedEvent] }>();
 
 export interface WardenClient {
   mac: string; name?: string; hostname?: string; ip?: string; online?: boolean;
@@ -304,6 +308,7 @@ export class WardenAdapter implements Adapter {
 
   /** One event from Warden's feed. */
   onFeed(ev: FeedEvent): void {
+    wardenFeed.emit('event', ev);
     const d = ev.data ?? {};
     switch (ev.type) {
       case 'wan.down': this.onWan(false); break;
