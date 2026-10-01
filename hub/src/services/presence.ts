@@ -3,12 +3,13 @@ import http from 'node:http';
 import https from 'node:https';
 import net from 'node:net';
 import type { Hub } from '../hub.ts';
-import { Warden, type WardenOptions } from '../adapters/warden.ts';
+import { Warden, type WardenDevice, type WardenOptions, type WardenPerson } from '../adapters/warden.ts';
+import { LanHttpError } from '../util/lan-http.ts';
 
 /** How Kova works out who's home. Lives under `presence` in integrations.json. Every source is optional. */
 export interface PresenceOptions {
   /** Per person: the MAC addresses of their phones (as the router sees them), and optionally a fixed key for phone automations. */
-  people?: Record<string, { phones?: string[]; key?: string }>;
+  people?: Record<string, { phones?: string[]; key?: string; wardenPerson?: string }>;
   /** Read the router's ARP/NDP table through the OPNsense API (System → Access → Users → API keys). */
   opnsense?: { url: string; key: string; secret: string; insecureTls?: boolean };
   /** Per person: a phone IP to probe over TCP when the router can't be read. */
@@ -25,7 +26,7 @@ export interface PresenceOptions {
 
 export const ROUTER = 'Router (OPNsense)';
 export const WARDEN = 'Router (Warden)';
-/** Warden counts a phone as here while it was seen this recently. */
+/** Older Warden (no device records): a phone counts as here while it was seen this recently. */
 const WARDEN_RECENT_MS = 3 * 60_000;
 export const PING = 'Network (ping)';
 export const PHONE = 'Phone automation';
@@ -69,6 +70,8 @@ export class Presence {
     const ids = new Set<string>();
     // Phones count whenever a router can be read: OPNsense, or Warden (which may be linked later).
     if (this.opts.opnsense || this.sources.warden) for (const [id, p] of Object.entries(this.opts.people ?? {})) if (p.phones?.length) ids.add(id);
+    // Warden knows who devices belong to: anyone it has as a person (same name, or chosen) counts too.
+    if (this.sources.warden) for (const p of this.hub.config.get().people) ids.add(p.id);
     for (const id of Object.keys(this.opts.pingHosts ?? {})) ids.add(id);
     const known = new Set(this.hub.config.get().people.map(p => p.id));
     return [...ids].filter(id => known.has(id));
@@ -223,17 +226,36 @@ export class Presence {
     }
   }
 
-  /** Phones Warden has seen in the last few minutes. */
+  /**
+   * Who Warden says is here. A person's phones (by any MAC Warden has seen them use) on a device that's online,
+   * or Warden's own presence for the person of the same name (or the one chosen). People Warden can't speak for are left out.
+   */
   private async readWarden(w: WardenOptions): Promise<Map<string, boolean> | null> {
+    this.last.routerName = 'Warden';
+    const api = new Warden(w);
     try {
-      const now = Date.now();
-      const macs = new Set((await new Warden(w).clients())
-        .filter(c => c.lastSeenAt ? now - Date.parse(c.lastSeenAt) < WARDEN_RECENT_MS : c.online !== false)
-        .map(c => normMac(c.mac)));
-      this.last.routerName = 'Warden';
-      return this.match(macs);
+      let devices: WardenDevice[] | null = null;
+      try { devices = await api.devices(); } catch (e) { if (!(e instanceof LanHttpError && e.status === 404)) throw e; }
+      if (!devices) {
+        // Older Warden: clients by MAC, seen recently.
+        const now = Date.now();
+        const macs = new Set((await api.clients())
+          .filter(c => c.lastSeenAt ? now - Date.parse(c.lastSeenAt) < WARDEN_RECENT_MS : c.online !== false)
+          .map(c => normMac(c.mac)));
+        return this.match(macs);
+      }
+      const online = new Set(devices.filter(d => d.online).flatMap(d => d.macs.map(normMac)));
+      const out = this.match(online);
+      const people = await api.people().catch(() => [] as WardenPerson[]);
+      const byName = new Map(people.map(p => [p.name.trim().toLowerCase(), p]));
+      for (const p of this.hub.config.get().people) {
+        if (out.has(p.id)) continue;
+        const set = this.opts.people?.[p.id]?.wardenPerson;
+        const wp = set ? people.find(x => x.id === set) ?? byName.get(set.trim().toLowerCase()) : byName.get(p.name.trim().toLowerCase());
+        if (wp && wp.devices.length) out.set(p.id, wp.presence.home);
+      }
+      return out;
     } catch (err) {
-      this.last.routerName = 'Warden';
       this.last.router = { error: err instanceof Error ? err.message : String(err) };
       return null;
     }

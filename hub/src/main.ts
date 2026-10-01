@@ -17,6 +17,7 @@ import { AirCastBridge } from './bridges/aircast.ts';
 import { demoConfig, demoDevices, DEMO_SOLAR } from './seed/demo-home.ts';
 import type { Adapter } from './adapters/sdk.ts';
 import { Presence } from './services/presence.ts';
+import { HelixLink } from './services/helix-link.ts';
 import { Notifier } from './services/notify.ts';
 import { Backups, parseBackupTime } from './services/backup.ts';
 import { acquireLock, LockedError, type HeldLock } from './util/lock.ts';
@@ -125,6 +126,11 @@ const setup = new IntegrationsManager(hub, { path: integrationsFile, dataDir });
 
 // Who's home (router, ping, phone automations). Always on so phone automations get per-person keys;
 // the router and ping sources only run when configured.
+// Helix: once paired, Kova tells Helix Server where it is and which TV each box is on.
+const helixLink = new HelixLink(hub, { helix: () => setup.raw('helix'), dataDir, port: () => Number(env.KOVA_PORT ?? 8140) });
+helixLink.start();
+hub.services.push({ id: 'helix-link', name: 'Helix TVs', icon: 'tv', kind: 'Local', get devices() { return helixLink.screens().length; }, status: () => helixLink.status() ?? { ok: true, note: 'Pair with Helix to turn TVs on from Helix' } });
+
 const presence = new Presence(hub, integrations?.presence ?? {}, { warden: () => setup.raw('warden') });
 presence.start();
 hub.services.push({ id: 'presence', name: 'Presence', icon: 'person_pin_circle', kind: 'Local', status: () => presence.status() });
@@ -156,7 +162,7 @@ hub.services.push({ id: 'backups', name: 'Backups', icon: 'backup', kind: 'Local
 
 const app = await buildServer(hub, {
   webRoot: resolve(here, '../../web'), token: env.KOVA_TOKEN || undefined,
-  homekit, matterBridge, nest: integrations?.nest, presence, notifier, integrationsPath: integrationsFile, integrations: setup, haImport, backups,
+  homekit, matterBridge, nest: integrations?.nest, presence, helixLink, notifier, integrationsPath: integrationsFile, integrations: setup, haImport, backups,
 });
 await app.listen({ port: Number(env.KOVA_PORT ?? 8140), host: env.KOVA_HOST ?? '0.0.0.0' });
 const addr = app.server.address();
@@ -177,6 +183,7 @@ const shutdown = async (signal: string) => {
     try { await fn(); } catch (err) { console.error(`Stopping ${name} failed:`, err); }
   };
   presence.stop();
+  helixLink.stop();
   await step('web server', () => app.close());
   await step('notifications', () => notifier.stop());
   await step('Apple Home bridge', () => homekit?.stop());

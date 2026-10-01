@@ -21,6 +21,8 @@ export interface DeviceState {
   /** Playback is paused (players with the `pause` capability). `on` stays true while paused. */
   paused?: boolean;
   vol?: number | null;
+  /** TV input to switch to: "hdmi1".."hdmi4" or "tv" (TVs with the `input` capability). Not read back from the TV, so it stays null. */
+  input?: string | null;
   power?: number | null;
   /** Energy produced (inverters) or used today, in kWh. */
   energy?: number | null;
@@ -37,7 +39,7 @@ export interface DeviceState {
 
 export type VacuumActivity = 'cleaning' | 'returning' | 'docked' | 'paused' | 'idle' | 'error';
 
-export type Capability = 'onoff' | 'brightness' | 'colorTemp' | 'color' | 'fanMode' | 'media' | 'volume' | 'power' | 'energy' | 'events' | 'vacuum' | 'battery' | 'pause' | 'library';
+export type Capability = 'onoff' | 'brightness' | 'colorTemp' | 'color' | 'fanMode' | 'media' | 'volume' | 'power' | 'energy' | 'events' | 'vacuum' | 'battery' | 'pause' | 'library' | 'input';
 
 export interface Device {
   id: string;

@@ -1,8 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import type { IntegrationsManager } from '../integrations-store.ts';
-import { Warden, linkWarden, normMac } from '../adapters/warden.ts';
+import { Warden, deviceLabel, linkWarden, normMac, wardenPairPoll, wardenPairStart, type WardenDevice } from '../adapters/warden.ts';
+import { LanHttpError } from '../util/lan-http.ts';
 import { findHelixServers, helixPairPoll, helixPairStart } from '../adapters/helix.ts';
 import { trimUrl } from '../util/lan-http.ts';
+import type { HelixLink } from '../services/helix-link.ts';
 
 // Linking Kova with the home's own apps: Warden (sign in once, Kova makes its own token) and
 // Helix (pair with a code, like any Helix app). What they hand back is saved straight into
@@ -13,9 +15,13 @@ const msg = (e: unknown) => e instanceof Error ? e.message : String(e);
 
 export interface LanAppsOptions {
   integrations?: IntegrationsManager;
+  /** Paired with Helix: tell it where Kova is and which TVs its boxes are on. */
+  helixLink?: HelixLink;
   /** Tests narrow the Helix search to known hosts. */
   helixFindHosts?: string[];
   helixFindPort?: number;
+  /** Tests poll Warden pairing faster. */
+  wardenPollMs?: number;
 }
 
 export function registerLanAppRoutes(app: FastifyInstance, o: LanAppsOptions): void {
@@ -42,15 +48,68 @@ export function registerLanAppRoutes(app: FastifyInstance, o: LanAppsOptions): v
     } catch (e) { return bad(reply, msg(e)); }
   });
 
+  // Pair by code: Warden shows the same code at /apps for an admin to approve, and Kova collects a token
+  // limited to what it asked for. Kova keeps asking until then, like pairing with Helix.
+  let wpair: { url: string; fingerprint?: string; siteName?: string; pairId: string; pollSecret: string; code: string; until: number; status: 'pending' | 'approved' | 'denied' | 'expired'; error?: string } | null = null;
+
+  const watchWarden = async (p: NonNullable<typeof wpair>) => {
+    while (wpair === p && p.status === 'pending') {
+      await new Promise(r => setTimeout(r, o.wardenPollMs ?? 3000));
+      if (wpair !== p) return;
+      if (Date.now() > p.until) { p.status = 'expired'; return; }
+      try {
+        const r = await wardenPairPoll(p);
+        if (r.status === 'denied' || r.status === 'expired') { p.status = r.status; return; }
+        if (r.status === 'approved' && 'token' in r && r.token) {
+          p.status = 'approved';
+          const prev = o.integrations?.raw('warden');
+          await o.integrations?.update('warden', { ...prev, url: p.url, token: r.token, fingerprint: p.fingerprint });
+          return;
+        }
+        if (r.status === 'approved') { p.status = 'expired'; p.error = 'The token was already collected. Pair again.'; return; }
+      } catch (e) { p.error = msg(e); }
+    }
+  };
+
+  app.post<{ Body: { url?: string } }>('/api/integrations/warden/pair', async (req, reply) => {
+    const url = String(req.body?.url || o.integrations?.raw('warden')?.url || '').trim();
+    if (!url) return bad(reply, 'Enter Warden’s address');
+    if (!o.integrations) return bad(reply, 'In-app setup isn’t available on this hub');
+    try {
+      const s = await wardenPairStart(url);
+      wpair = { ...s, until: Date.parse(s.expiresAt) || Date.now() + 10 * 60_000, status: 'pending' };
+      void watchWarden(wpair);
+      return {
+        code: s.code,
+        next: `In Warden open ${s.url}/apps (System → Accounts → Apps), check it shows ${s.code}, and approve Kova. Kova finishes by itself.`,
+      };
+    } catch (e) { return bad(reply, msg(e)); }
+  });
+
+  app.get('/api/integrations/warden/pair', async () => wpair
+    ? { status: wpair.status, code: wpair.status === 'pending' ? wpair.code : undefined, error: wpair.error }
+    : { status: 'none' });
+
+  // Devices on the network, for choosing internet switches and people's phones.
   app.get('/api/integrations/warden/clients', async (_req, reply) => {
     const c = o.integrations?.raw('warden');
     if (!c?.url || !c.token) return bad(reply, 'Link with Warden first');
+    const w = new Warden(c);
     try {
-      const list = await new Warden(c).clients();
-      const recent = (t?: string) => !!t && Date.now() - Date.parse(t) < 5 * 60_000;
+      let list: WardenDevice[];
+      try { list = await w.devices(); } catch (e) {
+        if (!(e instanceof LanHttpError && e.status === 404)) throw e;
+        // Older Warden: clients by MAC.
+        const recent = (t?: string) => !!t && Date.now() - Date.parse(t) < 5 * 60_000;
+        list = (await w.clients()).map(x => ({ id: '', name: x.name, hostname: x.hostname, macs: [normMac(x.mac)], ips: x.ip ? [x.ip] : [], online: recent(x.lastSeenAt), paused: false }));
+      }
       const rows = list
-        .sort((a, b) => Number(recent(b.lastSeenAt)) - Number(recent(a.lastSeenAt)) || (a.name ?? a.hostname ?? '~').localeCompare(b.name ?? b.hostname ?? '~'))
-        .map(x => ({ name: `${x.name || x.hostname || 'Unnamed'} · ${normMac(x.mac)}${x.ip ? ` · ${x.ip}` : ''}${recent(x.lastSeenAt) ? '' : ' · not seen lately'}`, mac: normMac(x.mac), ip: x.ip, online: recent(x.lastSeenAt) }));
+        .sort((a, b) => Number(b.online) - Number(a.online) || deviceLabel(a).localeCompare(deviceLabel(b)))
+        .map(x => ({
+          name: [deviceLabel(x), x.owner && `${x.owner}’s`, x.class, x.vendor && x.vendor !== deviceLabel(x) ? x.vendor : '', x.network?.name, x.macs[0], x.ips[0], x.online ? '' : 'not here now']
+            .filter(Boolean).join(' · '),
+          deviceId: x.id || undefined, mac: x.macs[0], ip: x.ips[0], online: x.online,
+        }));
       return { devices: rows };
     } catch (e) { return bad(reply, `Couldn’t read Warden: ${msg(e)}`); }
   });
@@ -77,6 +136,7 @@ export function registerLanAppRoutes(app: FastifyInstance, o: LanAppsOptions): v
           p.status = 'approved';
           const prev = o.integrations?.raw('helix');
           await o.integrations?.update('helix', { ...prev, url: p.url, token: r.token });
+          await o.helixLink?.sync(true);
           return;
         }
       } catch (e) { p.error = msg(e); }
