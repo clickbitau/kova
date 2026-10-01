@@ -230,3 +230,66 @@ test('Helix boxes: a box that gets a stable id is followed, and the old entry go
     server.close();
   }
 });
+
+test('Helix link: a box that shuts down turns its TV and soundbar off, only while the TV is on the box’s input', async () => {
+  // A Helix box as the Helix adapter announces it; the test switches it offline like Helix's feed does.
+  class Box implements Adapter {
+    id = 'helix'; name = 'Helix'; icon = 'movie'; kind = 'Local' as const; ctx!: AdapterContext;
+    async start(ctx: AdapterContext) {
+      this.ctx = ctx;
+      ctx.announce([{ id: 'helix_lounge_box', name: 'Lounge box', room: 'lounge', type: 'tv', capabilities: ['onoff', 'media', 'pause', 'library'], integration: 'Helix', address: 'd-box1', state: { on: true, online: true } }]);
+    }
+    async stop() {}
+    status() { return { ok: true }; }
+    async command() {}
+  }
+  class SeenTvs extends Tvs {
+    ctx!: AdapterContext;
+    override async start(ctx: AdapterContext) { this.ctx = ctx; await super.start(ctx); }
+    override async command(d: Device, cmd: Command) { this.got.push({ id: d.id, cmd }); return undefined; }
+  }
+  const t = await testHub(12);
+  const tvs = new SeenTvs(), box = new Box();
+  await t.hub.reg.addAdapter(tvs);
+  await t.hub.reg.addAdapter(box);
+  let cfg: Record<string, unknown> = { url: 'http://helix', token: 'hxd', screens: { 'Lounge box': { tv: 'lounge_tv', input: 'hdmi4', soundbar: 'lounge_bar' } } };
+  const dir = mkdtempSync(join(tmpdir(), 'kova-helix-off-'));
+  const link = new HelixLink(t.hub, { helix: () => cfg, dataDir: dir, port: () => 8140, debounceMs: 60_000 });
+  const settle = () => new Promise(r => setTimeout(r, 30));
+  const offs = () => tvs.got.filter(g => g.cmd.on === false).map(g => g.id).sort();
+  try {
+    // The TV is on the box's input (hdmi4), the soundbar on: the box goes offline → both off.
+    tvs.ctx.report('lounge_tv', { on: true, input: 'hdmi4' });
+    tvs.ctx.report('lounge_bar', { on: true });
+    box.ctx.report('helix_lounge_box', { online: false, on: false });
+    await settle();
+    assert.deepEqual(offs(), ['lounge_bar', 'lounge_tv']);
+    assert.ok(t.hub.store.feed(20).some(e => /Helix box shut down/.test(JSON.stringify(e))), 'in Activity, with why');
+
+    // Someone switched the TV to another input (or its own apps): left alone.
+    tvs.got.length = 0;
+    box.ctx.report('helix_lounge_box', { online: true });
+    tvs.ctx.report('lounge_tv', { on: true, input: 'hdmi1' });
+    box.ctx.report('helix_lounge_box', { online: false });
+    await settle();
+    assert.deepEqual(offs(), []);
+
+    // Turned off in the settings: left alone.
+    cfg = { ...cfg, tvOffWithBox: 'off' };
+    box.ctx.report('helix_lounge_box', { online: true });
+    tvs.ctx.report('lounge_tv', { on: true, input: 'hdmi4' });
+    box.ctx.report('helix_lounge_box', { online: false });
+    await settle();
+    assert.deepEqual(offs(), []);
+
+    // Coming back (screen.awake) does nothing on Kova's side: Helix sends on/input itself.
+    cfg = { ...cfg, tvOffWithBox: 'on' };
+    tvs.ctx.report('lounge_tv', { on: false });
+    box.ctx.report('helix_lounge_box', { online: true, on: true });
+    await settle();
+    assert.deepEqual(tvs.got.filter(g => g.cmd.on === true), []);
+  } finally {
+    link.stop();
+    await t.hub.stop();
+  }
+});
