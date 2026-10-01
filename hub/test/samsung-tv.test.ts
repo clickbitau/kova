@@ -4,7 +4,7 @@ import http from 'node:http';
 import https from 'node:https';
 import dgram from 'node:dgram';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, statSync, existsSync } from 'node:fs';
+import { mkdtempSync, readFileSync, statSync, existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { AddressInfo } from 'node:net';
@@ -32,7 +32,7 @@ const DMR = `<?xml version="1.0"?><root xmlns="urn:schemas-upnp-org:device-1-0">
 
 /** A fake QA55S90D: info + DLNA over HTTP, the remote over (w)ss. */
 async function fakeTv() {
-  const tv = { power: 'on' as 'on' | 'standby', vol: 12, failSetVolume: false, token: 'T-123', prompts: 0, keys: [] as string[], urls: [] as string[], soap: [] as string[] };
+  const tv = { power: 'on' as 'on' | 'standby', refuse: false, vol: 12, failSetVolume: false, token: 'T-123', prompts: 0, keys: [] as string[], urls: [] as string[], soap: [] as string[] };
   const web = http.createServer((req, res) => {
     const chunks: Buffer[] = [];
     req.on('data', c => chunks.push(c));
@@ -64,6 +64,8 @@ async function fakeTv() {
     assert.equal(u.pathname, '/api/v2/channels/samsung.remote.control');
     const token = u.searchParams.get('token');
     if (token && token !== tv.token) { sock.send(JSON.stringify({ event: 'ms.channel.unauthorized' })); sock.close(); return; }
+    // Set to refuse (or its access list full): it says so at once, whatever the token.
+    if (tv.refuse) { sock.send(JSON.stringify({ event: 'ms.channel.timeOut' })); sock.close(); return; }
     if (!token) tv.prompts++; // the TV shows "Allow Kova?"; this one says yes straight away
     sock.send(JSON.stringify({ event: 'ms.channel.connect', data: { id: 'c1', clients: [], ...(token ? {} : { token: tv.token }) } }));
     sock.on('message', (m: Buffer) => {
@@ -210,7 +212,59 @@ class StStub {
   hasTv(tv: { model?: string }) { return tv.model === 'QA55S90DAWXXY'; }
   async tvInput() { return this.input; }
   async setTvInput(tv: { model?: string }, input: string) { if (this.fail) throw new Error('SmartThings is down'); this.asked.push({ model: tv.model, input }); this.input = input; return true; }
+  power: boolean[] = [];
+  async setTvPower(_tv: { model?: string }, on: boolean) { if (this.fail) throw new Error('SmartThings is down'); this.power.push(on); return true; }
 }
+
+test('Samsung TV: switched off and on through SmartThings when its network remote refuses Kova', { timeout: 15_000 }, async () => {
+  const f = await fakeTv();
+  f.tv.refuse = true;
+  const reg = new Registry(new Store(':memory:'));
+  const st = new StStub();
+  await reg.addAdapter(st as never);
+  const a = new SamsungTvAdapter(opts(f, mkdtempSync(join(tmpdir(), 'tv-'))));
+  try {
+    await reg.addAdapter(a);
+    // Never paired: straight to SmartThings, no remote prompt.
+    await reg.command('lounge_tv', { on: false }, you);
+    assert.deepEqual(st.power, [false]);
+    assert.deepEqual(f.tv.keys, []);
+    assert.equal(f.tv.prompts, 0);
+    // On: the magic packet and SmartThings both.
+    f.tv.power = 'standby';
+    await a.poll();
+    await reg.command('lounge_tv', { on: true }, you);
+    assert.deepEqual(st.power, [false, true]);
+    await until('magic packet', () => f.packets.length === 1);
+    // SmartThings down too: the remote is tried, and its refusal is what's reported.
+    f.tv.power = 'on';
+    await a.poll();
+    st.fail = true;
+    await assert.rejects(reg.command('lounge_tv', { on: false }, you), /refused|allow|closed/i);
+  } finally { await reg.stop(); f.close(); }
+});
+
+test('Samsung TV: a paired TV is switched off by its remote (quicker); SmartThings only when the remote fails', { timeout: 15_000 }, async () => {
+  const f = await fakeTv();
+  const reg = new Registry(new Store(':memory:'));
+  const st = new StStub();
+  await reg.addAdapter(st as never);
+  const dir = mkdtempSync(join(tmpdir(), 'tv-'));
+  writeFileSync(join(dir, 'tokens.json'), JSON.stringify({ '127.0.0.1': f.tv.token })); // allowed Kova before
+  const a = new SamsungTvAdapter(opts(f, dir));
+  try {
+    await reg.addAdapter(a);
+    await reg.command('lounge_tv', { on: false }, you);
+    await until('KEY_POWER', () => f.tv.keys.includes('KEY_POWER'));
+    assert.deepEqual(st.power, []);
+    // The TV later refuses Kova (its access list was reset): SmartThings takes over.
+    f.tv.power = 'on'; await a.poll();
+    for (const c of [...((a as any).tvs.values())]) { c.ws?.close(); c.ws = undefined; }
+    f.tv.refuse = true;
+    await reg.command('lounge_tv', { on: false }, you);
+    assert.deepEqual(st.power, [false]);
+  } finally { await reg.stop(); f.close(); }
+});
 
 test('Samsung TV: with SmartThings, the source is switched directly and read back (the TV’s own remote is noticed)', { timeout: 15_000 }, async () => {
   const f = await fakeTv();
