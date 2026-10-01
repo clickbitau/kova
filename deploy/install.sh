@@ -4,11 +4,13 @@
 #
 #   bash deploy/install.sh                      # from a checkout (uses it in place if it's at --dir)
 #   curl -fsSL https://raw.githubusercontent.com/clickbitau/kova/main/deploy/install.sh | bash
+#   bash deploy/install.sh --airplay --tailscale   # with the AirPlay bridge and remote access
 #
 # What it does: installs Node 22 (NodeSource), git and a C toolchain (hap-controller builds a native Bluetooth module), gets the code into /opt/kova,
 # runs `npm ci`, creates a `kova` system user, keeps data in /var/lib/kova, writes
 # /etc/kova/kova.env (with a random API token), installs and starts kova.service,
-# waits for /api/health and prints the URL.
+# waits for /api/health and prints the URL. Optional extras: --airplay (AirConnect's aircast,
+# so Cast speakers show up in AirPlay) and --tailscale (Kova on your tailnet, with HTTPS).
 set -euo pipefail
 
 KOVA_DIR=/opt/kova
@@ -19,6 +21,9 @@ PORT=8140
 SOURCE=""
 TOKEN=1
 DRY=0
+AIRPLAY=0
+TAILSCALE=0
+AIRCONNECT_DIR=/opt/airconnect
 ENV_FILE=/etc/kova/kova.env
 UNIT=/etc/systemd/system/kova.service
 
@@ -33,6 +38,10 @@ Usage: install.sh [options]
   --source DIR     copy the code from this local checkout instead of cloning
   --port N         web/API port (default $PORT; only used when creating $ENV_FILE)
   --no-token       don't generate KOVA_TOKEN (anyone on the network can use the API)
+  --airplay        install AirConnect's aircast in $AIRCONNECT_DIR (Cast speakers in AirPlay);
+                   turn it on in Kova under Integrations → AirPlay to Cast
+  --tailscale      install Tailscale, join your tailnet (prints a sign-in link) and serve
+                   Kova over HTTPS at https://<machine>.<tailnet>.ts.net (tailnet only)
   --dry-run        print what would run, change nothing
   -h, --help       this help
 EOF
@@ -47,6 +56,8 @@ while [[ $# -gt 0 ]]; do
     --source) SOURCE="${2:?--source needs a value}"; shift 2 ;;
     --port) PORT="${2:?--port needs a value}"; shift 2 ;;
     --no-token) TOKEN=0; shift ;;
+    --airplay) AIRPLAY=1; shift ;;
+    --tailscale) TAILSCALE=1; shift ;;
     --dry-run) DRY=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
@@ -204,6 +215,54 @@ if [[ $DRY == 0 ]]; then
   fi
 fi
 
+# ----------------------------------------------------------------- airplay --
+# AirConnect's aircast (MIT): Kova runs it so Cast speakers and groups appear in AirPlay. A static
+# build from the latest release, for this machine's architecture.
+if [[ $AIRPLAY == 1 ]]; then
+  case "$(uname -m)" in x86_64) ac=x86_64 ;; aarch64|arm64) ac=aarch64 ;; armv7l|armv6l) ac=arm ;; *) die "No AirConnect build for $(uname -m)" ;; esac
+  bin="$AIRCONNECT_DIR/aircast-linux-$ac-static"
+  if [[ $DRY == 0 && -x "$bin" ]]; then
+    log "AirConnect already in $AIRCONNECT_DIR"
+  else
+    log "Installing AirConnect's aircast into $AIRCONNECT_DIR"
+    run env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq unzip
+    run_sh "set -e; t=\$(mktemp -d); u=\$(curl -fsSL https://api.github.com/repos/philippe44/AirConnect/releases/latest | grep -o 'https://[^\"]*AirConnect-[0-9.]*\\.zip' | head -1); curl -fsSL \"\$u\" -o \"\$t/ac.zip\"; unzip -q -o \"\$t/ac.zip\" 'aircast-linux-$ac-static' -d \"\$t\"; install -d -m 0755 '$AIRCONNECT_DIR'; install -m 0755 \"\$t/aircast-linux-$ac-static\" '$bin'; rm -rf \"\$t\""
+  fi
+  AIRPLAY_NOTE="AirPlay:  turn it on in Integrations → AirPlay to Cast (program: $bin). Leave out speakers with AirPlay of their own."
+fi
+
+# --------------------------------------------------------------- tailscale --
+# Kova on your tailnet. Containers without /dev/net/tun (an unprivileged LXC) run Tailscale in
+# userspace mode, which is all reaching Kova and `tailscale serve` need.
+if [[ $TAILSCALE == 1 ]]; then
+  if [[ $DRY == 1 ]] || ! command -v tailscale >/dev/null; then
+    log "Installing Tailscale"
+    distro=$(. /etc/os-release; echo "${ID:-debian}"); codename=$(. /etc/os-release; echo "${VERSION_CODENAME:-bookworm}")
+    run_sh "curl -fsSL https://pkgs.tailscale.com/stable/$distro/$codename.noarmor.gpg -o /usr/share/keyrings/tailscale-archive-keyring.gpg && curl -fsSL https://pkgs.tailscale.com/stable/$distro/$codename.tailscale-keyring.list -o /etc/apt/sources.list.d/tailscale.list"
+    run apt-get update -qq
+    run env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq tailscale
+  fi
+  if [[ ! -e /dev/net/tun ]]; then
+    log "No /dev/net/tun: Tailscale runs in userspace mode"
+    run_sh "grep -q userspace-networking /etc/default/tailscaled || sed -i 's/^FLAGS=\"\"\$/FLAGS=\"--tun=userspace-networking\"/' /etc/default/tailscaled"
+  fi
+  run systemctl enable tailscaled
+  run systemctl restart tailscaled
+  if [[ $DRY == 0 ]] && ! tailscale status >/dev/null 2>&1; then
+    log "Joining your tailnet: open the link Tailscale prints; this carries on once you've signed in"
+    tailscale up --hostname="$(hostname)" --accept-dns=false
+  fi
+  # HTTPS for Kova on the tailnet (needs HTTPS certificates and Serve enabled in the tailnet).
+  if [[ $DRY == 1 ]]; then
+    show tailscale serve --bg --https=443 "http://127.0.0.1:$PORT"
+  elif timeout 60 tailscale serve --bg --https=443 "http://127.0.0.1:$port" >/tmp/kova-serve.log 2>&1; then
+    tsname=$(tailscale status --json | sed -n 's/.*"DNSName": *"\([^"]*\)\.".*/\1/p' | head -1)
+    TAILSCALE_NOTE="Remote:   https://$tsname/ (tailnet only). Set it as Kova's public address under Integrations → Notifications."
+  else
+    TAILSCALE_NOTE="Remote:   Serve isn't enabled on your tailnet yet: $(grep -o 'https://login.tailscale.com[^ ]*' /tmp/kova-serve.log | head -1). Then run: tailscale serve --bg --https=443 http://127.0.0.1:$port"
+  fi
+fi
+
 ip=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
 ip=${ip:-<this machine>}
 url="http://$ip:$port/"
@@ -219,3 +278,6 @@ Kova is running.
 It starts with a demo home. To bring in your Home Assistant rooms and devices, see
 docs/install.md ("Importing from Home Assistant").
 EOF
+[[ -n "${AIRPLAY_NOTE:-}" ]] && echo "  $AIRPLAY_NOTE"
+[[ -n "${TAILSCALE_NOTE:-}" ]] && echo "  $TAILSCALE_NOTE"
+exit 0

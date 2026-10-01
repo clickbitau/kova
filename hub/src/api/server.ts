@@ -15,7 +15,7 @@ import { isLight, isPlayer } from '../util/describe.ts';
 import type { HomeKitBridge } from '../bridges/homekit.ts';
 import type { MatterBridge } from '../bridges/matter-bridge.ts';
 import { LiveViewUnavailable, NEST_DEFAULT_REDIRECT, exchangeNestCode, nestAuthUrl, type NestOptions } from '../adapters/nest.ts';
-import { SMARTTHINGS_DEFAULT_REDIRECT, exchangeSmartThingsCode, smartThingsAuthUrl } from '../adapters/smartthings.ts';
+import { SMARTTHINGS_DEFAULT_REDIRECT, createSmartThingsApp, exchangeSmartThingsCode, smartThingsAuthUrl } from '../adapters/smartthings.ts';
 import type { Presence } from '../services/presence.ts';
 import { HELIX_AUTO, HELIX_REMOTE, type HelixLink } from '../services/helix-link.ts';
 import type { SnapLinks } from '../services/screen-notices.ts';
@@ -286,6 +286,21 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
 
   // Linking SmartThings (Samsung soundbars), once: open auth-url, allow Kova, copy the code from the address bar, post it to auth-code.
   const stCfg = () => opts.integrations?.raw('smartthings');
+  // Or, before that, without the SmartThings CLI: a one-time personal access token makes Kova's own app on the
+  // owner's account. The token isn't kept; the app's client id and secret are, and the answer is the Allow page.
+  app.post<{ Body: { token?: string; redirectUri?: string } }>('/api/integrations/smartthings/create-app', async (req, reply) => {
+    const token = String(req.body?.token ?? '').trim();
+    if (!token) return reply.code(400).send({ error: 'Paste a SmartThings token (account.smartthings.com/tokens)' });
+    if (!opts.integrations) return reply.code(503).send({ error: 'Integration settings aren’t available' });
+    const redirectUri = req.body?.redirectUri || SMARTTHINGS_DEFAULT_REDIRECT;
+    try {
+      const made = await createSmartThingsApp({ token, redirectUri, apiUrl: stCfg()?.apiUrl });
+      const { token: _old, refreshToken: _gone, ...rest } = stCfg() ?? {};
+      await opts.integrations.update('smartthings', { ...rest, clientId: made.clientId, clientSecret: made.clientSecret });
+      reply.header('cache-control', 'no-store');
+      return { ok: true, url: smartThingsAuthUrl({ clientId: made.clientId, redirectUri }), redirectUri, next: 'Allow Kova on that page, then copy the code from the address bar (?code=…) into Finish linking.' };
+    } catch (e) { return fail(reply, e); }
+  });
   app.get<{ Querystring: { redirectUri?: string } }>('/api/integrations/smartthings/auth-url', async (req, reply) => {
     const c = stCfg();
     if (!c?.clientId) return reply.code(400).send({ error: 'Save the SmartThings app’s client id and secret first' });

@@ -70,6 +70,25 @@ there), runs `npm ci`, creates the `kova` system user, `/var/lib/kova` and
 `/api/health` and prints the URL. Flags: `--dir`, `--data`, `--repo`, `--branch`,
 `--source`, `--port`, `--no-token`.
 
+Two optional extras, safe to add on a later run too:
+
+- `--airplay` installs AirConnect's `aircast` (a static build for this machine) in
+  `/opt/airconnect`, so Kova can put Cast speakers and groups into AirPlay. Turn it on in
+  **Integrations → AirPlay to Cast**, leaving out speakers that have AirPlay of their own.
+  Kova and the iPhones need to see the same mDNS: one network, or an mDNS reflector between
+  VLANs.
+- `--tailscale` installs Tailscale, joins your tailnet (it prints a sign-in link and waits)
+  and serves Kova over HTTPS at `https://<machine>.<tailnet>.ts.net`, reachable only on the
+  tailnet. In an LXC without `/dev/net/tun` it runs Tailscale in userspace mode, which is
+  enough for this. Your tailnet needs HTTPS certificates and Serve on (it prints the link if
+  not). Then set that address as Kova's public address under **Integrations →
+  Notifications**: HTTPS is what lets the web app on an iPhone get notifications.
+
+**Samsung soundbars (SmartThings)** need no extra tools: in **Integrations → Samsung
+SmartThings**, *Set up with a token* takes a one-time token from
+account.smartthings.com/tokens (Devices and Apps permissions), makes Kova's own app on your
+account, and opens the Allow page.
+
 The unit is sandboxed (`ProtectSystem=strict`, only `/var/lib/kova` writable). In an
 LXC without `nesting=1`, systemd can't set that up and the service fails with
 `status=226/NAMESPACE`: turn nesting on, or comment out the `Protect*`/`Private*`

@@ -1,4 +1,5 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import type { Adapter, AdapterContext, AdapterStatus } from './sdk.ts';
 import type { Command, Device, DeviceState } from '../model/types.ts';
@@ -10,9 +11,11 @@ import type { Command, Device, DeviceState } from '../model/types.ts';
 // Sound mode and night mode aren't SmartThings capabilities: they go through the soundbar's `execute` capability
 // with Samsung's own resource paths (/sec/networkaudio/soundmode and /advancedaudio).
 //
-// Signing in: a SmartThings OAuth app (`smartthings apps:create`, an OAuth-In app with r:devices:* and x:devices:*)
-// linked once, after which Kova keeps the refresh token, which SmartThings replaces on every use, in
-// <KOVA_DATA>/smartthings/token.json. A personal access token works too, but SmartThings now ends those after 24 h.
+// Signing in: a SmartThings OAuth app (an OAuth-In app with r:devices:* and x:devices:*), which Kova makes on the
+// owner's account itself from a one-time personal access token (`createSmartThingsApp`, the request the SmartThings
+// CLI's `apps:create` sends; or made with the CLI by hand). It's linked once, after which Kova keeps the refresh
+// token, which SmartThings replaces on every use, in <KOVA_DATA>/smartthings/token.json. A personal access token
+// works on its own too, but SmartThings now ends those after 24 h.
 
 export const SMARTTHINGS_URLS = { api: 'https://api.smartthings.com/v1', authorize: 'https://api.smartthings.com/oauth/authorize', token: 'https://api.smartthings.com/oauth/token' };
 export const SMARTTHINGS_DEFAULT_REDIRECT = 'https://httpbin.org/get';
@@ -141,6 +144,34 @@ async function smartThingsToken(o: Pick<SmartThingsOptions, 'clientId' | 'client
 export function smartThingsAuthUrl(o: { clientId: string; redirectUri?: string }): string {
   const q = new URLSearchParams({ client_id: o.clientId, response_type: 'code', redirect_uri: o.redirectUri ?? SMARTTHINGS_DEFAULT_REDIRECT, scope: SCOPES });
   return `${SMARTTHINGS_URLS.authorize}?${q}`;
+}
+
+/**
+ * Make Kova's OAuth-In app on the owner's SmartThings account, the way `smartthings apps:create` does, with a
+ * personal access token that can manage apps (it's used only for this; SmartThings ends it by itself in 24 h).
+ * Returns the app's OAuth client id and secret, which link Kova from then on.
+ */
+export async function createSmartThingsApp(o: { token: string; redirectUri?: string; apiUrl?: string; timeoutMs?: number }): Promise<{ clientId: string; clientSecret: string; appId?: string }> {
+  const res = await fetch(`${o.apiUrl ?? SMARTTHINGS_URLS.api}/apps`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${o.token.trim()}`, 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify({
+      appName: `kova-${randomBytes(4).toString('hex')}`,
+      displayName: 'Kova',
+      description: 'Kova smart home hub: Samsung soundbars and TVs on your home network',
+      appType: 'API_ONLY',
+      classifications: ['CONNECTED_SERVICE'],
+      singleInstance: true,
+      apiOnly: {},
+      principalType: 'LOCATION',
+      oauth: { clientName: 'Kova', scope: SCOPES.split(' '), redirectUris: [o.redirectUri ?? SMARTTHINGS_DEFAULT_REDIRECT] },
+    }),
+    signal: AbortSignal.timeout(o.timeoutMs ?? 15_000),
+  });
+  const j = await res.json().catch(() => ({})) as { oauthClientId?: string; oauthClientSecret?: string; app?: { appId?: string }; error?: { message?: string; details?: { message?: string }[] } };
+  if (res.status === 401 || res.status === 403) throw new Error('SmartThings didn’t accept that token for making apps: make a new one with the Apps permissions ticked (and Devices)');
+  if (!res.ok || !j.oauthClientId || !j.oauthClientSecret) throw new Error(`SmartThings couldn’t make Kova’s app: ${j.error?.details?.[0]?.message ?? j.error?.message ?? `HTTP ${res.status}`}`);
+  return { clientId: j.oauthClientId, clientSecret: j.oauthClientSecret, ...(j.app?.appId ? { appId: j.app.appId } : {}) };
 }
 
 /** Swap the one-time code for a refresh token. */
