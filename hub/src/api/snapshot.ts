@@ -129,7 +129,8 @@ export function snapshot(hub: Hub) {
       return { ...g, deviceId: `group_${g.id}`, missing: g.members.filter(id => !reg.get(id)), sync: castGroup ? 'perfect' : 'together', castGroup: castGroup ?? null };
     }),
     groups: cfg.groups,
-    people: cfg.people.map(p => ({ ...p, home: engine.people[p.id]?.home ?? true, since: engine.people[p.id]?.since ?? null, sinceLabel: engine.people[p.id] ? clock(engine.people[p.id].since, tz) : '' })),
+    // `via`: what already knows whether they're home without their phone's location (the app then doesn't need it).
+    people: cfg.people.map(p => ({ ...p, via: hub.presenceVia(p.id), home: engine.people[p.id]?.home ?? true, since: engine.people[p.id]?.since ?? null, sinceLabel: engine.people[p.id] ? clock(engine.people[p.id].since, tz) : '' })),
     devices: reg.list().map(d => ({ ...d, why: engine.why(d.id), usedIn: engine.usedIn(d.id) })),
     modes,
     current: {

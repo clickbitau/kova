@@ -53,6 +53,8 @@ export class Hub extends EventEmitter<{ changed: [] }> {
   updates: Updates | null = null;
   /** Which media players sit on which TV (and soundbar), for suggested automations. Helix's screens once it's linked. */
   screens: () => Screen[] = () => [];
+  /** What already knows whether a person is home without their phone's location (Warden, the router…); [] when only the phone can. */
+  presenceVia: (personId: string) => string[] = () => [];
 
   /** Let speakers play Helix music: names → play queues, for adapters, the snapshot and Ask. */
   useMusic(m: HelixMusic): void {

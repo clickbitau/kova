@@ -218,3 +218,19 @@ test('Presence API: per-person key works without the master token; missing or wr
     await app.close(); presence.stop(); await hub.stop();
   }
 });
+
+test('Presence: what already covers each person, so the app only asks for location when nothing else can', async () => {
+  const t = await testHub(12);
+  try {
+    // Nothing set up: only the phone could tell.
+    assert.deepEqual(new Presence(t.hub, {}, {}).coveredBy('methel'), []);
+    // A router that sees one person's phone, and a network check for another.
+    const opn = new Presence(t.hub, { opnsense: { url: 'https://router', key: 'k', secret: 's' }, people: { methel: { phones: ['aa:bb:cc:dd:ee:01'] } }, pingHosts: { brishti: '192.0.2.9' } }, {});
+    assert.deepEqual(opn.coveredBy('methel'), ['your router']);
+    assert.deepEqual(opn.coveredBy('brishti'), ['a network check']);
+    // Warden linked: it knows whose devices are whose, for everyone.
+    const w = new Presence(t.hub, {}, { warden: () => ({ url: 'https://warden', token: 't' }) as never });
+    assert.deepEqual(w.coveredBy('brishti'), ['Warden']);
+    assert.deepEqual(new Presence(t.hub, {}, { warden: () => undefined }).coveredBy('brishti'), [], 'Warden not linked yet');
+  } finally { await t.hub.stop(); }
+});
