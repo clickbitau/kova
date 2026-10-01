@@ -122,11 +122,15 @@ interface Tv {
   model?: string;
 }
 
-/** SmartThings, when it's linked and knows the TV: it switches the source directly and says which one is on. */
+/**
+ * SmartThings, when it's linked and knows the TV: it switches the source directly and says which one is on,
+ * and switches the TV on and off without the TV having allowed Kova's network remote.
+ */
 interface SourceVia {
   hasTv(tv: { name?: string; model?: string }): boolean;
   tvInput(tv: { name?: string; model?: string }): Promise<string | null | undefined>;
   setTvInput(tv: { name?: string; model?: string }, input: string): Promise<boolean>;
+  setTvPower?(tv: { name?: string; model?: string }, on: boolean): Promise<boolean>;
 }
 
 export class SamsungTvAdapter implements Adapter {
@@ -368,17 +372,54 @@ export class SamsungTvAdapter implements Adapter {
 
   // ------------------------------------------------------------ commands --
 
+  /** Can the network remote be used without asking: paired (a token kept) and not refused since. */
+  private remoteReady(tv: Tv): boolean { return !!this.tokens[tv.cfg.host] && !this.refused.has(tv.cfg.host); }
+
+  /**
+   * Off: the network remote's power key when the TV has allowed Kova (quickest), else SmartThings; either one
+   * failing falls back to the other. Without SmartThings, the remote asks the TV to allow Kova as before.
+   */
+  private async powerOff(tv: Tv): Promise<void> {
+    const via = this.via(tv);
+    const st = via?.setTvPower ? () => via.setTvPower!(tv, false) : null;
+    if (st && !this.remoteReady(tv)) {
+      try { if (await st()) return; } catch (err) { this.ctx?.log(`${tv.cfg.host}: SmartThings off failed (${(err as Error).message}), trying the remote`); }
+      await this.key(tv, 'KEY_POWER');
+      return;
+    }
+    try { await this.key(tv, 'KEY_POWER'); }
+    catch (err) {
+      if (!st) throw err;
+      this.ctx?.log(`${tv.cfg.host}: remote refused (${(err as Error).message}), switching off through SmartThings`);
+      if (!(await st())) throw err;
+    }
+  }
+
+  /** On: Wake-on-LAN and SmartThings both, so either one waking the TV is enough. Fails only when neither could be sent. */
+  private async powerOn(tv: Tv): Promise<void> {
+    const via = this.via(tv);
+    const tries: Promise<boolean>[] = [];
+    if (tv.mac) tries.push(this.wake(tv).then(() => true));
+    if (via?.setTvPower) tries.push(via.setTvPower(tv, true));
+    if (!tries.length) return this.wake(tv); // explains that a MAC address is needed
+    const r = await Promise.allSettled(tries);
+    if (!r.some(x => x.status === 'fulfilled' && x.value)) {
+      throw new Error(`${tv.cfg.name ?? tv.cfg.host}: couldn't switch it on (${r.map(x => x.status === 'rejected' ? (x.reason as Error).message : 'not known to SmartThings').join('; ')})`);
+    }
+  }
+
   async command(d: Device, cmd: Command): Promise<void | DeviceState> {
     const tv = this.tvs.get(d.address);
     if (!tv) throw new Error(`Unknown Samsung TV ${d.id}`);
     if (cmd.on === false) {
-      if (tv.on) { await this.key(tv, 'KEY_POWER'); tv.on = false; }
+      if (tv.on) { await this.powerOff(tv); tv.on = false; }
       return;
     }
     if (cmd.on === true && !tv.on) {
-      // Fully-off and standby TVs both wake on the magic packet. It takes a few seconds to boot,
-      // so a volume in the same command is left for the TV's own remembered level.
-      await this.wake(tv);
+      // Fully-off and standby TVs both wake on the magic packet; SmartThings is asked as well where it
+      // knows the TV. It takes a few seconds to boot, so a volume in the same command is left for the
+      // TV's own remembered level.
+      await this.powerOn(tv);
       tv.wakingUntil = Date.now() + (this.opts.wakeWaitMs ?? 30_000);
       if (!cmd.input) return;
     } else if (cmd.vol != null) await this.setVolume(tv, cmd.vol);

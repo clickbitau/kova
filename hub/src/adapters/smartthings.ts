@@ -359,6 +359,14 @@ export class SmartThingsAdapter implements Adapter {
     return true;
   }
 
+  /** Switch the TV on or off through SmartThings (no pairing with the TV needed). False when SmartThings doesn't know this TV. */
+  async setTvPower(tv: { name?: string; model?: string }, on: boolean): Promise<boolean> {
+    const t = this.tvFor(tv);
+    if (!t) return false;
+    await this.api('POST', `/devices/${encodeURIComponent(t.st)}/commands`, { commands: [{ component: 'main', capability: 'switch', command: on ? 'on' : 'off' }] });
+    return true;
+  }
+
   status(): AdapterStatus {
     if (this.error) return { ok: false, note: this.error };
     const n = this.bars.size;
