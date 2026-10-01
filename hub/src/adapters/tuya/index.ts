@@ -44,6 +44,13 @@ export interface TuyaDeviceConfig {
   switches?: Record<string, { name: string; room: string; type?: 'light' | 'plug'; id?: string }>;
   /** Or: the whole device is one light (dimmable, warmth and colour as its data points allow). */
   light?: TuyaLightDps & { name: string; room: string; id?: string };
+  /**
+   * A Zigbee (or BLE mesh) sub-device: reached through this gateway, the `id` of another entry in
+   * the list, and addressed there by `cid` (its node id). It has no host or key of its own.
+   * A gateway is an ordinary entry with its host and key; it needs no switches or light itself.
+   */
+  gateway?: string;
+  cid?: string;
 }
 
 export interface TuyaOptions { devices: TuyaDeviceConfig[]; timeoutMs?: number; heartbeatMs?: number }
@@ -230,6 +237,8 @@ export class TuyaAdapter implements Adapter {
   /** Every data point each device has reported, so a partial report can be read in context. */
   private known = new Map<string, Dps>();
   private unreachable: string[] = [];
+  /** Gateway id → its sub-devices by node id. */
+  private subs = new Map<string, Map<string, TuyaDeviceConfig>>();
 
   constructor(private opts: TuyaOptions) {}
 
@@ -248,6 +257,13 @@ export class TuyaAdapter implements Adapter {
         if (d.light.colour) caps.push('color');
         infos.push({ id: lightId(d), name: d.light.name, room: d.light.room, type: d.light.bri || d.light.colour ? 'dimmer' : 'light', integration: 'Tuya (local)', address: `${d.id}/light`, capabilities: caps });
       }
+      if (d.gateway) {
+        // Behind a gateway: wired up once every gateway's connection exists (below).
+        if (!d.cid) { ctx.log(`${d.name ?? d.id}: behind gateway ${d.gateway} but no node id (cid); it stays offline`); this.unreachable.push(d.id); continue; }
+        if (!this.subs.has(d.gateway)) this.subs.set(d.gateway, new Map());
+        this.subs.get(d.gateway)!.set(d.cid, d);
+        continue;
+      }
       const version = d.version ?? '3.3';
       if (!d.host || !d.key || !VERSIONS.includes(version)) {
         const why = !d.host ? 'no IP address yet' : !d.key ? 'no local key' : `protocol ${version} not supported`;
@@ -256,15 +272,37 @@ export class TuyaAdapter implements Adapter {
         continue;
       }
       const c = new TuyaConnection({ id: d.id, host: d.host, key: d.key, version, port: d.port, timeoutMs: this.opts.timeoutMs, heartbeatMs: this.opts.heartbeatMs });
-      c.on('dps', dps => this.onDps(d, dps));
-      c.on('online', on => { for (const i of this.idsOf(d)) ctx.report(i, { online: on }); });
+      // A gateway's reports name the sub-device they're from; its own carry no cid.
+      c.on('dps', (dps, cid) => {
+        if (!cid) { this.onDps(d, dps); return; }
+        const sub = this.subs.get(d.id)?.get(cid);
+        if (sub) this.onDps(sub, dps);
+      });
+      c.on('online', on => { for (const x of [d, ...this.subs.get(d.id)?.values() ?? []]) for (const i of this.idsOf(x)) ctx.report(i, { online: on }); });
       this.conns.set(d.id, c);
+    }
+    for (const [gw, subs] of this.subs) {
+      if (this.conns.has(gw)) continue;
+      for (const sub of subs.values()) {
+        ctx.log(`${sub.name ?? sub.id}: its gateway ${gw} isn't set up for local control; it stays offline`);
+        this.unreachable.push(sub.id);
+      }
+      this.subs.delete(gw);
     }
     ctx.announce(infos);
     for (const id of this.unreachable) for (const i of this.idsOf(this.cfg.get(id)!)) ctx.report(i, { online: false });
     // Connect in the background; a switch that's offline shouldn't hold up the hub.
     for (const [id, c] of this.conns) {
-      c.connect().then(() => c.query()).catch(err => { ctx.log(`${id}: ${err.message}`); c.scheduleReconnect(); });
+      const d = this.cfg.get(id)!;
+      const subs = [...this.subs.get(id)?.values() ?? []];
+      const own = this.idsOf(d).length > 0;
+      c.connect()
+        // A gateway: ask each sub-device for its state (a plain gateway has none of its own to read).
+        .then(async () => {
+          if (own || !subs.length) await c.query();
+          for (const sub of subs) await c.query(sub.cid).then(dps => { if (Object.keys(dps).length) this.onDps(sub, dps); }).catch(err => ctx.log(`${sub.name ?? sub.id}: ${err.message}`));
+        })
+        .catch(err => { ctx.log(`${id}: ${err.message}`); c.scheduleReconnect(); });
     }
   }
 
@@ -288,18 +326,23 @@ export class TuyaAdapter implements Adapter {
     const [devId, part] = device.address.split('/');
     const d = this.cfg.get(devId);
     if (!d) throw new Error(`Unknown Tuya device ${device.id}`);
-    const c = this.conns.get(devId);
-    if (!c) throw new Error(`${device.name} can't be reached: ${!d.host ? 'its IP address is not known yet' : 'it is not set up for local control'}`);
+    const c = this.conns.get(d.gateway ?? devId);
+    if (!c) throw new Error(`${device.name} can't be reached: ${d.gateway ? 'its gateway is not set up for local control' : !d.host ? 'its IP address is not known yet' : 'it is not set up for local control'}`);
     const dps: Dps = part === 'light' && d.light ? lightToDps(d.light, cmd, device.state) : cmd.on !== undefined ? { [part]: !!cmd.on } : {};
-    if (Object.keys(dps).length) await c.set(dps);
+    if (Object.keys(dps).length) await c.set(dps, d.gateway ? d.cid : undefined);
   }
 
   async stop(): Promise<void> { for (const c of this.conns.values()) c.close(); }
 
   status(): AdapterStatus {
-    const all = [...this.conns.values()];
-    const total = all.length + this.unreachable.length;
-    const off = all.filter(c => !c.online).length + this.unreachable.length;
+    // A gateway counts as its sub-devices (they're up when it is), plus itself if it has switches of its own.
+    let total = this.unreachable.length, off = this.unreachable.length;
+    for (const [id, c] of this.conns) {
+      const subs = this.subs.get(id)?.size ?? 0;
+      const n = subs ? subs + (this.idsOf(this.cfg.get(id)!).length ? 1 : 0) : 1;
+      total += n;
+      if (!c.online) off += n;
+    }
     if (!total) return { ok: false, note: 'No Tuya devices set up' };
     return off ? { ok: false, note: `${off} of ${total} not responding` } : { ok: true, note: `${total} devices, all local` };
   }
