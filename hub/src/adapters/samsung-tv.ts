@@ -206,12 +206,12 @@ export class SamsungTvAdapter implements Adapter {
       tv.ws?.close();
       try {
         await this.connect(tv);
-        return { name, ok: true, message: 'Allowed' };
+        return { name, ok: true, message: `${name} allowed Kova.` };
       } catch (e) {
         const m = (e as Error).message;
         return { name, ok: false, message: this.refused.has(tv.cfg.host)
           ? `${name} turned Kova away without asking. On the TV: Settings → Connection → Network → Expert Settings → IP Remote on, and Device Connection Manager → Access Notification set to First time only; then restart the TV (unplug it for a minute) and try again.`
-          : m };
+          : `${name}: ${m}` };
       }
     }));
   }

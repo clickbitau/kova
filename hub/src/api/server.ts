@@ -328,7 +328,7 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
     if (!tv?.pairAgain) return reply.code(400).send({ error: 'Set up a Samsung TV first' });
     const tvs = await tv.pairAgain();
     hub.emit('changed');
-    return { tvs, ok: tvs.every(t => t.ok), next: tvs.map(t => `${t.name}: ${t.message}`).join(' ') };
+    return { tvs, ok: tvs.every(t => t.ok), next: tvs.map(t => t.message).join(' ') };
   });
 
   // Add a Matter device with its pairing code (for one already in Google Home / Apple Home, open a pairing window there first).
