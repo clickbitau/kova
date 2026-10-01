@@ -18,7 +18,8 @@ export interface ConnectionOptions {
  * One persistent TCP connection to a Tuya device. Reconnects by itself,
  * sends a heartbeat, and emits 'dps' whenever the device reports state.
  */
-export class TuyaConnection extends EventEmitter<{ dps: [Dps]; online: [boolean] }> {
+/** `cid`: which sub-device (Zigbee/BLE node behind this gateway) the data points are from; none for the device itself. */
+export class TuyaConnection extends EventEmitter<{ dps: [Dps, string | undefined]; online: [boolean] }> {
   private sock: net.Socket | null = null;
   private buf: Buffer = Buffer.alloc(0);
   private seq = 1;
@@ -119,28 +120,38 @@ export class TuyaConnection extends EventEmitter<{ dps: [Dps]; online: [boolean]
 
   private ts() { return String(Math.floor(Date.now() / 1000)); }
 
-  /** Set data points, e.g. { '1': true }. */
-  async set(dps: Dps): Promise<void> {
+  /**
+   * Set data points, e.g. { '1': true }. With `cid`, on that sub-device behind this gateway
+   * (the gateway's own connection, addressed by the node id, as the Tuya app does).
+   */
+  async set(dps: Dps, cid?: string): Promise<void> {
     await this.connect();
-    if (this.modern) await this.send(CMD.CONTROL_NEW, { protocol: 5, t: Number(this.ts()), data: { dps } });
+    if (this.modern) await this.send(CMD.CONTROL_NEW, { protocol: 5, t: Number(this.ts()), data: cid ? { cid, dps } : { dps } });
+    else if (cid) await this.send(CMD.CONTROL, { cid, t: this.ts(), dps });
     else await this.send(CMD.CONTROL, { devId: this.o.id, uid: this.o.id, t: this.ts(), dps });
   }
 
-  /** Ask for all data points. The answer also arrives as a 'dps' event. */
-  async query(): Promise<Dps> {
+  /** Ask for all data points (of sub-device `cid`, through a gateway). The answer also arrives as a 'dps' event. */
+  async query(cid?: string): Promise<Dps> {
     await this.connect();
-    const f = this.modern
-      ? await this.send(CMD.DP_QUERY_NEW, {})
-      : await this.send(CMD.DP_QUERY, { gwId: this.o.id, devId: this.o.id, uid: this.o.id, t: this.ts() });
-    return this.parse(f) ?? {};
+    const f = cid
+      ? await this.send(this.modern ? CMD.DP_QUERY_NEW : CMD.DP_QUERY, { cid })
+      : this.modern
+        ? await this.send(CMD.DP_QUERY_NEW, {})
+        : await this.send(CMD.DP_QUERY, { gwId: this.o.id, devId: this.o.id, uid: this.o.id, t: this.ts() });
+    const r = this.parse(f);
+    return r && (!cid || !r.cid || r.cid === cid) ? r.dps : {};
   }
 
-  private parse(f: Frame): Dps | null {
+  private parse(f: Frame): { dps: Dps; cid?: string } | null {
     try {
       const text = decodePayload(this.o.version, f.payload, this.key).toString('utf8').trim();
       if (!text.startsWith('{')) return null;
-      const j = JSON.parse(text) as { dps?: Dps; data?: { dps?: Dps } };
-      return j.dps ?? j.data?.dps ?? null;
+      const j = JSON.parse(text) as { dps?: Dps; cid?: string; data?: { dps?: Dps; cid?: string } };
+      const dps = j.dps ?? j.data?.dps;
+      if (!dps) return null;
+      const cid = j.cid ?? j.data?.cid;
+      return cid ? { dps, cid: String(cid) } : { dps };
     } catch { return null; }
   }
 
@@ -150,13 +161,13 @@ export class TuyaConnection extends EventEmitter<{ dps: [Dps]; online: [boolean]
     this.buf = rest;
     for (const f of frames) {
       if (this.waitingCmd?.cmd === f.cmd) { this.waitingCmd.resolve(f); continue; }
-      const dps = f.cmd === CMD.HEART_BEAT ? null : this.parse(f);
+      const got = f.cmd === CMD.HEART_BEAT ? null : this.parse(f);
       // 3.5 devices answer with their own running sequence number, so match those replies by command.
       let seq: number | undefined = this.waiting.has(f.seq) ? f.seq : undefined;
       if (seq === undefined && this.o.version === '3.5') seq = [...this.waiting].find(([, w]) => w.cmd === f.cmd)?.[0];
       const w = seq === undefined ? undefined : this.waiting.get(seq);
       if (w) { clearTimeout(w.timer); this.waiting.delete(seq!); w.resolve(f); }
-      if (dps && Object.keys(dps).length) this.emit('dps', dps);
+      if (got && Object.keys(got.dps).length) this.emit('dps', got.dps, got.cid);
     }
   }
 

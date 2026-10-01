@@ -327,3 +327,25 @@ test('Tuya merge: a light that already exists keeps its name, room and id but ta
   assert.equal(devices[0].status, 'updated');
   assert.equal(devices[0].as, 'light (colour)');
 });
+
+test('Tuya cloud import: a Zigbee gateway becomes a connection, and the lights behind it are added with their node id', () => {
+  const spec = [{ code: 'switch_led', dp: 20, type: 'Boolean' }, { code: 'bright_value_v2', dp: 22, type: 'Integer', values: { min: 10, max: 1000 } }];
+  const { tuya, devices } = mergeCloudDevices(undefined, [
+    { id: 'gw1', name: 'Zigbee Gateway', key: 'gatewaykey012345', ip: '10.10.30.128', category: 'wg2' },
+    { id: 'zb1', name: 'Porch LED', category: 'dj', sub: true, nodeId: 'a1b2', gatewayId: 'gw1', spec },
+    { id: 'zb2', name: 'Lost LED', category: 'dj', sub: true, spec },
+    { id: 'gw2', name: 'Unused gateway', key: 'otherkey01234567', category: 'wg2' },
+  ], { rooms: [{ id: 'porch', name: 'Porch' }] });
+  const gw = tuya.devices.find(d => d.id === 'gw1')!;
+  assert.equal(gw.host, '10.10.30.128');
+  assert.equal(gw.light ?? gw.switches, undefined, 'the gateway is only a connection');
+  const zb = tuya.devices.find(d => d.id === 'zb1')!;
+  assert.equal(zb.gateway, 'gw1');
+  assert.equal(zb.cid, 'a1b2');
+  assert.equal(zb.light?.switch, '20');
+  assert.equal(zb.light?.room, 'porch');
+  assert.equal(devices.find(d => d.id === 'zb1')!.status, 'added');
+  assert.equal(devices.find(d => d.id === 'gw1')!.as, 'gateway');
+  assert.equal(devices.find(d => d.id === 'zb2')!.status, 'skipped', 'no gateway or node id');
+  assert.equal(devices.find(d => d.id === 'gw2')!.status, 'skipped', 'a gateway nothing sits behind is left out');
+});

@@ -64,8 +64,11 @@ export interface TuyaCloudDevice {
   productId?: string;
   online?: boolean;
   uid?: string;
-  /** A sub-device behind a gateway (Zigbee, BLE mesh): not reachable on its own. */
+  /** A sub-device behind a gateway (Zigbee, BLE mesh): reached through the gateway, not on its own. */
   sub?: boolean;
+  /** A sub-device's node id on its gateway (`cid`), and which gateway. */
+  nodeId?: string;
+  gatewayId?: string;
 }
 
 interface RawDevice { id?: string; name?: string; local_key?: string; ip?: string; category?: string; product_name?: string; product_id?: string; online?: boolean; is_online?: boolean; uid?: string; sub?: boolean; node_id?: string; gateway_id?: string }
@@ -81,6 +84,8 @@ const toDevice = (r: RawDevice): TuyaCloudDevice => ({
   ...(r.online ?? r.is_online) !== undefined ? { online: !!(r.online ?? r.is_online) } : {},
   ...(r.uid ? { uid: r.uid } : {}),
   ...(r.sub || r.node_id || (r.gateway_id && r.gateway_id !== r.id) ? { sub: true } : {}),
+  ...(r.node_id ? { nodeId: String(r.node_id) } : {}),
+  ...(r.gateway_id && r.gateway_id !== r.id ? { gatewayId: String(r.gateway_id) } : {}),
 });
 
 export class TuyaCloud {
@@ -279,6 +284,7 @@ function roomFor(name: string, rooms: Room[]): string {
 }
 
 function describe(d: TuyaDeviceConfig): string | undefined {
+  if (!d.light && !d.switches && !d.gateway) return 'gateway';
   if (d.light) {
     const f = [d.light.bri && 'brightness', d.light.temp && 'warmth', d.light.colour && 'colour'].filter(Boolean);
     return `light${f.length ? ` (${f.join(', ')})` : ''}`;
@@ -291,7 +297,8 @@ function describe(d: TuyaDeviceConfig): string | undefined {
  * Fold cloud devices into the Tuya config. Existing devices keep their host (unless discovery
  * found a new one), version, switch names, rooms and Kova ids; their key is refreshed, and a
  * light's data-point mapping is refreshed from the spec. New devices get a room guessed from their
- * name and a mapping from their spec. Gateways' sub-devices and unsupported categories are skipped.
+ * name and a mapping from their spec. A gateway's sub-devices (Zigbee lights…) are added with
+ * the gateway and their node id, and the gateway itself as a connection; unsupported categories are skipped.
  */
 export function mergeCloudDevices(existing: TuyaOptions | undefined, cloud: CloudDeviceWithSpec[], opts: { rooms?: Room[]; found?: Map<string, Discovered> } = {}): { tuya: TuyaOptions; devices: ImportedDevice[] } {
   const tuya: TuyaOptions = { ...existing, devices: (existing?.devices ?? []).map(d => structuredClone(d)) };
@@ -302,9 +309,29 @@ export function mergeCloudDevices(existing: TuyaOptions | undefined, cloud: Clou
   const uniqueId = (base: string) => { let id = base, n = 2; while (usedIds.has(id)) id = `${base}_${n++}`; usedIds.add(id); return id; };
   const kovaId = (name: string, room: string) => uniqueId(room === 'unassigned' ? `tuya_${slug(name)}` : `${room}_${slug(name).replace(new RegExp(`^${room}_`), '') || 'light'}`);
 
+  // Gateways that something in this account sits behind: kept as connections even with no switches of their own.
+  const gateways = new Set(cloud.filter(c => c.sub && c.gatewayId).map(c => c.gatewayId!));
+
   for (const c of cloud) {
     const base = { id: c.id, name: c.name, category: c.category, product: c.product, online: c.online, hasKey: !!c.key };
-    if (c.sub) { report.push({ ...base, status: 'skipped', note: 'behind a gateway (Zigbee/BLE): not reachable on its own' }); continue; }
+    if (c.sub) {
+      if (!c.gatewayId || !c.nodeId) { report.push({ ...base, status: 'skipped', note: 'behind a gateway, but the cloud gave no gateway or node id' }); continue; }
+      const notes: string[] = [];
+      const e = tuya.devices.find(d => d.id === c.id);
+      if (e) {
+        e.gateway = c.gatewayId; e.cid = c.nodeId;
+        if (c.key) e.key = c.key;
+        if (!e.light && !Object.keys(e.switches ?? {}).length) Object.assign(e, mapNew(c, c.spec ?? [], rooms, kovaId, notes));
+        report.push({ ...base, status: 'updated', as: describe(e), note: [`through gateway ${c.gatewayId}`, ...notes].join('; ') });
+        continue;
+      }
+      const mapped = mapNew(c, c.spec ?? [], rooms, kovaId, notes);
+      if (!mapped.light && !mapped.switches) { report.push({ ...base, status: 'skipped', note: `category ${c.category ?? '?'} isn't supported yet` }); continue; }
+      const d: TuyaDeviceConfig = { id: c.id, host: '', key: c.key ?? '', gateway: c.gatewayId, cid: c.nodeId, name: c.name, ...(c.category ? { category: c.category } : {}), ...(c.product ? { product: c.product } : {}), ...mapped };
+      tuya.devices.push(d);
+      report.push({ ...base, status: 'added', as: describe(d), note: [`through gateway ${c.gatewayId}`, ...notes].join('; ') });
+      continue;
+    }
     const disc = found.get(c.id);
     const host = disc?.ip ?? (isPrivateIp(c.ip) ? c.ip! : '');
     const discVersion = isSupportedVersion(disc?.version) ? disc!.version as TuyaDeviceConfig['version'] : undefined;
@@ -328,6 +355,14 @@ export function mergeCloudDevices(existing: TuyaOptions | undefined, cloud: Clou
     }
     if (!c.key) { report.push({ ...base, status: 'skipped', note: 'the cloud gave no local key' }); continue; }
     const mapped = mapNew(c, spec, rooms, kovaId, notes);
+    if (!mapped.light && !mapped.switches && gateways.has(c.id)) {
+      // A gateway: a connection for the devices behind it.
+      if (!host) notes.push('IP not known: run discovery on the home network, or set "host"');
+      const d: TuyaDeviceConfig = { id: c.id, host, key: c.key, version: discVersion ?? '3.3', name: c.name, ...(c.category ? { category: c.category } : {}), ...(c.product ? { product: c.product } : {}) };
+      tuya.devices.push(d);
+      report.push({ ...base, status: 'added', host: host || undefined, version: d.version, as: 'gateway', ...(notes.length ? { note: notes.join('; ') } : {}) });
+      continue;
+    }
     if (!mapped.light && !mapped.switches) {
       report.push({ ...base, status: 'skipped', note: `category ${c.category ?? '?'} isn't supported yet` });
       continue;
@@ -377,7 +412,6 @@ export async function importFromCloud(o: CloudImportOptions): Promise<{ tuya: Tu
   const cloud = new TuyaCloud(o);
   const list: CloudDeviceWithSpec[] = await cloud.listDevices(o.uid);
   for (const d of list) {
-    if (d.sub) continue;
     try { d.spec = await cloud.specification(d.id); } catch (e) { o.log?.(`${d.name}: no specification (${(e as Error).message})`); }
   }
   const known = new Map((o.existing?.devices ?? []).map(d => [d.id, d.host]));

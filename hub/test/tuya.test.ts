@@ -41,7 +41,8 @@ function open35(f: Buffer, k: Buffer): Buffer | null {
   try { return Buffer.concat([d.update(f.subarray(30, 18 + len - 16)), d.final()]); } catch { return null; }
 }
 
-function fakeSwitch(version: '3.3' | '3.4' | '3.5', dps: Record<string, unknown>) {
+/** A fake Tuya device; with `subs`, a gateway too: messages naming a `cid` are for that sub-device's data points. */
+function fakeSwitch(version: '3.3' | '3.4' | '3.5', dps: Record<string, unknown>, subs: Record<string, Record<string, unknown>> = {}) {
   const seen: { cmd: number; json?: unknown }[] = [];
   const errors: string[] = [];
   const server = net.createServer(sock => {
@@ -83,11 +84,16 @@ function fakeSwitch(version: '3.3' | '3.4' | '3.5', dps: Record<string, unknown>
           const json = body.length ? JSON.parse(body.toString()) : undefined;
           seen.push({ cmd, json });
           if (cmd === 9) { push(0, 9, rc); continue; }
-          if (cmd === 0x10) { push(0, 0x10, Buffer.concat([rc, Buffer.from(JSON.stringify({ protocol: 4, data: { dps } }))])); continue; }
+          if (cmd === 0x10) {
+            const cid = json?.cid;
+            push(0, 0x10, Buffer.concat([rc, Buffer.from(JSON.stringify({ protocol: 4, data: cid ? { cid, dps: subs[cid] } : { dps } }))]));
+            continue;
+          }
           if (cmd === 0x0d) {
-            Object.assign(dps, json.data.dps);
+            const cid = json.data.cid;
+            Object.assign(cid ? subs[cid] : dps, json.data.dps);
             push(0, 0x0d, rc);
-            push(0, 8, Buffer.concat([rc, Buffer.from('3.5'), Buffer.alloc(12), Buffer.from(JSON.stringify({ protocol: 4, data: { dps: json.data.dps } }))]));
+            push(0, 8, Buffer.concat([rc, Buffer.from('3.5'), Buffer.alloc(12), Buffer.from(JSON.stringify({ protocol: 4, data: cid ? { cid, dps: json.data.dps } : { dps: json.data.dps } }))]));
           }
         }
         return;
@@ -122,16 +128,18 @@ function fakeSwitch(version: '3.3' | '3.4' | '3.5', dps: Record<string, unknown>
         seen.push({ cmd, json });
         if (cmd === 9) { push(seq, 9, rc); continue; }
         if (cmd === 0x0a || cmd === 0x10) {
-          push(seq, cmd, Buffer.concat([rc, enc(key(), Buffer.from(JSON.stringify({ devId: 'dev1', dps })))]));
+          const cid = json?.cid;
+          push(seq, cmd, Buffer.concat([rc, enc(key(), Buffer.from(JSON.stringify(cid ? { devId: 'dev1', cid, dps: subs[cid] } : { devId: 'dev1', dps })))]));
           continue;
         }
         if (cmd === 7 || cmd === 0x0d) {
           const set = cmd === 7 ? json.dps : json.data.dps;
-          Object.assign(dps, set);
+          const cid = cmd === 7 ? json.cid : json.data.cid;
+          Object.assign(cid ? subs[cid] : dps, set);
           push(seq, cmd, rc);
           const status = version === '3.4'
-            ? enc(key(), Buffer.concat([Buffer.from('3.4'), Buffer.alloc(12), Buffer.from(JSON.stringify({ protocol: 4, data: { dps: set } }))]))
-            : Buffer.concat([Buffer.from('3.3'), Buffer.alloc(12), enc(KEY, Buffer.from(JSON.stringify({ devId: 'dev1', dps: set })))]);
+            ? enc(key(), Buffer.concat([Buffer.from('3.4'), Buffer.alloc(12), Buffer.from(JSON.stringify({ protocol: 4, data: cid ? { cid, dps: set } : { dps: set } }))]))
+            : Buffer.concat([Buffer.from('3.3'), Buffer.alloc(12), enc(KEY, Buffer.from(JSON.stringify(cid ? { devId: 'dev1', cid, dps: set } : { devId: 'dev1', dps: set })))]);
           push(0, 8, Buffer.concat([rc, status]));
         }
       }
@@ -178,6 +186,34 @@ for (const version of ['3.4', '3.5'] as const) {
     await assert.rejects(c.connect());
     c.close();
     fake.server.close();
+  });
+}
+
+for (const version of ['3.3', '3.4', '3.5'] as const) {
+  test(`Tuya ${version}: Zigbee lights behind a gateway, through the gateway's connection`, async () => {
+    const fake = fakeSwitch(version, {}, { a1b2: { '1': false }, c3d4: { '20': true, '22': 500 } });
+    await new Promise<void>(r => fake.server.listen(0, '127.0.0.1', r));
+    const port = (fake.server.address() as AddressInfo).port;
+    const reg = new Registry(new Store(':memory:'));
+    const tuya = new TuyaAdapter({ devices: [
+      { id: 'gw1', host: '127.0.0.1', port, key: KEY.toString(), version, name: 'Zigbee gateway' },
+      { id: 'zb1', host: '', key: '', gateway: 'gw1', cid: 'a1b2', switches: { '1': { name: 'Porch LED', room: 'porch', id: 'porch_led' } } },
+      { id: 'zb2', host: '', key: '', gateway: 'gw1', cid: 'c3d4', light: { switch: '20', bri: '22', briMin: 10, briMax: 1000, name: 'Desk LED', room: 'office', id: 'desk_led' } },
+    ] });
+    await reg.addAdapter(tuya);
+    const until = async (f: () => boolean) => { for (let i = 0; i < 100 && !f(); i++) await new Promise(r => setTimeout(r, 20)); assert.ok(f()); };
+    try {
+      assert.deepEqual(reg.list().map(d => d.id).sort(), ['desk_led', 'porch_led'], 'the gateway itself is no device');
+      // Each sub-device's state, asked for by node id.
+      await until(() => reg.get('porch_led')!.state.on === false && reg.get('desk_led')!.state.on === true);
+      await reg.command('porch_led', { on: true }, { kind: 'user', label: 'You' });
+      await until(() => reg.get('porch_led')!.state.on === true);
+      const ctl = fake.seen.filter(x => x.cmd === 7 || x.cmd === 0x0d).at(-1)!.json as { cid?: string; data?: { cid?: string } };
+      assert.equal(ctl.cid ?? ctl.data?.cid, 'a1b2', 'the command names the light');
+      assert.equal(reg.get('desk_led')!.state.on, true, 'the other light is untouched');
+      assert.equal(tuya.status().ok, true);
+      assert.match(tuya.status().note!, /2 devices/);
+    } finally { await reg.stop(); fake.server.close(); }
   });
 }
 
