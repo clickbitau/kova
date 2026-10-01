@@ -15,6 +15,7 @@ import { isLight, isPlayer } from '../util/describe.ts';
 import type { HomeKitBridge } from '../bridges/homekit.ts';
 import type { MatterBridge } from '../bridges/matter-bridge.ts';
 import { LiveViewUnavailable, NEST_DEFAULT_REDIRECT, exchangeNestCode, nestAuthUrl, type NestOptions } from '../adapters/nest.ts';
+import { SMARTTHINGS_DEFAULT_REDIRECT, exchangeSmartThingsCode, smartThingsAuthUrl } from '../adapters/smartthings.ts';
 import type { Presence } from '../services/presence.ts';
 import type { HelixLink } from '../services/helix-link.ts';
 import type { Notifier } from '../services/notify.ts';
@@ -100,7 +101,7 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
     return !!m && !!opts.presence && opts.presence.checkKey(decodeURIComponent(m[1]), key);
   };
 
-  // Helix Server calls back with the token Kova gave it (services/helix-link.ts): only its linked TVs, only on and input.
+  // Helix Server calls back with the token Kova gave it (services/helix-link.ts): only its linked TVs (on and input) and soundbars.
   const fromHelix = new WeakSet<FastifyRequest>();
   const helixTokenOk = (req: FastifyRequest, path: string): boolean => {
     const given = req.headers.authorization?.replace(/^Bearer\s+/i, '') ?? '';
@@ -122,7 +123,11 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
       if (req.method === 'GET') return reply.send(opts.helixLink!.state());
       const body = (req.body ?? {}) as Record<string, unknown>;
       const keys = Object.keys(body);
-      if (!keys.length || keys.some(k => k !== 'on' && k !== 'input')) return reply.code(403).send({ error: 'Helix may only switch this TV on or off, or change its input' });
+      const id = decodeURIComponent(/^\/api\/devices\/([^/]+)$/.exec(req.url.split('?')[0])?.[1] ?? '');
+      const may = opts.helixLink!.fields(id);
+      if (!keys.length || !may || keys.some(k => !may.has(k))) {
+        return reply.code(403).send({ error: may?.has('vol') ? `Helix may only send ${[...may].join(', ')} to this soundbar` : 'Helix may only switch this TV on or off, or change its input' });
+      }
     });
   }
 
@@ -266,6 +271,29 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
         return { ok: true, linked: true, status: applied.status };
       }
       return { refreshToken: r.refreshToken, scope: r.scope, next: 'Save this as nest.refreshToken in integrations.json and restart Kova' };
+    } catch (e) { return fail(reply, e); }
+  });
+
+  // Linking SmartThings (Samsung soundbars), once: open auth-url, allow Kova, copy the code from the address bar, post it to auth-code.
+  const stCfg = () => opts.integrations?.raw('smartthings');
+  app.get<{ Querystring: { redirectUri?: string } }>('/api/integrations/smartthings/auth-url', async (req, reply) => {
+    const c = stCfg();
+    if (!c?.clientId) return reply.code(400).send({ error: 'Save the SmartThings app’s client id and secret first' });
+    const redirectUri = req.query.redirectUri || SMARTTHINGS_DEFAULT_REDIRECT;
+    return { url: smartThingsAuthUrl({ clientId: c.clientId, redirectUri }), redirectUri };
+  });
+  app.post<{ Body: { code?: string; redirectUri?: string } }>('/api/integrations/smartthings/auth-code', async (req, reply) => {
+    // The whole redirect address pasted is fine too: take its code.
+    const raw = String(req.body?.code ?? '').trim();
+    const code = /[?&]code=([^&#\s]+)/.exec(raw)?.[1] ?? raw;
+    const c = stCfg();
+    if (!code) return reply.code(400).send({ error: 'code is required' });
+    if (!c?.clientId || !c.clientSecret) return reply.code(400).send({ error: 'Save the SmartThings app’s client id and secret first' });
+    try {
+      const r = await exchangeSmartThingsCode({ code: decodeURIComponent(code), clientId: c.clientId, clientSecret: c.clientSecret, redirectUri: req.body?.redirectUri, tokenUrl: c.tokenUrl });
+      reply.header('cache-control', 'no-store');
+      const applied = await opts.integrations!.update('smartthings', { ...c, refreshToken: r.refreshToken });
+      return { ok: true, linked: true, status: applied.status };
     } catch (e) { return fail(reply, e); }
   });
 

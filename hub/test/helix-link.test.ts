@@ -8,7 +8,7 @@ import { join, resolve } from 'node:path';
 import { testHub } from './helpers.ts';
 import { buildServer } from '../src/api/server.ts';
 import { IntegrationsManager } from '../src/integrations-store.ts';
-import { HelixLink, helixScreens, kovaAddress } from '../src/services/helix-link.ts';
+import { HelixLink, SOUNDBAR_INPUTS, TV_INPUTS, helixScreens, kovaAddress } from '../src/services/helix-link.ts';
 import type { Adapter, AdapterContext } from '../src/adapters/sdk.ts';
 import type { Command, Device } from '../src/model/types.ts';
 
@@ -45,6 +45,7 @@ class Tvs implements Adapter {
     ctx.announce([
       { id: 'lounge_tv', name: 'Lounge TV', room: 'lounge', type: 'tv', capabilities: ['onoff', 'volume', 'input'], integration: 'Samsung', address: '10.0.0.20', state: { on: false, online: true } },
       { id: 'bedroom_tv', name: 'Bedroom TV', room: 'bedroom', type: 'tv', capabilities: ['onoff', 'input'], integration: 'Samsung', address: '10.0.0.21', state: { on: false, online: true } },
+      { id: 'lounge_bar', name: 'Soundbar', room: 'lounge', type: 'media', capabilities: ['onoff', 'volume', 'mute', 'input', 'sound'], integration: 'Samsung soundbar', address: 'st-1', state: { on: false, online: true, vol: 12, input: 'tv' } },
     ]);
   }
   async stop() {}
@@ -80,8 +81,9 @@ test('Helix link: after pairing Kova tells Helix where it is, a token and which 
     assert.deepEqual(hx.puts[0].body, {
       url: 'http://10.0.0.5:8140', token: link.token,
       screens: [
-        { playerId: 'd-bed', tvDeviceId: 'bedroom_tv', tvName: 'Bedroom TV' },
-        { playerId: 'd-lounge', tvDeviceId: 'lounge_tv', tvName: 'Lounge TV', helixInput: 'hdmi2' },
+        { playerId: 'd-bed', tvDeviceId: 'bedroom_tv', tvName: 'Bedroom TV', inputs: TV_INPUTS },
+        // The soundbar in the TV's room goes with it, with the inputs Helix may pick and the one the box is wired to.
+        { playerId: 'd-lounge', tvDeviceId: 'lounge_tv', tvName: 'Lounge TV', helixInput: 'hdmi2', inputs: TV_INPUTS, soundbarDeviceId: 'lounge_bar', soundbarName: 'Soundbar', soundbarInputs: SOUNDBAR_INPUTS, soundbarHelixInput: 'hdmi1' },
       ],
     });
     assert.deepEqual(link.status(), { ok: true, note: 'Helix turns on 2 TVs through Kova' });
@@ -101,9 +103,20 @@ test('Helix link: after pairing Kova tells Helix where it is, a token and which 
     const inp = await app.inject({ method: 'POST', url: '/api/devices/lounge_tv', headers: helix, payload: { input: 'hdmi2' } });
     assert.equal(inp.statusCode, 200, inp.body);
     assert.deepEqual(tvs.got, [{ id: 'lounge_tv', cmd: { on: true } }, { id: 'lounge_tv', cmd: { input: 'hdmi2' } }]);
-    // Its /api/state lists the linked TVs only.
+    // The soundbar under it: Helix's remote sends power, input, volume steps, mute, sound and night mode.
+    for (const payload of [{ on: true }, { volStep: 1 }, { vol: 20 }, { muted: true }, { input: 'hdmi1' }, { sound: 'surround' }, { night: true }]) {
+      const r = await app.inject({ method: 'POST', url: '/api/devices/lounge_bar', headers: helix, payload });
+      assert.equal(r.statusCode, 200, `${JSON.stringify(payload)} ${r.body}`);
+    }
+    assert.deepEqual(tvs.got.filter(g => g.id === 'lounge_bar').map(g => g.cmd), [{ on: true }, { volStep: 1 }, { vol: 20 }, { muted: true }, { input: 'hdmi1' }, { sound: 'surround' }, { night: true }]);
+    assert.equal((await app.inject({ method: 'POST', url: '/api/devices/lounge_bar', headers: helix, payload: { media: 'Radio' } })).statusCode, 403);
+    tvs.got = tvs.got.filter(g => g.id !== 'lounge_bar');
+    // Its /api/state lists the linked TVs and soundbars only.
     const st = await app.inject({ method: 'GET', url: '/api/state', headers: helix });
-    assert.deepEqual(st.json(), { devices: [{ id: 'lounge_tv', name: 'Lounge TV', type: 'tv', state: { on: true, online: true } }] });
+    assert.deepEqual(st.json(), { devices: [
+      { id: 'lounge_tv', name: 'Lounge TV', type: 'tv', state: { on: true, online: true } },
+      { id: 'lounge_bar', name: 'Soundbar', type: 'soundbar', state: { on: true, online: true, vol: 20, muted: true, input: 'hdmi1', sound: 'surround', night: true } },
+    ] });
 
     // Anything else is refused: another device, the bedroom TV (no longer linked), other fields, other routes.
     for (const [method, url, payload] of [

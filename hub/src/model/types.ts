@@ -25,8 +25,17 @@ export interface DeviceState {
   track?: Track | null;
   /** The queue plays in a shuffled order (Kova shuffles it). */
   shuffle?: boolean;
-  /** TV input to switch to: "hdmi1".."hdmi4" or "tv" (TVs with the `input` capability). Not read back from the TV, so it stays null. */
+  /**
+   * Input to switch to (devices with the `input` capability). TVs: "hdmi1".."hdmi4" or "tv", not read back from the TV,
+   * so it stays null. Soundbars: "tv" (the TV's eARC/optical), "hdmi1", "hdmi2", "bluetooth", "wifi", read back.
+   */
   input?: string | null;
+  /** Sound is muted (devices with the `mute` capability). */
+  muted?: boolean;
+  /** Soundbar sound mode, e.g. "standard", "surround", "game", "adaptive" (the `sound` capability). */
+  sound?: string | null;
+  /** Soundbar night mode: quieter loud parts (the `sound` capability). */
+  night?: boolean;
   power?: number | null;
   /** Energy produced (inverters) or used today, in kWh. */
   energy?: number | null;
@@ -46,7 +55,7 @@ export interface Track { title: string; artist?: string; album?: string; art?: s
 
 export type VacuumActivity = 'cleaning' | 'returning' | 'docked' | 'paused' | 'idle' | 'error';
 
-export type Capability = 'onoff' | 'brightness' | 'colorTemp' | 'color' | 'fanMode' | 'media' | 'volume' | 'power' | 'energy' | 'events' | 'vacuum' | 'battery' | 'pause' | 'library' | 'input' | 'queue';
+export type Capability = 'onoff' | 'brightness' | 'colorTemp' | 'color' | 'fanMode' | 'media' | 'volume' | 'power' | 'energy' | 'events' | 'vacuum' | 'battery' | 'pause' | 'library' | 'input' | 'queue' | 'mute' | 'sound';
 
 export interface Device {
   id: string;
@@ -70,8 +79,11 @@ export interface Device {
 /** What the owner changed about a device: a better name, the right room, or hidden from lists. */
 export interface DeviceSettings { name?: string; room?: string; hidden?: boolean }
 
-/** A partial state change requested of a device. `skip` is momentary: 1 = next track, -1 = previous (players with `queue`). */
-export type Command = Partial<DeviceState> & { skip?: number };
+/**
+ * A partial state change requested of a device. Momentary, never kept as state: `skip` 1 = next track, -1 = previous
+ * (players with `queue`); `volStep` +1 = volume up a step, -1 = down (devices with `volume`).
+ */
+export type Command = Partial<DeviceState> & { skip?: number; volStep?: number };
 
 /** Why something happened. Attached to every state change and log entry. */
 export interface Cause {

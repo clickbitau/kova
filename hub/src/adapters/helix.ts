@@ -61,6 +61,11 @@ export interface PlaybackEvent {
   player?: { id: string; name?: string; client?: string };
   item?: HelixItem; profile?: { id: string; name: string } | null;
   state?: string; positionMs?: number; durationMs?: number; reason?: string;
+  /**
+   * Where the box's sound goes (D101): "earc" through the TV to the soundbar's eARC, or "soundbar" straight into the
+   * soundbar's HDMI in (7.1 PCM and DTS). On playback.* events, and as playback.audio when it changes mid-play.
+   */
+  audio?: { route?: string };
 }
 
 /** "S01E02" for an episode, else nothing. */
@@ -232,13 +237,13 @@ export class HelixAdapter implements Adapter {
   }
 
   /** Pass on a box's new state, with the events modes act on when it changed. */
-  private observe(id: string, next: DeviceState, kind: 'video' | 'music', what = ''): void {
+  private observe(id: string, next: DeviceState, kind: 'video' | 'music', what = '', route?: string): void {
     const prev = this.observed.get(id);
     this.observed.set(id, next);
     this.states.set(id, next);
     this.ctx.report(id, next);
     if (next.online === false) return;
-    const data = { title: next.media ?? '', what };
+    const data = { title: next.media ?? '', what, ...(route ? { route } : {}) };
     if (next.on && !next.paused && (!prev?.on || prev.media !== next.media)) this.ctx.event(id, `${kind}-started`, data);
     else if (next.on && next.paused && prev?.on && !prev.paused) this.ctx.event(id, 'paused', data);
     else if (next.on && !next.paused && prev?.on && prev.paused) this.ctx.event(id, 'resumed', data);
@@ -324,10 +329,15 @@ export class HelixAdapter implements Adapter {
     const cur = this.observed.get(id) ?? boxState(null, true);
     const kind = ev.item?.kind === 'music' ? 'music' : 'video';
     const title = ev.item?.title || cur.media || '';
+    const route = ev.audio?.route;
     switch (ev.type) {
       case 'playback.started':
       case 'playback.resumed':
-        this.observe(id, { ...cur, on: true, media: title, paused: false, online: true }, kind, episodeTag(ev.item));
+        this.observe(id, { ...cur, on: true, media: title, paused: false, online: true }, kind, episodeTag(ev.item), route);
+        break;
+      case 'playback.audio':
+        // The box moved its sound between the TV's eARC and the soundbar's HDMI in (Helix auto-switching follows it).
+        if (route) this.ctx.event(id, 'audio-route', { route, title });
         break;
       case 'playback.paused':
         this.observe(id, { ...cur, on: true, media: title, paused: true, online: true }, kind, episodeTag(ev.item));

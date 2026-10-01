@@ -16,6 +16,7 @@ export const CAPS: Record<DeviceType, Capability[]> = {
 const FIELD_CAP: Record<string, Capability> = {
   on: 'onoff', bri: 'brightness', k: 'colorTemp', color: 'color', mode: 'fanMode', media: 'media', vol: 'volume', power: 'power',
   activity: 'vacuum', battery: 'battery', paused: 'pause', input: 'input', skip: 'queue', shuffle: 'queue',
+  muted: 'mute', sound: 'sound', night: 'sound', volStep: 'volume',
 };
 
 /** Drop fields the device can't do, so a mode can target mixed brands safely. */
@@ -37,6 +38,10 @@ export function targetLabel(d: Device, t: Command): string {
   if (d.type === 'fan') return `${d.name} on ${t.mode ?? (t.on === false ? 'off' : 'Auto')}`;
   if (d.type === 'internet') return `${d.name} internet ${t.on === false ? 'paused' : 'on'}`;
   if (isPlayer(d) && t.skip && t.media === undefined) return `${d.name} ${t.skip > 0 ? 'next song' : 'previous song'}`;
+  if (isPlayer(d) && t.volStep && t.media === undefined && t.on === undefined) return `${d.name} volume ${t.volStep > 0 ? 'up' : 'down'}`;
+  if (isPlayer(d) && t.media === undefined && t.on === undefined && (t.input || t.muted !== undefined || t.sound || t.night !== undefined)) {
+    return `${d.name} ${[t.input && `to ${t.input.toUpperCase()}`, t.muted !== undefined && (t.muted ? 'muted' : 'unmuted'), t.sound && `${t.sound} sound`, t.night !== undefined && `night mode ${t.night ? 'on' : 'off'}`].filter(Boolean).join(', ')}`;
+  }
   if (isPlayer(d) && t.paused !== undefined && t.on === undefined && t.media === undefined) return `${d.name} ${t.paused ? 'pauses' : 'carries on'}`;
   if (isPlayer(d)) return t.on === false || t.media === null ? `${d.name} stops` : `${d.name} · ${t.media ?? 'on'}${t.shuffle ? ' (shuffled)' : ''}${t.vol != null ? ` ${t.vol}%` : ''}`;
   if (t.on === false) return `${d.name} off`;
