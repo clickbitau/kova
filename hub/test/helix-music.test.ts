@@ -30,6 +30,7 @@ async function fakeHelix(n = 60, o: { modern?: boolean } = {}) {
   const seen: string[] = [];
   const played: { id: string; body: any }[] = [];
   const signed: { id: string; body: any }[] = [];
+  const artSigned: string[] = [];
   let base = '';
   const server = http.createServer((req, res) => {
     const u = new URL(req.url!, 'http://x');
@@ -45,7 +46,9 @@ async function fakeHelix(n = 60, o: { modern?: boolean } = {}) {
         // An older Helix has neither route: Go's mux answers a plain-text 404.
         if (!o.modern) { res.writeHead(404, { 'content-type': 'text/plain' }); res.end('404 page not found'); return; }
         const pu = /^\/v1\/items\/([^/]+)\/play-url$/.exec(p);
-        if (pu) { signed.push({ id: pu[1], body }); return send(200, { url: `${base}/v1/play/${pu[1]}?sig=abc${pu[1]}`, path: `/v1/play/${pu[1]}?sig=abc${pu[1]}`, expiresAt: '2026-10-01T09:00:00Z', format: body.format, maxRate: body.maxRate }); }
+        // Covers come with the song for even songs; the rest are signed through /v1/art-urls.
+        if (pu) { signed.push({ id: pu[1], body }); return send(200, { url: `${base}/v1/play/${pu[1]}?sig=abc${pu[1]}`, path: `/v1/play/${pu[1]}?sig=abc${pu[1]}`, expiresAt: '2026-10-01T09:00:00Z', format: body.format, maxRate: body.maxRate, ...(Number(pu[1].slice(1)) % 2 ? {} : { artUrl: `/v1/images/p${pu[1].slice(1)}?w=600&sig=art${pu[1]}` }) }); }
+        if (p === '/v1/art-urls') { artSigned.push(...body.urls); return send(200, { urls: body.urls.map((u: string) => `${u}&sig=batch`) }); }
         const pl = /^\/v1\/music\/tracks\/([^/]+)\/played$/.exec(p);
         if (pl) { played.push({ id: pl[1], body }); return send(200, { ok: true, counted: true, duplicate: false }); }
         send(404, { error: 'not found' });
@@ -79,7 +82,7 @@ async function fakeHelix(n = 60, o: { modern?: boolean } = {}) {
   await new Promise<void>(r => server.listen(0, '127.0.0.1', r));
   const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   base = url;
-  return { url, seen, lib, played, signed, close: () => new Promise<void>(r => { server.closeAllConnections(); server.close(() => r()); }) };
+  return { url, seen, lib, played, signed, artSigned, close: () => new Promise<void>(r => { server.closeAllConnections(); server.close(() => r()); }) };
 }
 
 test('Helix music: Shuffle all, Loved and playlists, as songs a speaker can fetch by itself', async () => {
@@ -456,11 +459,18 @@ test('Current Helix: speakers get signed song URLs with no token, a window at a 
     assert.equal(first.contentId, `${h.url}/v1/play/t60?sig=abct60`);
     assert.equal(first.contentType, 'audio/aac');
     assert.ok(kitchen.st.items.every(i => !i.media.contentId.includes('token=')));
+    // Covers are signed too: with the song where Helix sends one, the rest in one batch (at the size Kova shows).
+    const covers = kitchen.st.items.map(i => i.media.metadata.images?.[0]?.url ?? '');
+    assert.ok(covers.every(u => u && !u.includes('token=')), covers.join('\n'));
+    assert.equal(covers[0], `${h.url}/v1/images/p60?w=600&sig=artt60`);
+    assert.equal(covers[1], `${h.url}/v1/images/p59?kind=poster&w=600&sig=batch`);
+    assert.equal(h.artSigned.length, CAST_WINDOW / 2);
+    assert.ok(!(t.dev('cast_k1').track?.art ?? '').includes('token='));
     // Nearing the end of the window, the next songs are signed and added.
     for (let i = 0; i < CAST_WINDOW - 3; i++) kitchen.advance();
     await until('topped up', () => kitchen.st.items.length === CAST_WINDOW * 2);
     assert.equal(h.signed.length, CAST_WINDOW * 2);
-    assert.ok(kitchen.st.items.every(i => !i.media.contentId.includes('token=')));
+    assert.ok(kitchen.st.items.every(i => !i.media.contentId.includes('token=') && !(i.media.metadata.images?.[0]?.url ?? '').includes('token=')));
     // Each song the speaker started counts as played in Helix, under the speaker's name.
     await until('plays counted', () => h.played.length >= CAST_WINDOW - 2);
     assert.deepEqual({ id: h.played[0].id, player: h.played[0].body.player, profile: h.played[0].body.profileId }, { id: 't60', player: 'Kitchen speaker', profile: 'default' });
