@@ -225,7 +225,14 @@ export class HelixAdapter implements Adapter {
     try {
       // A box that hasn't been paired by name shows up by its address.
       const boxes = (await this.api.boxes()).filter(isScreen).map(b => ({ ...b, name: b.name?.trim() || `Helix box ${b.address ?? ''}`.trim() }));
-      const fresh = boxes.filter(b => !this.boxes.has(boxDeviceId(b.name)));
+      // A box Helix now knows by a new id (an address-based id becoming its stable one): announced again with it.
+      const fresh = boxes.filter(b => this.boxes.get(boxDeviceId(b.name))?.id !== b.id);
+      // A box Helix no longer lists (renamed when it got its stable id, unpaired): gone from Kova too, so it doesn't
+      // count as a second screen.
+      const now = new Set(boxes.map(b => boxDeviceId(b.name)));
+      const gone = [...this.boxes.keys()].filter(id => !now.has(id));
+      for (const id of gone) this.boxes.delete(id);
+      if (gone.length) this.ctx.retract(gone);
       for (const b of boxes) this.boxes.set(boxDeviceId(b.name), b);
       if (fresh.length) {
         this.ctx.announce(fresh.map(b => ({
