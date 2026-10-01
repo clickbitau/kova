@@ -60,6 +60,18 @@ add-on: nothing in Kova depends on HA. The design reference lives in
     and its QR code, to callers that already have the token. Or it looks for a hub on the phone's
     Wi-Fi (`/api/health` on port 8140 across the /24), or you type the address. Kept in the
     Keychain / Keystore.
+  - **Home and away (two addresses):** each hub has a list of addresses, home network first, then
+    remote (`mobile/src/logic/addresses.ts`). The code carries them all (`&alt=…`) and the hub's ID
+    (`&hub=…`); after connecting the app reads `GET /api/connect/addresses` and keeps them (the owner
+    can add or remove some under More → This phone; a remote one must be https unless added by hand).
+    Every address is asked `GET /api/hello` (no token) at once: the first home-network one that
+    answers with this hub's ID wins; a remote one only once the home-network ones have had ~1.5 s.
+    Only an address that passed gets the token. It's chosen again on returning to the front, on a
+    network change, every minute while remote with a home-network address to go back to, when the
+    socket drops and when a request can't reach the hub (a GET is then retried once on the new
+    address; a write that timed out isn't). More shows "Connected · Home network" or "· Remote". The
+    over-the-air updater stays on one of the addresses (`logic/ota.ts` `updateBase`), because
+    expo-updates only launches updates from the origin it's pointed at now.
   - **Live state:** `/api/ws`, reconnecting with backoff and when the app comes to the front;
     changes show at once and the hub's snapshot has the final word; every action's undo is a toast.
   - **Arrive and leave:** the OS watches a 150 m circle around the home (`home.location` in the
@@ -497,7 +509,9 @@ a row on the Integrations screen ("Router: 2 phones seen").
 | GET | `/api/devices/:id/snapshot` | Latest event image, where the camera offers one (404 otherwise) |
 | GET | `/api/integrations/nest/auth-url` | `?redirectUri=` → `{url, redirectUri}`: Google's page for linking Nest |
 | POST | `/api/integrations/nest/auth-code` | `{code, redirectUri}` → `{refreshToken}` to save as `nest.refreshToken`; with in-app setup it's saved for you and the answer is `{ok, linked, status}` |
-| GET | `/api/app-link` | `{url, link, qrSvg, hasToken}`: the `kova://connect` link (with the token) and its QR code, for the native app |
+| GET | `/api/app-link` | `{url, link, qrSvg, hasToken, addresses, hubId}`: the `kova://connect` link (with the token, the hub's ID as `hub` and each other address as `alt`) and its QR code, for the native app |
+| GET | `/api/connect/addresses` | `{hubId, addresses: [{url, kind: "local"\|"remote"}]}`: every address the app may use, best first: the one the request came in on (when it's a home-network one), each private IPv4 interface, then the remote URL (`KOVA_REMOTE_URL`, else `notify.publicUrl`) |
+| GET | `/api/hello` | `{kova: true, hubId, version}`; no token needed. `hubId` is a fingerprint of the hub's ID, so the app can check an address leads to its hub before sending the token |
 | POST, DELETE | `/api/push/app` | `{token, personId?, name?, platform?}`: the native app's Expo push token |
 | GET | `/api/health` | `{ok, version, uptimeS}`; no token needed, no home data (for health checks) |
 | PATCH | `/api/devices/:id/settings` | `{name?, room?, hidden?, favourite?}` (`null` name or room goes back to the integration's) → `{undo}`. Devices carry `hidden` and `original: {name, room}` when changed |

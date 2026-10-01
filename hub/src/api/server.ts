@@ -72,6 +72,10 @@ export interface ServerOptions {
   haImport?: HaImport;
   /** Nightly backups; when absent the backup endpoints answer 404. */
   backups?: Backups;
+  /** The hub's remote address for the phone app away from home (Tailscale or a reverse proxy). */
+  remoteUrl?: () => string | null | undefined;
+  /** The hub's stable ID; by default the one the updater keeps (hub-id). */
+  hubId?: () => string | null | undefined;
 }
 
 const USER = { kind: 'user' as const, label: 'You' };
@@ -116,7 +120,7 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
   if (opts.token || opts.helixLink) {
     app.addHook('onRequest', async (req, reply) => {
       const path = req.url.split('?')[0];
-      if (!path.startsWith('/api/') || path === '/api/health') return;
+      if (!path.startsWith('/api/') || path === '/api/health' || path === '/api/hello') return;
       // App updates: expo-updates asks without a token (api/app-updates.ts explains why).
       if (req.method === 'GET' && (path === '/api/app/manifest' || path.startsWith('/api/app/assets/'))) return;
       // A doorbell picture for Helix to fetch: its random key is the credential (services/screen-notices.ts).
@@ -428,7 +432,12 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
   registerHomeRoutes(app, hub);
   registerLanAppRoutes(app, { integrations: opts.integrations, helixLink: opts.helixLink, ...opts.lanApps });
   if (opts.otaDir) registerAppUpdateRoutes(app, new AppUpdates(opts.otaDir));
-  registerAppLinkRoutes(app, { token: opts.token, port: () => { const a = app.server.address(); return typeof a === 'object' && a ? a.port : Number(process.env.KOVA_PORT ?? 8140); } });
+  registerAppLinkRoutes(app, {
+    token: opts.token,
+    port: () => { const a = app.server.address(); return typeof a === 'object' && a ? a.port : Number(process.env.KOVA_PORT ?? 8140); },
+    remoteUrl: opts.remoteUrl ?? (() => opts.integrations?.raw('notify')?.publicUrl),
+    hubId: opts.hubId ?? (() => hub.updates?.catalog.hubId()),
+  });
 
   // Presence from a phone: the Kova app, or an iOS Shortcut / Android automation ("When I arrive home → Get contents of URL").
   // `home` can be in the body or the query (?home=1), so a Shortcut needs no request body. `?key=` is the person's own key.

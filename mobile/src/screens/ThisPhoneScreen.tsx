@@ -11,11 +11,12 @@ import { Icon } from '../ui/Icon';
 import { Button, Card, HScroll, PageHead, Pill, Switch } from '../ui/kit';
 import { Screen } from '../ui/Screen';
 import { T } from '../ui/Text';
+import { HubAddresses } from './HubAddresses';
 
 /** Who this phone belongs to, arriving and leaving by location, notifications, and which hub it talks to. */
 export function ThisPhoneScreen() {
   const s = useSnap();
-  const { cfg, api, say, setPerson, forget } = useHub();
+  const { cfg, api, say, setPerson, forget, addresses, route } = useHub();
   const nav = useNav();
   const [geo, setGeo] = useState(false);
   const [push, setPush] = useState(false);
@@ -40,7 +41,7 @@ export function ThisPhoneScreen() {
       const setup = await api<{ people: { id: string; key: string }[] }>('GET', '/api/presence/setup');
       const key = setup.people.find(p => p.id === me.id)?.key;
       if (!key) throw new Error('The hub has no key for this person yet');
-      const r = await startArriveLeave({ hubUrl: cfg.url, personId: me.id, key, home });
+      const r = await startArriveLeave({ hubUrl: route?.url ?? cfg.url, addresses, hubId: cfg.hubId ?? null, personId: me.id, key, home });
       if (!r.ok) { say(r.why, { error: true }); return; }
       setGeo(true);
       say(`Kova will know when ${me.name} arrives and leaves`);
@@ -104,13 +105,7 @@ export function ThisPhoneScreen() {
       <T size={12} color={C.stone2} lineHeight={1.45}>Location stays on this phone: it only tells your hub “arrived” or “left”. Kova also uses Warden or your router to see phones on the Wi-Fi, so either one is enough.</T>
 
       <Card style={{ padding: 14, gap: 10 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <Icon name="hub" size={20} color={C.stone} />
-          <View style={{ flex: 1, gap: 2 }}>
-            <T size={14} weight={700}>Hub</T>
-            <T mono size={11.5} color={C.stone}>{cfg?.url ?? ''}</T>
-          </View>
-        </View>
+        <HubAddresses />
         <Button kind="secondary" label="Disconnect this phone" icon="link_off" onPress={() => void (async () => { await stopArriveLeave(); await togglePush(false); await forget(); })()} />
       </Card>
     </Screen>

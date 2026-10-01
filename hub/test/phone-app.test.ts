@@ -78,7 +78,8 @@ test('Phone app: the connect code carries a reachable address and the token; the
     assert.equal(r.statusCode, 200);
     const j = r.json();
     assert.equal(j.url, 'http://192.168.1.20:8140');
-    assert.equal(j.link, 'kova://connect?url=http%3A%2F%2F192.168.1.20%3A8140&token=sekret');
+    // (Then the hub's other addresses as alt=…, which depend on this machine's interfaces.)
+    assert.ok(j.link.startsWith('kova://connect?url=http%3A%2F%2F192.168.1.20%3A8140&token=sekret'), j.link);
     assert.match(j.qrSvg, /^<svg/);
     const st = (await app.inject({ method: 'GET', url: '/api/state', headers: { authorization: 'Bearer sekret' } })).json();
     assert.deepEqual(st.home.location, { latitude: t.hub.config.get().latitude, longitude: t.hub.config.get().longitude });

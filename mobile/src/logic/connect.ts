@@ -1,10 +1,18 @@
 // Finding and remembering the hub. Kept free of React Native so it can be tested under Node.
 
+import { kindFor, sortAddresses, type HubAddress } from './addresses.ts';
+
 export const DEFAULT_PORT = 8140;
 
 export interface HubConfig {
-  /** e.g. http://192.168.1.20:8140 */
+  /** The address in use (the last one that answered as this hub), e.g. http://192.168.1.20:8140 */
   url: string;
+  /** Every address the hub may be reached at, home network first (logic/addresses.ts). Absent on a phone set up before there was a list. */
+  addresses?: HubAddress[];
+  /** What GET /api/hello at the hub says it is: an address must say the same before the token goes there. */
+  hubId?: string;
+  /** Addresses the owner took away, so learning from the hub doesn't bring them back. */
+  removed?: string[];
   /** The hub's KOVA_TOKEN, when it has one. */
   token?: string;
   /** Who this phone belongs to (a person id in the home), for arriving and leaving. */
@@ -31,7 +39,8 @@ export function normalizeHubUrl(input: string): string | null {
 
 /**
  * The link the hub shows as a QR code (More → Connect the phone app):
- * kova://connect?url=http%3A%2F%2F192.168.1.20%3A8140&token=…
+ * kova://connect?url=http%3A%2F%2F192.168.1.20%3A8140&token=…&hub=<id>&alt=https%3A%2F%2Fkova.example.ts.net
+ * `alt` is each other address the hub may be reached at; `hub` the ID its /api/hello gives.
  * Also accepts a plain hub address, and an https link with the same query.
  */
 export function parseConnectLink(text: string): HubConfig | null {
@@ -42,7 +51,10 @@ export function parseConnectLink(text: string): HubConfig | null {
       const url = normalizeHubUrl(u.searchParams.get('url') ?? '');
       if (!url) return null;
       const token = u.searchParams.get('token') || undefined;
-      return { url, ...(token ? { token } : {}) };
+      const hubId = u.searchParams.get('hub') || undefined;
+      const alt = u.searchParams.getAll('alt').map(normalizeHubUrl).filter((a): a is string => !!a && a !== url);
+      const addresses = alt.length ? sortAddresses([url, ...new Set(alt)].map(a => ({ url: a, kind: kindFor(a) }))) : undefined;
+      return { url, ...(token ? { token } : {}), ...(hubId ? { hubId } : {}), ...(addresses ? { addresses } : {}) };
     }
   } catch { /* not a URL: maybe a bare address */ }
   const url = normalizeHubUrl(s);

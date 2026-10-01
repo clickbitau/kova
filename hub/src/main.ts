@@ -209,6 +209,8 @@ hub.services.push({ id: 'backups', name: 'Backups', icon: 'backup', kind: 'Local
 const app = await buildServer(hub, {
   webRoot: resolve(here, '../../web'), token: env.KOVA_TOKEN || undefined,
   homekit, matterBridge, nest: integrations?.nest, presence, helixLink, snapLinks, otaDir: env.KOVA_OTA_DIR ? resolve(env.KOVA_OTA_DIR) : resolve(here, '../../ota'), notifier, integrationsPath: integrationsFile, integrations: setup, haImport, backups,
+  // The phone app's address away from home: KOVA_REMOTE_URL, else the public URL notifications link to.
+  remoteUrl: () => env.KOVA_REMOTE_URL || setup.raw('notify')?.publicUrl,
 });
 await app.listen({ port: Number(env.KOVA_PORT ?? 8140), host: env.KOVA_HOST ?? '0.0.0.0' });
 const addr = app.server.address();
