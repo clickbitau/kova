@@ -18,6 +18,7 @@ import { demoConfig, demoDevices, DEMO_SOLAR } from './seed/demo-home.ts';
 import type { Adapter } from './adapters/sdk.ts';
 import { Presence } from './services/presence.ts';
 import { HelixLink } from './services/helix-link.ts';
+import { Updates } from './services/updates.ts';
 import { ScreenNotices, SnapLinks } from './services/screen-notices.ts';
 import { HelixMusic } from './services/helix-music.ts';
 import { WardenLink } from './services/warden-link.ts';
@@ -156,6 +157,9 @@ hub.services.push({ id: 'presence', name: 'Presence', icon: 'person_pin_circle',
 
 // Notifications: Web Push to the phone app needs no config (VAPID keys are made on first run); ntfy when configured.
 const notifier = new Notifier(hub, integrations?.notify ?? {}, { dataDir });
+// Updating the hub itself, through the updater on the box (deploy/updater.sh): what's new, the Update button, overnight updates.
+hub.updates = new Updates(hub, { dataDir, notify: n => notifier.notify(n) });
+hub.updates.start();
 notifier.start();
 // Cloud: Web Push is delivered by Apple's / Google's push service (and ntfy.sh unless self-hosted).
 hub.services.push({ id: 'notify', name: 'Notifications', icon: 'notifications', kind: 'Cloud', status: () => notifier.status() });
@@ -203,6 +207,7 @@ const shutdown = async (signal: string) => {
   };
   presence.stop();
   helixLink.stop();
+  hub.updates?.stop();
   screenNotices.stop();
   wardenLink.stop();
   await step('web server', () => app.close());

@@ -96,3 +96,43 @@ test('simulated solar follows the sun', () => {
   assert.ok(solarWatts(sim, at(12.5)) > 2000);
   assert.ok(solarWatts(sim, at(8)) < solarWatts(sim, at(12)));
 });
+
+test('Energy without an inverter: plugs that measure, and about what the TV, soundbar, lights and Helix box draw while on', async () => {
+  const clock = { t: at(19) };
+  const store = new Store(':memory:', () => clock.t);
+  const reg = new Registry(store);
+  const settings: Record<string, { watts?: number }> = {};
+  const home = {
+    id: 'home', name: 'Home', icon: 'home', kind: 'Local' as const,
+    async start(ctx: import('../src/adapters/sdk.ts').AdapterContext) {
+      ctx.announce([
+        { id: 'fridge_plug', name: 'Fridge', room: 'kitchen', type: 'plug', integration: 'Tapo', address: 'a', capabilities: ['onoff', 'power'], state: { on: true, power: 120 } },
+        { id: 's90d', name: 'S90D', room: 'living', type: 'tv', integration: 'Samsung', address: 'b', capabilities: ['onoff', 'input'], state: { on: true } },
+        { id: 'q930b', name: 'Soundbar', room: 'living', type: 'media', integration: 'SmartThings', address: 'c', capabilities: ['onoff', 'volume', 'mute', 'input', 'sound'], state: { on: true } },
+        { id: 'kam', name: 'kam-lx', room: 'living', type: 'tv', integration: 'Helix', address: 'd', capabilities: ['onoff'], state: { on: true } },
+        { id: 'lamp', name: 'Lamp', room: 'living', type: 'dimmer', integration: 'Tuya', address: 'e', capabilities: ['onoff', 'brightness'], state: { on: true, bri: 50 } },
+        { id: 'bed_tv', name: 'Bedroom TV', room: 'bed', type: 'tv', integration: 'Samsung', address: 'f', capabilities: ['onoff'], state: { on: false } },
+        { id: 'heater_plug', name: 'Heater plug', room: 'bed', type: 'plug', integration: 'Tuya', address: 'g', capabilities: ['onoff'], state: { on: true } },
+      ]);
+    },
+    async stop() {}, status: () => ({ ok: true }), async command() {},
+  };
+  // The Helix box is the helix adapter's; this stand-in has its own id, so name it the way the estimate looks for it.
+  await reg.addAdapter(home);
+  reg.get('kam')!.adapter = 'helix';
+  const e = new Energy(store, reg, () => TZ, () => clock.t, () => settings);
+  const t = e.today();
+  assert.equal(t.available, true, 'no inverter, still something to show');
+  assert.equal(t.estimated, true);
+  const w = Object.fromEntries(t.devices.map(d => [d.id, [d.w, !!d.estimated]]));
+  assert.deepEqual(w, { fridge_plug: [120, false], s90d: [110, true], q930b: [35, true], kam: [25, true], lamp: [5, true] }, 'off, and plugs with no meter, aren’t counted');
+  assert.equal(t.now.load, 120 + 110 + 35 + 25 + 5);
+  // The owner's own figure for the TV wins.
+  settings.s90d = { watts: 140 };
+  assert.equal(e.today().devices.find(d => d.id === 's90d')!.w, 140);
+  // Home use over an hour, sampled.
+  for (let m = 0; m < 60; m++) { clock.t = at(19 + m / 60); e.sample(); }
+  clock.t = at(20);
+  assert.equal(e.today().usedKwh, 0.3, '325 W for an hour, to 0.1 kWh');
+  await reg.stop();
+});

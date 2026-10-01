@@ -179,6 +179,9 @@ run systemctl daemon-reload
 run systemctl enable kova.service
 run systemctl restart kova.service
 
+log "Installing the updater (Update button, and a look for a newer Kova every 6 hours)"
+run bash "$KOVA_DIR/deploy/install-updater.sh" "$KOVA_DIR" "$DATA_DIR"
+
 # ------------------------------------------------------------------- check --
 port=$PORT
 tok=""

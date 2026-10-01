@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import type { Updates } from './services/updates.ts';
 import { Store } from './store/db.ts';
 import { ConfigStore } from './engine/config.ts';
 import { Registry } from './devices/registry.ts';
@@ -47,6 +48,8 @@ export class Hub extends EventEmitter<{ changed: [] }> {
   readonly groups: SpeakerGroupsAdapter;
   /** Helix music on any speaker (services/helix-music.ts), once Helix is set up. */
   music: HelixMusic | null = null;
+  /** Updating the hub itself (services/updates.ts); null without an updater set up (tests, Docker). */
+  updates: Updates | null = null;
 
   /** Let speakers play Helix music: names → play queues, for adapters, the snapshot and Ask. */
   useMusic(m: HelixMusic): void {
@@ -72,7 +75,7 @@ export class Hub extends EventEmitter<{ changed: [] }> {
     this.engine = new Engine(this.store, this.reg, this.config, opts.now);
     this.checker = new Checker(this.engine, this.store, this.config, () => this.reg.devices);
     this.assistant = new Assistant(this.engine, this.reg, this.config);
-    this.energy = new Energy(this.store, this.reg, () => this.config.get().timezone, opts.now);
+    this.energy = new Energy(this.store, this.reg, () => this.config.get().timezone, opts.now, () => this.config.get().devices ?? {});
     this._demo = !!opts.demo;
     this.weather = opts.weather;
     this.engine.on('changed', () => this.emit('changed'));

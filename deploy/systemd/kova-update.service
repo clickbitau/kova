@@ -1,0 +1,13 @@
+[Unit]
+Description=Kova update (check or apply, as the hub asked)
+Documentation=https://github.com/clickbitau/kova/blob/main/docs/install.md
+After=network-online.target
+# deploy/install.sh rewrites these paths if you install somewhere else.
+
+[Service]
+Type=oneshot
+Environment=KOVA_DIR=/opt/kova
+Environment=KOVA_DATA=/var/lib/kova
+ExecStart=/bin/bash /opt/kova/deploy/updater.sh request
+# Updating restarts kova.service; this unit isn't part of it, so it carries on through the restart.
+TimeoutStartSec=30min

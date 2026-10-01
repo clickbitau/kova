@@ -200,22 +200,34 @@ Docker: `docker compose stop kova && docker compose run --rm kova node --import 
 
 ## Updating
 
-Native: as root inside the container,
+**From the app or the web page**: Integrations shows *Kova X is available* with what's new, an **Update**
+button, **Check now**, and *Overnight updates* (off by default: at 3:00, when an update is waiting and nothing is
+playing). You get a notification when a new version is out, and after an update, whether it worked.
+
+How it works: the hub runs as the unprivileged `kova` user, so it can't update itself. A small updater runs as root
+on the box instead (`deploy/updater.sh`, installed by `install.sh` and `update.sh` as systemd units):
+
+- `kova-update-check.timer` looks for a newer Kova every 6 hours (`git fetch`) and writes what it found to
+  `/var/lib/kova/update/status.json`, which the hub shows.
+- **Update** and **Check now** make the hub write `check` or `apply` to `/var/lib/kova/update/request`;
+  `kova-update.path` sees it and runs `kova-update.service`, which runs `update.sh` (log in
+  `/var/lib/kova/update/last-update.log`).
+
+By hand, as root inside the container (this also installs the updater on a box that predates it):
 
 ```bash
 bash /opt/kova/deploy/update.sh
 ```
 
-It makes a backup, `git pull --ff-only`, `npm ci`, restarts the service and waits
-for `/api/health`. If Kova doesn't come back, it prints the commands to go back to
-the previous version (and to restore the backup it just made). If the update
-changed `deploy/systemd/kova.service`, run `bash /opt/kova/deploy/install.sh` once
-more to reinstall it (it keeps your settings and data).
+It makes a backup, `git pull --ff-only`, `npm ci`, restarts the service and waits for `/api/health`. **If Kova
+doesn't come back, it goes back by itself**: the previous code, its dependencies and the backup it just made, then
+starts that again (exit code 3, and the app says so). If the update changed `deploy/systemd/kova.service`, run
+`bash /opt/kova/deploy/install.sh` once more to reinstall it (it keeps your settings and data).
 
 From the Proxmox host: `pct exec 106 -- bash /opt/kova/deploy/update.sh`. For a
 risky update, `pct snapshot 106 pre-update` first (ZFS makes that instant).
 
-Docker: `git pull && docker compose up -d --build kova`.
+Docker: `git pull && docker compose up -d --build kova` (the Update button is for native installs).
 
 ## Health and shutdown
 

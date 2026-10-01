@@ -1,0 +1,10 @@
+[Unit]
+Description=Look for a newer Kova
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=KOVA_DIR=/opt/kova
+Environment=KOVA_DATA=/var/lib/kova
+ExecStart=/bin/bash /opt/kova/deploy/updater.sh check
