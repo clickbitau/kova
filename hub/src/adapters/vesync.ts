@@ -9,13 +9,21 @@ import type { Command, Device, DeviceState } from '../model/types.ts';
 // email/password, and it stops working if VeSync changes or retires the API.
 //
 // The request shapes follow the behaviour of the open-source pyvesync project
-// (v1 login with an MD5 password, device list, and the "bypassV2" relay that
-// forwards a JSON method call to the purifier).
+// (3.x): a two-step login (password → authorization code → token, following
+// VeSync's cross-region redirect), the device list, and the "bypassV2" relay
+// that forwards a JSON method call to the purifier. VeSync refuses old app
+// versions ("app version is too low"), so APP tracks what pyvesync sends.
 
 export const VESYNC_HOSTS = { us: 'https://smartapi.vesync.com', eu: 'https://smartapi.vesync.eu' } as const;
 
 // Values the VeSync Android app sends; the API expects them to be present.
-const APP = { acceptLanguage: 'en', appVersion: '2.8.6', phoneBrand: 'SM N9005', phoneOS: 'Android', timeZone: 'America/New_York', userType: '1' };
+const APP = { acceptLanguage: 'en', appVersion: '5.6.60', phoneBrand: 'Kova', phoneOS: 'Android', timeZone: 'America/New_York', userType: '1' };
+const APP_ID = 'eldodkfj';
+const CLIENT = { clientInfo: APP.phoneBrand, clientType: 'vesyncApp', clientVersion: `VeSync ${APP.appVersion}`, osInfo: APP.phoneOS, debugMode: false };
+/** VeSync's answer when the account lives in the other region: retry there with the bizToken it gives. */
+const CROSS_REGION = -11260022;
+/** The EU countries' accounts live on the EU server; everyone else on the US one (pyvesync's rule, by exception list). */
+export const regionHost = (region: string | undefined) => (String(region ?? '').toUpperCase() === 'EU' ? VESYNC_HOSTS.eu : VESYNC_HOSTS.us);
 
 export const md5 = (s: string) => createHash('md5').update(s).digest('hex');
 
@@ -86,7 +94,11 @@ interface Envelope<T> { code: number; msg?: string; result?: T }
 export class VeSyncClient {
   private token = '';
   private accountId = '';
-  constructor(private base: string, private email: string, private password: string, private timeoutMs = 10_000) {}
+  /** Stable per account, like the app's install id ('2' + 32 hex). */
+  private readonly terminalId: string;
+  constructor(private base: string, private email: string, private password: string, private timeoutMs = 10_000, private country = 'US') {
+    this.terminalId = '2' + md5(`kova:${email.toLowerCase()}`);
+  }
 
   get loggedIn() { return !!this.token; }
 
@@ -106,13 +118,35 @@ export class VeSyncClient {
     return { ...APP, traceId: String(Date.now()), method, ...(auth ? { accountID: this.accountId, token: this.token } : {}) };
   }
 
+  /** Sign in: the password buys an authorization code, which buys the token. */
   async login(): Promise<void> {
-    const r = await this.post<{ token: string; accountID: string; countryCode?: string }>('/cloud/v1/user/login', {
-      ...this.common('login', false), email: this.email, password: md5(this.password), devToken: '',
+    const base = { acceptLanguage: APP.acceptLanguage, accountID: '', ...CLIENT, terminalId: this.terminalId, timeZone: APP.timeZone, token: '' };
+    const a = await this.post<{ accountID: string; authorizeCode: string }>('/globalPlatform/api/accountAuth/v1/authByPWDOrOTM', {
+      ...base, email: this.email, method: 'authByPWDOrOTM', password: md5(this.password), authProtocolType: 'generic',
+      userCountryCode: this.country, appID: APP_ID, sourceAppID: APP_ID, traceId: String(Date.now()),
     }, false);
-    if (r.code !== 0 || !r.result?.token) throw new VeSyncError(`VeSync login failed: ${r.msg ?? `code ${r.code}`}`, r.code);
-    this.token = r.result.token;
-    this.accountId = String(r.result.accountID);
+    if (a.code !== 0 || !a.result?.authorizeCode) throw new VeSyncError(`VeSync login failed: ${a.msg ?? `code ${a.code}`}`, a.code);
+    let bizToken: string | undefined;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const r = await this.post<{ token: string; accountID: string; countryCode?: string; currentRegion?: string; bizToken?: string }>('/user/api/accountManage/v1/loginByAuthorizeCode4Vesync', {
+        ...base, method: 'loginByAuthorizeCode4Vesync', authorizeCode: a.result.authorizeCode, emailSubscriptions: false,
+        userCountryCode: this.country, traceId: String(Date.now()),
+        ...(bizToken ? { bizToken, regionChange: 'lastRegion' } : {}),
+      }, false);
+      if (r.code === CROSS_REGION && r.result?.bizToken && !bizToken) {
+        // The account is in the other region: switch server and country, then finish there.
+        if (r.result.countryCode) this.country = r.result.countryCode;
+        if (r.result.currentRegion && (Object.values(VESYNC_HOSTS) as string[]).includes(this.base)) this.base = regionHost(r.result.currentRegion);
+        bizToken = r.result.bizToken;
+        continue;
+      }
+      if (r.code !== 0 || !r.result?.token) throw new VeSyncError(`VeSync login failed: ${r.msg ?? `code ${r.code}`}`, r.code);
+      this.token = r.result.token;
+      this.accountId = String(r.result.accountID);
+      if (r.result.countryCode) this.country = r.result.countryCode;
+      return;
+    }
+    throw new VeSyncError('VeSync login failed: the region redirect repeated', CROSS_REGION);
   }
 
   /** An authenticated call. On an auth error, log in again and retry once. */

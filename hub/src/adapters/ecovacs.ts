@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { constants, createHash, createPublicKey, publicEncrypt } from 'node:crypto';
 import type { Adapter, AdapterContext, AdapterStatus } from './sdk.ts';
 import type { Command, Device, DeviceState, VacuumActivity } from '../model/types.ts';
 
@@ -13,6 +13,8 @@ import type { Command, Device, DeviceState, VacuumActivity } from '../model/type
 // three separate steps, each isolated below so it's easy to fix against the
 // real service:
 //   1. user/login on gl-{country}-api.ecovacs.com   (signed GET, MD5 password) → uid + accessToken
+//      (a new device id gets code 1013 instead: Ecovacs emails a code, and user/verifyDevice
+//      with that code → uid + accessToken; the email is RSA-encrypted with Ecovacs' published key)
 //   2. getAuthCode on gl-{country}-openapi.ecovacs.com (signed GET)           → authCode
 //   3. loginByItToken on the IoT portal (users/user.do)                       → portal token
 // Then the portal's appsvr/app.do lists devices and iot/devmanager.do relays
@@ -24,7 +26,9 @@ export const md5 = (s: string) => createHash('md5').update(s).digest('hex');
 // Keys the Ecovacs global app signs requests with (public, shipped in the app; same values deebot-client uses).
 const CLIENT = { key: '1520391301804', secret: '6c319b2a5cd3e66e39159c2e28f2fce9' };
 const AUTH_CLIENT = { key: '1520391491841', secret: '77ef58ce3afbe337da74aa8c5ab963a9' };
-const META = { lang: 'EN', appCode: 'global_e', appVersion: '1.6.3', channel: 'google_play', deviceType: '1' };
+// Ecovacs refuses old app versions ("Please update to the latest version"): keep this at what deebot-client sends.
+const META = { lang: 'EN', appCode: 'global_e', appVersion: '3.14.0', channel: 'google_play', deviceType: '1' };
+const PHONE = { model: 'Pixel 7', system: 'Android 14' };
 const REALM = 'ecouser.net';
 
 /**
@@ -112,7 +116,7 @@ export function isJsonVacuum(d: EcovacsDevice): boolean {
 }
 
 export class EcovacsError extends Error {
-  constructor(message: string, public kind: 'auth' | 'credentials' | 'offline' | 'other' = 'other') { super(message); }
+  constructor(message: string, public kind: 'auth' | 'credentials' | 'verify' | 'offline' | 'other' = 'other') { super(message); }
 }
 
 interface Session { uid: string; accessToken: string; userId: string; token: string; expiresAt: number }
@@ -138,6 +142,8 @@ export class EcovacsClient {
   private session: Session | null = null;
   /** The app's "device id": stable per account so Ecovacs sees one phone, not a new one each start. */
   readonly deviceId: string;
+  /** The one-time code Ecovacs emailed to verify this device id (from the setup), if any. */
+  verifyCode?: string;
   constructor(private urls: { login: string; auth: string; portal: string }, private email: string, private password: string, private country: string, private timeoutMs = 15_000) {
     this.deviceId = md5(`kova:${email}`);
   }
@@ -161,20 +167,51 @@ export class EcovacsClient {
     return await res.json() as T;
   }
 
+  /** A signed call to the account API (gl-{country}-api): user/login, user/verifyDevice, common/getConfig… */
+  private async privateCall<T>(endpoint: string, params: Record<string, string>): Promise<{ code: string; msg?: string; data?: T }> {
+    const c = this.country.toLowerCase();
+    const path = `/v1/private/${c}/${META.lang}/${this.deviceId}/${META.appCode}/${META.appVersion}/${META.channel}/${META.deviceType}/${endpoint}`;
+    const now = String(Date.now());
+    const signed = signParams({ ...params, requestId: md5(now), authTimespan: now, authTimeZone: 'GMT-8' }, { ...META, country: c, deviceId: this.deviceId }, CLIENT);
+    return this.get(`${this.urls.login}${path}`, signed);
+  }
+
+  private accountResult(r: { code: string; msg?: string; data?: { uid: string; accessToken: string } }, what: string) {
+    if (r.code === '1005' || r.code === '1010') throw new EcovacsError('Ecovacs login failed: wrong email or password', 'credentials');
+    if (r.code === '1013') throw new EcovacsError('Ecovacs wants to verify Kova by email', 'verify');
+    if (r.code === '1012') throw new EcovacsError('That email code is wrong or expired', 'verify');
+    if (r.code !== '0000' || !r.data?.accessToken) throw new EcovacsError(`Ecovacs ${what} failed: ${r.msg ?? `code ${r.code}`}`);
+    return { uid: String(r.data.uid), accessToken: r.data.accessToken };
+  }
+
   /** Step 1: account login → uid + accessToken. */
   async userLogin(): Promise<{ uid: string; accessToken: string }> {
-    const c = this.country.toLowerCase();
-    const path = `/v1/private/${c}/${META.lang}/${this.deviceId}/${META.appCode}/${META.appVersion}/${META.channel}/${META.deviceType}/user/login`;
-    const now = String(Date.now());
-    const params = signParams(
-      { account: this.email, password: md5(this.password), requestId: md5(now), authTimespan: now, authTimeZone: 'GMT-8' },
-      { ...META, country: c, deviceId: this.deviceId },
-      CLIENT,
-    );
-    const r = await this.get<{ code: string; msg?: string; data?: { uid: string; accessToken: string } }>(`${this.urls.login}${path}`, params);
-    if (r.code === '1005' || r.code === '1010') throw new EcovacsError('Ecovacs login failed: wrong email or password', 'credentials');
-    if (r.code !== '0000' || !r.data?.accessToken) throw new EcovacsError(`Ecovacs login failed: ${r.msg ?? `code ${r.code}`}`);
-    return { uid: r.data.uid, accessToken: r.data.accessToken };
+    return this.accountResult(await this.privateCall('user/login', { account: this.email, password: md5(this.password) }), 'login');
+  }
+
+  /** The account email, encrypted with Ecovacs' published RSA key (PKCS#1 v1.5), as the verification calls want it. */
+  async encryptAccount(): Promise<string> {
+    const r = await this.privateCall<{ key?: string; value?: string }[]>('common/getConfig', { keys: 'PUBLIC.KEY.CONFIG' });
+    const entry = Array.isArray(r.data) ? r.data.find(e => e?.key === 'PUBLIC.KEY.CONFIG') : undefined;
+    let der: string | undefined;
+    try { der = JSON.parse(String(entry?.value)).publicKey; } catch { /* below */ }
+    if (r.code !== '0000' || typeof der !== 'string') throw new EcovacsError('Ecovacs didn’t give its public key');
+    const key = createPublicKey({ key: Buffer.from(der, 'base64'), format: 'der', type: 'spki' });
+    return publicEncrypt({ key, padding: constants.RSA_PKCS1_PADDING }, Buffer.from(this.email)).toString('base64');
+  }
+
+  /** Ask Ecovacs to email the one-time code that verifies this device id. */
+  async requestVerifyCode(): Promise<void> {
+    const r = await this.privateCall('user/sendEmailVerifyCode', { encryptEmail: await this.encryptAccount(), verifyType: 'EMAIL_VERIFY_DEVICE', supportChar: 'N', isForce: 'N' });
+    if (r.code !== '0000') throw new EcovacsError(`Ecovacs couldn’t send the email code: ${r.msg ?? `code ${r.code}`}`);
+  }
+
+  /** Step 1, for a device id Ecovacs hasn't seen: the emailed code → uid + accessToken. */
+  async verifyDevice(code: string): Promise<{ uid: string; accessToken: string }> {
+    const r = await this.privateCall<{ uid: string; accessToken: string }>('user/verifyDevice', {
+      encryptAccount: await this.encryptAccount(), backUpEmail: '', verifyCode: code.trim(), ...PHONE,
+    });
+    return this.accountResult(r, 'device verification');
   }
 
   /** Step 2: exchange the account token for an IoT auth code. */
@@ -202,7 +239,26 @@ export class EcovacsClient {
 
   async login(): Promise<void> {
     this.session = null;
-    const { uid, accessToken } = await this.userLogin();
+    let account: { uid: string; accessToken: string };
+    try {
+      account = await this.userLogin();
+    } catch (err) {
+      if (!(err instanceof EcovacsError) || err.kind !== 'verify') throw err;
+      // A new device id: use the emailed code if the owner gave one, else ask Ecovacs to send one.
+      if (this.verifyCode) {
+        try { account = await this.verifyDevice(this.verifyCode); }
+        catch (e) {
+          if (!(e instanceof EcovacsError) || e.kind !== 'verify') throw e;
+          this.verifyCode = undefined;
+          await this.requestVerifyCode();
+          throw new EcovacsError('That email code didn’t work, so Ecovacs sent a new one: enter it in the Ecovacs setup', 'verify');
+        }
+      } else {
+        await this.requestVerifyCode();
+        throw new EcovacsError('Ecovacs emailed you a code: enter it in the Ecovacs setup to finish signing in', 'verify');
+      }
+    }
+    const { uid, accessToken } = account;
     const { authCode, ecovacsUid } = await this.getAuthCode(uid, accessToken);
     const { userId, token } = await this.loginByItToken(authCode, ecovacsUid);
     this.session = { uid, accessToken, userId, token, expiresAt: tokenExpiry(token) ?? Infinity };
@@ -279,6 +335,8 @@ export interface EcovacsOptions {
   /** Override the login/auth/portal base URLs (tests, or if Ecovacs moves them). */
   urls?: Partial<{ login: string; auth: string; portal: string }>;
   timeoutMs?: number;
+  /** The one-time code Ecovacs emails the first time Kova signs in (it verifies Kova as a device). */
+  verifyCode?: string;
 }
 
 interface Bot { id: string; dev: EcovacsDevice; activity?: VacuumActivity; offline: boolean }
@@ -302,6 +360,7 @@ export class EcovacsAdapter implements Adapter {
   constructor(private opts: EcovacsOptions) {
     const urls = { ...ecovacsUrls(opts.country, opts.continent), ...opts.urls };
     this.client = new EcovacsClient(urls, opts.email, opts.password, opts.country, opts.timeoutMs);
+    if (opts.verifyCode?.trim()) this.client.verifyCode = opts.verifyCode.trim();
   }
 
   async start(ctx: AdapterContext): Promise<void> {
@@ -331,6 +390,8 @@ export class EcovacsAdapter implements Adapter {
         this.badCredentials = true;
         this.error = 'Wrong Ecovacs email or password. Fix ecovacs.password in integrations.json and restart Kova.';
       }
+      // Waiting for the emailed code: don't keep asking Ecovacs (each try would email another code).
+      if (err instanceof EcovacsError && err.kind === 'verify') this.badCredentials = true;
       ctx.log(this.error);
       for (const b of this.bots.values()) ctx.report(b.id, { online: false });
       return;
