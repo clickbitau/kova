@@ -1,0 +1,87 @@
+/* Kova on a phone: the same app as on a computer, laid out for a narrow screen.
+   index.html is written with inline styles for the desktop; below 760px this file
+   folds the sidebar into a menu and tightens the page. Hooks are data-kova-* attributes. */
+
+[data-kova-scrim] { display: none; }
+
+@media (max-width: 760px) {
+  /* The sidebar becomes a menu that slides in from the left. */
+  [data-kova-nav] {
+    position: fixed !important;
+    top: 0; left: 0; bottom: 0;
+    height: auto !important;
+    width: min(300px, 86vw) !important;
+    z-index: 60;
+    overflow-y: auto;
+    padding-top: calc(22px + env(safe-area-inset-top, 0px)) !important;
+    padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px)) !important;
+    transform: translateX(-102%);
+    transition: transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
+    box-shadow: none;
+  }
+  html.kova-nav-open [data-kova-nav] { transform: none; box-shadow: 0 0 40px rgba(0, 0, 0, 0.5); }
+  [data-kova-scrim] {
+    display: block; position: fixed; inset: 0; z-index: 59;
+    background: rgba(0, 0, 0, 0.5);
+    opacity: 0; pointer-events: none; transition: opacity 0.24s;
+  }
+  html.kova-nav-open [data-kova-scrim] { opacity: 1; pointer-events: auto; }
+  html.kova-nav-open, html.kova-nav-open body { overflow: hidden; }
+
+  /* Bigger touch targets in the menu. */
+  [data-kova-navitem] { padding-top: 11px !important; padding-bottom: 11px !important; }
+
+  /* The page: phone margins, room for the notch and the home indicator. */
+  [data-kova-main] {
+    padding: calc(10px + env(safe-area-inset-top, 0px)) 16px calc(40px + env(safe-area-inset-bottom, 0px)) !important;
+    gap: 20px !important;
+    /* "hidden" makes main a scroll box, and the sticky top bar would scroll away with the page. */
+    overflow: clip !important;
+  }
+  [data-kova-topbar] {
+    display: flex !important;
+    position: sticky; top: 0; z-index: 20;
+    margin: calc(-10px - env(safe-area-inset-top, 0px)) -16px 0;
+    padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 10px;
+    background: rgba(14, 15, 16, 0.92);
+    -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  /* Headings: one step down so titles fit on a line. */
+  [data-kova-main] h1 { font-size: 26px !important; }
+  [data-kova-main] [style*="font-size: 56px"] { font-size: 40px !important; }
+  [data-kova-main] [style*="font-size: 46px"] { font-size: 34px !important; }
+  [data-kova-main] [style*="font-size: 42px"] { font-size: 32px !important; }
+
+  /* Fixed two-column layouts (list beside detail) stack. */
+  [data-kova-stack] { grid-template-columns: minmax(0, 1fr) !important; flex-direction: column !important; }
+  [data-kova-stack] > * { width: auto !important; max-width: 100% !important; min-width: 0 !important; scroll-margin-top: calc(74px + env(safe-area-inset-top, 0px)); }
+
+  /* Wide tables and charts scroll sideways inside their card instead of squeezing. */
+  [data-kova-scroll] { overflow-x: auto !important; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  [data-kova-scroll]::-webkit-scrollbar { display: none; }
+  /* The day on Now: about 37px an hour, so its events don't pile on each other. */
+  [data-kova-timeline] { margin: 0 -22px; padding: 0 22px; }
+  [data-kova-timeline] [data-kova-wide] { min-width: 900px; }
+
+  /* A title beside its buttons: the buttons drop below the title instead of squeezing it. */
+  [data-kova-wrap] { flex-wrap: wrap !important; }
+  [data-kova-wrap] > [style*="flex: 1"] { flex-basis: calc(100% - 62px) !important; }
+
+  /* Device cards: two to a row. */
+  [data-kova-grid2] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 10px !important; }
+
+  /* Panels that slide in from the right take the whole screen. */
+  [data-kova-sheet] {
+    width: 100vw !important; border-left: 0 !important;
+    padding-top: calc(20px + env(safe-area-inset-top, 0px)) !important;
+    padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  /* Toasts sit above the home indicator and fit the screen. */
+  [data-kova-toast] { bottom: calc(16px + env(safe-area-inset-bottom, 0px)) !important; max-width: calc(100vw - 32px); }
+
+  /* iOS zooms into inputs under 16px; keep the page still. */
+  input, select, textarea { font-size: 16px !important; }
+}

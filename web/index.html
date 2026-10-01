@@ -2,29 +2,35 @@
 <html>
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0e0f10">
 <title>Kova</title>
+<link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" href="./assets/logo/kova-favicon.svg">
-<script>try{if(matchMedia("(max-width: 640px)").matches&&!/[?&]desktop/.test(location.search))location.replace("/phone.html"+location.search)}catch(e){}</script>
+<link rel="apple-touch-icon" href="./assets/logo/kova-app-icon.svg">
 <script>(function(){var t="";try{var u=new URL(location.href);t=u.searchParams.get("token")||localStorage.getItem("kova_token")||"";if(u.searchParams.get("token"))localStorage.setItem("kova_token",t)}catch(e){}document.write('<script src="/api/boot.js'+(t?"?token="+encodeURIComponent(t):"")+'"><\/script>')})();</script>
 <script src="./support.js"></script>
 <link rel="stylesheet" href="./motion.css">
+<link rel="stylesheet" href="./responsive.css">
+<script src="./responsive.js"></script>
 <script src="./motion.js"></script>
 <script src="./sting.js"></script>
 </head>
 <body>
 <x-dc>
 <helmet><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..24,400,0..1,0&display=swap" rel="stylesheet"><style>body{margin:0;background:#0e0f10;-webkit-font-smoothing:antialiased}a{color:#f2b14c}a:hover{color:#f7cb82}*{box-sizing:border-box}input[type=range]{accent-color:#f2b14c}</style></helmet>
-<div style="display:flex;min-height:100vh;background:#0e0f10;color:#f1efea;font-family:Manrope,system-ui,sans-serif">
+<div data-kova-shell style="display:flex;min-height:100vh;background:#0e0f10;color:#f1efea;font-family:Manrope,system-ui,sans-serif">
 
-<aside style="width:236px;flex:none;border-right:1px solid rgba(255,255,255,0.07);padding:22px 14px;display:flex;flex-direction:column;gap:4px;position:sticky;top:0;height:100vh;background:#111214">
+<aside data-kova-nav style="width:236px;flex:none;border-right:1px solid rgba(255,255,255,0.07);padding:22px 14px;display:flex;flex-direction:column;gap:4px;position:sticky;top:0;height:100vh;background:#111214">
 <div style="display:flex;align-items:center;gap:10px;padding:4px 10px 18px">
 <div style="width:30px;height:30px;border-radius:9px;background:#1d1e21;display:flex;align-items:center;justify-content:center"><svg width="22" height="22" viewBox="0 0 48 48"><path d="M8 26L24 11L40 26" fill="none" stroke="#f1efea" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path><path d="M16 32L24 24.5L32 32" fill="none" stroke="#f1efea" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="24" cy="38.5" r="3.5" fill="#f2b14c"></circle></svg></div>
 <div style="display:flex;flex-direction:column"><span style="font-size:18px;font-weight:800;letter-spacing:-0.02em">Kova</span><span style="font-size:12px;color:#a3a09a">{{ homeName }}</span></div>
 </div>
-<div onClick="{{ goModes }}" style="margin:0 2px 14px;padding:11px 12px;border-radius:12px;background:#17181b;display:flex;align-items:center;gap:12px;cursor:pointer"><div style="width:10px;height:10px;border-radius:50%;background:{{ mode.color }};box-shadow:0 0 0 4px {{ mode.tint }}"></div><div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:13px;font-weight:700">{{ mode.name }}</span><span style="font-size:11px;color:#a3a09a">{{ mode.untilShort }}</span></div></div>
+<div data-kova-navitem onClick="{{ goModes }}" style="margin:0 2px 14px;padding:11px 12px;border-radius:12px;background:#17181b;display:flex;align-items:center;gap:12px;cursor:pointer"><div style="width:10px;height:10px;border-radius:50%;background:{{ mode.color }};box-shadow:0 0 0 4px {{ mode.tint }}"></div><div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:13px;font-weight:700">{{ mode.name }}</span><span style="font-size:11px;color:#a3a09a">{{ mode.untilShort }}</span></div></div>
 <sc-for list="{{ nav }}" as="n" hint-placeholder-count="5">
-<div onClick="{{ n.go }}" style="display:flex;align-items:center;gap:12px;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:14px;font-weight:600;margin-top:{{ n.mt }};background:{{ n.bg }};color:{{ n.fg }}" style-hover="background:rgba(255,255,255,0.05)">
+<div data-kova-navitem onClick="{{ n.go }}" style="display:flex;align-items:center;gap:12px;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:14px;font-weight:600;margin-top:{{ n.mt }};background:{{ n.bg }};color:{{ n.fg }}" style-hover="background:rgba(255,255,255,0.05)">
 <span style="font-family:'Material Symbols Rounded';font-size:20px;line-height:1">{{ n.icon }}</span><span style="flex:1">{{ n.label }}</span><span style="font-size:11px;color:#a3a09a">{{ n.badge }}</span>
 </div>
 </sc-for>
@@ -40,8 +46,15 @@
 </div>
 </div>
 </aside>
+<div data-kova-scrim></div>
 
-<main style="flex:1;min-width:0;padding:30px 40px 80px;display:flex;flex-direction:column;gap:28px;position:relative;isolation:isolate;overflow:hidden">
+<main data-kova-main style="flex:1;min-width:0;padding:30px 40px 80px;display:flex;flex-direction:column;gap:28px;position:relative;isolation:isolate;overflow:hidden">
+<!-- Phones only (responsive.css): the sidebar folds into a menu behind this bar. -->
+<div data-kova-topbar style="display:none;align-items:center;gap:10px">
+<button data-kova-menu aria-label="Menu" style="width:40px;height:40px;flex:none;border:0;border-radius:12px;background:#17181b;color:#f1efea;display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:22px;line-height:1">menu</span></button>
+<div style="display:flex;flex-direction:column;min-width:0;flex:1"><span style="font-size:16px;font-weight:800;letter-spacing:-0.02em">Kova</span><span style="font-size:12px;color:#a3a09a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ homeName }}</span></div>
+<div onClick="{{ goModes }}" style="padding:8px 12px;border-radius:12px;background:#17181b;display:flex;align-items:center;gap:10px;cursor:pointer;min-width:0"><div style="width:9px;height:9px;flex:none;border-radius:50%;background:{{ mode.color }};box-shadow:0 0 0 3px {{ mode.tint }}"></div><div style="display:flex;flex-direction:column;gap:1px;min-width:0"><span style="font-size:13px;font-weight:700;white-space:nowrap">{{ mode.name }}</span><span style="font-size:11px;color:#a3a09a;white-space:nowrap">{{ mode.untilShort }}</span></div></div>
+</div>
 
 <sc-if value="{{ isHome }}" hint-placeholder-val="{{ true }}">
 <div style="position:absolute;top:-240px;left:-10%;right:-10%;height:620px;background:radial-gradient(50% 55% at 28% 45%, {{ mode.glow }}, transparent 72%);pointer-events:none;z-index:-1"></div>
@@ -65,6 +78,7 @@
 
 <div style="background:#16171a;border-radius:20px;padding:20px 22px;display:flex;flex-direction:column;gap:12px">
 <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;font-size:13px"><span style="font-weight:700">Today</span><span style="color:#a3a09a">Tap anywhere on the day to preview it</span></div>
+<div data-kova-scroll data-kova-timeline><div data-kova-wide>
 <div onClick="{{ scrub }}" style="position:relative;cursor:crosshair">
 <div style="height:44px;border-radius:12px;overflow:hidden;display:flex">
 <sc-for list="{{ bands }}" as="bd" hint-placeholder-count="6"><div style="height:100%;width:{{ bd.w }};background:{{ bd.bg }};display:flex;align-items:center;padding:0 10px;font-size:12px;font-weight:700;color:{{ bd.fg }};white-space:nowrap;overflow:hidden">{{ bd.name }}</div></sc-for>
@@ -76,6 +90,7 @@
 <sc-if value="{{ previewing }}" hint-placeholder-val="{{ false }}"><div style="position:absolute;left:{{ previewLeft }};top:-6px;height:56px;width:3px;border-radius:2px;background:{{ mode.color }}"></div><div style="position:absolute;left:{{ previewLeft }};top:12px;transform:translateX(-50%);padding:2px 8px;border-radius:6px;background:{{ mode.color }};color:#141517;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500">{{ previewTime }}</div></sc-if>
 </div>
 <div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:11px;color:#6f6d69"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>
+</div></div>
 </div>
 
 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr));gap:16px;align-items:start">
@@ -133,7 +148,7 @@
 </sc-for>
 </div>
 </sc-if>
-<div style="display:grid;grid-template-columns:minmax(0,300px) minmax(0,1fr);gap:20px;align-items:start">
+<div data-kova-stack style="display:grid;grid-template-columns:minmax(0,300px) minmax(0,1fr);gap:20px;align-items:start">
 <div style="display:flex;flex-direction:column;gap:18px">
 <div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">Through the day</span>
 <sc-for list="{{ modeList }}" as="ml" hint-placeholder-count="5"><div onClick="{{ ml.pick }}" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;cursor:pointer;background:{{ ml.bg }};border:1px solid {{ ml.border }}" style-hover="background:#1c1d21"><div style="width:10px;height:10px;border-radius:50%;background:{{ ml.color }};box-shadow:0 0 0 4px {{ ml.tint }}"></div><div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:14px;font-weight:700">{{ ml.name }}</span><span style="font-size:11.5px;color:#a3a09a">{{ ml.span }}</span></div><sc-if value="{{ ml.now }}" hint-placeholder-val="{{ false }}"><span style="font-size:10.5px;font-weight:800;padding:2px 7px;border-radius:999px;background:{{ ml.color }};color:#141517">NOW</span></sc-if></div></sc-for>
@@ -149,7 +164,7 @@
 <div style="background:#16171a;border-radius:20px;overflow:hidden;display:flex;flex-direction:column">
 <div style="height:6px;background:{{ sm.color }}"></div>
 <div style="padding:22px;display:flex;flex-direction:column;gap:20px">
-<div style="display:flex;align-items:center;gap:14px"><div style="width:48px;height:48px;border-radius:14px;display:flex;align-items:center;justify-content:center;background:{{ sm.tint }};color:{{ sm.color }}"><span style="font-family:'Material Symbols Rounded';font-size:26px;font-variation-settings:'FILL' 1">{{ sm.icon }}</span></div><div style="display:flex;flex-direction:column;gap:2px;flex:1"><span style="font-size:24px;font-weight:700;letter-spacing:-0.02em">{{ sm.name }}</span><span style="font-size:13px;color:#a3a09a">{{ sm.span }}</span></div><div onClick="{{ sm.preview }}" style="padding:8px 14px;border-radius:10px;background:rgba(255,255,255,0.06);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px"><span style="font-family:'Material Symbols Rounded';font-size:18px">preview</span>Preview</div><div onClick="{{ sm.toggleEdit }}" style="padding:8px 14px;border-radius:10px;background:rgba(255,255,255,0.06);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;background:{{ sm.editBg }};color:{{ sm.editFg }}"><span style="font-family:'Material Symbols Rounded';font-size:18px">edit</span>{{ sm.editLabel }}</div></div>
+<div data-kova-wrap style="display:flex;align-items:center;gap:14px"><div style="width:48px;height:48px;border-radius:14px;display:flex;align-items:center;justify-content:center;background:{{ sm.tint }};color:{{ sm.color }}"><span style="font-family:'Material Symbols Rounded';font-size:26px;font-variation-settings:'FILL' 1">{{ sm.icon }}</span></div><div style="display:flex;flex-direction:column;gap:2px;flex:1"><span style="font-size:24px;font-weight:700;letter-spacing:-0.02em">{{ sm.name }}</span><span style="font-size:13px;color:#a3a09a">{{ sm.span }}</span></div><div onClick="{{ sm.preview }}" style="padding:8px 14px;border-radius:10px;background:rgba(255,255,255,0.06);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px"><span style="font-family:'Material Symbols Rounded';font-size:18px">preview</span>Preview</div><div onClick="{{ sm.toggleEdit }}" style="padding:8px 14px;border-radius:10px;background:rgba(255,255,255,0.06);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;background:{{ sm.editBg }};color:{{ sm.editFg }}"><span style="font-family:'Material Symbols Rounded';font-size:18px">edit</span>{{ sm.editLabel }}</div></div>
 <div style="display:flex;flex-wrap:wrap;gap:8px;font-size:13px;font-weight:600;align-items:center"><span style="color:#a3a09a">Starts</span><span style="padding:7px 11px;border-radius:10px;background:{{ sm.color }};color:#141517">{{ sm.starts }}</span><span style="color:#a3a09a">ends</span><span style="padding:7px 11px;border-radius:10px;background:#26272b">{{ sm.ends }}</span></div>
 <sc-if value="{{ sm.editing }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px;border-radius:12px;background:#16171a;border:1px dashed rgba(255,255,255,0.12)"><span style="font-size:13px;color:#a3a09a;font-weight:600">Start at</span><select value="{{ ed.startKind }}" onChange="{{ ed.setStartKind }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px"><sc-for list="{{ ed.startKinds }}" as="k" hint-placeholder-count="8"><option value="{{ k.v }}">{{ k.label }}</option></sc-for></select><sc-if value="{{ ed.isClock }}" hint-placeholder-val="{{ false }}"><input type="time" value="{{ ed.startAt }}" onChange="{{ ed.setStartAt }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px"></sc-if><sc-if value="{{ ed.hasOffset }}" hint-placeholder-val="{{ true }}"><input type="number" step="5" value="{{ ed.startOffset }}" onChange="{{ ed.setStartOffset }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px;width:80px"><span style="font-size:12px;color:#a3a09a">min (− before, + after)</span></sc-if><div onClick="{{ ed.saveStart }}" style="padding:8px 14px;border-radius:10px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;cursor:pointer">Save start</div></div></sc-if>
 <div style="display:flex;flex-direction:column;gap:10px"><span style="font-size:12px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">How the home should be</span>
@@ -183,7 +198,7 @@
 </sc-for>
 </div>
 <div style="display:flex;align-items:center;gap:10px;font-size:13px;color:#a3a09a"><span>{{ roomSummary }}</span><span onClick="{{ roomAllOff }}" style="color:#f2b14c;font-weight:600;cursor:pointer">Turn all lights off</span></div>
-<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px">
+<div data-kova-grid2 style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px">
 <sc-for list="{{ tiles }}" as="d" hint-placeholder-count="6">
 <div style="border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:22px;background:{{ d.bg }};border:1px solid {{ d.border }};transition:background .2s">
 <div style="display:flex;justify-content:space-between;align-items:flex-start">
@@ -446,6 +461,7 @@
 
 <sc-if value="{{ isActivity }}" hint-placeholder-val="{{ false }}">
 <div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;color:#a3a09a">Today · every change and what caused it</span><h1 style="margin:0;font-size:30px;font-weight:700;letter-spacing:-0.02em">Activity</h1></div>
+<div onClick="{{ push.go }}" style="display:flex;gap:12px;align-items:center;padding:12px 14px;border-radius:16px;background:#16171a;border:1px solid rgba(255,255,255,0.05);cursor:pointer"><div style="width:32px;height:32px;border-radius:10px;flex:none;display:flex;align-items:center;justify-content:center;background:{{ push.iconBg }};color:{{ push.iconFg }}"><span style="font-family:'Material Symbols Rounded';font-size:18px">{{ push.icon }}</span></div><div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:13.5px;font-weight:600">{{ push.title }}</span><span style="font-size:12px;color:#a3a09a">{{ push.note }}</span></div><sc-if value="{{ push.hasBtn }}" hint-placeholder-val="{{ true }}"><div style="flex:none;padding:8px 14px;border-radius:999px;font-size:13px;font-weight:600;background:#f1efea;color:#141517">{{ push.btn }}</div></sc-if></div>
 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:20px;align-items:start">
 <div style="display:flex;flex-direction:column;gap:12px">
 <div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ actFilters }}" as="af" hint-placeholder-count="5"><div onClick="{{ af.pick }}" style="padding:7px 13px;border-radius:999px;font-size:13px;font-weight:600;cursor:pointer;background:{{ af.bg }};color:{{ af.fg }}">{{ af.label }}</div></sc-for></div>
@@ -522,7 +538,7 @@
 
 <sc-if value="{{ drawerOpen }}" hint-placeholder-val="{{ false }}">
 <div onClick="{{ closeDrawer }}" style="position:fixed;inset:0;background:rgba(0,0,0,0.55)"></div>
-<div style="position:fixed;top:0;right:0;bottom:0;width:min(420px,100vw);background:#141517;border-left:1px solid rgba(255,255,255,0.08);padding:24px;display:flex;flex-direction:column;gap:20px;overflow:auto">
+<div data-kova-sheet style="position:fixed;top:0;right:0;bottom:0;width:min(420px,100vw);background:#141517;border-left:1px solid rgba(255,255,255,0.08);padding:24px;display:flex;flex-direction:column;gap:20px;overflow:auto">
 <div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:12px;color:#a3a09a">{{ dr.room }}</span><span style="font-size:22px;font-weight:700">{{ dr.name }}</span></div><div onClick="{{ closeDrawer }}" style="width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px">close</span></div></div>
 <div style="display:flex;gap:4px;padding:4px;border-radius:12px;background:#1c1d20">
 <sc-for list="{{ tabs }}" as="tb" hint-placeholder-count="2">
@@ -568,7 +584,7 @@
 
 <sc-if value="{{ igOpen }}" hint-placeholder-val="{{ false }}">
 <div onClick="{{ ig.close }}" style="position:fixed;inset:0;background:rgba(0,0,0,0.55)"></div>
-<div style="position:fixed;top:0;right:0;bottom:0;width:min(480px,100vw);background:#141517;border-left:1px solid rgba(255,255,255,0.08);padding:24px;display:flex;flex-direction:column;gap:20px;overflow:auto">
+<div data-kova-sheet style="position:fixed;top:0;right:0;bottom:0;width:min(480px,100vw);background:#141517;border-left:1px solid rgba(255,255,255,0.08);padding:24px;display:flex;flex-direction:column;gap:20px;overflow:auto">
 <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px"><div style="display:flex;align-items:center;gap:12px;min-width:0"><div style="width:40px;height:40px;flex:none;border-radius:12px;background:#232428;display:flex;align-items:center;justify-content:center;color:#d8d5cf"><span style="font-family:'Material Symbols Rounded';font-size:21px">{{ ig.icon }}</span></div><div style="display:flex;flex-direction:column;gap:3px;min-width:0"><span style="font-size:12px;color:#a3a09a">{{ ig.kicker }}</span><span style="font-size:22px;font-weight:700">{{ ig.name }}</span></div></div><div onClick="{{ ig.close }}" style="width:34px;height:34px;flex:none;border-radius:50%;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px">close</span></div></div>
 <span style="font-size:13px;color:#a3a09a;line-height:1.5;margin-top:-8px">{{ ig.description }}</span>
 <div style="display:flex;align-items:center;gap:8px;padding:12px 14px;border-radius:14px;background:#1c1d20"><div style="width:7px;height:7px;border-radius:50%;background:{{ ig.dot }}"></div><span style="font-size:13px;color:{{ ig.stFg }};flex:1;line-height:1.4">{{ ig.status }}</span></div>
@@ -655,7 +671,7 @@
 </sc-if>
 
 <sc-if value="{{ toastOn }}" hint-placeholder-val="{{ false }}">
-<div style="position:fixed;left:50%;bottom:28px;transform:translateX(-50%);display:flex;align-items:center;gap:16px;padding:12px 14px 12px 18px;border-radius:14px;background:#f1efea;color:#141517;font-size:14px;font-weight:600;box-shadow:0 10px 30px rgba(0,0,0,0.4)">
+<div data-kova-toast style="position:fixed;left:50%;bottom:28px;transform:translateX(-50%);display:flex;align-items:center;gap:16px;padding:12px 14px 12px 18px;border-radius:14px;background:#f1efea;color:#141517;font-size:14px;font-weight:600;box-shadow:0 10px 30px rgba(0,0,0,0.4)">
 <span>{{ toastText }}</span>
 <sc-if value="{{ canUndo }}" hint-placeholder-val="{{ false }}"><div onClick="{{ undo }}" style="padding:6px 12px;border-radius:9px;background:#141517;color:#f1efea;font-size:13px;cursor:pointer">Undo</div></sc-if>
 </div>
@@ -717,9 +733,34 @@ function resRows(r){if(r==null||typeof r!=='object')return[{k:'Result',v:String(
   const rows=Object.entries(r).filter(([k])=>k!=='ok'&&k!=='enabled').map(([k,v])=>({k:human(k),v:show(v),font:/code|payload|pin|url/i.test(k)?"'JetBrains Mono',monospace":'inherit'}));
   return rows.length?rows:[{k:'Done',v:'OK',font:'inherit'}]}
 
+// Push notifications: service worker + Web Push subscription (iOS needs HTTPS and the app on the Home Screen).
+const swReady=(()=>{try{return 'serviceWorker' in navigator&&window.isSecureContext?navigator.serviceWorker.register('/sw.js').then(()=>navigator.serviceWorker.ready):null}catch(e){return null}})();
+const pushBase=()=>{if(!window.isSecureContext)return 'insecure';if(!swReady||!('PushManager' in window)||!('Notification' in window))return /iPhone|iPad/.test(navigator.userAgent)&&!navigator.standalone?'install':'unsupported';return Notification.permission==='denied'?'denied':'off'};
+const b64u=s=>{const p='='.repeat((4-s.length%4)%4);const r=atob((s+p).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from(r,c=>c.charCodeAt(0))};
+const PUSH_UI={insecure:['Notifications need HTTPS','Open Kova over https:// to get alerts here, or use the ntfy app','notifications_off',null],install:['Add Kova to your Home Screen','iPhone only shows alerts for Home Screen apps: Share → Add to Home Screen','add_to_home_screen',null],unsupported:['No notifications in this browser','Use the ntfy app for alerts instead','notifications_off',null],denied:['Notifications are blocked','Allow them for Kova in Settings → Notifications','notifications_off',null],off:['Enable notifications','Doorbell, lights left on, devices not responding','notifications','Enable'],on:['Notifications are on','Doorbell, lights left on, devices not responding','notifications_active','Test']};
+
 class Component extends DCLogic {
-  state={hub:BOOT,conn:!!window.KOVA_BOOT,screen:this.props.startScreen??'home',room:(BOOT.rooms[0]||{}).id,drawer:null,tab:'simple',advanced:(this.props.depth??'Simple')==='Advanced',sel:'sunset',toast:null,undo:null,merging:false,merged:false,done:{},linked:{},q:'',camSel:null,mediaSel:null,actF:'all',inboxDone:{},iq:'',intF:'All',draft:'',chat:[{from:'kova',text:`Hi. ${BOOT.devices.filter(d=>isLight(d)&&d.state.on).length} lights are on and the home is in ${(BOOT.modes.find(m=>m.id===BOOT.current.modeId)||BOOT.modes[0]).name}. What do you need?`}],preview:null,pv:null,modeSel:null,igCat:null,igCfg:null,igPick:false,ig:null,igLoadErr:null,imp:null,impAutos:[],impFile:null,impKey:'',impPath:'',impBusy:null,impPct:0,impErr:null,impNeedKey:false,impNew:false,showCode:false};
-  componentDidMount(){this.connect();this.loadInteg();this.loadImport()}
+  state={hub:BOOT,conn:!!window.KOVA_BOOT,screen:this.props.startScreen??'home',room:(BOOT.rooms[0]||{}).id,drawer:null,tab:'simple',advanced:(this.props.depth??'Simple')==='Advanced',sel:'sunset',toast:null,undo:null,merging:false,merged:false,done:{},linked:{},q:'',camSel:null,push:pushBase(),mediaSel:null,actF:'all',inboxDone:{},iq:'',intF:'All',draft:'',chat:[{from:'kova',text:`Hi. ${BOOT.devices.filter(d=>isLight(d)&&d.state.on).length} lights are on and the home is in ${(BOOT.modes.find(m=>m.id===BOOT.current.modeId)||BOOT.modes[0]).name}. What do you need?`}],preview:null,pv:null,modeSel:null,igCat:null,igCfg:null,igPick:false,ig:null,igLoadErr:null,imp:null,impAutos:[],impFile:null,impKey:'',impPath:'',impBusy:null,impPct:0,impErr:null,impNeedKey:false,impNew:false,showCode:false};
+  componentDidMount(){this.connect();this._igLoad=this.loadInteg();this.loadImport();this.pushCheck();this.deepLink()}
+  async pushCheck(){const b=pushBase();this.setState({push:b});if(b!=='off')return;try{const reg=await swReady;const sub=await reg.pushManager.getSubscription();if(sub){this.setState({push:'on'});api('POST','/api/push/subscribe',{subscription:sub.toJSON()}).catch(()=>{})}}catch(e){}}
+  async pushGo(){const st=this.state.push;
+    if(st==='on'){api('POST','/api/push/test').then(r=>this.toast(r.push||r.ntfy?'Test sent':'Nothing was delivered')).catch(e=>this.err(e));return}
+    if(st!=='off')return;
+    try{const perm=await Notification.requestPermission();if(perm!=='granted'){this.setState({push:perm==='denied'?'denied':'off'});return}
+      const reg=await swReady;const {publicKey}=await api('GET','/api/push/vapid');
+      const sub=(await reg.pushManager.getSubscription())||await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64u(publicKey)});
+      await api('POST','/api/push/subscribe',{subscription:sub.toJSON()});this.setState({push:'on'});this.toast('Notifications are on')}catch(e){this.err(e)}}
+  // Links from notifications and old phone links (/phone.html?cam=… forwards here), e.g. "Turn them off" on "Everyone's out".
+  deepLink(){try{const u=new URL(location.href);const d=u.searchParams.get('do'),cam=u.searchParams.get('cam'),page=u.searchParams.get('page'),setup=u.searchParams.get('setup'),add=u.searchParams.get('add');if(!d&&!cam&&!page&&!setup&&!add)return;
+    ['do','cam','page','setup','add'].forEach(k=>u.searchParams.delete(k));history.replaceState(null,'',u.pathname+u.search+u.hash);
+    if(setup){this.setState({screen:'integrations'});Promise.resolve(this._igLoad).then(()=>{if(this.igItem(setup))this.openInteg(setup)});return}
+    if(add){this.setState({screen:'integrations',igPick:true});return}
+    if(d==='lights-off')api('POST','/api/lights/off').then(r=>this.toast(`${r.changed.length} light${r.changed.length===1?'':'s'} off`,this.undoFn(r.undo))).catch(e=>this.err(e));
+    // "View camera" on a doorbell notification: Security, on that camera, live.
+    if(cam){this.setState({screen:'security',camSel:cam});const d=this.state.hub.devices.find(x=>x.id===cam);if(d)this.goLive(d);return}
+    const SCREENS={customise:'rooms',more:'home'};const scr=SCREENS[page]||page;
+    if(['home','modes','rooms','energy','security','media','activity','assistant','integrations','import'].includes(scr))this.setState({screen:scr})}catch(e){}}
+
   componentWillUnmount(){this._closed=true;try{this._ws&&this._ws.close()}catch(e){}this.stopLive(true)}
   componentDidUpdate(){if(this._pc&&this.state.screen!=='security')this.stopLive()}
   // ---- camera live view: WebRTC straight from the camera's cloud (Nest) to this browser; the hub only relays the offer/answer ----
@@ -980,7 +1021,7 @@ class Component extends DCLogic {
     const idle=Object.keys(s.igCfg||{}).filter(id=>!RUN.has(id)).map(id=>{const c=this.igItem(id)||{name:id,icon:'extension',kind:'Local'};return{id,name:c.name,icon:c.icon,kind:c.kind,devices:0,ok:false,note:c.apply==='restart'?'Starts when the hub restarts':'Not running · check its settings'}});
     const INTEG=[...H.integrations,...idle].map(i=>({name:i.name,icon:i.icon,sub:`${i.devices} device${i.devices===1?'':'s'}`,st:i.ok?'ok':'attention',kind:i.kind,note:i.note,open:()=>this.openInteg(i.id)}));
     const integrations=INTEG.filter(i=>(!iq||(i.name+' '+i.sub).toLowerCase().includes(iq))&&(s.intF==='All'||(s.intF==='Needs attention'?i.st==='attention':i.kind===s.intF))).map(i=>({...i,status:i.note||(i.st==='ok'?'Connected':'Needs attention'),dot:i.st==='ok'?'#7fd4a0':'#f2b14c',stFg:i.st==='attention'?'#f2b14c':'#a3a09a',border:i.st==='attention'?'rgba(242,177,76,0.3)':'rgba(255,255,255,0.05)'}));
-    return {isEnergy:s.screen==='energy',isSecurity:s.screen==='security',isMedia:s.screen==='media',isActivity:s.screen==='activity',isAssistant:s.screen==='assistant',isIntegrations:s.screen==='integrations',
+    return {isEnergy:s.screen==='energy',isSecurity:s.screen==='security',isMedia:s.screen==='media',isActivity:s.screen==='activity',push:(()=>{const [title,note,icon,btn]=PUSH_UI[s.push]||PUSH_UI.unsupported;const on=s.push==='on';return{title,note,icon,btn:btn||'',hasBtn:!!btn,iconBg:on?'rgba(127,212,160,0.15)':'rgba(255,255,255,0.06)',iconFg:on?'#7fd4a0':'#a3a09a',go:()=>this.pushGo()}})(),isAssistant:s.screen==='assistant',isIntegrations:s.screen==='integrations',
       sourceRows,editSources:!!s.editSources,toggleSources:()=>this.setState(p=>({editSources:!p.editSources})),sourcesLink:s.editSources?'Done':missingUrls?`Set stream addresses · ${missingUrls} missing`:'Edit stream addresses',
       energyBars,energyStats,energyDevices,...env,camMain,camThumbs,people,secEvents,mp,sources,players,mediaCount:`${pls.filter(d=>d.on).length} playing · ${pls.length} players`,
       noSecEvents:!secEvents.length,secSummary:`${cams.length} camera${cams.length===1?'':'s'} · ${H.people.length} ${H.people.length===1?'person':'people'}`,

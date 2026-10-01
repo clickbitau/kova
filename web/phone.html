@@ -2,6 +2,8 @@
 <html>
 <head>
 <meta charset="utf-8">
+<!-- The web app is index.html on every screen size now. This page stays for the Kova phone app's embedded screens (?embed=1); browsers, bookmarks and notification links move on, keeping ?cam=, ?do=, ?page=. -->
+<script>try{if(!/[?&]embed=1(&|$)/.test(location.search))location.replace("/"+location.search+location.hash)}catch(e){}</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">

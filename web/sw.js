@@ -13,7 +13,7 @@ self.addEventListener('push', e => {
     tag: d.tag || undefined,
     renotify: !!d.tag,
     icon: '/assets/logo/kova-app-icon.svg',
-    data: { url: d.url || '/phone.html', actions },
+    data: { url: d.url || '/', actions },
     actions: actions.map(a => ({ action: a.action, title: a.title })),
   }));
 });
@@ -22,7 +22,7 @@ self.addEventListener('notificationclick', e => {
   e.notification.close();
   const d = e.notification.data || {};
   const act = (d.actions || []).find(a => a.action === e.action);
-  const url = new URL((act && act.url) || d.url || '/phone.html', self.location.origin).href;
+  const url = new URL((act && act.url) || d.url || '/', self.location.origin).href;
   e.waitUntil((async () => {
     const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     const same = wins.find(w => w.url === url);
