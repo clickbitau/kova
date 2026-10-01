@@ -283,11 +283,20 @@ export const CATALOG: CatalogItem[] = [
           room(),
         ],
       },
+      {
+        key: 'outlets', label: 'Plugs that power network gear', type: 'list', addLabel: 'Add a plug',
+        help: 'When the access point, a camera or the modem freezes, Warden can ask Kova to switch its plug off and on again. Only list plugs that are safe to cut.',
+        item: [
+          { key: 'plug', label: 'Kova plug (device id)', type: 'text', required: true, placeholder: 'hallway_plug' },
+          { key: 'powers', label: 'Powers (Warden device, MAC or IP)', type: 'text', required: true, placeholder: 'dev_… or aa:bb:cc:dd:ee:ff' },
+          { key: 'role', label: 'This plug feeds', type: 'select', options: [{ value: 'modem', label: 'the internet modem' }] },
+        ],
+      },
     ],
     actions: [
       {
         id: 'pair', label: 'Pair with Warden', icon: 'add_link', method: 'POST', path: '/api/integrations/warden/pair',
-        help: 'Kova shows a code. Open Warden’s /apps page (System → Accounts → Apps), check the code matches and approve Kova. Kova only gets what it needs: devices, pausing, events, discovery, people and the network’s health.',
+        help: 'Kova shows a code. Open Warden’s /apps page (System → Accounts → Apps), check the code matches and approve Kova. Kova only gets what it needs: devices, pausing, events, discovery, people, the network’s health, and sharing its own devices, presence, house mode and plugs.',
         fields: [{ key: 'url', label: 'Warden address', type: 'text', placeholder: 'leave empty to use the one above' }],
       },
       {

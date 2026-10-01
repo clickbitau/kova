@@ -18,6 +18,7 @@ import { demoConfig, demoDevices, DEMO_SOLAR } from './seed/demo-home.ts';
 import type { Adapter } from './adapters/sdk.ts';
 import { Presence } from './services/presence.ts';
 import { HelixLink } from './services/helix-link.ts';
+import { WardenLink } from './services/warden-link.ts';
 import { Notifier } from './services/notify.ts';
 import { Backups, parseBackupTime } from './services/backup.ts';
 import { acquireLock, LockedError, type HeldLock } from './util/lock.ts';
@@ -131,7 +132,12 @@ const helixLink = new HelixLink(hub, { helix: () => setup.raw('helix'), dataDir,
 helixLink.start();
 hub.services.push({ id: 'helix-link', name: 'Helix TVs', icon: 'tv', kind: 'Local', get devices() { return helixLink.screens().length; }, status: () => helixLink.status() ?? { ok: true, note: 'Pair with Helix to turn TVs on from Helix' } });
 
-const presence = new Presence(hub, integrations?.presence ?? {}, { warden: () => setup.raw('warden') });
+// Warden: Kova shares its devices, people, house mode and plugs, and restarts frozen equipment when Warden asks.
+const wardenLink = new WardenLink(hub, { warden: () => setup.raw('warden'), port: () => Number(env.KOVA_PORT ?? 8140), people: () => setup.raw('presence')?.people });
+wardenLink.start();
+hub.services.push({ id: 'warden-link', name: 'Kova in Warden', icon: 'router', kind: 'Local', status: () => wardenLink.status() ?? { ok: true, note: 'Pair with Warden to share Kova’s devices with it' } });
+
+const presence = new Presence(hub, integrations?.presence ?? {}, { warden: () => setup.raw('warden'), onReport: (id, home, source) => void wardenLink.presence(id, home, source) });
 presence.start();
 hub.services.push({ id: 'presence', name: 'Presence', icon: 'person_pin_circle', kind: 'Local', status: () => presence.status() });
 
@@ -184,6 +190,7 @@ const shutdown = async (signal: string) => {
   };
   presence.stop();
   helixLink.stop();
+  wardenLink.stop();
   await step('web server', () => app.close());
   await step('notifications', () => notifier.stop());
   await step('Apple Home bridge', () => homekit?.stop());

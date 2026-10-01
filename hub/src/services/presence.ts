@@ -58,7 +58,7 @@ export class Presence {
   private last: { router?: { seen: number; total: number } | { error: string }; routerName?: 'Warden'; ping?: { up: number; total: number } } = {};
 
   /** `warden` reads the Warden section as it is now, so linking Warden later works without a restart. */
-  constructor(private hub: Hub, private opts: PresenceOptions = {}, private sources: { warden?: () => WardenOptions | undefined } = {}) {
+  constructor(private hub: Hub, private opts: PresenceOptions = {}, private sources: { warden?: () => WardenOptions | undefined; onReport?: (personId: string, home: boolean, source: string) => void } = {}) {
     this.keys = hub.store.get<Record<string, string>>('presenceKeys') ?? {};
   }
 
@@ -155,6 +155,8 @@ export class Presence {
       else { n.left = { at: this.now, sawAbsent: false }; n.home = false; }
     }
     await this.hub.engine.setPresence(personId, home, source);
+    // Tell Warden too (services/warden-link.ts), so it doesn't alarm about the phone of someone Kova knows is home.
+    try { this.sources.onReport?.(personId, home, source); } catch { /* best effort */ }
   }
 
   /** Read every network source once and apply what changed. */
