@@ -1,4 +1,5 @@
 import mdns from 'multicast-dns';
+import { findCastGroups } from '../../services/lan-find.ts';
 import type { Adapter, AdapterContext, AdapterStatus, Queue, QueueTrack } from '../sdk.ts';
 import type { Command, Device, DeviceState, Track } from '../../model/types.ts';
 import { CastChannel, NS, type CastMessage } from './channel.ts';
@@ -26,6 +27,8 @@ export interface CastOptions {
   batchMs?: number;
   /** Plain TCP instead of TLS (tests only). */
   insecure?: boolean;
+  /** The ports a moved speaker group is looked for on (default 32000–32999; tests narrow it). */
+  groupPorts?: { from: number; to: number };
   timeoutMs?: number;
 }
 
@@ -305,11 +308,43 @@ export class CastAdapter implements Adapter {
     });
   }
 
+  /** Groups that didn't answer when last asked, and when Kova last went looking for each. */
+  private groupDown = new Map<string, number>();
+  private groupSearched = new Map<string, number>();
+
   /** Learn which speakers are in each Cast group. */
   private async refreshGroups(): Promise<void> {
     await Promise.all([...this.groups.keys()].map(async gid => {
-      try { this.groups.set(gid, new Set(await this.receivers.get(gid)!.members())); } catch { /* group offline */ }
+      try {
+        this.groups.set(gid, new Set(await this.receivers.get(gid)!.members()));
+        this.groupDown.delete(gid);
+      } catch { this.groupDown.set(gid, (this.groupDown.get(gid) ?? 0) + 1); /* group offline, or moved */ }
     }));
+    await this.refindGroups();
+  }
+
+  /**
+   * Google moves a speaker group to another of its speakers (and port) now and then. A group set up by
+   * address (another VLAN: no mDNS to follow it) that stops answering is looked for on the speakers Kova
+   * knows, at most every five minutes, and followed: the group with the same speakers, or the only one.
+   */
+  private async refindGroups(): Promise<void> {
+    const now = Date.now();
+    const lost = [...this.groupDown].filter(([gid, n]) => n >= 2 && now - (this.groupSearched.get(gid) ?? 0) > 5 * 60_000).map(([gid]) => gid);
+    if (!lost.length) return;
+    for (const gid of lost) this.groupSearched.set(gid, now);
+    const speakers = [...new Set([...this.receivers.values()].filter(r => !r.ep.group).map(r => r.ep.host))];
+    const found = await findCastGroups(speakers, { insecure: this.o.insecure, ports: this.o.groupPorts }).catch(() => []);
+    for (const gid of lost) {
+      const was = [...(this.groups.get(gid) ?? [])].sort().join(',');
+      const g = (was ? found.find(f => f.members.join(',') === was) : undefined) ?? (found.length === 1 && lost.length === 1 ? found[0] : undefined);
+      const r = this.receivers.get(gid);
+      if (!g || !r || (r.ep.host === g.host && r.ep.port === g.port)) continue;
+      this.ctx?.log(`${r.ep.name} moved to ${g.host}:${g.port}`);
+      this.add({ ...r.ep, host: g.host, port: g.port });
+      this.groups.set(gid, new Set(g.members));
+      this.groupDown.delete(gid);
+    }
   }
 
   private speakerId(d: Device) { return this.castOf.get(d.id) ?? d.id.replace(/^cast_/, ''); }

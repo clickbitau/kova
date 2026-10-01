@@ -130,7 +130,7 @@ export const CATALOG: CatalogItem[] = [
       },
       {
         key: 'endpoints', label: 'Fixed addresses', type: 'list', addLabel: 'Add address',
-        help: 'Only for speakers discovery can’t find (another VLAN).',
+        help: 'Only for speakers discovery can’t find (another VLAN): Find Cast speakers below fills these in.',
         item: [
           { key: 'id', label: 'Id', type: 'text', required: true },
           { key: 'name', label: 'Name', type: 'text', required: true },
@@ -140,11 +140,25 @@ export const CATALOG: CatalogItem[] = [
         ],
       },
     ],
+    actions: [
+      {
+        id: 'find', label: 'Find Cast speakers', icon: 'travel_explore', method: 'POST', path: '/api/integrations/cast/find',
+        help: 'Asks every address for Cast speakers, displays, TVs and Google speaker groups, including on other networks where they can’t be heard announcing themselves, and adds them. Run it again after changing groups in Google Home.',
+        fields: [{ key: 'subnet', label: 'Also search', type: 'text', placeholder: '10.10.30.0/24', help: 'A network your speakers are on, if it isn’t the hub’s own (another VLAN). With Warden linked, every device it sees online is searched too.' }],
+      },
+    ],
   },
   {
     id: 'sonos', name: 'Sonos', icon: 'speaker_group', kind: 'Local', apply: 'hot',
     description: 'Sonos speakers over your network.',
     fields: [{ key: 'hosts', label: 'Speaker addresses', type: 'text', multiple: true, placeholder: 'optional: 10.0.0.20, 10.0.0.21', help: 'Leave empty to find them automatically.' }],
+    actions: [
+      {
+        id: 'find', label: 'Find Sonos speakers', icon: 'travel_explore', method: 'POST', path: '/api/integrations/sonos/find',
+        help: 'Asks every address for Sonos speakers, including on other networks, and adds them.',
+        fields: [{ key: 'subnet', label: 'Also search', type: 'text', placeholder: '10.10.30.0/24', help: 'A network your speakers are on, if it isn’t the hub’s own (another VLAN). With Warden linked, every device it sees online is searched too.' }],
+      },
+    ],
   },
   {
     id: 'airplay', name: 'AirPlay (OwnTone)', icon: 'airplay', kind: 'Local', apply: 'hot', testable: true,
@@ -218,6 +232,12 @@ export const CATALOG: CatalogItem[] = [
         optId,
       ],
     }],
+    actions: [
+      {
+        id: 'pair', label: 'Pair again', icon: 'tv', method: 'POST', path: '/api/integrations/samsungtv/pair',
+        help: 'With the TV on, Kova asks again; accept the Allow prompt on the TV. If the TV turns Kova away without asking, turn on IP Remote and set Access Notification to First time only, restart the TV, and try again.',
+      },
+    ],
   },
   {
     id: 'smartthings', name: 'Samsung SmartThings', icon: 'speaker', kind: 'Cloud', apply: 'hot',
