@@ -231,14 +231,15 @@ export class NestAdapter implements Adapter {
   private get pubsubBase() { return `${this.opts.pubsubUrl ?? NEST_URLS.pubsub}/v1`; }
 
   /** An authenticated Google API call. On a 401, get a fresh token and retry once. */
-  private async api<T>(url: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+  /** A Google API call, given up after `timeoutMs` (default opts.timeoutMs); a Pub/Sub pull passes its own, longer wait. */
+  private async api<T>(url: string, body?: unknown, signal?: AbortSignal, timeoutMs = this.opts.timeoutMs ?? 15_000): Promise<T> {
     for (let attempt = 0; ; attempt++) {
       const token = await this.auth.accessToken();
       const res = await fetch(url, {
         method: body === undefined ? 'GET' : 'POST',
         headers: { authorization: `Bearer ${token}`, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
         body: body === undefined ? undefined : JSON.stringify(body),
-        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(this.opts.timeoutMs ?? 15_000)]) : AbortSignal.timeout(this.opts.timeoutMs ?? 15_000),
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
       });
       if (res.status === 401 && attempt === 0) { this.auth.invalidate(); continue; }
       const j = await res.json().catch(() => ({})) as T & { error?: { message?: string; status?: string } };
@@ -336,9 +337,10 @@ export class NestAdapter implements Adapter {
   /** Pull one batch from the subscription, turn it into Kova events, and ack it. Returns how many messages came. */
   async pullOnce(): Promise<number> {
     const sub = this.opts.subscription!;
-    const signal = AbortSignal.any([this.abort.signal, AbortSignal.timeout(this.opts.pullTimeoutMs ?? 100_000)]);
+    // Pub/Sub holds an empty pull open until a message comes or its own wait ends; the normal 15 s API timeout
+    // would cut every quiet pull short and report "aborted due to timeout".
     const r = await this.api<{ receivedMessages?: { ackId: string; message?: { data?: string; messageId?: string; publishTime?: string } }[] }>(
-      `${this.pubsubBase}/${sub}:pull`, { maxMessages: 20 }, signal);
+      `${this.pubsubBase}/${sub}:pull`, { maxMessages: 20 }, this.abort.signal, this.opts.pullTimeoutMs ?? 100_000);
     const msgs = r.receivedMessages ?? [];
     if (!msgs.length) return 0;
     for (const m of msgs) {

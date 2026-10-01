@@ -25,7 +25,7 @@ async function fakeGoogle() {
   const s = {
     tokenCalls: 0, token: '', codes: [] as string[],
     queue: [] as { ackId: string; message: { data: string; messageId: string; publishTime: string } }[],
-    acked: [] as string[], pulls: 0,
+    acked: [] as string[], pulls: 0, emptyPullMs: 20,
     commands: [] as { device: string; command: string; params: Record<string, unknown> }[],
     authHeaders: [] as string[],
   };
@@ -74,7 +74,7 @@ async function fakeGoogle() {
         s.pulls++;
         const batch = s.queue.splice(0);
         // Real pulls wait for messages; answer an empty pull after a moment.
-        if (!batch.length) { setTimeout(() => send({}), 20); return; }
+        if (!batch.length) { setTimeout(() => send({}), s.emptyPullMs); return; }
         return send({ receivedMessages: batch });
       }
       if (url === `/pubsub/v1/${SUB}:acknowledge`) { s.acked.push(...JSON.parse(raw).ackIds); return send({}); }
@@ -248,6 +248,20 @@ test('Nest: WebRTC live view through the hub API, and account linking routes', a
     const bad = await app.inject({ method: 'POST', url: '/api/integrations/nest/auth-code', payload: { code: 'nope' } });
     assert.equal(bad.statusCode, 400);
   } finally { await app.close(); await hub.stop(); await g.close(); }
+});
+
+test('Nest: a quiet subscription is not an error (a pull may wait longer than an API call)', async () => {
+  const g = await fakeGoogle();
+  g.s.emptyPullMs = 300; // Pub/Sub holds an empty pull open; longer than the normal API timeout below
+  const reg = new Registry(new Store(':memory:'));
+  const nest = new NestAdapter(g.opts({ subscription: SUB, timeoutMs: 100, pullTimeoutMs: 2000, idleMs: 0 }));
+  await reg.addAdapter(nest);
+  try {
+    await new Promise(r => setTimeout(r, 800));
+    assert.ok(g.s.pulls >= 2, 'kept pulling');
+    assert.doesNotMatch(String(nest.status().note), /timeout|aborted/i);
+    assert.equal(nest.status().ok, true);
+  } finally { await reg.stop(); await g.close(); }
 });
 
 test('Nest: a revoked refresh token is reported, not thrown, and the event loop stops cleanly', async () => {
