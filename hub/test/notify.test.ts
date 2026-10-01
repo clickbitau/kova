@@ -238,6 +238,32 @@ test('Notify: a device offline for more than 10 minutes, once', async () => {
   } finally { await done(); }
 });
 
+test('Notify: a link that worked and broke (Helix, SmartThings…) after 5 minutes, once, and when it’s back', async () => {
+  const { hub, clock, ntfy, notifier, done } = await setup(12);
+  const helix = { ok: true, note: '1 box · live' };
+  hub.services.push({ id: 'helix-link', name: 'Helix TVs', icon: 'tv', kind: 'Local', status: () => helix });
+  // Never set up: not news.
+  hub.services.push({ id: 'never', name: 'SmartThings', icon: 'speaker', kind: 'Cloud', status: () => ({ ok: false, note: 'Not linked yet' }) });
+  try {
+    notifier.checkLinks();
+    Object.assign(helix, { ok: false, note: 'Can’t reach Helix Server: connect ECONNREFUSED' });
+    notifier.checkLinks();
+    clock.t += 4 * 60_000; notifier.checkLinks();
+    await notifier.idle();
+    assert.equal(ntfy.got.length, 0, 'a blip isn’t news');
+    clock.t += 2 * 60_000; notifier.checkLinks(); notifier.checkLinks();
+    await notifier.idle();
+    assert.equal(ntfy.got.length, 1);
+    assert.equal(ntfy.got[0].json.title, 'Kova lost Helix TVs');
+    assert.match(ntfy.got[0].json.message, /^Can’t reach Helix Server: connect ECONNREFUSED\./);
+    Object.assign(helix, { ok: true, note: '1 box · live' });
+    notifier.checkLinks(); notifier.checkLinks();
+    await notifier.idle();
+    assert.equal(ntfy.got.length, 2);
+    assert.equal(ntfy.got[1].json.title, 'Helix TVs is back');
+  } finally { await done(); }
+});
+
 test('Notify: rules can be turned off; nothing is logged without a channel', async () => {
   const { hub, ntfy, notifier, done } = await setup(20.5, { rules: { doorbell: false } });
   try {
