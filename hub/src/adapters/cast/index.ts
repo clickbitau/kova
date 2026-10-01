@@ -421,7 +421,12 @@ export class CastAdapter implements Adapter {
     await Promise.all(jobs);
   }
 
+  private polls = 0;
   private async poll(): Promise<void> {
+    // Group members are read at start, but a group that didn't answer then (or was changed in
+    // Google Home since) would leave Kova's speaker groups out of sync for good: read again,
+    // at once while a group's members are unknown, and every sixth poll otherwise.
+    if (this.groups.size && ([...this.groups.values()].some(m => !m.size) || ++this.polls % 6 === 0)) await this.refreshGroups();
     await Promise.all([...this.receivers.values()].filter(r => !r.ep.group).map(async r => {
       const id = r.ep.id;
       try {
