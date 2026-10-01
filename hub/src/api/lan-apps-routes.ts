@@ -5,6 +5,7 @@ import { LanHttpError } from '../util/lan-http.ts';
 import { findHelixServers, helixPairPoll, helixPairStart } from '../adapters/helix.ts';
 import { trimUrl } from '../util/lan-http.ts';
 import type { HelixLink } from '../services/helix-link.ts';
+import { findCastDevices, findCastGroups, findSonos, searchHosts } from '../services/lan-find.ts';
 
 // Linking Kova with the home's own apps: Warden (sign in once, Kova makes its own token) and
 // Helix (pair with a code, like any Helix app). What they hand back is saved straight into
@@ -22,6 +23,10 @@ export interface LanAppsOptions {
   helixFindPort?: number;
   /** Tests poll Warden pairing faster. */
   wardenPollMs?: number;
+  /** Tests: the addresses Find searches instead of the hub's networks and Warden's devices, and the group port range. */
+  findHosts?: string[];
+  castGroupPorts?: { from: number; to: number };
+  castInsecure?: boolean;
 }
 
 export function registerLanAppRoutes(app: FastifyInstance, o: LanAppsOptions): void {
@@ -112,6 +117,63 @@ export function registerLanAppRoutes(app: FastifyInstance, o: LanAppsOptions): v
         }));
       return { devices: rows };
     } catch (e) { return bad(reply, `Couldn’t read Warden: ${msg(e)}`); }
+  });
+
+  // ------------------------------------------------- finding speakers --
+  // Speakers on another VLAN aren't heard announcing themselves, so Find asks every address: the hub's own
+  // networks, one the owner names ("10.10.30.0/24"), and every device Warden sees online when it's linked.
+  const findTargets = async (subnet?: string): Promise<string[]> => {
+    if (o.findHosts) return o.findHosts;
+    let extra: string[] = [];
+    const w = o.integrations?.raw('warden');
+    if (w?.url && w.token) {
+      try { extra = (await new Warden(w).devices()).filter(d => d.online).flatMap(d => d.ips); } catch { /* without Warden's list */ }
+    }
+    return searchHosts({ subnet, extra });
+  };
+
+  app.post<{ Body: { subnet?: string } }>('/api/integrations/cast/find', async (req, reply) => {
+    if (!o.integrations) return bad(reply, 'Integration settings aren’t available', 503);
+    let hosts: string[];
+    try { hosts = await findTargets(req.body?.subnet); } catch (e) { return bad(reply, msg(e)); }
+    const speakers = await findCastDevices(hosts);
+    const groups = await findCastGroups(speakers.map(s => s.host), { ports: o.castGroupPorts, insecure: o.castInsecure });
+    const prev = (o.integrations.raw('cast') ?? {}) as { endpoints?: { id: string; name: string; model: string; host: string; port: number }[]; rooms?: Record<string, string>; ids?: Record<string, string> };
+    const endpoints = [...(prev.endpoints ?? [])];
+    let added = 0, updated = 0;
+    const put = (e: { id: string; name: string; model: string; host: string; port: number }, same: (x: typeof e) => boolean) => {
+      const i = endpoints.findIndex(same);
+      if (i < 0) { endpoints.push(e); added++; return; }
+      if (endpoints[i].host !== e.host || endpoints[i].port !== e.port) { endpoints[i] = { ...endpoints[i], host: e.host, port: e.port }; updated++; }
+    };
+    for (const s of speakers) put(s, x => x.id === s.id);
+    // A group is known by its speakers: the id stays when Google moves it to another speaker or port.
+    const byName = new Map(speakers.map(s => [s.id, s.name]));
+    for (const g of groups) {
+      const id = `group${g.members.join('').slice(0, 24)}`;
+      const name = `Google group: ${g.members.map(m => byName.get(m) ?? m.slice(0, 6)).join(', ')}`.slice(0, 120);
+      const known = (prev.endpoints ?? []).find(x => /cast group/i.test(x.model) && (x.id === id || (x.host === g.host && x.port === g.port)));
+      put({ id: known?.id ?? id, name: known?.name ?? name, model: 'Google Cast Group', host: g.host, port: g.port }, x => x.id === (known?.id ?? id));
+    }
+    if (added || updated) await o.integrations.update('cast', { ...prev, endpoints });
+    return {
+      speakers: speakers.map(s => ({ name: s.name, model: s.model, host: s.host })),
+      groups: groups.map(g => ({ host: g.host, port: g.port, speakers: g.members.map(m => byName.get(m) ?? m) })),
+      added, updated,
+      next: speakers.length ? `${speakers.length} Cast device${speakers.length === 1 ? '' : 's'} and ${groups.length} speaker group${groups.length === 1 ? '' : 's'}${added || updated ? ', saved' : ', nothing new'}.` : 'No Cast devices answered. Name the network they’re on (like 10.10.30.0/24) and try again.',
+    };
+  });
+
+  app.post<{ Body: { subnet?: string } }>('/api/integrations/sonos/find', async (req, reply) => {
+    if (!o.integrations) return bad(reply, 'Integration settings aren’t available', 503);
+    let hosts: string[];
+    try { hosts = await findTargets(req.body?.subnet); } catch (e) { return bad(reply, msg(e)); }
+    const found = await findSonos(hosts);
+    const prev = (o.integrations.raw('sonos') ?? {}) as { hosts?: string[] };
+    const all = [...new Set([...(prev.hosts ?? []), ...found.map(f => f.host)])];
+    const added = all.length - (prev.hosts ?? []).length;
+    if (added) await o.integrations.update('sonos', { ...prev, hosts: all });
+    return { speakers: found, added, next: found.length ? `${found.length} Sonos speaker${found.length === 1 ? '' : 's'}${added ? ', saved' : ', nothing new'}.` : 'No Sonos answered. Name the network they’re on (like 10.10.30.0/24) and try again.' };
   });
 
   // ------------------------------------------------------------------ Helix --

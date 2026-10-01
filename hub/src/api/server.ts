@@ -322,6 +322,15 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
     } catch (e) { return fail(reply, e); }
   });
 
+  // Samsung TVs: ask again for Kova to be allowed (the TV shows its Allow prompt when it's set to ask).
+  app.post('/api/integrations/samsungtv/pair', async (_req, reply) => {
+    const tv = hub.reg.adapters.get('samsungtv') as { pairAgain?: () => Promise<{ name: string; ok: boolean; message: string }[]> } | undefined;
+    if (!tv?.pairAgain) return reply.code(400).send({ error: 'Set up a Samsung TV first' });
+    const tvs = await tv.pairAgain();
+    hub.emit('changed');
+    return { tvs, ok: tvs.every(t => t.ok), next: tvs.map(t => `${t.name}: ${t.message}`).join(' ') };
+  });
+
   // Add a Matter device with its pairing code (for one already in Google Home / Apple Home, open a pairing window there first).
   app.post<{ Body: { code?: string; room?: string; name?: string } }>('/api/integrations/matter/commission', async (req, reply) => {
     const m = hub.reg.adapters.get('matter');

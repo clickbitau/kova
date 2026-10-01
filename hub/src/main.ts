@@ -54,7 +54,8 @@ const initialConfig = (): HomeConfig => !demo && existsSync(homeFile) ? JSON.par
 
 const adapters: Adapter[] = integrations ? adaptersFor(integrations, dataDir) : [];
 if (demo) adapters.push(new VirtualAdapter(demoDevices(), DEMO_SOLAR));
-if (env.KOVA_SONOS === '1') adapters.push(new SonosAdapter());
+// KOVA_SONOS=1 is the older switch; Sonos set up under Integrations (or found there) takes its place.
+if (env.KOVA_SONOS === '1' && !integrations?.sonos) adapters.push(new SonosAdapter());
 if (env.KOVA_MATTER === '1' && !integrations?.matter) adapters.push(new MatterAdapter({ storageDir: resolve(dataDir, 'matter') }));
 
 const hub = new Hub({

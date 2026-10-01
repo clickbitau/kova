@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import http from 'node:http';
 import net from 'node:net';
 import type { AddressInfo } from 'node:net';
 import { Store } from '../src/store/db.ts';
@@ -200,6 +201,55 @@ test('Cast: a Kova speaker group whose speakers are a Cast group plays through i
     assert.equal(g.loads(), 1, 'one LOAD on the Cast group');
     assert.equal(a.loads() + b.loads(), 0, 'not on each speaker separately');
     assert.equal(reg.get('group_kids')!.state.media, 'Tarateel');
+  } finally {
+    await reg.stop();
+    for (const f of [a, b, g]) f.server.close();
+  }
+});
+
+test('Finding speakers on another network: addresses, Cast devices by their info page, and groups on a high port', async () => {
+  const { expandSubnet, findCastDevices, findCastGroups } = await import('../src/services/lan-find.ts');
+  assert.equal(expandSubnet('10.10.30.0/24').length, 254);
+  assert.deepEqual(expandSubnet('10.10.30.0/24').slice(0, 2), ['10.10.30.1', '10.10.30.2']);
+  assert.deepEqual(expandSubnet('10.10.30.5'), ['10.10.30.5']);
+  assert.throws(() => expandSubnet('10.0.0.0/16'), /a \/22 or smaller/);
+  assert.throws(() => expandSubnet('kitchen'), /isn't a network/);
+
+  const info = http.createServer((req, res) => {
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ name: 'Kitchen Speaker', ssdp_udn: 'AAAA0000-0000-0000-0000-000000000001', device_info: { model_name: 'Google Nest Audio' } }));
+  });
+  await new Promise<void>(r => info.listen(0, '127.0.0.1', r));
+  const g = fakeCast('Home Speaker Group', ['aaaa0000-0000-0000-0000-000000000001', 'bbbb0000-0000-0000-0000-000000000002']);
+  const gport = await listen(g);
+  try {
+    const found = await findCastDevices(['127.0.0.1'], 1000, (info.address() as AddressInfo).port);
+    assert.deepEqual(found, [{ id: 'aaaa0000000000000000000000000001', name: 'Kitchen Speaker', model: 'Google Nest Audio', host: '127.0.0.1', port: 8009 }]);
+    const groups = await findCastGroups(['127.0.0.1'], { ports: { from: gport - 1, to: gport + 1 }, insecure: true });
+    assert.deepEqual(groups, [{ host: '127.0.0.1', port: gport, members: ['aaaa0000000000000000000000000001', 'bbbb0000000000000000000000000002'] }]);
+  } finally { info.close(); g.server.close(); }
+});
+
+test('Cast: a speaker group that moved (another VLAN, no mDNS) is found again at its new port', async () => {
+  const a = fakeCast('Music Room Speaker'), b = fakeCast('Baby Room speaker');
+  const g = fakeCast('Home Speaker Group', ['aaaa0000-0000-0000-0000-000000000001', 'bbbb0000-0000-0000-0000-000000000002']);
+  const gport = await listen(g);
+  const ep = async (f: ReturnType<typeof fakeCast>, id: string, model: string) => ({ id, name: f.name, model, host: '127.0.0.1', port: await listen(f) });
+  const speakers = [await ep(a, 'aaaa0000000000000000000000000001', 'Nest Audio'), await ep(b, 'bbbb0000000000000000000000000002', 'Nest Audio')];
+  // Its saved address: a port nothing listens on any more (taken after the fakes have theirs).
+  const gone = net.createServer(); await new Promise<void>(r => gone.listen(0, '127.0.0.1', r));
+  const oldPort = (gone.address() as AddressInfo).port; gone.close();
+  const reg = new Registry(new Store(':memory:'));
+  const cast = new CastAdapter({
+    discover: false, insecure: true, pollMs: 0, batchMs: 20, timeoutMs: 500, groupPorts: { from: gport, to: gport },
+    endpoints: [...speakers, { id: 'dddd0000000000000000000000000004', name: 'Home Speaker Group', model: 'Google Cast Group', host: '127.0.0.1', port: oldPort }],
+  });
+  await reg.addAdapter(cast);
+  const both = () => [reg.get('cast_aaaa0000000000000000000000000001')!, reg.get('cast_bbbb0000000000000000000000000002')!];
+  try {
+    // Not answering where it was (at start, and the first poll): looked for, and followed to its new port.
+    assert.equal(cast.castGroupFor(both()), 'Home Speaker Group', 'followed to its new port');
+    assert.ok(g.log.some(l => l.ns === NS.multizone), 'asked at the new port');
   } finally {
     await reg.stop();
     for (const f of [a, b, g]) f.server.close();

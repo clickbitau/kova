@@ -195,6 +195,27 @@ export class SamsungTvAdapter implements Adapter {
     await Promise.all([...this.tvs.values()].map(tv => this.refresh(tv)));
   }
 
+  /**
+   * Ask each TV again (Integrations → Pair again): forget an earlier refusal and connect, so a TV set to
+   * ask shows its Allow prompt. Resolves per TV once it allows, refuses, or the prompt times out.
+   */
+  async pairAgain(): Promise<{ name: string; ok: boolean; message: string }[]> {
+    return Promise.all([...this.tvs.values()].map(async tv => {
+      const name = tv.cfg.name ?? tv.name ?? tv.cfg.host;
+      this.refused.delete(tv.cfg.host);
+      tv.ws?.close();
+      try {
+        await this.connect(tv);
+        return { name, ok: true, message: 'Allowed' };
+      } catch (e) {
+        const m = (e as Error).message;
+        return { name, ok: false, message: this.refused.has(tv.cfg.host)
+          ? `${name} turned Kova away without asking. On the TV: Settings → Connection → Network → Expert Settings → IP Remote on, and Device Connection Manager → Access Notification set to First time only; then restart the TV (unplug it for a minute) and try again.`
+          : m };
+      }
+    }));
+  }
+
   private async info(tv: Tv): Promise<TvInfo> {
     const res = await fetch(`http://${tv.cfg.host}:${this.ports.info}/api/v2/`, { signal: AbortSignal.timeout(this.timeout) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
