@@ -50,13 +50,21 @@ test('Sonos: finds a speaker, plays a source, sets volume, stops', async () => {
 
   await reg.command(d.id, { on: true, media: 'Jazz stream', vol: 25 }, { kind: 'user', label: 'You' });
   const actions = fake.calls.map(c => c.action);
-  assert.deepEqual(actions.slice(-4), ['SetVolume', 'BecomeCoordinatorOfStandaloneGroup', 'SetAVTransportURI', 'Play']);
+  assert.deepEqual(actions.slice(-5), ['SetVolume', 'BecomeCoordinatorOfStandaloneGroup', 'SetAVTransportURI', 'SetPlayMode', 'Play']);
+  assert.match(fake.calls.find(c => c.action === 'SetPlayMode')!.body, /NORMAL/, 'a stream plays once');
   assert.match(fake.calls.find(c => c.action === 'SetAVTransportURI')!.body, /x-rincon-mp3radio:\/\/radio\.example\/jazz\.mp3/);
   assert.equal(fake.st.vol, 25);
   assert.equal(reg.get(d.id)!.state.media, 'Jazz stream');
 
   await reg.command(d.id, { on: false, media: null }, { kind: 'user', label: 'You' });
   assert.equal(fake.st.state, 'PAUSED_PLAYBACK');
+
+  // A recording set to repeat loops on the speaker.
+  reg.sourceLoops = n => n === 'Jazz stream';
+  await reg.command(d.id, { on: true, media: 'Jazz stream' }, { kind: 'user', label: 'You' });
+  assert.match(fake.calls.filter(c => c.action === 'SetPlayMode').at(-1)!.body, /REPEAT_ONE/);
+  reg.sourceLoops = () => false;
+  await reg.command(d.id, { on: false, media: null }, { kind: 'user', label: 'You' });
 
   await assert.rejects(reg.command(d.id, { on: true, media: 'Unknown' }, { kind: 'user', label: 'You' }), /No stream URL/);
   await reg.stop();

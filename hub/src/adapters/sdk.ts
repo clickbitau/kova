@@ -23,6 +23,8 @@ export interface AdapterContext {
   event(deviceId: string, type: string, data?: Record<string, unknown>): void;
   /** Look up a media source's stream URL by name. */
   sourceUrl(name: string): string | undefined;
+  /** Whether a source plays again from the start when it ends (a recording set to loop). */
+  sourceLoops?(name: string): boolean;
   /**
    * Music by name (Helix: "Shuffle all", "Loved", a playlist, "Station: …") → the tracks to queue, in the order
    * to play them (already shuffled when asked). Null when it isn't music Kova knows. Asked again within a few

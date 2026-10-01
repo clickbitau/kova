@@ -30,8 +30,8 @@ function fakeCast(name: string, members: string[] = []) {
           if (type === 'STOP') { st.app = null; st.url = ''; }
           if (type === 'SET_VOLUME') { const v = m.data.volume as { level?: number; muted?: boolean }; if (v.level != null) st.level = v.level; if (v.muted != null) st.muted = v.muted; }
           reply({ source: 'receiver-0', namespace: NS.receiver, data: status(rid) });
-        } else if (m.namespace === NS.media && type === 'LOAD') {
-          st.url = String((m.data.media as { contentId: string }).contentId);
+        } else if (m.namespace === NS.media && (type === 'LOAD' || type === 'QUEUE_LOAD')) {
+          st.url = String((type === 'LOAD' ? m.data.media as { contentId: string } : (m.data.items as { media: { contentId: string } }[])[0].media).contentId);
           st.paused = false;
           reply({ source: 'web-1', namespace: NS.media, data: { type: 'MEDIA_STATUS', requestId: rid, status: [{ mediaSessionId: 7, playerState: 'PLAYING' }] } });
         } else if (m.namespace === NS.media && (type === 'GET_STATUS' || type === 'PAUSE' || type === 'PLAY')) {
@@ -204,6 +204,29 @@ test('Cast: a Kova speaker group whose speakers are a Cast group plays through i
   } finally {
     await reg.stop();
     for (const f of [a, b, g]) f.server.close();
+  }
+});
+
+test('Cast: a recording set to repeat loops on the speaker; a stream plays once', async () => {
+  const a = fakeCast('Bedroom Speaker');
+  const urls: Record<string, string> = { Rain: 'https://sounds.example/rain-1h.mp3', Radio: 'https://radio.example/live' };
+  const reg = new Registry(new Store(':memory:'), n => urls[n]);
+  reg.sourceLoops = n => n === 'Rain';
+  const cast = new CastAdapter({ discover: false, insecure: true, pollMs: 0, batchMs: 20, endpoints: [{ id: 'aaaa0000000000000000000000000002', name: a.name, model: 'Nest Mini', host: '127.0.0.1', port: await listen(a) }] });
+  await reg.addAdapter(cast);
+  const id = 'cast_aaaa0000000000000000000000000002';
+  try {
+    await reg.command(id, { on: true, media: 'Rain' }, { kind: 'user', label: 'You' });
+    const q = a.log.find(l => l.type === 'QUEUE_LOAD')!;
+    assert.equal(q.data.repeatMode, 'REPEAT_SINGLE', 'plays again from the start, until stopped');
+    assert.equal((q.data.items as { media: { streamType: string } }[])[0].media.streamType, 'BUFFERED');
+    assert.equal(a.st.url, urls.Rain);
+    await reg.command(id, { on: true, media: 'Radio' }, { kind: 'user', label: 'You' });
+    assert.equal(a.log.filter(l => l.type === 'LOAD').length, 1, 'a stream is a plain LOAD');
+    assert.equal(a.st.url, urls.Radio);
+  } finally {
+    await reg.stop();
+    a.server.close();
   }
 });
 

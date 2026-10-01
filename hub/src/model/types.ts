@@ -300,6 +300,18 @@ export interface AutomationRun {
   endedAt?: number;
 }
 
+/** Something speakers can play by name: a live radio stream, or a recording (rain, thunder, white noise). */
+export interface MediaSource {
+  name: string;
+  icon: string;
+  url?: string;
+  /**
+   * A recording plays again from the start when it ends, until someone stops it (so a one-hour file of rain
+   * doesn't go quiet after an hour). Live streams never end, so it doesn't matter for them.
+   */
+  loop?: boolean;
+}
+
 export interface HomeConfig {
   name: string;
   timezone: string;
@@ -313,7 +325,7 @@ export interface HomeConfig {
   overlays: Overlay[];
   lightTheWay: { triggers: LightTheWayTrigger[] };
   /** Media sources that targets can reference by name. */
-  sources: { name: string; icon: string; url?: string }[];
+  sources: MediaSource[];
   /** Named groups of rooms learned from the user ("downstairs"). */
   groups: Record<string, string[]>;
   /** Findings the user chose to keep as they are. */

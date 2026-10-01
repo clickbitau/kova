@@ -152,6 +152,8 @@ export class AirPlayAdapter implements Adapter {
           await this.api('PUT', '/api/outputs/set', { outputs: ids });
           if (q) await this.playQueue(q);
           else {
+            // A recording set to loop plays again from the start each time it ends.
+            await this.api('PUT', `/api/player/repeat?state=${this.ctx!.sourceLoops?.(src) ? 'single' : 'off'}`).catch(() => {});
             await this.api('POST', `/api/queue/items/add?uris=${encodeURIComponent(url!)}&clear=true&playback=start`);
             this.music = null;
           }

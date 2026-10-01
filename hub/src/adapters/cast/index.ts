@@ -102,13 +102,19 @@ class Receiver {
     return app.transportId;
   }
 
-  async play(url: string, title: string): Promise<void> {
+  /** Play a stream or a recording; `loop` plays a recording again from the start each time it ends. */
+  async play(url: string, title: string, loop = false): Promise<void> {
     const transport = await this.receiverApp();
-    const r = await this.ch.request(NS.media, transport, {
-      type: 'LOAD', autoplay: true,
-      media: { contentId: url, contentType: contentType(url), streamType: 'LIVE', metadata: { metadataType: 0, title } },
-    });
-    if (r.data.type === 'LOAD_FAILED' || r.data.type === 'LOAD_CANCELLED') throw new Error(`${this.ep.name} couldn't play ${title}`);
+    const r = loop
+      ? await this.ch.request(NS.media, transport, {
+        type: 'QUEUE_LOAD', startIndex: 0, repeatMode: 'REPEAT_SINGLE',
+        items: [{ autoplay: true, media: { contentId: url, contentType: contentType(url), streamType: 'BUFFERED', metadata: { metadataType: 0, title } } }],
+      })
+      : await this.ch.request(NS.media, transport, {
+        type: 'LOAD', autoplay: true,
+        media: { contentId: url, contentType: contentType(url), streamType: 'LIVE', metadata: { metadataType: 0, title } },
+      });
+    if (r.data.type === 'LOAD_FAILED' || r.data.type === 'LOAD_CANCELLED' || r.data.type === 'INVALID_REQUEST') throw new Error(`${this.ep.name} couldn't play ${title}`);
     this.media = title;
     this.queue = null;
   }
@@ -429,7 +435,7 @@ export class CastAdapter implements Adapter {
       // Not a radio source: maybe music (Helix), which plays as a queue of songs.
       const queue = url ? null : this.ctx!.queueFor(media, { shuffle: !!ps[0].cmd.shuffle });
       const start = async (r: Receiver) => {
-        if (url) return r.play(url, media);
+        if (url) return r.play(url, media, !!this.ctx!.sourceLoops?.(media));
         const q = await queue;
         if (!q) throw new Error(`No stream URL set for “${media}”`);
         await r.playQueue(q);
