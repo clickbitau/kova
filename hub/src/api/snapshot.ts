@@ -132,6 +132,8 @@ export function snapshot(hub: Hub) {
     overlays: cfg.overlays.map(o => ({ id: o.id, name: o.name, icon: o.icon, endsLabel: o.endsLabel, targets: targetList(o.targets) })),
     moments: cfg.moments.map(mo => ({ id: mo.id, label: mo.label, what: mo.what, at: mo.at, atLabel: rhythmLabel(mo.at), targets: targetList(mo.targets) })),
     sources: cfg.sources,
+    // Helix music any speaker can play: Shuffle all, Loved, each playlist (empty until Helix is paired).
+    music: hub.music?.cached() ?? [],
     findings,
     activity,
     integrations: [

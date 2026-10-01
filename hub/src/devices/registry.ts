@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import type { Adapter, AdapterContext, DeviceInfo } from '../adapters/sdk.ts';
+import type { Adapter, AdapterContext, DeviceInfo, Queue } from '../adapters/sdk.ts';
 import type { Cause, Command, Device, DeviceSettings, DeviceState, Targets } from '../model/types.ts';
 import type { Store } from '../store/db.ts';
 import { CAPS, changeSentence, fitCommand } from '../util/describe.ts';
@@ -30,6 +30,11 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
   /** What each integration called a device and where it put it, before the owner's settings. */
   private origin = new Map<string, { name: string; room: string }>();
 
+  /** Music by name → a play queue (services/helix-music.ts); set by the hub. */
+  queues: ((media: string, opts: { shuffle?: boolean }) => Promise<Queue | null>) | null = null;
+  /** Whether a name is music (not a radio source), for a plain answer on speakers that can't play a queue. */
+  isMusic: ((media: string) => boolean) | null = null;
+
   constructor(private store: Store, private sourceUrl: (name: string) => string | undefined = () => undefined, private settings: () => Record<string, DeviceSettings> = () => ({})) {
     super();
     this.saved = store.get<Record<string, DeviceState>>('deviceState') ?? {};
@@ -53,6 +58,7 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
       report: (id, state) => this.report(id, state),
       event: (id, type, data = {}) => this.deviceEvent(id, type, data),
       sourceUrl: this.sourceUrl,
+      queueFor: (media, opts) => this.queues ? this.queues(media, opts ?? {}) : Promise.resolve(null),
       derive: (id, state) => { const d = this.devices.get(id); if (!d) return; const patch = this.diff(d, state); if (!Object.keys(patch).length) return; d.state = { ...d.state, ...patch }; this.emit('measure'); },
       retract: ids => { let n = 0; for (const id of ids) if (this.devices.get(id)?.adapter === a.id) { this.devices.delete(id); n++; } if (n) this.emit('devices'); },
     };
@@ -137,7 +143,8 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
   diff(d: Device, patch: Command): Command {
     const out: Command = {};
     for (const [k, v] of Object.entries(patch)) {
-      if ((d.state as Record<string, unknown>)[k] !== v) (out as Record<string, unknown>)[k] = v;
+      // A skip is momentary: always sent, never kept as state.
+      if (k === 'skip' || (d.state as Record<string, unknown>)[k] !== v) (out as Record<string, unknown>)[k] = v;
     }
     return out;
   }
@@ -149,6 +156,9 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
   async command(id: string, cmd: Command, cause: Cause, opts: { quiet?: boolean } = {}): Promise<Command> {
     const d = this.devices.get(id);
     if (!d) throw new Error(`Unknown device ${id}`);
+    if (typeof cmd.media === 'string' && !d.capabilities.includes('queue') && !d.capabilities.includes('library') && !this.sourceUrl(cmd.media) && this.isMusic?.(cmd.media)) {
+      throw new Error(`${d.name} can’t play Helix music yet (Google Cast and Sonos speakers can)`);
+    }
     const patch = this.diff(d, fitCommand(d, cmd));
     if (!Object.keys(patch).length) return {};
     const adapter = this.adapters.get(d.adapter);
@@ -160,7 +170,13 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
       this.store.append({ kind: 'system', device: id, feed: 'system', what: `${d.name} didn't respond`, data: { error: String(err), patch }, cause });
       throw err;
     }
-    return this.apply(d, did ? { ...patch, ...did } : patch, cause, opts.quiet);
+    const { skip: _skip, ...kept } = did ? { ...patch, ...did } : patch;
+    // A skip changes the song (which the speaker reports), not a setting: log it, keep no state for it.
+    if (_skip && !Object.keys(kept).length) {
+      this.store.append({ kind: 'state', device: d.id, feed: cause.kind === 'user' || cause.kind === 'assistant' ? 'device' : null, what: `${d.name}: ${_skip > 0 ? 'next song' : 'previous song'}`, data: { patch }, cause });
+      return {};
+    }
+    return this.apply(d, kept, cause, opts.quiet);
   }
 
   /** Apply many targets at once. Failures on one device don't stop the rest. The caller logs one summary entry. */
@@ -198,6 +214,16 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
     if (!Object.keys(patch).length) return;
     const onlyOnline = Object.keys(patch).every(k => MEASUREMENTS.has(k));
     if (onlyOnline) { d.state = { ...d.state, ...patch }; this.emit('measure'); return; }
+    // The next song in a queue isn't news for Activity: keep it quiet, but let listeners (play counts) hear it.
+    if (Object.keys(patch).every(k => k === 'track' || k === 'shuffle' || MEASUREMENTS.has(k))) {
+      const prev: DeviceState = {};
+      for (const k of Object.keys(patch)) (prev as Record<string, unknown>)[k] = (d.state as Record<string, unknown>)[k] ?? null;
+      d.state = { ...d.state, ...patch };
+      this.persist();
+      this.emit('change', { device: d, prev, patch, cause: { kind: 'device', label: d.integration, detail: 'next song' } });
+      this.emit('measure');
+      return;
+    }
     this.apply(d, patch, { kind: 'device', label: `${d.integration}`, detail: 'changed at the device or in another app' });
   }
 

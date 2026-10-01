@@ -119,7 +119,7 @@ export function saveSettings(store: Store, patch: SettingsPatch): AssistantSetti
 export const TOOLS = [
   {
     name: 'set_devices',
-    description: 'Change one or more devices. Only use device ids from the home context. bri is brightness 1-100, k is colour temperature in Kelvin, color is #rrggbb, vol is volume 0-100. Turning a speaker or TV off also stops what it plays. paused pauses or carries on (devices with the pause capability). media on a device with the library capability is a film or show title to find and play there (a Helix box).',
+    description: 'Change one or more devices. Only use device ids from the home context. bri is brightness 1-100, k is colour temperature in Kelvin, color is #rrggbb, vol is volume 0-100. Turning a speaker or TV off also stops what it plays. paused pauses or carries on (devices with the pause capability). media on a device with the library capability is a film or show title to find and play there (a Helix box). On a speaker with the queue capability, media can also be Helix music: "Shuffle all", "Loved", a playlist title, or "Station: <artist, album or song>"; shuffle true plays it in a shuffled order; skip 1 is the next song, -1 the previous.',
     parameters: {
       type: 'object',
       properties: {
@@ -136,6 +136,8 @@ export const TOOLS = [
               vol: { type: 'integer', minimum: 0, maximum: 100 },
               paused: { type: 'boolean' },
               media: { type: 'string' },
+              shuffle: { type: 'boolean' },
+              skip: { type: 'integer', enum: [-1, 1] },
             },
             required: ['id'],
           },
@@ -207,7 +209,10 @@ export class Toolbox {
             if (typeof x.vol === 'number' && Number.isFinite(x.vol)) c.vol = Math.round(Math.max(0, Math.min(100, x.vol)));
             if (typeof x.paused === 'boolean' && d.capabilities.includes('pause')) c.paused = x.paused;
             // A title only means something to a TV that finds titles itself; elsewhere media is a named source.
-            if (typeof x.media === 'string' && x.media.trim() && (d.capabilities.includes('library') || this.ai.config.get().sources.some(s => s.name === x.media))) c.media = x.media.trim().slice(0, 120);
+            if (typeof x.media === 'string' && x.media.trim() && (d.capabilities.includes('library') || this.ai.config.get().sources.some(s => s.name === x.media)
+              || (d.capabilities.includes('queue') && (this.ai.reg.isMusic?.(x.media.trim()) || /^station: /i.test(x.media.trim()))))) c.media = x.media.trim().slice(0, 120);
+            if (typeof x.shuffle === 'boolean' && d.capabilities.includes('queue')) c.shuffle = x.shuffle;
+            if ((x.skip === 1 || x.skip === -1) && d.capabilities.includes('queue')) c.skip = x.skip;
             if ((c.bri != null || c.k != null || c.color != null) && c.on === undefined) c.on = true;
             if (c.on === false && isPlayer(d)) c.media = null;
             if (Object.keys(c).length) targets[d.id] = c;
@@ -399,6 +404,9 @@ export class AiAssistant {
   /** Share settings of the request in progress (list_schedule hides details when names are off). */
   lastShare: ShareSettings | null = null;
 
+  /** Helix music names for the home context (hub.music). */
+  music: (() => { name: string; kind: string }[]) | null = null;
+
   constructor(readonly engine: Engine, readonly reg: Registry, readonly config: ConfigStore, private store: Store, private opts: AiOptions = {}) {}
 
   /** Build the home context the user chose to share. Cameras are never included. */
@@ -429,11 +437,14 @@ export class AiAssistant {
       parts.can = d.capabilities.filter(c => c !== 'events' && c !== 'power');
       if (share.rooms) {
         const s = d.state;
-        parts.state = Object.fromEntries(Object.entries({ on: s.on, bri: s.bri, k: s.k, color: s.color, mode: s.mode, media: s.media, paused: s.paused || undefined, vol: s.vol, online: s.online }).filter(([, v]) => v !== undefined && v !== null));
+        parts.state = Object.fromEntries(Object.entries({ on: s.on, bri: s.bri, k: s.k, color: s.color, mode: s.mode, media: s.media, song: s.track ? `${s.track.title}${s.track.artist ? ` by ${s.track.artist}` : ''}` : undefined, shuffle: s.shuffle || undefined, paused: s.paused || undefined, vol: s.vol, online: s.online }).filter(([, v]) => v !== undefined && v !== null));
       }
       return JSON.stringify(parts);
     });
     lines.push('Devices:', ...devLines);
+    // Helix music speakers can play (playlist titles are names, so only when names are shared).
+    const music = devices.some(d => d.capabilities.includes('queue')) ? (this.music?.() ?? []) : [];
+    if (music.length) lines.push(`Helix music for speakers with the queue capability: ${(share.names ? music : music.filter(m => m.kind !== 'playlist')).map(m => `"${m.name}"`).join(', ')}, or "Station: <artist, album or song>".`);
     if (share.names) shared.push('device and room names');
     if (share.rooms) shared.push('device states');
 

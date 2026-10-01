@@ -34,7 +34,7 @@ export function stateOf(d: Dev): [string, string] {
     return [`${VAC[a] || 'Idle'}${d.battery != null ? ` · ${d.battery}%` : ''}`, a === 'error' ? C.red : a === 'cleaning' ? C.amber : C.stone];
   }
   if (d.type === 'fan') return [d.mode || 'Auto', C.blue];
-  if (isPlayer(d)) return d.on ? [d.paused ? `Paused${d.media ? ` · ${d.media}` : ''}` : d.media ? `Playing ${d.media}` : 'Playing', d.paused ? C.stone : C.blue] : ['Idle', C.stone];
+  if (isPlayer(d)) return d.on ? [d.paused ? `Paused${d.media ? ` · ${d.media}` : ''}` : d.track ? `Playing ${d.track.title}${d.track.artist ? ` · ${d.track.artist}` : ''}` : d.media ? `Playing ${d.media}` : 'Playing', d.paused ? C.stone : C.blue] : ['Idle', C.stone];
   if (d.type === 'internet') return d.on ? ['Internet on', C.green] : ['Internet paused', C.amber];
   if (!d.on) return ['Off', C.stone];
   if (d.type === 'dimmer') return [`On · ${d.bri}%`, C.amber];

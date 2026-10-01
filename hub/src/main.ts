@@ -18,6 +18,7 @@ import { demoConfig, demoDevices, DEMO_SOLAR } from './seed/demo-home.ts';
 import type { Adapter } from './adapters/sdk.ts';
 import { Presence } from './services/presence.ts';
 import { HelixLink } from './services/helix-link.ts';
+import { HelixMusic } from './services/helix-music.ts';
 import { WardenLink } from './services/warden-link.ts';
 import { Notifier } from './services/notify.ts';
 import { Backups, parseBackupTime } from './services/backup.ts';
@@ -127,6 +128,13 @@ const setup = new IntegrationsManager(hub, { path: integrationsFile, dataDir });
 
 // Who's home (router, ping, phone automations). Always on so phone automations get per-person keys;
 // the router and ping sources only run when configured.
+// Helix music on any Cast or Sonos speaker: Shuffle all, Loved, playlists, stations (services/helix-music.ts).
+const music = new HelixMusic(() => setup.raw('helix'));
+hub.useMusic(music);
+const refreshMusic = () => void music.catalog(true).then(() => hub.emit('changed')).catch(() => {});
+refreshMusic();
+setInterval(refreshMusic, 5 * 60_000).unref();
+
 // Helix: once paired, Kova tells Helix Server where it is and which TV each box is on.
 const helixLink = new HelixLink(hub, { helix: () => setup.raw('helix'), dataDir, port: () => Number(env.KOVA_PORT ?? 8140) });
 helixLink.start();

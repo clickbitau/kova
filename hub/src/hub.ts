@@ -10,6 +10,7 @@ import { SpeakerGroupsAdapter } from './adapters/groups.ts';
 import type { HomeConfig } from './model/types.ts';
 import type { Weather } from './services/weather.ts';
 import { Energy } from './services/energy.ts';
+import type { HelixMusic } from './services/helix-music.ts';
 
 export interface HubOptions {
   dbPath: string;
@@ -44,6 +45,21 @@ export class Hub extends EventEmitter<{ changed: [] }> {
   readonly energy: Energy;
   /** Speaker groups made in Kova (they're devices of their own). */
   readonly groups: SpeakerGroupsAdapter;
+  /** Helix music on any speaker (services/helix-music.ts), once Helix is set up. */
+  music: HelixMusic | null = null;
+
+  /** Let speakers play Helix music: names → play queues, for adapters, the snapshot and Ask. */
+  useMusic(m: HelixMusic): void {
+    this.music = m;
+    this.reg.queues = (media, o) => m.queueFor(media, o);
+    this.reg.isMusic = media => m.isMusic(media);
+    // Each song a speaker starts counts as played in Helix (Recently played, play counts), as in Helix's own apps.
+    this.reg.on('change', e => {
+      const t = e.patch.track;
+      if (t?.id && t.id !== e.prev.track?.id) void m.played(t.id, e.device.name);
+    });
+    this.assistant.music = m;
+  }
 
   constructor(private opts: HubOptions) {
     super();

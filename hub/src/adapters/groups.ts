@@ -47,7 +47,7 @@ export class SpeakerGroupsAdapter implements Adapter {
     this.announced = ids;
     this.ctx.announce(gs.map(g => ({
       id: groupDeviceId(g), name: g.name, room: g.room || this.commonRoom(g) || 'unassigned', type: 'media' as const,
-      capabilities: ['onoff', 'volume', 'media'], integration: 'Kova speaker group', address: g.members.join(', '),
+      capabilities: ['onoff', 'volume', 'media', 'queue'], integration: 'Kova speaker group', address: g.members.join(', '),
       state: this.derived(g),
     })));
     this.refresh();
@@ -62,9 +62,13 @@ export class SpeakerGroupsAdapter implements Adapter {
     const playing = ms.filter(d => d.state.on);
     const medias = new Set(playing.map(d => d.state.media ?? null));
     const vols = ms.map(d => d.state.vol).filter((v): v is number => typeof v === 'number');
+    // The song: from the first speaker that says (they play the same queue in the same order).
+    const withTrack = playing.find(d => d.state.track);
     return {
       on: playing.length > 0,
       media: playing.length && medias.size === 1 ? [...medias][0] : playing.length ? 'Mixed' : null,
+      track: medias.size === 1 ? withTrack?.state.track ?? null : null,
+      shuffle: !!withTrack?.state.shuffle,
       vol: vols.length ? Math.round(vols.reduce((a, b) => a + b, 0) / vols.length) : 30,
       online: ms.some(d => d.state.online !== false) && ms.length > 0,
     };
