@@ -5,6 +5,7 @@ import { call } from '../api/client';
 import type { Command, Snapshot } from '../api/types';
 import { wsUrl, type HubConfig } from '../logic/connect';
 import { getJson, setJson } from '../native/storage';
+import { checkForAppUpdate, pointUpdatesAtHub } from '../native/updates';
 
 export type Conn = 'connecting' | 'live' | 'offline';
 
@@ -22,7 +23,8 @@ interface HubCtx {
   setPerson(personId: string | undefined): Promise<void>;
   api<T = unknown>(method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, body?: unknown): Promise<T>;
   /** Change a device, showing the change at once; the hub's next snapshot has the final word. */
-  send(id: string, cmd: Command, done?: string): Promise<void>;
+  /** Resolves true when the hub took it (errors are shown here). */
+  send(id: string, cmd: Command, done?: string): Promise<boolean>;
   /** A call that returns { undo }: toast with an Undo button. */
   act(method: 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, body: unknown, done: string): Promise<void>;
   say(text: string, opts?: { undo?: string; error?: boolean }): void;
@@ -89,6 +91,19 @@ export function HubProvider({ children }: { children: ReactNode }) {
     toastTimer.current = setTimeout(() => setToast(null), opts.undo ? 6000 : 3500);
   }, []);
 
+  // App updates come from this hub (native/updates.ts): point the updater at it, check now and
+  // whenever the app comes back to the front (at most every 30 minutes). A new one runs next launch.
+  const hubUrl = cfg?.url;
+  useEffect(() => {
+    if (!hubUrl) return;
+    const check = (force: boolean) => void checkForAppUpdate(force).then(ready => {
+      if (ready) say('A new version of Kova is ready. It starts next time you open the app.');
+    });
+    void pointUpdatesAtHub(hubUrl).then(() => check(true));
+    const sub = AppState.addEventListener('change', st => { if (st === 'active') check(false); });
+    return () => sub.remove();
+  }, [hubUrl, say]);
+
   const api = useCallback(<T,>(method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, body?: unknown) => {
     if (!cfg) return Promise.reject(new Error('Not connected to a hub'));
     return call<T>(cfg, method, path, body);
@@ -101,9 +116,11 @@ export function HubProvider({ children }: { children: ReactNode }) {
     try {
       const r = await api<{ undo?: string }>('POST', `/api/devices/${encodeURIComponent(id)}`, cmd);
       if (done) say(done, { undo: r?.undo });
+      return true;
     } catch (e) {
       say((e as Error).message, { error: true });
       void api<Snapshot>('GET', '/api/state').then(setSnap).catch(() => {});
+      return false;
     }
   }, [api, say]);
 

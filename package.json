@@ -1,11 +1,17 @@
 {
   "name": "kova",
   "private": true,
-  "workspaces": ["hub"],
+  "workspaces": [
+    "hub"
+  ],
   "scripts": {
     "dev": "npm run dev -w hub",
     "start": "npm start -w hub",
     "test": "npm test -w hub",
-    "typecheck": "npm run typecheck -w hub"
+    "typecheck": "npm run typecheck -w hub",
+    "versions": "node scripts/check-versions.mjs",
+    "ota": "node scripts/export-ota.mjs",
+    "store-release": "node scripts/store-release.mjs",
+    "test:scripts": "node --test scripts/versioning.test.mjs"
   }
 }

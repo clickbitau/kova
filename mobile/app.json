@@ -3,6 +3,14 @@
     "name": "Kova",
     "slug": "kova",
     "version": "0.1.0",
+    "runtimeVersion": "kova-mobile-0",
+    "updates": {
+      "enabled": true,
+      "url": "https://updates.invalid/api/app/manifest",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0,
+      "disableAntiBrickingMeasures": true
+    },
     "scheme": "kova",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
@@ -11,6 +19,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "au.clickbit.kova",
+      "appleTeamId": "G5W29SJ797",
       "buildNumber": "1",
       "infoPlist": {
         "NSLocalNetworkUsageDescription": "Kova talks to your home’s Kova hub on your Wi-Fi.",
@@ -123,6 +132,7 @@
           ]
         }
       ]
-    ]
+    ],
+    "owner": "dkathel"
   }
 }

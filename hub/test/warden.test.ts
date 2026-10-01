@@ -144,6 +144,10 @@ test('Warden: link once, internet status and alerts, pause a device’s internet
     await adapter.poll();
     await notifier.idle();
     assert.equal(ntfy.got.at(-1)!.title, 'The internet is back');
+    // Warden moved to the backup connection (from its live feed): the phone hears it too.
+    t.hub.reg.deviceEvent(INTERNET_ID, 'internet-failover', { title: 'Switched to 5G backup', body: 'NBN stopped answering.' });
+    await notifier.idle();
+    assert.deepEqual({ title: ntfy.got.at(-1)!.title, message: ntfy.got.at(-1)!.message }, { title: 'Switched to 5G backup', message: 'NBN stopped answering. Everything stays online; it may be slower until the main connection is back.' });
 
     // Devices on the network, for picking phones and internet switches.
     w.s.clients = [

@@ -145,13 +145,15 @@ export class Notifier {
     await this.notify({ title: `Someone’s at the ${where}`, body, tag: `ring-${e.device.id}`, url: cam, actions: [{ action: 'view-camera', title: 'View camera', url: cam }] });
   }
 
-  /** Warden: the internet went down or came back, a new device joined, or an attack was blocked. */
+  /** Warden: the internet went down, came back or moved to the backup connection, a new device joined, or an attack was blocked. */
   private async onNetwork(e: DeviceEvent): Promise<void> {
     const d = e.data ?? {};
     const text = (k: string) => typeof d[k] === 'string' ? d[k] as string : '';
     const url = '/phone.html?page=integrations';
     if (e.type === 'internet-down') await this.notify({ title: 'The internet is down', body: 'Warden lost the connection. Kova and your devices at home keep working.', tag: 'internet', url });
     else if (e.type === 'internet-up') await this.notify({ title: 'The internet is back', body: 'Warden is connected again.', tag: 'internet', url });
+    // On the backup connection: still online, but it may be slower or metered. Same tag, so "back" replaces it.
+    else if (e.type === 'internet-failover') await this.notify({ title: text('title') || 'Switched to the backup connection', body: [text('body'), 'Everything stays online; it may be slower until the main connection is back.'].filter(Boolean).join(' '), tag: 'internet', url });
     else if (e.type === 'new-device') await this.notify({ title: text('title') || 'A new device joined your network', body: text('body') || 'Open Warden to name it or block it.', tag: 'warden-new-device', url });
     else if (e.type === 'threat') await this.notify({ title: text('title') || 'Warden blocked an attack', body: text('body'), tag: 'warden-threat', url });
   }

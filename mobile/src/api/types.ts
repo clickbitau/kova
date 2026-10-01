@@ -12,6 +12,8 @@ export interface DeviceState {
   media?: string | null;
   paused?: boolean;
   vol?: number | null;
+  /** TV input to switch to: hdmi1..hdmi4 or tv (TVs with `input`). The TV can't say which it's on, so this reads back null. */
+  input?: string | null;
   power?: number | null;
   energy?: number | null;
   activity?: string;

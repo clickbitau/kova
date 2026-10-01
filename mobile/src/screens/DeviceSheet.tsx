@@ -10,13 +10,15 @@ import { Button, HScroll, Pill, Press, Sheet, Slider, Switch } from '../ui/kit';
 import { T } from '../ui/Text';
 
 const TEMPS: [number, string][] = [[2200, '#ffb56b'], [2700, '#ffc98a'], [3000, '#ffd9a8'], [4000, '#fff1dc'], [5000, '#f4f7ff']];
+/** Inputs a TV with `input` can switch to (the TV can't say which it's on, so none shows as selected). */
+const INPUTS: [string, string][] = [['hdmi1', 'HDMI 1'], ['hdmi2', 'HDMI 2'], ['hdmi3', 'HDMI 3'], ['hdmi4', 'HDMI 4'], ['tv', 'TV']];
 const COLOURS = ['#ff5a4e', '#ff9f43', '#ffd93d', '#6bd968', '#3fd0c9', '#4aa3ff', '#8b6bff', '#ff6bd6'];
 
 const Label = ({ children }: { children: string }) => <T size={13} weight={600}>{children}</T>;
 
 /** Every control a device has, why it's like this, and its settings. Opened from ⋯ on any tile. */
 export function DeviceSheet() {
-  const { snap, send, act } = useHub();
+  const { snap, send, act, say } = useHub();
   const { id, close } = useSheet();
   const nav = useNav();
   const [name, setName] = useState<string | null>(null);
@@ -90,6 +92,16 @@ export function DeviceSheet() {
             <View style={{ flex: 1 }}><Slider value={D.vol ?? 30} color={C.blue} onRelease={v => void send(D.id, { vol: v })} /></View>
             <T mono size={12} color={C.stone} style={{ width: 36, textAlign: 'right' }}>{`${D.vol ?? 30}%`}</T>
           </View>
+          {has(D, 'input') && D.on ? (
+            <View style={{ gap: 8 }}>
+              <Label>Source</Label>
+              <HScroll>
+                {INPUTS.map(([id, label]) => (
+                  <Pill key={id} label={label} onPress={() => void send(D.id, { input: id }).then(ok => { if (ok) say(`${D.name} is on ${label}`); })} />
+                ))}
+              </HScroll>
+            </View>
+          ) : null}
           {has(D, 'pause') && D.on ? (
             <View style={{ flexDirection: 'row', gap: 8 }}>
               <Press onPress={() => void send(D.id, { paused: !D.paused })} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, padding: 11, borderRadius: 12, backgroundColor: 'rgba(124,184,240,0.16)' }}>
