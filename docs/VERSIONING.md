@@ -14,8 +14,9 @@ Kova ships two things that move independently:
 
 The owner's standard for every app (the same as Helix and Warden):
 
-- **MAJOR** is the App Store line. `X.0.0` is what Apple approves. Kova's first App Store release
-  will be **1.0.0**.
+- **MAJOR** is the App Store line. A new MAJOR starts a line only when the owner decides; it is
+  not needed for each App Review submission. Kova's first App Store release will be **1.0.0**, as
+  the owner chose.
 - **MINOR** is a native store build on that line. It changes when native code changes and a new
   binary is built. Kova starts at **0.1.0**.
 - **PATCH** is an over-the-air update: JavaScript and assets only, with no store build (0.1.1,
@@ -29,7 +30,9 @@ The owner's standard for every app (the same as Helix and Warden):
 3. No native change, no store build. If the native fingerprint equals the last store build's, ship
    over the air.
 4. Never reuse an approved version; versions only go up.
-5. A new MAJOR is a new App Store line, starting at `X.0.0` (`store-release.mjs mobile --major`).
+5. Any native `X.Y.0` build goes to App Review as it is: no version change is needed to submit it.
+   A new MAJOR is a new App Store line, starting at `X.0.0` (`store-release.mjs mobile --major`),
+   and only when the owner decides.
 6. Each binary has a native **train** named after the version line it builds:
    `kova-mobile-<MAJOR>.<MINOR>` of its store version. `kova-mobile-0.1` builds 0.1.0 and its
    updates 0.1.x; `kova-mobile-0.2` builds 0.2.0; `kova-mobile-1.0` builds 1.0.0. The train is
