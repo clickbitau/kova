@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Store } from '../src/store/db.ts';
 import { Registry } from '../src/devices/registry.ts';
-import { SmartThingsAdapter, exchangeSmartThingsCode, fromStInput, fromTvSource, isSoundbar, smartThingsAuthUrl, toStInput, toTvSource } from '../src/adapters/smartthings.ts';
+import { SmartThingsAdapter, createSmartThingsApp, exchangeSmartThingsCode, fromStInput, fromTvSource, isSoundbar, smartThingsAuthUrl, toStInput, toTvSource } from '../src/adapters/smartthings.ts';
 
 const you = { kind: 'user' as const, label: 'You' };
 
@@ -166,4 +166,33 @@ test('SmartThings sets and reads a Samsung TV’s source, for the Samsung TV ada
   assert.equal(toTvSource('hdmi3', ['dtv', 'HDMI3']), 'HDMI3');
   assert.equal(toTvSource('tv', ['digitalTv', 'HDMI1']), 'digitalTv');
   assert.deepEqual(['HDMI1', 'dtv', 'digitalTv', 'USB'].map(fromTvSource), ['hdmi1', 'tv', 'tv', 'usb']);
+});
+
+test('SmartThings: Kova makes its own OAuth-In app from a one-time token, as the CLI would', async () => {
+  const got: { auth?: string; body?: Record<string, any> }[] = [];
+  const server = http.createServer((req, res) => {
+    const chunks: Buffer[] = [];
+    req.on('data', c => chunks.push(c));
+    req.on('end', () => {
+      const body = JSON.parse(Buffer.concat(chunks).toString() || '{}');
+      got.push({ auth: req.headers.authorization, body });
+      res.setHeader('content-type', 'application/json');
+      if (req.headers.authorization !== 'Bearer good-token') { res.statusCode = 403; res.end(JSON.stringify({ error: { message: 'Forbidden' } })); return; }
+      res.end(JSON.stringify({ app: { appId: 'app-1', appName: body.appName }, oauthClientId: 'client-1', oauthClientSecret: 'secret-1' }));
+    });
+  });
+  await new Promise<void>(r => server.listen(0, '127.0.0.1', r));
+  const apiUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  try {
+    const made = await createSmartThingsApp({ token: ' good-token ', apiUrl });
+    assert.deepEqual(made, { clientId: 'client-1', clientSecret: 'secret-1', appId: 'app-1' });
+    const b = got[0].body!;
+    assert.equal(b.appType, 'API_ONLY');
+    assert.deepEqual(b.classifications, ['CONNECTED_SERVICE']);
+    assert.equal(b.principalType, 'LOCATION');
+    assert.match(b.appName, /^kova-[0-9a-f]{8}$/);
+    assert.deepEqual(b.oauth.scope, ['r:devices:*', 'x:devices:*']);
+    assert.deepEqual(b.oauth.redirectUris, ['https://httpbin.org/get']);
+    await assert.rejects(createSmartThingsApp({ token: 'no-apps-permission', apiUrl }), /Apps permissions/);
+  } finally { server.close(); }
 });
