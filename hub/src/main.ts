@@ -18,7 +18,7 @@ import { demoConfig, demoDevices, DEMO_SOLAR } from './seed/demo-home.ts';
 import type { Adapter } from './adapters/sdk.ts';
 import { Presence } from './services/presence.ts';
 import { HelixLink } from './services/helix-link.ts';
-import { HelixAutoSwitch, autoSwitchOn } from './services/helix-autoswitch.ts';
+import { ScreenNotices, SnapLinks } from './services/screen-notices.ts';
 import { HelixMusic } from './services/helix-music.ts';
 import { WardenLink } from './services/warden-link.ts';
 import { Notifier } from './services/notify.ts';
@@ -139,9 +139,10 @@ setInterval(refreshMusic, 5 * 60_000).unref();
 // Helix: once paired, Kova tells Helix Server where it is and which TV each box is on.
 const helixLink = new HelixLink(hub, { helix: () => setup.raw('helix'), dataDir, port: () => Number(env.KOVA_PORT ?? 8140) });
 helixLink.start();
-// Auto-switch when Helix plays: TV on and to the box, soundbar on and to where the sound goes.
-const helixSwitch = new HelixAutoSwitch(hub, { screens: () => helixLink.screens(), enabled: () => autoSwitchOn((setup.raw('helix') as { autoSwitch?: unknown } | undefined)?.autoSwitch) });
-helixSwitch.start();
+// The doorbell on the TV: a card with its snapshot on every Helix screen that's on.
+const snapLinks = new SnapLinks();
+const screenNotices = new ScreenNotices(hub, { links: snapLinks, kovaUrl: () => helixLink.kovaUrl() });
+screenNotices.start();
 hub.services.push({ id: 'helix-link', name: 'Helix TVs', icon: 'tv', kind: 'Local', get devices() { return helixLink.screens().length; }, status: () => helixLink.status() ?? { ok: true, note: 'Pair with Helix to turn TVs on from Helix' } });
 
 // Warden: Kova shares its devices, people, house mode and plugs, and restarts frozen equipment when Warden asks.
@@ -180,7 +181,7 @@ hub.services.push({ id: 'backups', name: 'Backups', icon: 'backup', kind: 'Local
 
 const app = await buildServer(hub, {
   webRoot: resolve(here, '../../web'), token: env.KOVA_TOKEN || undefined,
-  homekit, matterBridge, nest: integrations?.nest, presence, helixLink, otaDir: env.KOVA_OTA_DIR ? resolve(env.KOVA_OTA_DIR) : resolve(here, '../../ota'), notifier, integrationsPath: integrationsFile, integrations: setup, haImport, backups,
+  homekit, matterBridge, nest: integrations?.nest, presence, helixLink, snapLinks, otaDir: env.KOVA_OTA_DIR ? resolve(env.KOVA_OTA_DIR) : resolve(here, '../../ota'), notifier, integrationsPath: integrationsFile, integrations: setup, haImport, backups,
 });
 await app.listen({ port: Number(env.KOVA_PORT ?? 8140), host: env.KOVA_HOST ?? '0.0.0.0' });
 const addr = app.server.address();
@@ -202,7 +203,7 @@ const shutdown = async (signal: string) => {
   };
   presence.stop();
   helixLink.stop();
-  helixSwitch.stop();
+  screenNotices.stop();
   wardenLink.stop();
   await step('web server', () => app.close());
   await step('notifications', () => notifier.stop());

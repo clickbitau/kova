@@ -350,10 +350,6 @@ export const CATALOG: CatalogItem[] = [
           { key: 'soundbarInput', label: 'Box’s sound goes to the soundbar’s', type: 'select', options: [{ value: 'hdmi1', label: 'HDMI in 1' }, { value: 'hdmi2', label: 'HDMI in 2' }], help: 'For films whose 7.1 or DTS sound the box sends straight to the soundbar. Otherwise the soundbar listens to the TV (eARC).' },
         ],
       },
-      {
-        key: 'autoSwitch', label: 'Auto-switch when Helix plays', type: 'select', options: [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }],
-        help: 'When a box plays: the TV comes on and goes to the box, and the soundbar comes on and goes to where the sound is. An input you choose during playback is left alone.',
-      },
       { key: 'kovaUrl', label: 'Kova’s address for Helix', type: 'text', placeholder: 'http://10.10.10.5:8140', help: 'Optional. Kova uses its own address on Helix Server’s network.' },
     ],
     actions: [

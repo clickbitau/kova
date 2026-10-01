@@ -3,7 +3,7 @@ import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
 import { timingSafeEqual } from 'node:crypto';
 import type { Hub } from '../hub.ts';
-import type { Command } from '../model/types.ts';
+import type { Cause, Command } from '../model/types.ts';
 import type { AskAction } from '../assistant/assistant.ts';
 import { VirtualAdapter } from '../adapters/virtual.ts';
 import { MatterAdapter } from '../adapters/matter.ts';
@@ -17,7 +17,8 @@ import type { MatterBridge } from '../bridges/matter-bridge.ts';
 import { LiveViewUnavailable, NEST_DEFAULT_REDIRECT, exchangeNestCode, nestAuthUrl, type NestOptions } from '../adapters/nest.ts';
 import { SMARTTHINGS_DEFAULT_REDIRECT, exchangeSmartThingsCode, smartThingsAuthUrl } from '../adapters/smartthings.ts';
 import type { Presence } from '../services/presence.ts';
-import type { HelixLink } from '../services/helix-link.ts';
+import { HELIX_AUTO, HELIX_REMOTE, type HelixLink } from '../services/helix-link.ts';
+import type { SnapLinks } from '../services/screen-notices.ts';
 import type { Notifier } from '../services/notify.ts';
 import type { PushSubscription } from 'web-push';
 import { importFromCloud, type CloudImportOptions } from '../adapters/tuya/cloud.ts';
@@ -51,6 +52,8 @@ export interface ServerOptions {
   presence?: Presence;
   /** Helix's own token: it may switch the TVs its boxes sit on, and nothing else. */
   helixLink?: HelixLink;
+  /** One-picture links for Helix's on-screen doorbell card. */
+  snapLinks?: SnapLinks;
   /** Where the phone app's over-the-air bundles are (ota/<train>/<update>/). Absent: no app updates. */
   otaDir?: string;
   /** Web Push / ntfy notifications. */
@@ -103,6 +106,7 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
 
   // Helix Server calls back with the token Kova gave it (services/helix-link.ts): only its linked TVs (on and input) and soundbars.
   const fromHelix = new WeakSet<FastifyRequest>();
+  const helixCause = new WeakMap<FastifyRequest, Cause>();
   const helixTokenOk = (req: FastifyRequest, path: string): boolean => {
     const given = req.headers.authorization?.replace(/^Bearer\s+/i, '') ?? '';
     return !!opts.helixLink && !!given && opts.helixLink.isToken(given) && opts.helixLink.allows(req.method, path);
@@ -114,6 +118,8 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
       if (!path.startsWith('/api/') || path === '/api/health') return;
       // App updates: expo-updates asks without a token (api/app-updates.ts explains why).
       if (req.method === 'GET' && (path === '/api/app/manifest' || path.startsWith('/api/app/assets/'))) return;
+      // A doorbell picture for Helix to fetch: its random key is the credential (services/screen-notices.ts).
+      if (req.method === 'GET' && path.startsWith('/api/snap/')) return;
       if (opts.token && tokenOk(req, opts.token)) return;
       if (helixTokenOk(req, path)) { fromHelix.add(req); return; }
       if (opts.token && !personKeyOk(req)) return reply.code(401).send({ error: 'unauthorised' });
@@ -121,13 +127,12 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
     app.addHook('preHandler', async (req, reply) => {
       if (!fromHelix.has(req)) return;
       if (req.method === 'GET') return reply.send(opts.helixLink!.state());
-      const body = (req.body ?? {}) as Record<string, unknown>;
-      const keys = Object.keys(body);
+      // Helix's command (D98.11: one key, by its names) as Kova's, from its remote or its own switching.
       const id = decodeURIComponent(/^\/api\/devices\/([^/]+)$/.exec(req.url.split('?')[0])?.[1] ?? '');
-      const may = opts.helixLink!.fields(id);
-      if (!keys.length || !may || keys.some(k => !may.has(k))) {
-        return reply.code(403).send({ error: may?.has('vol') ? `Helix may only send ${[...may].join(', ')} to this soundbar` : 'Helix may only switch this TV on or off, or change its input' });
-      }
+      const t = opts.helixLink!.translate(id, (req.body ?? {}) as Record<string, unknown>);
+      if ('error' in t) return reply.code(403).send({ error: t.error });
+      req.body = t.cmd;
+      helixCause.set(req, String(req.headers['x-helix-origin'] ?? '').toLowerCase() === 'auto' ? HELIX_AUTO : HELIX_REMOTE);
     });
   }
 
@@ -189,7 +194,7 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
 
   // --------------------------------------------------------------- write --
   app.post<{ Params: { id: string }; Body: Command }>('/api/devices/:id', async (req, reply) => {
-    try { return { undo: await hub.engine.command(req.params.id, req.body ?? {}, USER) }; } catch (e) { return fail(reply, e); }
+    try { return { undo: await hub.engine.command(req.params.id, req.body ?? {}, helixCause.get(req) ?? USER) }; } catch (e) { return fail(reply, e); }
   });
 
   // Momentary events (camera saw a person, doorbell rang). Adapters use this path internally; webhooks can too.
@@ -234,6 +239,11 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
       if (req.params.op === 'stop') { await lv.stop(d, sid); return { ok: true }; }
       return reply.code(404).send({ error: 'unknown operation' });
     } catch (e) { return liveFail(reply, e); }
+  });
+  app.get<{ Params: { key: string } }>('/api/snap/:key', async (req, reply) => {
+    const s = opts.snapLinks?.get(req.params.key);
+    if (!s) return reply.code(404).send({ error: 'No such picture' });
+    return reply.type(s.contentType).header('cache-control', 'no-store').send(s.body);
   });
   app.get<{ Params: { id: string } }>('/api/devices/:id/snapshot', async (req, reply) => {
     const d = hub.reg.get(req.params.id);

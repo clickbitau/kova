@@ -8,7 +8,7 @@ import { join, resolve } from 'node:path';
 import { testHub } from './helpers.ts';
 import { buildServer } from '../src/api/server.ts';
 import { IntegrationsManager } from '../src/integrations-store.ts';
-import { HelixLink, SOUNDBAR_INPUTS, TV_INPUTS, helixScreens, kovaAddress } from '../src/services/helix-link.ts';
+import { HelixLink, SOUNDBAR_INPUTS, SOUNDBAR_MODES, TV_INPUTS, helixScreens, kovaAddress } from '../src/services/helix-link.ts';
 import type { Adapter, AdapterContext } from '../src/adapters/sdk.ts';
 import type { Command, Device } from '../src/model/types.ts';
 
@@ -50,7 +50,8 @@ class Tvs implements Adapter {
   }
   async stop() {}
   status() { return { ok: true }; }
-  async command(d: Device, cmd: Command) { this.got.push({ id: d.id, cmd }); }
+  // Like the Samsung adapter: a TV can't say its input, so it isn't kept.
+  async command(d: Device, cmd: Command) { this.got.push({ id: d.id, cmd }); if (d.type === 'tv' && cmd.input) return { input: null }; }
 }
 
 test('Helix link: after pairing Kova tells Helix where it is, a token and which TV each box is on; the token only reaches those TVs', async () => {
@@ -83,7 +84,11 @@ test('Helix link: after pairing Kova tells Helix where it is, a token and which 
       screens: [
         { playerId: 'd-bed', tvDeviceId: 'bedroom_tv', tvName: 'Bedroom TV', inputs: TV_INPUTS },
         // The soundbar in the TV's room goes with it, with the inputs Helix may pick and the one the box is wired to.
-        { playerId: 'd-lounge', tvDeviceId: 'lounge_tv', tvName: 'Lounge TV', helixInput: 'hdmi2', inputs: TV_INPUTS, soundbarDeviceId: 'lounge_bar', soundbarName: 'Soundbar', soundbarInputs: SOUNDBAR_INPUTS, soundbarHelixInput: 'hdmi1' },
+        {
+          playerId: 'd-lounge', tvDeviceId: 'lounge_tv', tvName: 'Lounge TV', helixInput: 'hdmi2', inputs: TV_INPUTS,
+          soundbarDeviceId: 'lounge_bar', soundbarName: 'Soundbar', soundbarInputs: SOUNDBAR_INPUTS, soundbarModes: SOUNDBAR_MODES, soundbarNight: true,
+          soundbarTvInput: 'tv', soundbarAdapterInput: 'hdmi1',
+        },
       ],
     });
     assert.deepEqual(link.status(), { ok: true, note: 'Helix turns on 2 TVs through Kova' });
@@ -103,20 +108,36 @@ test('Helix link: after pairing Kova tells Helix where it is, a token and which 
     const inp = await app.inject({ method: 'POST', url: '/api/devices/lounge_tv', headers: helix, payload: { input: 'hdmi2' } });
     assert.equal(inp.statusCode, 200, inp.body);
     assert.deepEqual(tvs.got, [{ id: 'lounge_tv', cmd: { on: true } }, { id: 'lounge_tv', cmd: { input: 'hdmi2' } }]);
-    // The soundbar under it: Helix's remote sends power, input, volume steps, mute, sound and night mode.
-    for (const payload of [{ on: true }, { volStep: 1 }, { vol: 20 }, { muted: true }, { input: 'hdmi1' }, { sound: 'surround' }, { night: true }]) {
+    // The soundbar under it: Helix sends one command at a time, by its own names (D98.11).
+    for (const payload of [{ on: true }, { volumeStep: 1 }, { volume: 20 }, { mute: true }, { input: 'hdmi1' }, { mode: 'surround' }, { nightMode: true }]) {
       const r = await app.inject({ method: 'POST', url: '/api/devices/lounge_bar', headers: helix, payload });
       assert.equal(r.statusCode, 200, `${JSON.stringify(payload)} ${r.body}`);
     }
     assert.deepEqual(tvs.got.filter(g => g.id === 'lounge_bar').map(g => g.cmd), [{ on: true }, { volStep: 1 }, { vol: 20 }, { muted: true }, { input: 'hdmi1' }, { sound: 'surround' }, { night: true }]);
-    assert.equal((await app.inject({ method: 'POST', url: '/api/devices/lounge_bar', headers: helix, payload: { media: 'Radio' } })).statusCode, 403);
+    for (const payload of [{ media: 'Radio' }, { volume: 20, mute: true }, { input: 'hdmi9' }, { volumeStep: 5 }, { mode: 'loud' }, { vol: 20 }]) {
+      assert.equal((await app.inject({ method: 'POST', url: '/api/devices/lounge_bar', headers: helix, payload })).statusCode, 403, JSON.stringify(payload));
+    }
     tvs.got = tvs.got.filter(g => g.id !== 'lounge_bar');
-    // Its /api/state lists the linked TVs and soundbars only.
-    const st = await app.inject({ method: 'GET', url: '/api/state', headers: helix });
-    assert.deepEqual(st.json(), { devices: [
-      { id: 'lounge_tv', name: 'Lounge TV', type: 'tv', state: { on: true, online: true } },
-      { id: 'lounge_bar', name: 'Soundbar', type: 'soundbar', state: { on: true, online: true, vol: 20, muted: true, input: 'hdmi1', sound: 'surround', night: true } },
+    // Helix switching by itself marks it; Kova says who changed each input last, so Helix never switches back someone's choice.
+    const auto = await app.inject({ method: 'POST', url: '/api/devices/lounge_tv', headers: { ...helix, 'x-helix-origin': 'auto' }, payload: { input: 'hdmi2' } });
+    assert.equal(auto.statusCode, 200, auto.body);
+    tvs.got.pop();
+    // Its /api/state lists the linked TVs and soundbars only, by Helix's names.
+    const st = (await app.inject({ method: 'GET', url: '/api/state', headers: helix })).json();
+    const at = (id: string) => st.devices.find((d: { id: string }) => d.id === id).state;
+    assert.equal(at('lounge_tv').inputChangedBy, 'helix-auto');
+    assert.equal(typeof at('lounge_tv').inputChangedAt, 'number');
+    assert.equal(at('lounge_bar').inputChangedBy, 'Helix remote');
+    for (const d of st.devices) delete d.state.inputChangedAt;
+    assert.deepEqual(st, { devices: [
+      { id: 'lounge_tv', name: 'Lounge TV', type: 'tv', state: { on: true, online: true, input: 'hdmi2', inputChangedBy: 'helix-auto' } },
+      { id: 'lounge_bar', name: 'Soundbar', type: 'soundbar', state: { on: true, online: true, input: 'hdmi1', volume: 20, muted: true, mode: 'surround', nightMode: true, inputChangedBy: 'Helix remote' } },
     ] });
+    // Someone changes the TV's input in Kova's app: Helix sees it wasn't its own switching.
+    await app.inject({ method: 'POST', url: '/api/devices/lounge_tv', headers: { authorization: 'Bearer master' }, payload: { input: 'hdmi3' } });
+    tvs.got.pop();
+    const st2 = (await app.inject({ method: 'GET', url: '/api/state', headers: helix })).json();
+    assert.deepEqual([st2.devices[0].state.input, st2.devices[0].state.inputChangedBy], ['hdmi3', 'You']);
 
     // Anything else is refused: another device, the bedroom TV (no longer linked), other fields, other routes.
     for (const [method, url, payload] of [

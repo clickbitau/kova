@@ -44,6 +44,9 @@ export interface SamsungTvOptions {
   timeoutMs?: number;
   /** Gap between repeated key presses (volume steps). */
   keyDelayMs?: number;
+  /** How long an input asked for right after waking the TV waits for it to come on (default 30 s), and how often to look (1 s). */
+  wakeWaitMs?: number;
+  wakeCheckMs?: number;
   /** Name shown on the TV's Allow prompt. */
   clientName?: string;
 }
@@ -112,6 +115,8 @@ interface Tv {
   connecting?: Promise<WsClient>;
   /** Absolute RenderingControl URL, null once we know DLNA isn't there. */
   dlna?: string | null;
+  /** Woken until then: an input asked for meanwhile waits for the TV to answer. */
+  wakingUntil?: number;
 }
 
 export class SamsungTvAdapter implements Adapter {
@@ -333,13 +338,19 @@ export class SamsungTvAdapter implements Adapter {
       // Fully-off and standby TVs both wake on the magic packet. It takes a few seconds to boot,
       // so a volume in the same command is left for the TV's own remembered level.
       await this.wake(tv);
-      return;
-    }
-    if (cmd.vol != null) await this.setVolume(tv, cmd.vol);
+      tv.wakingUntil = Date.now() + (this.opts.wakeWaitMs ?? 30_000);
+      if (!cmd.input) return;
+    } else if (cmd.vol != null) await this.setVolume(tv, cmd.vol);
     if (cmd.input) {
       // The remote API has no way to read the current source, so the input is not
       // kept as state: the next request for the same input still presses the key.
+      // Asked for right after "on" (Helix sends them back to back): wait for the TV to answer.
+      while (!tv.on && (tv.wakingUntil ?? 0) > Date.now()) {
+        await new Promise(r => setTimeout(r, this.opts.wakeCheckMs ?? 1000));
+        await this.refresh(tv);
+      }
       if (!tv.on) throw new Error(`${tv.cfg.name ?? tv.cfg.host} is off: switch it on before changing input`);
+      tv.wakingUntil = 0;
       await this.key(tv, inputKey(cmd.input));
       return { input: null };
     }

@@ -3,7 +3,8 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import { join } from 'node:path';
 import type { Hub } from '../hub.ts';
-import type { Device } from '../model/types.ts';
+import type { Cause, Command, Device } from '../model/types.ts';
+import type { ChangeEvent, SentEvent } from '../devices/registry.ts';
 import { lanJson, trimUrl } from '../util/lan-http.ts';
 
 /**
@@ -12,11 +13,14 @@ import { lanJson, trimUrl } from '../util/lan-http.ts';
  * (`PUT /v1/integrations/kova`). Helix then turns that TV on and off and switches its
  * input through Kova (`POST /api/devices/<tv>`), from the Helix remotes and apps.
  *
- * The same for the soundbar under each TV, when there is one (`soundbarDeviceId`): Helix forwards its remote's
- * soundbar buttons as `POST /api/devices/<soundbar> {on | input | vol | volStep | muted | sound | night}`.
+ * The same for the soundbar under each TV, when there is one (`soundbarDeviceId`, Helix's D98.11): Helix sends
+ * its remote's soundbar buttons, and its own switching when something plays, as `POST /api/devices/<soundbar>`
+ * with one of `{on}`, `{volumeStep: ±1}`, `{volume}`, `{mute}`, `{input}`, `{mode}`, `{nightMode}`. Switching
+ * Helix does by itself carries `X-Helix-Origin: auto`; Kova keeps who last changed each input
+ * (`inputChangedBy: "helix-auto"` for those) so Helix never switches back an input someone chose.
  *
- * The token only reaches those TVs and soundbars: `POST /api/devices/<tv> {on | input}`, the soundbar fields above,
- * and a `GET /api/state` that lists just them. It is made once and kept in helix-link.json.
+ * The token only reaches those TVs and soundbars: `POST /api/devices/<tv> {on | input}`, the soundbar commands
+ * above, and a `GET /api/state` that lists just them. It is made once and kept in helix-link.json.
  */
 export interface HelixLinkConfig {
   url?: string;
@@ -24,13 +28,11 @@ export interface HelixLinkConfig {
   /** Where Helix reaches Kova. Default: this hub's address on the same network as Helix Server. */
   kovaUrl?: string;
   /**
-   * Box name → its TV in Kova, the TV input the box is on, its soundbar, and the soundbar input the box is wired
-   * to when its sound goes to the soundbar directly (default hdmi1). Without one, a box gets the one TV (and the one
-   * soundbar) in its room.
+   * Box name → its TV in Kova, the TV input the box is on, its soundbar, and the soundbar input the box's DP
+   * adapter feeds (Helix's D101: 7.1 and DTS go straight to the soundbar; default hdmi1). Without one, a box gets
+   * the one TV (and the one soundbar) in its room.
    */
   screens?: Record<string, { tv?: string; input?: string; soundbar?: string; soundbarInput?: string }>;
-  /** Auto-switch when Helix plays: TV on and to the box, soundbar on and to the right input. Default on. */
-  autoSwitch?: boolean | 'on' | 'off';
 }
 
 export interface Input { id: string; name: string }
@@ -40,15 +42,22 @@ export interface HelixScreen {
   inputs: Input[];
   soundbarDeviceId?: string; soundbarName?: string;
   soundbarInputs?: Input[];
-  /** The soundbar input the box is wired to, for when its sound goes to the soundbar rather than the TV's eARC. */
-  soundbarHelixInput?: string;
+  soundbarModes?: Input[];
+  soundbarNight?: boolean;
+  /** The soundbar input the TV's sound arrives on (eARC), and the one the box's DP adapter feeds. */
+  soundbarTvInput?: string;
+  soundbarAdapterInput?: string;
 }
 
 export const TV_INPUTS: Input[] = [{ id: 'tv', name: 'TV' }, { id: 'hdmi1', name: 'HDMI 1' }, { id: 'hdmi2', name: 'HDMI 2' }, { id: 'hdmi3', name: 'HDMI 3' }, { id: 'hdmi4', name: 'HDMI 4' }];
 export const SOUNDBAR_INPUTS: Input[] = [{ id: 'tv', name: 'TV (eARC)' }, { id: 'hdmi1', name: 'HDMI in 1' }, { id: 'hdmi2', name: 'HDMI in 2' }, { id: 'bluetooth', name: 'Bluetooth' }, { id: 'wifi', name: 'Wi-Fi' }];
-/** What Helix may send each kind of linked device. */
-export const HELIX_TV_FIELDS = new Set(['on', 'input']);
-export const HELIX_SOUNDBAR_FIELDS = new Set(['on', 'input', 'vol', 'volStep', 'muted', 'sound', 'night']);
+export const SOUNDBAR_MODES: Input[] = [{ id: 'standard', name: 'Standard' }, { id: 'surround', name: 'Surround' }, { id: 'game', name: 'Game' }, { id: 'adaptive', name: 'Adaptive' }];
+/** What Helix may send each kind of linked device, by Helix's name, as Kova's command field. */
+export const HELIX_TV_FIELDS: Record<string, keyof Command> = { on: 'on', input: 'input' };
+export const HELIX_SOUNDBAR_FIELDS: Record<string, keyof Command> = { on: 'on', volumeStep: 'volStep', volume: 'vol', mute: 'muted', input: 'input', mode: 'sound', nightMode: 'night' };
+/** Who last changed an input, as Helix reads it (`inputChangedBy`): "helix-auto" for Helix's own switching. */
+export const HELIX_AUTO: Cause = { kind: 'behaviour', id: 'helix-auto', label: 'Helix (switching for what plays)' };
+export const HELIX_REMOTE: Cause = { kind: 'user', label: 'Helix remote' };
 
 export const isSoundbar = (d: Device) => d.capabilities.includes('sound') || (d.capabilities.includes('mute') && d.capabilities.includes('input') && d.type === 'media');
 
@@ -69,10 +78,14 @@ export function helixScreens(devices: Iterable<Device>, screens: HelixLinkConfig
     const bars = all.filter(isSoundbar);
     const barsInRoom = tv.room && tv.room !== 'unassigned' ? bars.filter(b => b.room === tv.room) : [];
     const bar = set?.soundbar ? bars.find(b => b.id === set.soundbar) : barsInRoom.length === 1 ? barsInRoom[0] : undefined;
-    const barInput = set?.soundbarInput && SOUNDBAR_INPUTS.some(i => i.id === set.soundbarInput) ? set.soundbarInput : 'hdmi1';
+    const adapterInput = set?.soundbarInput && SOUNDBAR_INPUTS.some(i => i.id === set.soundbarInput && i.id.startsWith('hdmi')) ? set.soundbarInput : 'hdmi1';
     out.push({
       playerId: box.address, tvDeviceId: tv.id, tvName: tv.name, ...(input ? { helixInput: input } : {}), inputs: TV_INPUTS,
-      ...(bar ? { soundbarDeviceId: bar.id, soundbarName: bar.name, soundbarInputs: SOUNDBAR_INPUTS, soundbarHelixInput: barInput } : {}),
+      ...(bar ? {
+        soundbarDeviceId: bar.id, soundbarName: bar.name, soundbarInputs: SOUNDBAR_INPUTS,
+        ...(bar.capabilities.includes('sound') ? { soundbarModes: SOUNDBAR_MODES, soundbarNight: true } : {}),
+        soundbarTvInput: 'tv', soundbarAdapterInput: adapterInput,
+      } : {}),
     });
   }
   return out.sort((a, b) => a.playerId.localeCompare(b.playerId));
@@ -95,6 +108,8 @@ export class HelixLink {
   private last: { ok: boolean; note: string } | null = null;
   private syncing: Promise<void> | null = null;
   private again = false;
+  /** Who last changed each linked device's input, and when (Helix's inputChangedBy / inputChangedAt). */
+  private inputs = new Map<string, { input: string | null; at: number; by: string }>();
 
   constructor(private hub: Hub, private o: { helix: () => HelixLinkConfig | undefined; dataDir: string; port: () => number; debounceMs?: number }) {
     const file = join(o.dataDir, 'helix-link.json');
@@ -105,6 +120,8 @@ export class HelixLink {
       writeFileSync(file, JSON.stringify({ token: t }, null, 2) + '\n', { mode: 0o600 });
     }
     this.token = t;
+    this.hub.reg.on('sent', this.onSent);
+    this.hub.reg.on('change', this.onChange);
   }
 
   start(): void {
@@ -118,9 +135,50 @@ export class HelixLink {
     soon();
   }
 
-  stop(): void { if (this.timer) clearTimeout(this.timer); this.timer = null; }
+  stop(): void {
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
+    this.hub.reg.off('sent', this.onSent);
+    this.hub.reg.off('change', this.onChange);
+  }
+
+  /** An input asked for through Kova: by Helix's switching ("helix-auto"), its remote, the app, an automation… */
+  private onSent = ({ device, cmd, cause }: SentEvent): void => {
+    if (cmd.input === undefined) return;
+    this.inputs.set(device.id, { input: cmd.input ?? null, at: Date.now(), by: cause.id === HELIX_AUTO.id ? 'helix-auto' : cause.kind === 'user' ? cause.label : cause.id ?? cause.kind });
+  };
+  /** An input changed at the device itself (the soundbar's own remote), read back by its integration. */
+  private onChange = ({ device, patch, cause }: ChangeEvent): void => {
+    if (cause.kind !== 'device' || typeof patch.input !== 'string') return;
+    this.inputs.set(device.id, { input: patch.input, at: Date.now(), by: 'remote' });
+  };
+
+  /** Helix's command for a linked device, as Kova's, or why not: one key, by Helix's names (D98.11). */
+  translate(deviceId: string, body: Record<string, unknown>): { cmd: Command } | { error: string } {
+    const s = this.screens();
+    const tv = s.some(x => x.tvDeviceId === deviceId), bar = s.some(x => x.soundbarDeviceId === deviceId);
+    const fields = tv ? HELIX_TV_FIELDS : bar ? HELIX_SOUNDBAR_FIELDS : null;
+    const keys = Object.keys(body);
+    if (!fields) return { error: 'Not a TV or soundbar linked to Helix' };
+    if (keys.length !== 1 || !(keys[0] in fields)) return { error: `Send one of ${Object.keys(fields).join(', ')}` };
+    const k = keys[0], v = body[k];
+    const ok = k === 'on' || k === 'mute' || k === 'nightMode' ? typeof v === 'boolean'
+      : k === 'volumeStep' ? v === 1 || v === -1
+      : k === 'volume' ? typeof v === 'number' && v >= 0 && v <= 100
+      : k === 'input' ? typeof v === 'string' && (tv ? TV_INPUTS : SOUNDBAR_INPUTS).some(i => i.id === v)
+      : k === 'mode' ? typeof v === 'string' && SOUNDBAR_MODES.some(m => m.id === v)
+      : false;
+    if (!ok) return { error: `${k} can’t be ${JSON.stringify(v)}` };
+    return { cmd: { [fields[k]]: v } as Command };
+  }
 
   status(): { ok: boolean; note: string } | null { return this.last; }
+
+  /** Where Helix reaches Kova (null until paired). */
+  kovaUrl(): string | null {
+    const c = this.o.helix();
+    return c?.url && c.token ? trimUrl(c.kovaUrl || kovaAddress(c.url, this.o.port())) : null;
+  }
 
   screens(): HelixScreen[] { return helixScreens(this.hub.reg.devices.values(), this.o.helix()?.screens); }
 
@@ -134,18 +192,15 @@ export class HelixLink {
   allows(method: string, path: string): boolean {
     if (method === 'GET' && path === '/api/state') return true;
     const m = method === 'POST' && /^\/api\/devices\/([^/]+)$/.exec(path);
-    return !!m && !!this.fields(decodeURIComponent(m[1]));
+    const id = m ? decodeURIComponent(m[1]) : '';
+    return !!m && this.screens().some(x => x.tvDeviceId === id || x.soundbarDeviceId === id);
   }
 
-  /** The fields Helix may send this device: on and input for a linked TV, the soundbar's controls for a linked soundbar. */
-  fields(deviceId: string): Set<string> | null {
-    const s = this.screens();
-    if (s.some(x => x.tvDeviceId === deviceId)) return HELIX_TV_FIELDS;
-    if (s.some(x => x.soundbarDeviceId === deviceId)) return HELIX_SOUNDBAR_FIELDS;
-    return null;
-  }
-
-  /** The linked TVs and soundbars only, in the shape of /api/state, for a request made with Helix's token. */
+  /**
+   * The linked TVs and soundbars only, in the shape of /api/state, for a request made with Helix's token, with the
+   * state by Helix's names: on, input, volume, muted, mode, nightMode, inputChangedAt (Unix ms), inputChangedBy.
+   * A TV can't say its input, so it's the one last asked for through Kova (by whom and when).
+   */
   state(): { devices: { id: string; name: string; type: string; state: Record<string, unknown> }[] } {
     const ids = new Set(this.screens().flatMap(s => [s.tvDeviceId, ...(s.soundbarDeviceId ? [s.soundbarDeviceId] : [])]));
     return {
@@ -154,9 +209,16 @@ export class HelixLink {
         if (!d) return [];
         const st = d.state;
         const bar = isSoundbar(d);
+        const changed = this.inputs.get(id);
+        const input = bar ? st.input ?? null : changed?.input ?? null;
         return [{
           id, name: d.name, type: bar ? 'soundbar' : d.type,
-          state: { on: !!st.on, online: st.online !== false, ...(bar ? { vol: st.vol ?? null, muted: !!st.muted, input: st.input ?? null, sound: st.sound ?? null, night: !!st.night } : {}) },
+          state: {
+            on: !!st.on, online: st.online !== false,
+            ...(input ? { input } : {}),
+            ...(bar ? { ...(st.vol != null ? { volume: st.vol } : {}), muted: !!st.muted, ...(st.sound ? { mode: st.sound } : {}), nightMode: !!st.night } : {}),
+            ...(changed ? { inputChangedAt: changed.at, inputChangedBy: changed.by } : {}),
+          },
         }];
       }),
     };

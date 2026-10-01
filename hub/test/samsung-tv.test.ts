@@ -164,6 +164,22 @@ test('Samsung TV: on when in standby sends Wake-on-LAN to the MAC it reported', 
   } finally { await reg.stop(); f.close(); }
 });
 
+test('Samsung TV: an input asked for straight after "on" waits for the TV to wake (Helix sends them back to back)', { timeout: 15_000 }, async () => {
+  const f = await fakeTv();
+  f.tv.power = 'standby';
+  const reg = new Registry(new Store(':memory:'));
+  const a = new SamsungTvAdapter(opts(f, mkdtempSync(join(tmpdir(), 'tv-')), { wakeCheckMs: 50, wakeWaitMs: 5000 }));
+  try {
+    await reg.addAdapter(a);
+    await reg.command('lounge_tv', { on: true }, you);
+    // The TV boots a moment later.
+    setTimeout(() => { f.tv.power = 'on'; }, 300);
+    await reg.command('lounge_tv', { input: 'hdmi2' }, you);
+    await until('KEY_HDMI2', () => f.tv.keys.length === 1);
+    assert.deepEqual(f.tv.keys, ['KEY_HDMI2']);
+  } finally { await reg.stop(); f.close(); }
+});
+
 test('Samsung TV: input presses the HDMI / TV key every time, and refuses while off', { timeout: 15_000 }, async () => {
   const f = await fakeTv();
   const reg = new Registry(new Store(':memory:'));

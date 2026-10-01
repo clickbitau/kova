@@ -8,10 +8,6 @@ import { join } from 'node:path';
 import { Store } from '../src/store/db.ts';
 import { Registry } from '../src/devices/registry.ts';
 import { SmartThingsAdapter, exchangeSmartThingsCode, fromStInput, isSoundbar, smartThingsAuthUrl, toStInput } from '../src/adapters/smartthings.ts';
-import { HelixAutoSwitch, autoSwitchOn } from '../src/services/helix-autoswitch.ts';
-import type { HelixScreen } from '../src/services/helix-link.ts';
-import type { Adapter, AdapterContext } from '../src/adapters/sdk.ts';
-import type { Command, Device } from '../src/model/types.ts';
 
 const you = { kind: 'user' as const, label: 'You' };
 
@@ -133,87 +129,4 @@ test('SmartThings linking, inputs and what counts as a soundbar', async () => {
   assert.deepEqual(['digital', 'HDMI1', 'arc', 'BLUETOOTH', 'usb'].map(fromStInput), ['tv', 'hdmi1', 'tv', 'bluetooth', 'usb']);
   assert.equal(isSoundbar({ deviceId: 'x', label: 'Lounge speaker', components: [{ id: 'main', capabilities: [{ id: 'switch' }] }] }), false);
   assert.equal(isSoundbar({ deviceId: 'x', label: 'Samsung HW-Q930B', components: [{ id: 'main', capabilities: [{ id: 'audioVolume' }] }] }), true);
-  assert.equal(autoSwitchOn(undefined), true);
-  assert.equal(autoSwitchOn('off'), false);
-  assert.equal(autoSwitchOn(false), false);
-});
-
-/** A TV, a soundbar and a Helix box in the lounge, recording what they were asked. */
-class Lounge implements Adapter {
-  id = 'lounge'; name = 'Lounge'; icon = 'tv'; kind = 'Local' as const;
-  got: { id: string; cmd: Command; by?: string }[] = [];
-  ctx!: AdapterContext;
-  tvReady = true;
-  async start(ctx: AdapterContext) {
-    this.ctx = ctx;
-    ctx.announce([
-      { id: 'lounge_tv', name: 'S90D', room: 'lounge', type: 'tv', capabilities: ['onoff', 'input'], integration: 'Samsung', address: '10.0.0.20', state: { on: false, online: true } },
-      { id: 'lounge_bar', name: 'Soundbar', room: 'lounge', type: 'media', capabilities: ['onoff', 'volume', 'mute', 'input', 'sound'], integration: 'Samsung soundbar', address: 'st-1', state: { on: false, online: true, input: 'bluetooth' } },
-    ]);
-  }
-  async stop() {}
-  status() { return { ok: true }; }
-  async command(d: Device, cmd: Command) {
-    this.got.push({ id: d.id, cmd });
-    if (d.id === 'lounge_tv' && cmd.input && !this.tvReady) { this.tvReady = true; throw new Error('S90D is off'); }
-    if (d.id === 'lounge_tv' && cmd.input) return { input: null };
-  }
-}
-/** Helix boxes come from the helix adapter; this one stands in for it. */
-class Boxes implements Adapter {
-  id = 'helix'; name = 'Helix'; icon = 'movie'; kind = 'Local' as const;
-  ctx!: AdapterContext;
-  async start(ctx: AdapterContext) { this.ctx = ctx; ctx.announce([{ id: 'helix_kam', name: 'kam-lx', room: 'lounge', type: 'tv', capabilities: ['onoff', 'pause'], integration: 'Helix', address: 'kam-lx', state: { online: true } }]); }
-  async stop() {}
-  status() { return { ok: true }; }
-  async command() {}
-}
-
-test('Auto-switch when Helix plays: TV on and to the box, soundbar on and to where the sound goes; an input chosen by hand is left alone', async () => {
-  const reg = new Registry(new Store(':memory:'));
-  const lounge = new Lounge(), boxes = new Boxes();
-  await reg.addAdapter(lounge);
-  await reg.addAdapter(boxes);
-  const screens: HelixScreen[] = [{ playerId: 'kam-lx', tvDeviceId: 'lounge_tv', tvName: 'S90D', helixInput: 'hdmi2', inputs: [], soundbarDeviceId: 'lounge_bar', soundbarHelixInput: 'hdmi1' }];
-  let enabled = true;
-  const sw = new HelixAutoSwitch({ reg } as never, { screens: () => screens, enabled: () => enabled, tvWakeMs: 5 });
-  sw.start();
-  const settle = () => new Promise(r => setTimeout(r, 60));
-  const cmds = () => lounge.got.splice(0).map(g => [g.id, g.cmd]);
-  try {
-    // A film starts with the TV off and its sound on eARC: TV on, then to HDMI 2 (it takes a moment to wake); soundbar on and to the TV.
-    lounge.tvReady = false;
-    boxes.ctx.event('helix_kam', 'video-started', { title: 'Dune', route: 'earc' });
-    await settle();
-    assert.deepEqual(cmds(), [['lounge_tv', { on: true }], ['lounge_bar', { on: true, input: 'tv' }], ['lounge_tv', { input: 'hdmi2' }], ['lounge_tv', { input: 'hdmi2' }]]);
-    // Mid-film the box moves the sound to the soundbar's HDMI in (DTS): only the soundbar moves.
-    boxes.ctx.event('helix_kam', 'audio-route', { route: 'soundbar' });
-    await settle();
-    assert.deepEqual(cmds(), [['lounge_bar', { input: 'hdmi1' }]]);
-    // Someone puts the TV on the console during playback: on resume, the TV is left on their input; nothing else needs doing.
-    await reg.command('lounge_tv', { input: 'hdmi3' }, you);
-    cmds();
-    boxes.ctx.event('helix_kam', 'resumed', { title: 'Dune' });
-    await settle();
-    assert.deepEqual(cmds(), []);
-    // Playback stopped: the next film switches again.
-    boxes.ctx.event('helix_kam', 'stopped', {});
-    boxes.ctx.event('helix_kam', 'video-started', { title: 'Arrival', route: 'earc' });
-    await settle();
-    // (The TV and the soundbar are switched at the same time, so in either order.)
-    assert.deepEqual(cmds().sort((a, b) => String(a[0]).localeCompare(String(b[0]))), [['lounge_bar', { input: 'tv' }], ['lounge_tv', { input: 'hdmi2' }]]);
-    // Switched off in settings: nothing.
-    enabled = false;
-    boxes.ctx.event('helix_kam', 'stopped', {});
-    boxes.ctx.event('helix_kam', 'video-started', { title: 'Heat', route: 'soundbar' });
-    await settle();
-    assert.deepEqual(cmds(), []);
-    // Its own changes are logged as Auto-switch, quietly (no device feed entries).
-    const store = (reg as unknown as { store: Store }).store;
-    assert.equal(store.lastStateChange('lounge_bar')?.cause.id, 'helix-autoswitch');
-    assert.deepEqual(store.feed(100).filter(e => e.cause.id === 'helix-autoswitch'), []);
-  } finally {
-    sw.stop();
-    await reg.stop();
-  }
 });
