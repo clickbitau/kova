@@ -6,7 +6,16 @@
       "name": "Kova hub",
       "versionFile": "hub/package.json",
       "ships": "git pull (deploy/update.sh) and the Docker image",
-      "paths": ["hub/", "web/", "deploy/", "Dockerfile", "docker-compose.yml"]
+      "paths": [
+        "hub/",
+        "web/",
+        "deploy/",
+        "Dockerfile",
+        "docker-compose.yml"
+      ],
+      "exclude": [
+        "hub/test/"
+      ]
     },
     {
       "id": "mobile",
@@ -16,9 +25,23 @@
       "ships": "App Store / TestFlight binary per train; JavaScript over the air from the hub (ota/<train>/)",
       "trainPrefix": "kova-mobile",
       "nativeLock": "mobile/native-lock.json",
-      "nativeDirs": ["mobile/targets/", "mobile/modules/", "mobile/plugins/", "mobile/ios-app/"],
-      "nativeExclude": ["mobile/targets/widget/Assets.xcassets/", "mobile/modules/kova-native/index.ts"],
-      "paths": ["mobile/"]
+      "nativeDirs": [
+        "mobile/targets/",
+        "mobile/modules/",
+        "mobile/plugins/",
+        "mobile/ios-app/"
+      ],
+      "nativeExclude": [
+        "mobile/targets/widget/Assets.xcassets/",
+        "mobile/modules/kova-native/index.ts"
+      ],
+      "paths": [
+        "mobile/"
+      ],
+      "exclude": [
+        "mobile/test/"
+      ]
     }
-  ]
+  ],
+  "//exclude": "exclude: paths under a component that don't change what ships (its tests): no version bump needed."
 }

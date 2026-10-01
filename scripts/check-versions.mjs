@@ -39,8 +39,13 @@ for (const c of components) {
 if (against) {
   const changed = execFileSync('git', ['diff', '--name-only', `${against}...HEAD`], { cwd: ROOT, encoding: 'utf8' }).split('\n').filter(Boolean);
   for (const c of components) {
-    const touched = changed.filter(f => c.paths.some(p => f === p || f.startsWith(p)));
+    const touched = changed.filter(f => c.paths.some(p => f === p || f.startsWith(p)) && !(c.exclude ?? []).some(x => f.startsWith(x)));
     if (!touched.length) continue;
+    // An app version nothing has shipped at yet (no store build on its train, no update above it) can still change.
+    if (c.id === 'mobile') {
+      const vf = readJson(c.versionFile);
+      if (vf.version === vf.store && !(record.trains?.[vf.train] ?? []).length) continue;
+    }
     if (versionOf(c) === versionOf(c, against)) problems.push(`${c.id}: ${touched.length} file(s) changed since ${against} (${touched.slice(0, 3).join(', ')}…) without a version bump in ${c.versionFile}`);
   }
 }

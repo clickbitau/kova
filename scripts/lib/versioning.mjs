@@ -30,10 +30,18 @@ export function compareVersions(a, b) {
   for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] < y[i] ? -1 : 1;
   return 0;
 }
-export const trainNumber = (train, prefix) => {
-  const m = new RegExp(`^${prefix}-(\\d+)$`).exec(String(train ?? ''));
-  return m ? Number(m[1]) : null;
-};
+/** The train a store version builds on (rule 6): <prefix>-<MAJOR>.<MINOR>, so 0.1.0 is kova-mobile-0.1. */
+export function trainFor(store, prefix) {
+  const v = parseVersion(store);
+  return v ? `${prefix}-${v[0]}.${v[1]}` : null;
+}
+/** [MAJOR, MINOR] from a train name, or null. */
+export function trainLine(train, prefix) {
+  const m = new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(\\d+)\\.(\\d+)$`).exec(String(train ?? ''));
+  return m ? [Number(m[1]), Number(m[2])] : null;
+}
+/** Trains in version order. */
+const byLine = prefix => (a, b) => { const x = trainLine(a, prefix) ?? [-1, -1], y = trainLine(b, prefix) ?? [-1, -1]; return x[0] - y[0] || x[1] - y[1]; };
 
 /** Rules 1, 2 and 4 on the app's version file and app.json. */
 export function appProblems({ version: vf, appJson, prefix, approved = [] }) {
@@ -42,7 +50,8 @@ export function appProblems({ version: vf, appJson, prefix, approved = [] }) {
   const store = vf.store, v = vf.version;
   if (!parseVersion(store) || parseVersion(store)[2] !== 0) out.push(`store version ${store} is not X.Y.0 (rule 1)`);
   if (expo.version !== store) out.push(`app.json version ${expo.version} is not the store version ${store}`);
-  if (trainNumber(vf.train, prefix) === null) out.push(`train ${vf.train} is not ${prefix}-<n>`);
+  // Rule 6: the train names the version line it builds (kova-mobile-0.1 builds 0.1.0).
+  if (trainFor(store, prefix) && vf.train !== trainFor(store, prefix)) out.push(`train ${vf.train} is not ${trainFor(store, prefix)}: the train is ${prefix}-<MAJOR>.<MINOR> of the store version (rule 6)`);
   if (expo.runtimeVersion !== vf.train) out.push(`app.json runtimeVersion ${expo.runtimeVersion} is not the train ${vf.train}`);
   const pv = parseVersion(v), ps = parseVersion(store);
   if (!pv) out.push(`version ${v} is not X.Y.Z`);
@@ -61,7 +70,7 @@ export function appProblems({ version: vf, appJson, prefix, approved = [] }) {
 /** Rule 7: build numbers only go up, per platform, in train order. */
 export function buildNumberProblems(record, prefix) {
   const out = [];
-  const trains = Object.keys(record.trains ?? {}).sort((a, b) => (trainNumber(a, prefix) ?? 0) - (trainNumber(b, prefix) ?? 0));
+  const trains = Object.keys(record.trains ?? {}).sort(byLine(prefix));
   const last = {};
   for (const t of trains) {
     for (const b of record.trains[t]) {
@@ -76,8 +85,8 @@ export function buildNumberProblems(record, prefix) {
 
 /** The last store build's native fingerprint on a train before `train` (rule 3 compares against it). */
 export function lastStoreFingerprint(record, train, prefix) {
-  const n = trainNumber(train, prefix);
-  const earlier = Object.keys(record.trains ?? {}).filter(t => (trainNumber(t, prefix) ?? -1) < n).sort((a, b) => trainNumber(b, prefix) - trainNumber(a, prefix));
+  const order = byLine(prefix);
+  const earlier = Object.keys(record.trains ?? {}).filter(t => trainLine(t, prefix) && order(t, train) < 0).sort(order).reverse();
   for (const t of earlier) {
     const withFp = record.trains[t].filter(b => b.fingerprint);
     if (withFp.length) return { train: t, ...withFp[withFp.length - 1] };
@@ -100,10 +109,9 @@ export function storeBuildProblems({ version: vf, record, prefix, fingerprint, l
 
 /** The next train and store version: MINOR + 1, or a new MAJOR (a new App Store line). */
 export function nextTrain(vf, prefix, { major = false } = {}) {
-  const n = trainNumber(vf.train, prefix);
   const [X, Y] = parseVersion(vf.store);
   const store = major ? `${X + 1}.0.0` : `${X}.${Y + 1}.0`;
-  return { train: `${prefix}-${n + 1}`, store };
+  return { train: trainFor(store, prefix), store };
 }
 
 /** The next over-the-air version on this train: PATCH + 1 above what runs now. */

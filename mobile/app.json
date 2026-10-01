@@ -3,7 +3,7 @@
     "name": "Kova",
     "slug": "kova",
     "version": "0.1.0",
-    "runtimeVersion": "kova-mobile-0",
+    "runtimeVersion": "kova-mobile-0.1",
     "updates": {
       "enabled": true,
       "url": "https://updates.invalid/api/app/manifest",
@@ -133,6 +133,11 @@
         }
       ]
     ],
-    "owner": "dkathel"
+    "owner": "dkathel",
+    "extra": {
+      "eas": {
+        "projectId": "8f877da4-d63a-49ef-9561-cd3e8fc9a9df"
+      }
+    }
   }
 }
