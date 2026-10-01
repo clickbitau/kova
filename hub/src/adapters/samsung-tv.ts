@@ -117,6 +117,16 @@ interface Tv {
   dlna?: string | null;
   /** Woken until then: an input asked for meanwhile waits for the TV to answer. */
   wakingUntil?: number;
+  /** What the TV calls itself, to find it on SmartThings. */
+  name?: string;
+  model?: string;
+}
+
+/** SmartThings, when it's linked and knows the TV: it switches the source directly and says which one is on. */
+interface SourceVia {
+  hasTv(tv: { name?: string; model?: string }): boolean;
+  tvInput(tv: { name?: string; model?: string }): Promise<string | null | undefined>;
+  setTvInput(tv: { name?: string; model?: string }, input: string): Promise<boolean>;
 }
 
 export class SamsungTvAdapter implements Adapter {
@@ -204,10 +214,14 @@ export class SamsungTvAdapter implements Adapter {
       return;
     }
     tv.on = info.on; tv.online = true;
+    tv.name = info.name ?? tv.name; tv.model = info.model ?? tv.model;
     const st: DeviceState = { on: info.on, online: true };
     if (info.on) {
       const v = await this.getVolume(tv).catch(() => null);
       if (v != null) { tv.vol = v; st.vol = v; }
+      // The source, when SmartThings knows the TV (the network remote can't say).
+      const via = this.via(tv);
+      if (via) { const input = await via.tvInput(tv).catch(() => undefined); if (input) st.input = input; }
     } else tv.ws?.close();
     this.ctx?.report(tv.id, st);
   }
@@ -325,6 +339,12 @@ export class SamsungTvAdapter implements Adapter {
     tv.vol = to;
   }
 
+  /** SmartThings, if it's running and knows this TV. */
+  private via(tv: Tv): SourceVia | null {
+    const p = this.ctx?.peer?.('smartthings') as Partial<SourceVia> | undefined;
+    return p && typeof p.hasTv === 'function' && typeof p.setTvInput === 'function' && typeof p.tvInput === 'function' && p.hasTv({ name: tv.name, model: tv.model }) ? p as SourceVia : null;
+  }
+
   // ------------------------------------------------------------ commands --
 
   async command(d: Device, cmd: Command): Promise<void | DeviceState> {
@@ -351,6 +371,12 @@ export class SamsungTvAdapter implements Adapter {
       }
       if (!tv.on) throw new Error(`${tv.cfg.name ?? tv.cfg.host} is off: switch it on before changing input`);
       tv.wakingUntil = 0;
+      // SmartThings switches straight to the source, and can say which one is on: kept as state.
+      const via = this.via(tv);
+      if (via) {
+        try { if (await via.setTvInput(tv, cmd.input)) return { input: cmd.input }; }
+        catch (err) { this.ctx?.log(`${tv.cfg.host}: SmartThings source failed (${(err as Error).message}), pressing the remote key`); }
+      }
       await this.key(tv, inputKey(cmd.input));
       return { input: null };
     }

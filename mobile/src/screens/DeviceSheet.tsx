@@ -11,7 +11,7 @@ import { Button, HScroll, Pill, Press, Sheet, Slider, Switch } from '../ui/kit';
 import { T } from '../ui/Text';
 
 const TEMPS: [number, string][] = [[2200, '#ffb56b'], [2700, '#ffc98a'], [3000, '#ffd9a8'], [4000, '#fff1dc'], [5000, '#f4f7ff']];
-/** Inputs a TV with `input` can switch to (the TV can't say which it's on, so none shows as selected). */
+/** Inputs a TV with `input` can switch to. The one it's on is marked when the TV can say (through SmartThings). */
 const INPUTS: [string, string][] = [['hdmi1', 'HDMI 1'], ['hdmi2', 'HDMI 2'], ['hdmi3', 'HDMI 3'], ['hdmi4', 'HDMI 4'], ['tv', 'TV']];
 /** A soundbar's inputs (it says which it's on) and sound modes. */
 const BAR_INPUTS: [string, string][] = [['tv', 'TV'], ['hdmi1', 'HDMI in'], ['bluetooth', 'Bluetooth'], ['wifi', 'Wi-Fi']];
@@ -161,7 +161,7 @@ export function DeviceSheet() {
               <Label>Source</Label>
               <HScroll>
                 {INPUTS.map(([id, label]) => (
-                  <Pill key={id} label={label} onPress={() => void send(D.id, { input: id }).then(ok => { if (ok) say(`${D.name} is on ${label}`); })} />
+                  <Pill key={id} label={label} on={D.input === id} onPress={() => void send(D.id, { input: id }).then(ok => { if (ok) say(`${D.name} is on ${label}`); })} />
                 ))}
               </HScroll>
             </View>

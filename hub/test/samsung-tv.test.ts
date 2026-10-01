@@ -202,6 +202,42 @@ test('Samsung TV: input presses the HDMI / TV key every time, and refuses while 
   } finally { await reg.stop(); f.close(); }
 });
 
+/** SmartThings as the Samsung TV adapter sees it: it knows the S90D by model, switches its source and says which is on. */
+class StStub {
+  id = 'smartthings'; name = 'SmartThings'; icon = 'speaker'; kind = 'Cloud' as const;
+  input = 'hdmi1'; asked: { model?: string; input: string }[] = []; fail = false;
+  async start() {} async stop() {} status() { return { ok: true }; } async command() {}
+  hasTv(tv: { model?: string }) { return tv.model === 'QA55S90DAWXXY'; }
+  async tvInput() { return this.input; }
+  async setTvInput(tv: { model?: string }, input: string) { if (this.fail) throw new Error('SmartThings is down'); this.asked.push({ model: tv.model, input }); this.input = input; return true; }
+}
+
+test('Samsung TV: with SmartThings, the source is switched directly and read back (the TV’s own remote is noticed)', { timeout: 15_000 }, async () => {
+  const f = await fakeTv();
+  const reg = new Registry(new Store(':memory:'));
+  const st = new StStub();
+  await reg.addAdapter(st as never);
+  const a = new SamsungTvAdapter(opts(f, mkdtempSync(join(tmpdir(), 'tv-'))));
+  try {
+    await reg.addAdapter(a);
+    // Read back on the first look: the TV is on HDMI 1.
+    assert.equal(reg.get('lounge_tv')!.state.input, 'hdmi1');
+    await reg.command('lounge_tv', { input: 'hdmi2' }, you);
+    assert.deepEqual(st.asked, [{ model: 'QA55S90DAWXXY', input: 'hdmi2' }]);
+    assert.deepEqual(f.tv.keys, [], 'no remote key needed');
+    assert.equal(reg.get('lounge_tv')!.state.input, 'hdmi2', 'kept: SmartThings can say');
+    // Someone uses the TV's own remote: the next look sees it, as a change at the device.
+    st.input = 'hdmi3';
+    await a.poll();
+    assert.equal(reg.get('lounge_tv')!.state.input, 'hdmi3');
+    // SmartThings down: the remote key still does it.
+    st.fail = true;
+    await reg.command('lounge_tv', { input: 'tv' }, you);
+    await until('KEY_TV', () => f.tv.keys.length === 1);
+    assert.deepEqual(f.tv.keys, ['KEY_TV']);
+  } finally { await reg.stop(); f.close(); }
+});
+
 test('Samsung TV: falls back to volume keys when DLNA SetVolume fails', { timeout: 15_000 }, async () => {
   const f = await fakeTv();
   f.tv.failSetVolume = true;
