@@ -4,6 +4,7 @@ import type { LogEntry } from '../store/db.ts';
 import { clock, localDate, localHour, atLocal } from '../util/time.ts';
 import { isLight, targetLabel } from '../util/describe.ts';
 import { rhythmLabel } from '../rhythms/rhythms.ts';
+import { automationIdeas, ifLabel, thenLabels, whenLabel } from '../engine/automation-ideas.ts';
 import SunCalc from 'suncalc';
 
 const FEED_ICON: Record<string, string> = { mode: 'routine', run: 'bolt', presence: 'person_pin_circle', state: 'lightbulb', system: 'info', skip: 'event_busy' };
@@ -129,6 +130,9 @@ export function snapshot(hub: Hub) {
     day: { bands: engine.planner.bands(today), items, marks },
     upcoming,
     lightTheWay: cfg.lightTheWay.triggers.map(t => ({ id: t.id, label: t.label, minutes: t.minutes, lights: t.lights })),
+    // When / if / then, with each part in words; and ones Kova suggests from how devices are connected.
+    automations: (cfg.automations ?? []).map(a => ({ ...a, whenLabel: whenLabel(a.when, reg.devices), ifLabels: a.if.map(c => ifLabel(c, reg.devices)), thenLabels: thenLabels(a.then, reg.devices) })),
+    automationIdeas: automationIdeas(cfg, reg.devices, hub.screens()).map(i => ({ ...i, whenLabel: whenLabel(i.when, reg.devices), ifLabels: i.if.map(c => ifLabel(c, reg.devices)), thenLabels: thenLabels(i.then, reg.devices) })),
     overlays: cfg.overlays.map(o => ({ id: o.id, name: o.name, icon: o.icon, endsLabel: o.endsLabel, targets: targetList(o.targets) })),
     moments: cfg.moments.map(mo => ({ id: mo.id, label: mo.label, what: mo.what, at: mo.at, atLabel: rhythmLabel(mo.at), targets: targetList(mo.targets) })),
     sources: cfg.sources,

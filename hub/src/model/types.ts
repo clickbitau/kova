@@ -100,7 +100,7 @@ export type Command = Partial<DeviceState> & { skip?: number; volStep?: number }
 
 /** Why something happened. Attached to every state change and log entry. */
 export interface Cause {
-  kind: 'mode' | 'moment' | 'overlay' | 'behaviour' | 'user' | 'device' | 'presence' | 'system' | 'undo' | 'assistant';
+  kind: 'mode' | 'moment' | 'overlay' | 'behaviour' | 'user' | 'device' | 'presence' | 'system' | 'undo' | 'assistant' | 'automation';
   /** Id of the mode / overlay / behaviour / person that caused it. */
   id?: string;
   /** Short human label: "Evening started", "Light the way". */
@@ -195,6 +195,34 @@ export interface LightTheWayTrigger {
   minutes: number;
 }
 
+// ------------------------------------------------------------ automations --
+
+/**
+ * What starts an automation: a device changing (switched on or off, gone offline or back) or a device event
+ * (a camera seeing a person, a doorbell ring, a player starting a film).
+ */
+export type AutomationWhen =
+  | { device: string; becomes: 'on' | 'off' | 'offline' | 'online' }
+  | { device: string; event: string };
+
+/** Only go ahead while a device is like this: on or off, online, on an input, in a mode (fans, air conditioners). */
+export interface AutomationIf {
+  device: string;
+  is: { on?: boolean; online?: boolean; input?: string; hvac?: HvacMode };
+}
+
+/** The home's own rules: "when the TV box shuts down, if the TV is still on its input, turn the TV and soundbar off". */
+export interface Automation {
+  id: string;
+  name: string;
+  /** Off: kept, but doesn't run. */
+  enabled: boolean;
+  when: AutomationWhen;
+  /** Every one has to hold. */
+  if: AutomationIf[];
+  then: Targets;
+}
+
 export interface HomeConfig {
   name: string;
   timezone: string;
@@ -221,6 +249,8 @@ export interface HomeConfig {
   speakerGroups?: SpeakerGroup[];
   /** Pause what's playing on players that can pause (a Helix box) when the doorbell rings. Default on. */
   pauseForDoorbell?: boolean;
+  /** When / if / then rules the owner made (or took from a suggestion). */
+  automations?: Automation[];
 }
 
 export interface SpeakerGroup { id: string; name: string; room?: string; members: string[] }

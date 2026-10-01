@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+import { automationIdeas, carryOverTvOff } from './engine/automation-ideas.ts';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Hub } from './hub.ts';
@@ -145,6 +147,18 @@ setInterval(refreshMusic, 5 * 60_000).unref();
 // Helix: once paired, Kova tells Helix Server where it is and which TV each box is on.
 const helixLink = new HelixLink(hub, { helix: () => setup.raw('helix'), dataDir, port: () => Number(env.KOVA_PORT ?? 8140) });
 helixLink.start();
+// A Helix box going dark while its TV still shows it: suggested as an automation the owner can add.
+hub.screens = () => helixLink.screens().flatMap(s => {
+  const box = [...hub.reg.devices.values()].find(d => d.adapter === 'helix' && d.address === s.playerId);
+  return box ? [{ player: box.id, tv: s.tvDeviceId, input: s.helixInput, soundbar: s.soundbarDeviceId }] : [];
+});
+carryOverTvOff({
+  done: () => !!hub.store.get('carried.tvOffWithBox'), markDone: () => hub.store.set('carried.tvOffWithBox', true),
+  wasOff: () => { const v = (setup.raw('helix') as { tvOffWithBox?: unknown } | undefined)?.tvOffWithBox; return v === false || v === 'off'; },
+  ideas: () => automationIdeas(hub.config.get(), hub.reg.devices, hub.screens()),
+  add: a => { hub.config.update(c => { (c.automations ??= []).push({ id: `tv_off_${randomUUID().slice(0, 6)}`, ...a }); }); },
+  on: fn => { hub.reg.on('devices', fn); return () => hub.reg.off('devices', fn); },
+});
 // The doorbell on the TV: a card with its snapshot on every Helix screen that's on.
 const snapLinks = new SnapLinks();
 const screenNotices = new ScreenNotices(hub, { links: snapLinks, kovaUrl: () => helixLink.kovaUrl() });

@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
-import type { Cause, Command, Device, DeviceState, LightTheWayTrigger, Mode, Overlay, PersonState, PlanItem, Targets } from '../model/types.ts';
+import type { Automation, Cause, Command, Device, DeviceState, LightTheWayTrigger, Mode, Overlay, PersonState, PlanItem, Targets } from '../model/types.ts';
 import type { Store } from '../store/db.ts';
 import type { ChangeEvent, DeviceEvent, Registry } from '../devices/registry.ts';
 import type { ConfigStore } from './config.ts';
@@ -222,7 +222,35 @@ export class Engine extends EventEmitter<{ changed: [] }> {
       const o = this.cfg.overlays.find(x => x.id === cur.id);
       if (o?.ends.kind === 'device_off' && o.ends.device === e.device.id && e.patch.on === false && e.cause.kind !== 'overlay') void this.endOverlay('device');
     }
+    // Automations started by this device switching on or off, or going offline or coming back.
+    const became = becameOf(e);
+    if (became.length) {
+      for (const a of this.automations()) {
+        if (!('becomes' in a.when) || a.when.device !== e.device.id || !became.includes(a.when.becomes)) continue;
+        if (e.cause.kind === 'automation' && e.cause.id === a.id) continue; // its own doing
+        void this.runAutomation(a, `${e.device.name} ${BECAME[a.when.becomes]}`);
+      }
+    }
     this.emit('changed');
+  }
+
+  // --------------------------------------------------------- automations --
+
+  private automations(): Automation[] { return (this.cfg.automations ?? []).filter(a => a.enabled !== false); }
+
+  /** Do an automation's "then" if every "if" holds. Returns which devices changed, or null when an "if" didn't hold. */
+  async runAutomation(a: Automation, why: string): Promise<string[] | null> {
+    for (const c of a.if ?? []) {
+      const d = this.reg.get(c.device);
+      if (!d || !holds(d.state, c.is)) return null;
+    }
+    const cause: Cause = { kind: 'automation', id: a.id, label: a.name, detail: why };
+    const { changed } = await this.reg.applyTargets(a.then, cause);
+    if (changed.length) {
+      const names = changed.map(id => this.reg.get(id)?.name ?? id);
+      this.store.append({ kind: 'run', device: null, feed: 'auto', what: `${a.name}: ${names.join(', ')} · ${why}`, data: { automation: a.id, changed }, cause });
+    }
+    return changed;
   }
 
   // --------------------------------------------------------- behaviours --
@@ -239,6 +267,9 @@ export class Engine extends EventEmitter<{ changed: [] }> {
       what: `${e.device.name} ${labels[e.type] ?? e.type}${title}`,
       data: { type: e.type, ...e.data }, cause: { kind: 'device', label: e.device.integration },
     });
+    for (const a of this.automations()) {
+      if ('event' in a.when && a.when.device === e.device.id && a.when.event === e.type) await this.runAutomation(a, `${e.device.name} ${labels[e.type] ?? e.type}`);
+    }
     const hits = this.cfg.lightTheWay.triggers.filter(t => 'device' in t.on && t.on.device === e.device.id && t.on.event === e.type);
     for (const t of hits) await this.lightTheWay(t);
     // "Movie starts when the lounge Helix plays a film."
@@ -377,11 +408,33 @@ export class Engine extends EventEmitter<{ changed: [] }> {
       ...c.moments.filter(m => m.targets[deviceId]).map(m => ({ kind: 'moment', id: m.id, name: m.label })),
       ...c.overlays.filter(o => o.targets[deviceId]).map(o => ({ kind: 'overlay', id: o.id, name: o.name })),
       ...c.lightTheWay.triggers.filter(t => t.lights.includes(deviceId) || ('device' in t.on && t.on.device === deviceId)).map(t => ({ kind: 'behaviour', id: t.id, name: `Light the way · ${t.label}` })),
+      ...(c.automations ?? []).filter(a => a.when.device === deviceId || a.then[deviceId] || a.if.some(x => x.device === deviceId)).map(a => ({ kind: 'automation', id: a.id, name: a.name })),
     ];
   }
 }
 
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
+
+const BECAME: Record<string, string> = { on: 'switched on', off: 'switched off', offline: 'went offline', online: 'came back online' };
+
+/** What a change made a device become: switched on or off, gone offline or back. A device first heard from isn't "back". */
+export function becameOf(e: { prev: DeviceState; patch: Command }): ('on' | 'off' | 'offline' | 'online')[] {
+  const out: ('on' | 'off' | 'offline' | 'online')[] = [];
+  if (e.patch.on === true && e.prev.on !== true) out.push('on');
+  if (e.patch.on === false && e.prev.on === true) out.push('off');
+  if (e.patch.online === false && e.prev.online !== false) out.push('offline');
+  if (e.patch.online === true && e.prev.online === false) out.push('online');
+  return out;
+}
+
+/** Is a device like this now? Unknown on/off counts as off; unknown online counts as online. */
+export function holds(s: DeviceState, is: Automation['if'][number]['is']): boolean {
+  if (is.on !== undefined && !!s.on !== is.on) return false;
+  if (is.online !== undefined && (s.online !== false) !== is.online) return false;
+  if (is.input !== undefined && s.input !== is.input) return false;
+  if (is.hvac !== undefined && s.hvac !== is.hvac) return false;
+  return true;
+}
 
 function pick(s: DeviceState, keys: string[]): Command {
   const out: Command = {};
