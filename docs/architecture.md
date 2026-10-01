@@ -403,7 +403,7 @@ Built-in rules (each can be turned off in `notify.rules`):
 | `doorbell` | a device event `ring` | "Someone's at the front door", plus which lights Light the way turned on and what was paused |
 | `everyoneOut` | the last person leaves and, after `everyoneOutGraceSec` (60), lights are still on | "Everyone's out, N lights are on" with a *Turn them off* action (`/phone.html?do=lights-off` → `POST /api/lights/off`). Lights Light the way is holding don't count; they turn off by themselves. |
 | `offline` | a device reports `online: false` for `offlineAfterMin` (10) | "X isn't responding", once per outage |
-| `network` | Warden: the internet goes down or comes back, a new device joins, an attack is blocked (live, from Warden's feed) | "The internet is down" / "is back", and Warden's own words for the rest |
+| `network` | Warden: the internet goes down, comes back or moves to the backup connection, a new device joins, an attack is blocked (live, from Warden's feed) | "The internet is down" / "is back", and Warden's own words for the rest |
 
 The action links open the Kova app, so from outside the home they only work
 if the app is reachable from outside (reverse proxy or VPN).

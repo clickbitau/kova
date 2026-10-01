@@ -22,7 +22,8 @@ interface HubCtx {
   setPerson(personId: string | undefined): Promise<void>;
   api<T = unknown>(method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, body?: unknown): Promise<T>;
   /** Change a device, showing the change at once; the hub's next snapshot has the final word. */
-  send(id: string, cmd: Command, done?: string): Promise<void>;
+  /** Resolves true when the hub took it (errors are shown here). */
+  send(id: string, cmd: Command, done?: string): Promise<boolean>;
   /** A call that returns { undo }: toast with an Undo button. */
   act(method: 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, body: unknown, done: string): Promise<void>;
   say(text: string, opts?: { undo?: string; error?: boolean }): void;
@@ -101,9 +102,11 @@ export function HubProvider({ children }: { children: ReactNode }) {
     try {
       const r = await api<{ undo?: string }>('POST', `/api/devices/${encodeURIComponent(id)}`, cmd);
       if (done) say(done, { undo: r?.undo });
+      return true;
     } catch (e) {
       say((e as Error).message, { error: true });
       void api<Snapshot>('GET', '/api/state').then(setSnap).catch(() => {});
+      return false;
     }
   }, [api, say]);
 
