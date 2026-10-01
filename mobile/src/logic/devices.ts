@@ -25,6 +25,10 @@ export function devs(s: Pick<Snapshot, 'devices'>): Record<string, Dev> {
 }
 
 /** The status line under a device's name, and its colour. */
+/** Input names for a status line: a soundbar's "tv" is the TV's sound coming in over eARC. */
+const INPUT_NAMES: Record<string, string> = { hdmi1: 'HDMI 1', hdmi2: 'HDMI 2', hdmi3: 'HDMI 3', hdmi4: 'HDMI 4', bluetooth: 'Bluetooth', wifi: 'Wi-Fi' };
+const inputName = (d: Dev) => d.input ? (d.input === 'tv' ? (has(d, 'sound') ? 'TV (eARC)' : 'TV') : INPUT_NAMES[d.input] ?? d.input) : '';
+
 export function stateOf(d: Dev): [string, string] {
   if (d.id === 'warden_internet') return d.online === false ? ['Warden not answering', C.red] : d.on ? ['Internet up', C.green] : ['Internet down', C.red];
   if (d.type === 'camera' || d.type === 'sensor') return d.online === false ? ['Offline', C.red] : ['Live', C.green];
@@ -34,6 +38,8 @@ export function stateOf(d: Dev): [string, string] {
     return [`${VAC[a] || 'Idle'}${d.battery != null ? ` · ${d.battery}%` : ''}`, a === 'error' ? C.red : a === 'cleaning' ? C.amber : C.stone];
   }
   if (d.type === 'fan') return [d.mode || 'Auto', C.blue];
+  // A soundbar or TV Kova controls but can't stream to: on (and its input) or off, never "Playing".
+  if (isPlayer(d) && !has(d, 'media')) return d.on ? [`On${inputName(d) ? ` · ${inputName(d)}` : ''}`, C.blue] : ['Off', C.stone];
   if (isPlayer(d)) return d.on ? [d.paused ? `Paused${d.media ? ` · ${d.media}` : ''}` : d.track ? `Playing ${d.track.title}${d.track.artist ? ` · ${d.track.artist}` : ''}` : d.media ? `Playing ${d.media}` : 'Playing', d.paused ? C.stone : C.blue] : ['Idle', C.stone];
   if (d.type === 'internet') return d.on ? ['Internet on', C.green] : ['Internet paused', C.amber];
   if (!d.on) return ['Off', C.stone];
@@ -64,6 +70,7 @@ export function toggleCommand(d: Dev, sources: { name: string }[]): Command | nu
   if (d.type === 'fan') return { mode: d.mode === 'Auto' ? 'Sleep' : 'Auto' };
   if (d.type === 'vacuum') return { on: !d.on };
   if (has(d, 'library')) return d.on ? { paused: !d.paused } : null;
+  if (isPlayer(d) && !has(d, 'media')) return { on: !d.on };
   if (isPlayer(d)) return d.on ? { on: false, media: null } : { on: true, media: sources[0]?.name || 'Radio', vol: d.vol ?? 30 };
   return { on: !d.on };
 }
