@@ -12,6 +12,10 @@ export interface DeviceState {
   media?: string | null;
   paused?: boolean;
   vol?: number | null;
+  /** The song playing now, on speakers playing a queue (Helix music). */
+  track?: { title: string; artist?: string; album?: string; art?: string } | null;
+  /** The queue plays shuffled. */
+  shuffle?: boolean;
   /** TV input to switch to: hdmi1..hdmi4 or tv (TVs with `input`). The TV can't say which it's on, so this reads back null. */
   input?: string | null;
   power?: number | null;
@@ -21,7 +25,8 @@ export interface DeviceState {
   online?: boolean;
 }
 
-export type Command = Partial<DeviceState>;
+/** `skip`: 1 = next song, -1 = previous (speakers with `queue`). */
+export type Command = Partial<DeviceState> & { skip?: number };
 
 export interface Device {
   id: string;
@@ -68,6 +73,8 @@ export interface Snapshot {
   upcoming: { id: string; t: string; label: string; what: string; modeId: string | null; skipped: boolean }[];
   overlays: { id: string; name: string; icon: string; endsLabel: string }[];
   sources: { name: string; icon: string }[];
+  /** Helix music any speaker with `queue` can play: Shuffle all, Loved, playlists. Empty until Helix is paired. */
+  music?: { name: string; kind: 'all' | 'loved' | 'playlist'; icon: string; tracks?: number }[];
   findings: Finding[];
   activity: ActivityRow[];
   integrations: Integration[];

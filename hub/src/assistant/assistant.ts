@@ -1,4 +1,5 @@
 import type { Engine } from '../engine/engine.ts';
+import type { HelixMusic } from '../services/helix-music.ts';
 import type { Registry } from '../devices/registry.ts';
 import type { ConfigStore } from '../engine/config.ts';
 import type { Cause, Device, Overlay, Targets } from '../model/types.ts';
@@ -10,7 +11,7 @@ import { clock } from '../util/time.ts';
 // which the UI can show as "Understood" chips before anything runs.
 
 /** Where an answer came from, shown under every reply. */
-export type Source = 'Device control' | 'From the activity log' | 'From your modes' | 'Built-in · nothing left your home'
+export type Source = 'Device control' | 'Helix' | 'From the activity log' | 'From your modes' | 'Built-in · nothing left your home'
   /** Optional AI engines (see ai.ts). The cloud tag says what context was sent. */
   | 'Local AI on your server' | `Cloud AI · sent ${string}`;
 
@@ -27,7 +28,13 @@ export type Intent =
   | { kind: 'unknownLabel'; word: string }
   /** "play The Office in the lounge": a TV that can find titles itself (a Helix box). */
   | { kind: 'play'; title: string; device: string; label: string }
-  | { kind: 'pause'; resume: boolean; label: string; devices: string[] };
+  | { kind: 'pause'; resume: boolean; label: string; devices: string[] }
+  /** "play Bangla Collection on shuffle in the kitchen", "a station from Coke Studio in the lounge": Helix music on speakers. */
+  | { kind: 'music'; words: string; shuffle: boolean; station: boolean; label: string; devices: string[] }
+  /** "next song", "previous song in the kitchen". */
+  | { kind: 'skip'; delta: 1 | -1; label: string; devices: string[] }
+  /** "what's playing?", "what song is this?" */
+  | { kind: 'nowPlaying' };
 
 /** A follow-up the user can tap, executed by POST /api/ask/act. */
 export type AskAction =
@@ -56,6 +63,9 @@ const OVERLAY_PHRASES: Record<string, RegExp> = {
 const ARRIVED = /\b(im|i am|we re|were|we are) (home|back)\b|\bback home\b/;
 
 export class Assistant {
+  /** Helix music on speakers ("play Bangla Collection on shuffle in the kitchen"), once Helix is set up. */
+  music: HelixMusic | null = null;
+
   constructor(private engine: Engine, private reg: Registry, private config: ConfigStore) {}
 
   private rooms() { return this.config.get().rooms; }
@@ -88,6 +98,18 @@ export class Assistant {
     if (dev.length) return { devices: dev, label: dev.length === 1 ? dev[0].name : cap(phrase.trim()) };
     if (/^[a-z]+$/.test(p) && p.length > 2) return { unknown: p };
     return null;
+  }
+
+  /** Speakers that can play a queue (Helix music). A Kova speaker group stands for its speakers, so they aren't asked twice. */
+  private speakers(): Device[] {
+    const all = this.reg.list().filter(d => d.capabilities.includes('queue') && !d.hidden);
+    const real = all.filter(d => d.adapter !== 'groups');
+    return real.length ? real : all;
+  }
+
+  private speakerLabel(d: Device): string {
+    const rn = this.roomName(d.room);
+    return norm(d.name).includes(norm(rn)) ? d.name : `${rn} ${d.name}`.trim();
   }
 
   /** A room, a learned group of rooms, or a device by name: "lounge", "downstairs", "bedroom tv". */
@@ -149,17 +171,41 @@ export class Assistant {
       const players = this.reg.list().filter(d => d.capabilities.includes('pause') && (!at || at.has(d)));
       if (players.length && (!pz[2] || at)) return { kind: 'pause', resume, label: at?.label ?? 'What’s playing', devices: players.filter(d => d.state.on && !!d.state.paused === resume).map(d => d.id) };
     }
+    // "what's playing", "what song is this"
+    if (/^what(?:'s| is)? (?:playing|this song|song is this|song is playing)|^what song\b|^which song\b/.test(raw.replace(/’/g, "'"))) return { kind: 'nowPlaying' };
+    // "next song", "skip", "previous song in the kitchen", "go back a song"
+    const sk = raw.match(/^(?:play the )?(next|skip|previous|last|go back)(?: (?:a |one )?(?:song|track|this song|this one|this))?(?: (?:on|in) (?:the )?(.+))?$/);
+    if (sk) {
+      const at = sk[2] ? this.place(sk[2]) : null;
+      if (!sk[2] || at) {
+        const playing = this.speakers().filter(d => d.state.on && d.state.track && (!at || at.has(d)));
+        return { kind: 'skip', delta: /next|skip/.test(sk[1]) ? 1 : -1, label: at?.label ?? (playing.length === 1 ? this.speakerLabel(playing[0]) : 'What’s playing'), devices: playing.map(d => d.id) };
+      }
+    }
     // "play the office in the lounge", "watch dune on the bedroom tv", "put on bluey"
-    const pl = raw.match(/^(?:play|watch|put on) (.+)$/);
+    // "play Bangla Collection on shuffle in the kitchen", "shuffle my loved songs", "play a station from Coke Studio in the lounge"
+    const pl = raw.match(/^(play|watch|put on|shuffle)\s+(.+)$/);
     if (pl) {
-      const tvs = this.reg.list().filter(d => d.capabilities.includes('library'));
-      const split = pl[1].match(/^(.+) (?:on|in) (?:the )?(.+)$/);
+      let words = pl[2].trim();
+      const shuffle = pl[1] === 'shuffle' || /\b(?:on |in )?(?:shuffle|shuffled|random)\b/.test(words);
+      words = words.replace(/\s*\b(?:on |in |with )?(?:shuffle|shuffled|random(?: order)?)\b\s*/g, ' ').replace(/\s+/g, ' ').trim();
+      const split = words.match(/^(.+) (?:on|in) (?:the )?(.+)$/);
       const at = split ? this.place(split[2]) : null;
-      const title = (at ? split![1] : pl[1]).trim();
+      let title = (at ? split![1] : words).trim();
+      const tvs = this.reg.list().filter(d => d.capabilities.includes('library'));
       const picked = at ? tvs.filter(d => at.has(d)) : tvs.length === 1 ? tvs : tvs.filter(d => d.state.on);
-      if (picked.length === 1 && title && !/^(a |the )?(movie|film|something|music)$/.test(norm(title))) {
+      const musical = shuffle || pl[1] === 'shuffle' || /\b(songs?|music|playlist|station|radio|album|loved|favou?rites?|tracks?)\b/.test(norm(title)) || / by /.test(title);
+      if (pl[1] !== 'shuffle' && !musical && picked.length === 1 && title && !/^(a |the )?(movie|film|something)$/.test(norm(title))) {
         const rn = this.roomName(picked[0].room), dn = picked[0].name;
         return { kind: 'play', title, device: picked[0].id, label: norm(dn).includes(norm(rn)) ? dn : `${rn} ${dn}`.trim() };
+      }
+      if (pl[1] !== 'watch' && (!split || at)) {
+        const st = title.match(/^(?:a |the )?(?:station|radio|mix) (?:from|of|for|like|based on) (.+)$/) ?? title.match(/^(.+?) (?:station|radio|mix)$/);
+        if (st) title = st[1].trim();
+        const speakers = this.speakers().filter(d => at ? at.has(d) : d.state.on && d.state.track);
+        const all = this.speakers();
+        const devices = speakers.length ? speakers : !at && all.length === 1 ? all : [];
+        if (title) return { kind: 'music', words: title, shuffle: shuffle || !!st, station: !!st, label: at?.label ?? (devices.length === 1 ? this.speakerLabel(devices[0]) : 'the speakers'), devices: devices.map(d => d.id) };
       }
     }
     if (ARRIVED.test(t) && this.engine.overlay?.id === 'away') return { kind: 'overlay', id: 'away', name: 'Away', end: true };
@@ -186,6 +232,9 @@ export class Assistant {
       case 'unknownLabel': return ['Turn', `“${i.word}”`, 'New label'];
       case 'play': return ['Play', `“${i.title}”`, i.label];
       case 'pause': return [i.resume ? 'Carry on' : 'Pause', i.label];
+      case 'music': return ['Play', `“${i.words}”${i.station ? ' station' : ''}${i.shuffle && !i.station ? ' on shuffle' : ''}`, i.devices.length ? i.label : 'Which speaker?'];
+      case 'skip': return [i.delta > 0 ? 'Next song' : 'Previous song', i.label];
+      case 'nowPlaying': return ['Now playing'];
     }
   }
 
@@ -254,6 +303,41 @@ export class Assistant {
         } catch (e) {
           return reply(e instanceof Error ? e.message : String(e), 'Device control');
         }
+      }
+      case 'music': {
+        if (!this.music) return reply('Kova plays Helix music once it’s paired with Helix (Integrations → Helix).', 'Device control');
+        if (!i.devices.length) return reply(`Where should I play “${i.words}”? Say “in the kitchen”, or the speaker’s name.`, 'Device control');
+        let found: { media: string; kind: string } | null;
+        try { found = await this.music.find(i.words, { station: i.station }); } catch (e) { return reply(e instanceof Error ? e.message : String(e), 'Device control'); }
+        if (!found) return reply(`Helix has nothing called “${i.words}”.`, 'Helix');
+        const shuffle = i.shuffle || found.kind === 'all' || found.kind === 'station';
+        const results = await Promise.allSettled(i.devices.map(id => this.engine.command(id, { on: true, media: found!.media, shuffle }, { ...CAUSE, label: `Play ${found!.media}` })));
+        const ok = results.filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled');
+        if (!ok.length) return reply((results[0] as PromiseRejectedResult).reason?.message ?? 'The speakers didn’t answer.', 'Device control');
+        const what = found.media.replace(/^Artist: (.+)$/, 'songs by $1').replace(/^Album: (.+)$/, 'the album $1').replace(/^Song: (.+)$/, '$1, then songs like it')
+          .replace(/^Station: (.+)$/, 'a station from $1').replace(/^Shuffle all$/, 'all your music').replace(/^Loved$/, 'your loved songs');
+        const first = this.reg.get(i.devices[0])?.state.track;
+        return reply(`Playing ${what}${shuffle && found.kind !== 'all' && found.kind !== 'station' ? ' on shuffle' : ''} ${/^(the speakers|.* speaker.*)$/i.test(i.label) ? 'on' : 'in'} ${i.label}${first ? `: ${first.title}${first.artist ? ` by ${first.artist}` : ''}` : ''}.`, 'Helix', { undo: ok[0].value });
+      }
+      case 'skip': {
+        if (!i.devices.length) return reply('Nothing is playing a playlist to skip.', 'Device control');
+        const results = await Promise.allSettled(i.devices.map(id => this.reg.command(id, { skip: i.delta }, { ...CAUSE, label: i.delta > 0 ? 'Next song' : 'Previous song' })));
+        const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+        if (failed && results.every(r => r.status === 'rejected')) return reply(failed.reason?.message ?? 'The speaker didn’t answer.', 'Device control');
+        const t = this.reg.get(i.devices[0])?.state.track;
+        return reply(t ? `${i.delta > 0 ? 'Next' : 'Back'}: ${t.title}${t.artist ? ` by ${t.artist}` : ''}.` : 'Done.', 'Device control');
+      }
+      case 'nowPlaying': {
+        const playing = this.speakers().filter(d => d.state.on && d.state.track);
+        if (!playing.length) return reply('No speaker is playing a song from Helix right now.', 'Device control');
+        // Speakers playing the same song together are said once.
+        const bySong = new Map<string, Device[]>();
+        for (const d of playing) { const k = `${d.state.track!.title}\0${d.state.media}`; bySong.set(k, [...(bySong.get(k) ?? []), d]); }
+        const lines = [...bySong.values()].map(ds => {
+          const t = ds[0].state.track!;
+          return `${list(ds.map(d => this.speakerLabel(d)))}: ${t.title}${t.artist ? ` by ${t.artist}` : ''}${ds[0].state.media ? ` (${ds[0].state.media})` : ''}`;
+        });
+        return reply(`${lines.join('. ')}.`, 'Device control');
       }
       case 'pause': {
         if (!i.devices.length) return reply(i.resume ? 'Nothing is paused.' : 'Nothing is playing that I can pause.', 'Device control');

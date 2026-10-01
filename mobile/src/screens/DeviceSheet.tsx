@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { TextInput, View } from 'react-native';
+import { Image } from 'expo-image';
 import { C, F } from '../theme';
 import { useHub } from '../state/hub';
 import { useSheet } from '../state/sheet';
@@ -23,7 +24,9 @@ export function DeviceSheet() {
   const nav = useNav();
   const [name, setName] = useState<string | null>(null);
   const [title, setTitle] = useState('');
-  useEffect(() => { setName(null); setTitle(''); }, [id]);
+  const [station, setStation] = useState('');
+  const [musicShuffle, setMusicShuffle] = useState(false);
+  useEffect(() => { setName(null); setTitle(''); setStation(''); }, [id]);
   const D = snap && id ? devs(snap)[id] : undefined;
   if (!snap || !D) return <Sheet open={false} onClose={close}>{null}</Sheet>;
 
@@ -92,6 +95,51 @@ export function DeviceSheet() {
             <View style={{ flex: 1 }}><Slider value={D.vol ?? 30} color={C.blue} onRelease={v => void send(D.id, { vol: v })} /></View>
             <T mono size={12} color={C.stone} style={{ width: 36, textAlign: 'right' }}>{`${D.vol ?? 30}%`}</T>
           </View>
+          {has(D, 'queue') && D.on && D.track ? (
+            <View style={{ gap: 12 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                {D.track.art ? <Image source={{ uri: D.track.art }} style={{ width: 56, height: 56, borderRadius: 10, backgroundColor: C.inset }} contentFit="cover" /> : (
+                  <View style={{ width: 56, height: 56, borderRadius: 10, backgroundColor: C.inset, alignItems: 'center', justifyContent: 'center' }}><Icon name="music_note" size={24} color={C.blue} /></View>
+                )}
+                <View style={{ flex: 1, gap: 2 }}>
+                  <T size={15} weight={700} numberOfLines={1}>{D.track.title}</T>
+                  <T size={12.5} color={C.stone} numberOfLines={1}>{[D.track.artist, D.media].filter(Boolean).join(' · ')}</T>
+                </View>
+              </View>
+              <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 18 }}>
+                <Press label="Shuffle" onPress={() => void send(D.id, { shuffle: !D.shuffle }, D.shuffle ? 'Back in order' : 'Shuffled')} style={{ width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: D.shuffle ? 'rgba(199,155,242,0.2)' : 'transparent' }}>
+                  <Icon name="shuffle" size={21} color={D.shuffle ? '#c79bf2' : C.stone} />
+                </Press>
+                <Press label="Previous song" onPress={() => void send(D.id, { skip: -1 })} style={{ width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: C.inset }}>
+                  <Icon name="skip_previous" size={26} fill />
+                </Press>
+                <Press label="Next song" onPress={() => void send(D.id, { skip: 1 })} style={{ width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: C.inset }}>
+                  <Icon name="skip_next" size={26} fill />
+                </Press>
+                <View style={{ width: 42 }} />
+              </View>
+            </View>
+          ) : null}
+          {has(D, 'queue') && snap.music?.length ? (
+            <View style={{ gap: 8 }}>
+              <Label>Helix music</Label>
+              <HScroll>
+                <Pill label={musicShuffle ? 'Shuffle on' : 'Shuffle off'} on={musicShuffle} onPress={() => setMusicShuffle(v => !v)} />
+                {snap.music.map(m => {
+                  const sh = m.kind === 'all' || musicShuffle;
+                  return <Pill key={m.name} label={m.name} on={D.on && D.media === m.name} onPress={() => void send(D.id, { on: true, media: m.name, shuffle: sh }, `Playing ${m.name}${sh && m.kind !== 'all' ? ' on shuffle' : ''} on ${D.name}`)} />;
+                })}
+              </HScroll>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <TextInput value={station} onChangeText={setStation} placeholder="A station from… an artist, album or song" placeholderTextColor={C.stone3} returnKeyType="go"
+                  onSubmitEditing={() => { const w = station.trim(); if (w) { void send(D.id, { on: true, media: `Station: ${w}`, shuffle: true }, `Playing a station from ${w} on ${D.name}`); setStation(''); } }}
+                  style={{ flex: 1, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', backgroundColor: C.card, color: C.bone, fontFamily: F[400], fontSize: 16 }} />
+                <Press onPress={() => { const w = station.trim(); if (w) { void send(D.id, { on: true, media: `Station: ${w}`, shuffle: true }, `Playing a station from ${w} on ${D.name}`); setStation(''); } }} style={{ paddingHorizontal: 14, borderRadius: 12, backgroundColor: '#c79bf2', justifyContent: 'center' }}>
+                  <T size={13} weight={700} color="#1a1020">Play</T>
+                </Press>
+              </View>
+            </View>
+          ) : null}
           {has(D, 'input') && D.on ? (
             <View style={{ gap: 8 }}>
               <Label>Source</Label>

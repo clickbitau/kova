@@ -417,6 +417,7 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
   // Assistant engine settings. Built-in is the default; AI engines only ever see requests the built-in parser can't handle.
   // API keys are write-only: GET reports hasKey, never the key. Cameras are never shared, whatever is sent.
   const ai = new AiAssistant(hub.engine, hub.reg, hub.config, hub.store, opts.ai);
+  ai.music = () => hub.music?.cached() ?? [];
   app.get('/api/assistant/settings', async () => publicSettings(loadSettings(hub.store)));
   app.put<{ Body: SettingsPatch }>('/api/assistant/settings', async (req, reply) => {
     try { return publicSettings(saveSettings(hub.store, req.body ?? {})); } catch (e) { return fail(reply, e); }

@@ -21,6 +21,10 @@ export interface DeviceState {
   /** Playback is paused (players with the `pause` capability). `on` stays true while paused. */
   paused?: boolean;
   vol?: number | null;
+  /** The song playing now, on speakers that play a queue (Helix music): read back from the speaker. */
+  track?: Track | null;
+  /** The queue plays in a shuffled order (Kova shuffles it). */
+  shuffle?: boolean;
   /** TV input to switch to: "hdmi1".."hdmi4" or "tv" (TVs with the `input` capability). Not read back from the TV, so it stays null. */
   input?: string | null;
   power?: number | null;
@@ -37,9 +41,12 @@ export interface DeviceState {
   online?: boolean;
 }
 
+/** One song in a play queue: what a speaker fetches, and what Kova shows. */
+export interface Track { title: string; artist?: string; album?: string; art?: string; durationMs?: number; /** The song's id where it came from (Helix: helix:…), for counting plays. */ id?: string }
+
 export type VacuumActivity = 'cleaning' | 'returning' | 'docked' | 'paused' | 'idle' | 'error';
 
-export type Capability = 'onoff' | 'brightness' | 'colorTemp' | 'color' | 'fanMode' | 'media' | 'volume' | 'power' | 'energy' | 'events' | 'vacuum' | 'battery' | 'pause' | 'library' | 'input';
+export type Capability = 'onoff' | 'brightness' | 'colorTemp' | 'color' | 'fanMode' | 'media' | 'volume' | 'power' | 'energy' | 'events' | 'vacuum' | 'battery' | 'pause' | 'library' | 'input' | 'queue';
 
 export interface Device {
   id: string;
@@ -63,8 +70,8 @@ export interface Device {
 /** What the owner changed about a device: a better name, the right room, or hidden from lists. */
 export interface DeviceSettings { name?: string; room?: string; hidden?: boolean }
 
-/** A partial state change requested of a device. */
-export type Command = Partial<DeviceState>;
+/** A partial state change requested of a device. `skip` is momentary: 1 = next track, -1 = previous (players with `queue`). */
+export type Command = Partial<DeviceState> & { skip?: number };
 
 /** Why something happened. Attached to every state change and log entry. */
 export interface Cause {

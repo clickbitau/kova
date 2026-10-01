@@ -14,3 +14,6 @@ schedule search search_off send sensors settings shield single_bed skip_next sol
 speaker_group stairs star stop sync thunderstorm toggle_on tune tv videocam videocam_off visibility
 visibility_off volume_down volume_off volume_up wb_sunny wb_twilight weekend wifi wifi_off yard
 water_drop sunny partly_cloudy_day rainy foggy ac_unit mode_fan sensor_door bathroom home_work
+
+# Helix music on speakers
+skip_previous shuffle queue_music

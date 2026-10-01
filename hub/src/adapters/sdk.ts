@@ -1,4 +1,4 @@
-import type { Cause, Command, Device, DeviceState } from '../model/types.ts';
+import type { Cause, Command, Device, DeviceState, Track } from '../model/types.ts';
 
 /**
  * A device as an adapter announces it. The registry fills in the rest.
@@ -23,6 +23,12 @@ export interface AdapterContext {
   event(deviceId: string, type: string, data?: Record<string, unknown>): void;
   /** Look up a media source's stream URL by name. */
   sourceUrl(name: string): string | undefined;
+  /**
+   * Music by name (Helix: "Shuffle all", "Loved", a playlist, "Station: …") → the tracks to queue, in the order
+   * to play them (already shuffled when asked). Null when it isn't music Kova knows. Asked again within a few
+   * seconds it answers the same order, so every speaker of a group plays the same queue.
+   */
+  queueFor(media: string, opts?: { shuffle?: boolean }): Promise<Queue | null>;
   /** Set the state of a device whose state is worked out from others (a speaker group): quietly, without an Activity entry. */
   derive(deviceId: string, state: DeviceState): void;
   /** Remove devices this adapter no longer has (a deleted group). */
@@ -62,3 +68,13 @@ export interface LiveView {
 }
 
 export interface Snapshot { contentType: string; body: Buffer }
+
+/** One song a speaker can fetch by itself (no headers: any credential is in the URL). */
+export interface QueueTrack extends Track { id: string; url: string; contentType: string }
+
+/** A play queue: what was asked for, and the songs in playing order. */
+export interface Queue {
+  label: string; tracks: QueueTrack[]; shuffle: boolean;
+  /** Make the URLs of tracks[from..to) ready to hand to a speaker (Helix signs each song's URL just before it's queued). */
+  prepare?(from: number, to: number): Promise<void>;
+}
