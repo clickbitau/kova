@@ -5,6 +5,7 @@ import { call } from '../api/client';
 import type { Command, Snapshot } from '../api/types';
 import { wsUrl, type HubConfig } from '../logic/connect';
 import { getJson, setJson } from '../native/storage';
+import { checkForAppUpdate, pointUpdatesAtHub } from '../native/updates';
 
 export type Conn = 'connecting' | 'live' | 'offline';
 
@@ -89,6 +90,19 @@ export function HubProvider({ children }: { children: ReactNode }) {
     setToast({ id: Date.now(), text, ...opts });
     toastTimer.current = setTimeout(() => setToast(null), opts.undo ? 6000 : 3500);
   }, []);
+
+  // App updates come from this hub (native/updates.ts): point the updater at it, check now and
+  // whenever the app comes back to the front (at most every 30 minutes). A new one runs next launch.
+  const hubUrl = cfg?.url;
+  useEffect(() => {
+    if (!hubUrl) return;
+    const check = (force: boolean) => void checkForAppUpdate(force).then(ready => {
+      if (ready) say('A new version of Kova is ready. It starts next time you open the app.');
+    });
+    void pointUpdatesAtHub(hubUrl).then(() => check(true));
+    const sub = AppState.addEventListener('change', st => { if (st === 'active') check(false); });
+    return () => sub.remove();
+  }, [hubUrl, say]);
 
   const api = useCallback(<T,>(method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, body?: unknown) => {
     if (!cfg) return Promise.reject(new Error('Not connected to a hub'));

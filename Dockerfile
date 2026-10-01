@@ -12,6 +12,7 @@ COPY hub/package.json hub/
 RUN npm ci --omit=dev -w hub --include-workspace-root && npm cache clean --force
 COPY hub hub
 COPY web web
+COPY ota ota
 
 # Run as the image's unprivileged "node" user (uid 1000). The code stays root-owned
 # and read-only to it; only /data is writable. A bind-mounted ./data must belong to uid 1000.

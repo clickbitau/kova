@@ -1,0 +1,24 @@
+{
+  "//": "Every independently shipped piece of Kova and the paths that belong to it (docs/VERSIONING.md). scripts/check-versions.mjs --against <ref> requires a version bump for each component a change touches. First match wins, longest prefix first.",
+  "components": [
+    {
+      "id": "hub",
+      "name": "Kova hub",
+      "versionFile": "hub/package.json",
+      "ships": "git pull (deploy/update.sh) and the Docker image",
+      "paths": ["hub/", "web/", "deploy/", "Dockerfile", "docker-compose.yml"]
+    },
+    {
+      "id": "mobile",
+      "name": "Kova (phone)",
+      "versionFile": "mobile/src/version.json",
+      "appJson": "mobile/app.json",
+      "ships": "App Store / TestFlight binary per train; JavaScript over the air from the hub (ota/<train>/)",
+      "trainPrefix": "kova-mobile",
+      "nativeLock": "mobile/native-lock.json",
+      "nativeDirs": ["mobile/targets/", "mobile/modules/", "mobile/plugins/", "mobile/ios-app/"],
+      "nativeExclude": ["mobile/targets/widget/Assets.xcassets/", "mobile/modules/kova-native/index.ts"],
+      "paths": ["mobile/"]
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "//": "The Kova app's version (docs/VERSIONING.md). store: the X.Y.0 a store binary on this train carries (app.json version). version: what runs, store or over the air (X.Y.Z, PATCH only). train: the native runtime (app.json runtimeVersion). history: newest first; an over-the-air release adds an entry.",
+  "train": "kova-mobile-0",
+  "store": "0.1.0",
+  "version": "0.1.0",
+  "history": [
+    { "version": "0.1.0", "title": "First TestFlight build" }
+  ]
+}

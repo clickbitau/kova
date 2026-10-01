@@ -3,6 +3,8 @@
 /** @type {import('@bacons/apple-targets/app.plugin').ConfigFunction} */
 module.exports = config => ({
   type: 'widget',
+  // au.clickbit.kova.widget: the widgets, the lock-screen Live Activity and the Siri intents' extension.
+  bundleIdentifier: '.widget',
   name: 'KovaWidgets',
   displayName: 'Kova',
   icon: '../../assets/images/icon.png',

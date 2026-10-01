@@ -1,0 +1,9 @@
+{
+  "//": "Every store binary of the phone app, per native train, and every version Apple approved (docs/VERSIONING.md). Append only, through scripts/store-release.mjs: --shipped when a TestFlight/App Store/Play build is uploaded (DockBit), --approved when App Review approves. Never edit or remove an entry.",
+  "trains": {
+    "kova-mobile-0": []
+  },
+  "approved": {
+    "mobile": []
+  }
+}

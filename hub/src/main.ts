@@ -168,7 +168,7 @@ hub.services.push({ id: 'backups', name: 'Backups', icon: 'backup', kind: 'Local
 
 const app = await buildServer(hub, {
   webRoot: resolve(here, '../../web'), token: env.KOVA_TOKEN || undefined,
-  homekit, matterBridge, nest: integrations?.nest, presence, helixLink, notifier, integrationsPath: integrationsFile, integrations: setup, haImport, backups,
+  homekit, matterBridge, nest: integrations?.nest, presence, helixLink, otaDir: env.KOVA_OTA_DIR ? resolve(env.KOVA_OTA_DIR) : resolve(here, '../../ota'), notifier, integrationsPath: integrationsFile, integrations: setup, haImport, backups,
 });
 await app.listen({ port: Number(env.KOVA_PORT ?? 8140), host: env.KOVA_HOST ?? '0.0.0.0' });
 const addr = app.server.address();

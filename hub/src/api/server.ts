@@ -29,6 +29,7 @@ import { registerImportRoutes } from './import-routes.ts';
 import { registerHomeRoutes } from './home-routes.ts';
 import { registerLanAppRoutes } from './lan-apps-routes.ts';
 import { registerAppLinkRoutes } from './app-link.ts';
+import { AppUpdates, registerAppUpdateRoutes } from './app-updates.ts';
 import type { Backups } from '../services/backup.ts';
 import { KOVA_VERSION } from '../version.ts';
 import { createReadStream } from 'node:fs';
@@ -49,6 +50,8 @@ export interface ServerOptions {
   presence?: Presence;
   /** Helix's own token: it may switch the TVs its boxes sit on, and nothing else. */
   helixLink?: HelixLink;
+  /** Where the phone app's over-the-air bundles are (ota/<train>/<update>/). Absent: no app updates. */
+  otaDir?: string;
   /** Web Push / ntfy notifications. */
   notifier?: Notifier;
   /** Where integrations.json lives, for imports that write to it (e.g. Tuya cloud keys). */
@@ -108,6 +111,8 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
     app.addHook('onRequest', async (req, reply) => {
       const path = req.url.split('?')[0];
       if (!path.startsWith('/api/') || path === '/api/health') return;
+      // App updates: expo-updates asks without a token (api/app-updates.ts explains why).
+      if (req.method === 'GET' && (path === '/api/app/manifest' || path.startsWith('/api/app/assets/'))) return;
       if (opts.token && tokenOk(req, opts.token)) return;
       if (helixTokenOk(req, path)) { fromHelix.add(req); return; }
       if (opts.token && !personKeyOk(req)) return reply.code(401).send({ error: 'unauthorised' });
@@ -343,6 +348,7 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
   registerImportRoutes(app, opts.haImport);
   registerHomeRoutes(app, hub);
   registerLanAppRoutes(app, { integrations: opts.integrations, helixLink: opts.helixLink, ...opts.lanApps });
+  if (opts.otaDir) registerAppUpdateRoutes(app, new AppUpdates(opts.otaDir));
   registerAppLinkRoutes(app, { token: opts.token, port: () => { const a = app.server.address(); return typeof a === 'object' && a ? a.port : Number(process.env.KOVA_PORT ?? 8140); } });
 
   // Presence from a phone: the Kova app, or an iOS Shortcut / Android automation ("When I arrive home → Get contents of URL").

@@ -1,0 +1,10 @@
+# Phone app dependencies with no native code: changing them is an over-the-air update, not a store build.
+# Everything else in mobile/package.json counts as native (scripts/native-fingerprint.mjs).
+@expo-google-fonts/jetbrains-mono
+@expo-google-fonts/manrope
+@expo/metro-runtime
+@react-navigation/bottom-tabs
+@react-navigation/native
+@react-navigation/native-stack
+react-dom
+react-native-web
