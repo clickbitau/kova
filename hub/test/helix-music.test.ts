@@ -64,6 +64,9 @@ async function fakeHelix(n = 60, o: { modern?: boolean } = {}) {
       if (q.get('loved') === '1') return send(200, { tracks: lib.filter(t => t.loved) });
       if (q.get('ids')) return send(200, { tracks: lib.filter(t => t.id === q.get('ids')) });
       if (q.get('artist')) return send(200, { tracks: lib.filter(t => t.artist === 'Coke Studio') });
+      // Newest first / most played first (the fake: by reverse id, and play counts on the first three songs).
+      if (q.get('sort') === 'added') return send(200, { tracks: [...lib].reverse().slice(0, Number(q.get('limit') ?? 200)) });
+      if (q.get('sort') === 'played') return send(200, { tracks: lib.slice(0, 4).map((t, i) => ({ ...t, playCount: 3 - i })) });
       const off = Number(q.get('offset') ?? 0), lim = Number(q.get('limit') ?? 200);
       // A current Helix shuffles the whole library itself.
       if (q.get('shuffle') === '1' && o.modern) return send(200, { tracks: [...lib].reverse().slice(off, off + lim), total: lib.length, offset: off, limit: lim, nextOffset: null, seed: 'S1' });
@@ -86,12 +89,21 @@ async function fakeHelix(n = 60, o: { modern?: boolean } = {}) {
   return { url, seen, lib, played, signed, artSigned, close: () => new Promise<void>(r => { server.closeAllConnections(); server.close(() => r()); }) };
 }
 
-test('Helix music: Shuffle all, Loved and playlists, as songs a speaker can fetch by itself', async () => {
+test('Helix music: four choices on the page, playlists by name, as songs a speaker can fetch by itself', async () => {
   const h = await fakeHelix(2500);
   const music = new HelixMusic(() => ({ url: h.url, token: TOKEN }), { random: seq() });
   try {
-    assert.deepEqual((await music.catalog()).map(i => i.name), ['Shuffle all', 'Loved', 'Bangla Collection']);
-    assert.ok(music.isMusic('Bangla Collection') && music.isMusic('loved') && music.isMusic('Station: Coke Studio'));
+    assert.deepEqual((await music.catalog()).map(i => i.name), ['Shuffle all', 'Loved', 'Recently added', 'Most played'], 'four ways in, not every playlist');
+    assert.ok(music.isMusic('Bangla Collection') && music.isMusic('loved') && music.isMusic('Station: Coke Studio') && music.isMusic('most played'));
+
+    // Recently added: newest first, in that order; Most played: only songs played at all, most first.
+    const added = (await music.queueFor('Recently added'))!;
+    assert.equal(added.shuffle, false);
+    assert.ok(h.seen.some(x => x.startsWith('GET /v1/music/tracks?sort=added&limit=200')));
+    assert.equal(added.tracks[0].title, h.lib[h.lib.length - 1].title, 'newest first');
+    const most = (await music.queueFor('Most played'))!;
+    assert.ok(h.seen.some(x => x.startsWith('GET /v1/music/tracks?sort=played&limit=200')));
+    assert.equal(most.tracks.length, 3, 'the never-played song is left out');
     assert.equal(music.isMusic('Radio Foorti'), false);
 
     // A playlist in order: songs it can't play and repeats are left out; each song is the AAC stream with Kova's token.

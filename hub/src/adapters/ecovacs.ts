@@ -49,12 +49,15 @@ const CONTINENTS: Record<string, string> = {
 };
 export function continentFor(country: string): string { return CONTINENTS[country.toLowerCase()] ?? 'ww'; }
 
+/** Ecovacs' hosts for an account's country (deebot-client's rule: portal-{continent}, plain portal in China). */
 export function ecovacsUrls(country: string, continent = continentFor(country)) {
   const c = country.toLowerCase();
+  const cn = c === 'cn';
   return {
-    login: `https://gl-${c}-api.ecovacs.com`,
-    auth: `https://gl-${c}-openapi.ecovacs.com`,
-    portal: `https://api-app.dc-${continent.toLowerCase()}.ww.ecouser.net/api`,
+    login: `https://gl-${c}-api.ecovacs.${cn ? 'cn' : 'com'}`,
+    auth: `https://gl-${c}-openapi.ecovacs.${cn ? 'cn' : 'com'}`,
+    // The old api-app.dc-{continent}.ww.ecouser.net names no longer resolve.
+    portal: `https://portal${cn ? '' : `-${continent.toLowerCase()}`}.ecouser.net/api`,
   };
 }
 

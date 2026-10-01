@@ -47,7 +47,7 @@ export class SpeakerGroupsAdapter implements Adapter {
     this.announced = ids;
     this.ctx.announce(gs.map(g => ({
       id: groupDeviceId(g), name: g.name, room: g.room || this.commonRoom(g) || 'unassigned', type: 'media' as const,
-      capabilities: ['onoff', 'volume', 'media', 'queue'], integration: 'Kova speaker group', address: g.members.join(', '),
+      capabilities: ['onoff', 'volume', 'media', 'queue', 'pause'], integration: 'Kova speaker group', address: g.members.join(', '),
       state: this.derived(g),
     })));
     this.refresh();
@@ -69,6 +69,8 @@ export class SpeakerGroupsAdapter implements Adapter {
       media: playing.length && medias.size === 1 ? [...medias][0] : playing.length ? 'Mixed' : null,
       track: medias.size === 1 ? withTrack?.state.track ?? null : null,
       shuffle: !!withTrack?.state.shuffle,
+      // Paused when every speaker that's on is paused (pausing the group pauses them all).
+      paused: playing.length > 0 && playing.every(d => d.state.paused),
       vol: vols.length ? Math.round(vols.reduce((a, b) => a + b, 0) / vols.length) : 30,
       online: ms.some(d => d.state.online !== false) && ms.length > 0,
     };

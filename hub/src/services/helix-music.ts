@@ -8,6 +8,8 @@ import { lanJson, trimUrl } from '../util/lan-http.ts';
  * Names (what a speaker's `media` says while it plays):
  *   "Shuffle all"        the whole library, shuffled
  *   "Loved"              the loved songs
+ *   "Recently added"     the newest songs in the library, newest first
+ *   "Most played"        the most played songs, most played first
  *   "<playlist title>"   a playlist, in order (or shuffled)
  *   "Station: <name>"    a station from an artist, album or song: Helix's mix plus the artist's own songs, shuffled
  *   "Artist: <name>", "Album: <name>", "Song: <name>"   what Ask found by name
@@ -27,16 +29,26 @@ export interface HelixMusicConfig { url?: string; token?: string; /** Helix prof
 
 interface HelixTrack {
   id: string; title: string; artist?: string; album?: string; posterUrl?: string; durationMs?: number;
-  url?: string; hasFile?: boolean; streamable?: boolean; provisional?: boolean; codec?: string;
+  url?: string; hasFile?: boolean; streamable?: boolean; provisional?: boolean; codec?: string; playCount?: number;
 }
 interface Playlist { id: string; title: string; kind?: string; tracks?: number }
 interface SiriPick { kind: 'artist' | 'album' | 'track' | 'playlist' | 'loved' | 'default' | 'none'; id?: string; title?: string; artist?: string }
 
-export interface MusicItem { name: string; kind: 'all' | 'loved' | 'playlist'; icon: string; tracks?: number }
+/** The Media page's four ways into the library. */
+const CHOICES: MusicItem[] = [
+  { name: 'Shuffle all', kind: 'all', icon: 'shuffle' },
+  { name: 'Loved', kind: 'loved', icon: 'favorite' },
+  { name: 'Recently added', kind: 'added', icon: 'new_releases' },
+  { name: 'Most played', kind: 'played', icon: 'trending_up' },
+];
+/** How many songs Recently added and Most played hold. */
+const RECENT_MAX = 200;
+
+export interface MusicItem { name: string; kind: 'all' | 'loved' | 'added' | 'played' | 'playlist'; icon: string; tracks?: number }
 
 /** What a name means to Helix. */
 type Spec =
-  | { kind: 'all' } | { kind: 'loved' }
+  | { kind: 'all' } | { kind: 'loved' } | { kind: 'added' } | { kind: 'played' }
   | { kind: 'playlist'; id: string; title: string }
   | { kind: 'station' | 'artist' | 'album' | 'track'; id: string; seedKind: 'artist' | 'album' | 'track'; title: string };
 
@@ -93,7 +105,10 @@ export class HelixMusic {
     await this.post(`/v1/music/tracks/${encodeURIComponent(trackId.replace(/^helix:/, ''))}/played`, { profileId: h.profile, player, playedAt: new Date(this.now).toISOString() }).catch(() => {});
   }
 
-  /** What to offer on the Media page: Shuffle all, Loved, then each music playlist. */
+  /**
+   * What to offer on the Media page: four ways in, not every playlist (playlists still play by name,
+   * from Ask or a mode). The playlists are still read, so their names are known.
+   */
   async catalog(force = false): Promise<MusicItem[]> {
     if (!this.linked()) return [];
     if (force || this.now - this.listedAt > 5 * 60_000) {
@@ -102,25 +117,20 @@ export class HelixMusic {
         this.listedAt = this.now;
       } catch { /* keep the last list */ }
     }
-    return [
-      { name: 'Shuffle all', kind: 'all', icon: 'shuffle' },
-      { name: 'Loved', kind: 'loved', icon: 'favorite' },
-      ...this.playlists.map(p => ({ name: p.title, kind: 'playlist' as const, icon: 'queue_music', tracks: p.tracks })),
-    ];
+    return CHOICES;
   }
 
   /** The last catalog, without asking Helix (for the snapshot). */
   cached(): MusicItem[] {
     if (!this.linked()) return [];
-    return [{ name: 'Shuffle all', kind: 'all', icon: 'shuffle' }, { name: 'Loved', kind: 'loved', icon: 'favorite' },
-      ...this.playlists.map(p => ({ name: p.title, kind: 'playlist' as const, icon: 'queue_music', tracks: p.tracks }))];
+    return CHOICES;
   }
 
   /** Whether a name is Helix music (as opposed to a radio source). */
   isMusic(media: string): boolean {
     if (!this.linked()) return false;
     const n = media.trim().toLowerCase();
-    return n === 'shuffle all' || n === 'loved' || /^(station|artist|album|song): /i.test(media) || this.specs.has(media)
+    return CHOICES.some(c => c.name.toLowerCase() === n) || /^(station|artist|album|song): /i.test(media) || this.specs.has(media)
       || this.playlists.some(p => p.title.toLowerCase() === n);
   }
 
@@ -152,6 +162,8 @@ export class HelixMusic {
     const n = media.trim().toLowerCase();
     if (n === 'shuffle all') return { kind: 'all' };
     if (n === 'loved') return { kind: 'loved' };
+    if (n === 'recently added') return { kind: 'added' };
+    if (n === 'most played') return { kind: 'played' };
     const m = /^(station|artist|album|song): (.+)$/i.exec(media.trim());
     if (m) {
       const kind = PREFIX[m[1].toLowerCase()];
@@ -199,6 +211,8 @@ export class HelixMusic {
         break;
       }
       case 'loved': tracks = (await this.get<{ tracks?: HelixTrack[] }>('/v1/music/tracks?loved=1&limit=2000')).tracks ?? []; break;
+      case 'added': tracks = (await this.get<{ tracks?: HelixTrack[] }>(`/v1/music/tracks?sort=added&limit=${RECENT_MAX}`)).tracks ?? []; break;
+      case 'played': tracks = ((await this.get<{ tracks?: HelixTrack[] }>(`/v1/music/tracks?sort=played&limit=${RECENT_MAX}`)).tracks ?? []).filter(t => (t.playCount ?? 0) > 0); break;
       case 'playlist': tracks = (await this.get<{ tracks?: HelixTrack[] }>(`/v1/playlists/${encodeURIComponent(spec.id)}`)).tracks ?? []; break;
       case 'artist': tracks = (await this.get<{ tracks?: HelixTrack[] }>(`/v1/music/tracks?artist=${encodeURIComponent(spec.id)}&limit=2000`)).tracks ?? []; break;
       case 'album': tracks = (await this.get<{ tracks?: HelixTrack[] }>(`/v1/music/tracks?album=${encodeURIComponent(spec.id)}&limit=2000`)).tracks ?? []; break;

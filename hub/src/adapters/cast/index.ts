@@ -64,6 +64,8 @@ class Receiver {
   /** A play queue (Helix music): the songs in order, where it is, and what the speaker holds. */
   queue: { q: Queue; index: number; from: number; to: number; session?: number; position: number; topping?: boolean } | null = null;
   private transport: string | null = null;
+  /** Playback is paused (on hold, not stopped), as the speaker last said. */
+  paused = false;
   /** Called when the song changes or the queue ends. */
   onTrack?: () => void;
 
@@ -125,6 +127,7 @@ class Receiver {
 
   /** What the speaker says it's playing: follow the queue, and add more songs before it runs out. */
   private onStatus(st: MediaStatus | undefined): void {
+    if (st?.playerState) this.paused = st.playerState === 'PAUSED';
     const qu = this.queue;
     if (!st || !qu) return;
     if (st.mediaSessionId) qu.session = st.mediaSessionId;
@@ -151,6 +154,19 @@ class Receiver {
       await this.ch.request(NS.media, this.transport, { type: 'QUEUE_INSERT', mediaSessionId: qu.session, items: qu.q.tracks.slice(qu.to, to).map((t, i) => queueItem(t, qu.to + i)) });
       if (this.queue === qu) qu.to = to;
     } catch { /* tried again on the next status */ } finally { qu.topping = false; }
+  }
+
+  /** Pause (keep the place) or carry on whatever the speaker's media player is playing. */
+  async setPaused(paused: boolean): Promise<void> {
+    const { app } = await this.status();
+    if (!app || app.isIdleScreen) throw new Error(`${this.ep.name} isn’t playing anything`);
+    this.ch.connectTo(app.transportId);
+    this.transport = app.transportId;
+    const m = await this.ch.request(NS.media, app.transportId, { type: 'GET_STATUS' });
+    const session = (m.data.status as MediaStatus[] | undefined)?.[0]?.mediaSessionId ?? this.queue?.session;
+    if (session == null) throw new Error(`${this.ep.name} has nothing to ${paused ? 'pause' : 'resume'}`);
+    await this.ch.request(NS.media, app.transportId, { type: paused ? 'PAUSE' : 'PLAY', mediaSessionId: session });
+    this.paused = paused;
   }
 
   /** Next (1) or previous (-1) song. */
@@ -220,6 +236,8 @@ export class CastAdapter implements Adapter {
   private groups = new Map<string, Set<string>>();
   /** Speaker id → group id currently playing through it. */
   private viaGroup = new Map<string, string>();
+  /** Speakers taken out of a group that's still playing (muted, the rest carry on in sync) → that group. */
+  private silenced = new Map<string, string>();
   private queue: Pending[] = [];
   private flushTimer: NodeJS.Timeout | null = null;
   private poller: NodeJS.Timeout | null = null;
@@ -254,7 +272,7 @@ export class CastAdapter implements Adapter {
     const kid = this.o.ids?.[ep.name] ?? `cast_${ep.id}`;
     this.kova.set(ep.id, kid);
     this.castOf.set(kid, ep.id);
-    this.ctx!.announce([{ id: kid, name: ep.name, room, type: tv ? 'tv' : 'media', integration: `Google Cast · ${ep.model}`, address: `${ep.host}:${ep.port}`, capabilities: ['onoff', 'media', 'volume', 'queue'] }]);
+    this.ctx!.announce([{ id: kid, name: ep.name, room, type: tv ? 'tv' : 'media', integration: `Google Cast · ${ep.model}`, address: `${ep.host}:${ep.port}`, capabilities: ['onoff', 'media', 'volume', 'queue', 'pause'] }]);
   }
 
   /** mDNS browse for _googlecast._tcp. Keeps listening so new devices and IP changes are picked up. */
@@ -326,7 +344,25 @@ export class CastAdapter implements Adapter {
     const run = async (p: Pending[], fn: () => Promise<void | DeviceState>) => {
       try { const did = await fn(); p.forEach(x => x.resolve(did || undefined)); } catch (e) { p.forEach(x => x.reject(e as Error)); }
     };
-    const playedQueue = (r: Receiver): DeviceState | undefined => r.queue ? { shuffle: r.queue.q.shuffle, track: r.track } : undefined;
+    const playedQueue = (r: Receiver): DeviceState | undefined => r.queue ? { shuffle: r.queue.q.shuffle, track: r.track, paused: r.paused } : { paused: r.paused };
+    const jobs: Promise<void>[] = [];
+    // Back into the group it was taken out of, while that group still plays the same: unmute and rejoin, no new stream.
+    for (const p of [...batch]) {
+      const id = this.speakerId(p.device);
+      const gid = this.silenced.get(id);
+      const g = gid ? this.receivers.get(gid) : undefined;
+      if (!gid || !g?.media || p.cmd.on === false || p.cmd.media === null || (p.cmd.on !== true && !p.cmd.media) || (p.cmd.media && p.cmd.media !== g.media)) continue;
+      batch.splice(batch.indexOf(p), 1);
+      jobs.push(run([p], async () => {
+        const r = this.receivers.get(id)!;
+        if (p.cmd.vol != null) await r.volume(p.cmd.vol / 100);
+        await r.volume(0, false);
+        this.silenced.delete(id);
+        this.viaGroup.set(id, gid);
+        r.media = g.media;
+        return playedQueue(g);
+      }));
+    }
     // Plays of the same source in the same instant: try to use one Cast group.
     const plays = new Map<string, Pending[]>();
     const rest: Pending[] = [];
@@ -334,8 +370,8 @@ export class CastAdapter implements Adapter {
       if (p.cmd.media) { const key = `${p.cmd.media}\0${p.cmd.shuffle ? 1 : 0}`; plays.set(key, [...(plays.get(key) ?? []), p]); }
       else rest.push(p);
     }
-    const jobs: Promise<void>[] = [];
     for (const [key, ps] of plays) {
+      for (const p of ps) this.silenced.delete(this.speakerId(p.device)); // something new: no longer "taken out"
       const media = key.slice(0, key.lastIndexOf('\0'));
       const url = this.ctx!.sourceUrl(media);
       // Not a radio source: maybe music (Helix), which plays as a queue of songs.
@@ -366,9 +402,9 @@ export class CastAdapter implements Adapter {
         }));
       }
     }
-    // Next / previous song, and shuffle on or off: once per receiver (a group's speakers share one queue).
+    // Next / previous song, shuffle on or off, pause and resume: once per receiver (a group's speakers share one queue).
     const playing = (p: Pending) => { const id = this.speakerId(p.device); return this.receivers.get(this.viaGroup.get(id) ?? id)!; };
-    const skips = rest.filter(p => p.cmd.skip || p.cmd.shuffle !== undefined);
+    const skips = rest.filter(p => p.cmd.skip || p.cmd.shuffle !== undefined || (p.cmd.paused !== undefined && p.cmd.on !== false && p.cmd.media !== null));
     const byReceiver = new Map<Receiver, Pending[]>();
     for (const p of skips) byReceiver.set(playing(p), [...(byReceiver.get(playing(p)) ?? []), p]);
     for (const [r, ps] of byReceiver) {
@@ -381,6 +417,8 @@ export class CastAdapter implements Adapter {
         }
         const skip = ps.find(p => p.cmd.skip)?.cmd.skip;
         if (skip) await r.skip(skip > 0 ? 1 : -1);
+        const paused = ps.find(p => p.cmd.paused !== undefined)?.cmd.paused;
+        if (paused !== undefined && paused !== r.paused) await r.setPaused(paused);
         return playedQueue(r);
       }));
     }
@@ -398,12 +436,17 @@ export class CastAdapter implements Adapter {
           if (!groupsDone.has(gid)) {
             groupsDone.add(gid);
             const ps = stops.filter(x => members.includes(this.speakerId(x.device)));
-            jobs.push(run(ps, async () => { await this.receivers.get(gid)!.stop(); for (const s of members) { this.viaGroup.delete(s); this.receivers.get(s)!.media = null; } }));
+            jobs.push(run(ps, async () => {
+              await this.receivers.get(gid)!.stop();
+              for (const s of members) { this.viaGroup.delete(s); this.receivers.get(s)!.media = null; }
+              // Speakers taken out earlier come back to full volume for next time.
+              for (const [s, g] of [...this.silenced]) if (g === gid) { this.silenced.delete(s); await this.receivers.get(s)?.volume(0, false).catch(() => {}); }
+            }));
           }
           continue;
         }
         // Only some speakers of a group: silence this one, the rest keep playing in sync.
-        jobs.push(run([p], async () => { await this.receivers.get(id)!.volume(0, true); this.viaGroup.delete(id); this.receivers.get(id)!.media = null; }));
+        jobs.push(run([p], async () => { await this.receivers.get(id)!.volume(0, true); this.viaGroup.delete(id); this.silenced.set(id, gid); this.receivers.get(id)!.media = null; }));
         continue;
       }
       jobs.push(run([p], () => this.receivers.get(id)!.stop()));
@@ -432,7 +475,8 @@ export class CastAdapter implements Adapter {
       try {
         const { volume, app } = await r.status();
         const gid = this.viaGroup.get(id);
-        let playing = !!app && !app.isIdleScreen;
+        // Taken out of a group that's still playing: it's muted, and off as far as anyone is concerned.
+        let playing = !!app && !app.isIdleScreen && !this.silenced.has(id);
         if (gid && !playing) {
           const g = await this.receivers.get(gid)!.status().catch(() => ({ app: undefined }));
           playing = !!g.app && !g.app.isIdleScreen;
@@ -442,7 +486,7 @@ export class CastAdapter implements Adapter {
         const src = gid ? this.receivers.get(gid)! : r;
         if (playing) await src.refreshQueue();
         this.ctx!.report(this.kovaId(id), {
-          online: true, on: playing, media: playing ? r.media ?? 'Casting' : null, vol: volume.level != null ? Math.round(volume.level * 100) : undefined,
+          online: true, on: playing, media: playing ? r.media ?? 'Casting' : null, vol: volume.level != null ? Math.round(volume.level * 100) : undefined, paused: playing ? (gid ? this.receivers.get(gid)?.paused ?? r.paused : r.paused) : false,
           track: playing ? src.track : null, shuffle: playing && src.queue ? src.queue.q.shuffle : false,
         });
         this.failing.delete(id);

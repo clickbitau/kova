@@ -15,6 +15,8 @@ interface Speaker {
   id: string; host: string; name: string; room: string; media: string | null; udn: string;
   /** A play queue (Helix music): the songs in order, which one plays, and which of them the speaker's queue holds (from..to). */
   queue: { q: Queue; index: number; from: number; to: number } | null;
+  /** Paused (on hold, keeping its place), as the speaker last said. */
+  paused?: boolean;
 }
 
 /** How many songs the speaker's own queue holds ahead; more are added as it plays. */
@@ -83,7 +85,7 @@ export class SonosAdapter implements Adapter {
       const id = `sonos_${udn.replace(/^RINCON_/, '').toLowerCase()}`;
       this.speakers.set(id, { id, host, name: room, room, media: null, udn, queue: null });
       const kovaRoom = this.opts.roomFor?.(room) ?? room.toLowerCase().replace(/[^a-z0-9]+/g, '_');
-      this.ctx!.announce([{ id, name: `${model}`, room: kovaRoom, type: 'media', integration: 'Sonos', address: host, capabilities: ['onoff', 'media', 'volume', 'queue'] }]);
+      this.ctx!.announce([{ id, name: `${model}`, room: kovaRoom, type: 'media', integration: 'Sonos', address: host, capabilities: ['onoff', 'media', 'volume', 'queue', 'pause'] }]);
     } catch (err) {
       this.lastError = `Couldn’t reach ${host}`;
       this.ctx?.log(`add ${host} failed`, err);
@@ -160,13 +162,20 @@ export class SonosAdapter implements Adapter {
       await this.soap(s.host, AVT, 'Play', { InstanceID: 0, Speed: 1 });
     }
     if (cmd.skip) await this.skip(s, cmd.skip > 0 ? 1 : -1);
+    // Pause keeps the place (and the queue); resume carries on from it.
+    if (cmd.paused !== undefined && cmd.on !== false && cmd.media !== null) {
+      await this.soap(s.host, AVT, cmd.paused ? 'Pause' : 'Play', { InstanceID: 0, ...(cmd.paused ? {} : { Speed: 1 }) });
+      s.paused = cmd.paused;
+    }
     if (cmd.on === false || cmd.media === null) {
       await this.soap(s.host, AVT, 'Pause', { InstanceID: 0 }).catch(() => this.soap(s.host, AVT, 'Stop', { InstanceID: 0 }));
       s.media = null;
       s.queue = null;
+      s.paused = false;
     }
     // What the speaker now plays: whether it's shuffled, and the song.
-    if (s.queue) return { shuffle: s.queue.q.shuffle, track: shown(s.queue.q.tracks[s.queue.index]) };
+    if (s.queue) return { shuffle: s.queue.q.shuffle, track: shown(s.queue.q.tracks[s.queue.index]), paused: !!s.paused };
+    if (cmd.paused !== undefined) return { paused: !!s.paused };
   }
 
   private async skip(s: Speaker, delta: number): Promise<void> {
@@ -203,13 +212,15 @@ export class SonosAdapter implements Adapter {
           this.soap(s.host, RC, 'GetVolume', { InstanceID: 0, Channel: 'Master' }),
         ]);
         const state = tag(ti, 'CurrentTransportState') ?? '';
-        const playing = /PLAYING|TRANSITIONING/.test(state);
+        // Paused counts as on (it keeps its place), as with every player that can pause.
+        s.paused = /PAUSED/.test(state) && !!(s.queue || s.media);
+        const playing = /PLAYING|TRANSITIONING/.test(state) || s.paused;
         // The queue ran out, or someone played something else from the Sonos app.
         if (!playing && /STOPPED/.test(state)) s.queue = null;
         if (s.queue) await this.followQueue(s).catch(() => {});
         const qu = s.queue;
         this.ctx!.report(s.id, {
-          online: true, on: playing, media: playing ? s.media ?? 'Sonos' : null, vol: Number(tag(vo, 'CurrentVolume') ?? 0),
+          online: true, on: playing, paused: s.paused, media: playing ? s.media ?? 'Sonos' : null, vol: Number(tag(vo, 'CurrentVolume') ?? 0),
           track: playing && qu ? shown(qu.q.tracks[qu.index]) : null, shuffle: playing && qu ? qu.q.shuffle : false,
         });
       } catch {
