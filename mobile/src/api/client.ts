@@ -1,7 +1,9 @@
 import { hubUrl, type HubConfig } from '../logic/connect';
+import { parseHello, type Hello } from '../logic/addresses';
 
 export class HubError extends Error {
-  constructor(message: string, readonly status: number) { super(message); }
+  /** status 0: nothing answered. `timedOut`: the request may have reached the hub, so a write isn't re-sent. */
+  constructor(message: string, readonly status: number, readonly timedOut = false) { super(message); }
 }
 
 const withTimeout = (ms: number) => {
@@ -34,7 +36,8 @@ export async function call<T = unknown>(cfg: HubConfig, method: 'GET' | 'POST' |
     return json as T;
   } catch (e) {
     if (e instanceof HubError) throw e;
-    throw new HubError((e as Error).name === 'AbortError' ? 'The hub didn’t answer in time.' : 'Can’t reach the hub. Is this phone on the home network?', 0);
+    const late = (e as Error).name === 'AbortError';
+    throw new HubError(late ? 'The hub didn’t answer in time.' : 'Can’t reach the hub. Is this phone on the home network?', 0, late);
   } finally {
     t.done();
   }
@@ -50,6 +53,26 @@ export async function probe(url: string, timeoutMs = 1500): Promise<Health | nul
     if (!res.ok) return null;
     const j = await res.json() as Partial<Health>;
     return j && j.ok && typeof j.version === 'string' ? { ok: true, version: j.version } : null;
+  } catch {
+    return null;
+  } finally {
+    t.done();
+  }
+}
+
+/**
+ * Is there a Kova hub at this address, and which one? GET /api/hello, no token: this is how an address is checked
+ * before the token goes to it. A hub from before /api/hello answers /api/health instead (Kova, but no ID).
+ */
+export async function hello(url: string, timeoutMs = 1500): Promise<Hello | null> {
+  const t = withTimeout(timeoutMs);
+  try {
+    const res = await fetch(`${url}/api/hello`, { signal: t.signal, headers: { accept: 'application/json' } });
+    if (res.status === 404) {
+      const h = await fetch(`${url}/api/health`, { signal: t.signal });
+      return h.ok ? parseHello(await h.json()) : null;
+    }
+    return res.ok ? parseHello(await res.json()) : null;
   } catch {
     return null;
   } finally {

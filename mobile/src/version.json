@@ -2,8 +2,12 @@
   "//": "The Kova app's version (docs/VERSIONING.md). store: the X.Y.0 a store binary on this train carries (app.json version). version: what runs, store or over the air (X.Y.Z, PATCH only). train: the native runtime (app.json runtimeVersion). history: newest first; an over-the-air release adds an entry.",
   "train": "kova-mobile-0.2",
   "store": "0.2.0",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "history": [
+    {
+      "version": "0.2.4",
+      "title": "Home and away: the app uses the hub's home-network address at home and its remote address away, switching by itself; addresses under This phone"
+    },
     {
       "version": "0.2.3",
       "title": "Feels more physical: presses spring back, sheets rise and follow the finger, tiles cross-fade on and off, sliders show their value with ticks, haptics throughout, and reduced motion respected"

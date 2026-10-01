@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 import * as Updates from 'expo-updates';
-import { CHECK_EVERY_MS, manifestUrl, overrideNeeded } from '../logic/ota';
+import { CHECK_EVERY_MS, manifestUrl, overrideNeeded, updateBase } from '../logic/ota';
 import { getItem, setItem } from './storage';
 import version from '../version.json';
 
@@ -20,17 +20,24 @@ let checking: Promise<void> | null = null;
 /** What's running: this bundle's version, and the native train it needs. */
 export const running = { version: version.version, train: version.train, store: version.store };
 
-export async function pointUpdatesAtHub(hubUrl: string): Promise<void> {
-  if (Platform.OS === 'web' || !Updates.isEnabled || !hubUrl) return;
-  const url = manifestUrl(hubUrl);
+/**
+ * Point the updater at one of the hub's addresses (logic/ota.ts updateBase says which, and why it doesn't follow
+ * every switch between home and away). Resolves to the hub address updates come from, or null when there are none.
+ */
+export async function pointUpdatesAtHub(addresses: { url: string; kind: 'local' | 'remote' }[], current: string | null): Promise<string | null> {
+  if (Platform.OS === 'web' || !Updates.isEnabled) return null;
   const written = await getItem(KEY).catch(() => null);
-  if (!overrideNeeded(url, written)) return;
+  const base = updateBase(addresses, written, current);
+  if (!base) return null;
+  const url = manifestUrl(base);
+  if (!overrideNeeded(url, written)) return base;
   try {
     Updates.setUpdateURLAndRequestHeadersOverride({ updateUrl: url, requestHeaders: {} });
     await setItem(KEY, url);
   } catch {
     // A build without the override compiled in: keep running what we have.
   }
+  return base;
 }
 
 /** Ask the hub for a newer bundle and download it; it runs from the next launch. Resolves true when one is ready. */

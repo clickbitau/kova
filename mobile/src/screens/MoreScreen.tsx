@@ -6,10 +6,11 @@ import { Card, PageHead, Row } from '../ui/kit';
 import { Screen } from '../ui/Screen';
 import { T } from '../ui/Text';
 import appVersion from '../version.json';
+import { display, KIND_LABEL } from '../logic/addresses';
 
 export function MoreScreen() {
   const s = useSnap();
-  const { cfg, conn } = useHub();
+  const { cfg, conn, route } = useHub();
   const nav = useNav();
   const mode = s.modes.find(m => m.id === s.current.modeId);
   const bad = s.integrations.filter(i => !i.ok);
@@ -34,7 +35,7 @@ export function MoreScreen() {
         ))}
       </Card>
       <View style={{ alignItems: 'center', gap: 4 }}>
-        <T size={11.5} color={C.stone3} center>{`${conn === 'live' ? 'Connected to' : conn === 'connecting' ? 'Connecting to' : 'Can’t reach'} ${cfg?.url ?? ''}`}</T>
+        <T size={11.5} color={C.stone3} center>{conn === 'live' && route ? `Connected · ${KIND_LABEL[route.kind]} · ${display(route.url)}` : `${conn === 'offline' ? 'Can’t reach' : 'Connecting to'} your hub`}</T>
         <T mono size={11} color={C.stone3} center>{`Kova ${appVersion.version}`}</T>
       </View>
     </Screen>

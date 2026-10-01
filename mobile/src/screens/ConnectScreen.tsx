@@ -4,7 +4,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Network from 'expo-network';
 import { C, F } from '../theme';
-import { call, findHub, probe } from '../api/client';
+import { call, findHub, hello } from '../api/client';
+import { addressesOf, chooseAddress, display, kindFor } from '../logic/addresses';
 import { normalizeHubUrl, parseConnectLink, subnetCandidates, type HubConfig } from '../logic/connect';
 import { useHub } from '../state/hub';
 import { Icon } from '../ui/Icon';
@@ -30,18 +31,23 @@ export function ConnectScreen() {
   const cancelled = useRef(false);
   useEffect(() => () => { cancelled.current = true; }, []);
 
-  /** Check the hub answers and the token works, then save it. */
-  const tryHub = async (cfg: HubConfig) => {
+  /**
+   * Find the address that answers as this hub (the code may carry several: home network and remote, and the hub's
+   * ID), check the token works there, then save it. The token only goes to an address that passed that check.
+   */
+  const tryHub = async (given: HubConfig) => {
     setErr(null);
     setBusy('Connecting…');
     try {
-      if (!(await probe(cfg.url, 5000))) throw new Error(`Nothing answered at ${cfg.url}. Is this phone on the home Wi-Fi?`);
+      const r = await chooseAddress(addressesOf(given), { hello, hubId: given.hubId, localTimeoutMs: 4000, remoteTimeoutMs: 8000 });
+      if (!r) throw new Error(`No Kova hub answered at ${display(given.url)}. Is this phone on the home Wi-Fi?`);
+      const cfg: HubConfig = { ...given, url: r.url, ...(r.hubId ? { hubId: r.hubId } : {}) };
       await call(cfg, 'GET', '/api/state');
       await connect(cfg);
     } catch (e) {
       const m = (e as Error).message;
       setErr(m);
-      if (/token/i.test(m)) { setAddr(cfg.url); setStep('type'); }
+      if (/token/i.test(m)) { setAddr(given.url); setStep('type'); }
     } finally {
       setBusy(null);
     }
@@ -64,7 +70,8 @@ export function ConnectScreen() {
   const typed = () => {
     const url = normalizeHubUrl(addr);
     if (!url) { setErr('Type the hub’s address, e.g. 192.168.1.20'); return; }
-    void tryHub({ url, ...(token.trim() ? { token: token.trim() } : {}) });
+    // Typed by the owner, so it may be plain http even when remote.
+    void tryHub({ url, addresses: [{ url, kind: kindFor(url), manual: true }], ...(token.trim() ? { token: token.trim() } : {}) });
   };
 
   if (step === 'scan') {

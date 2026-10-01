@@ -1,6 +1,8 @@
 import { Platform } from 'react-native';
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
+import { hello } from '../api/client';
+import { chooseAddress, type HubAddress } from '../logic/addresses';
 import { GEOFENCE_TASK, HOME_RADIUS_M, presenceFor, type LatLon } from '../logic/geo';
 import { getJson, setJson } from './storage';
 
@@ -10,10 +12,23 @@ import { getJson, setJson } from './storage';
 
 const KEY = 'kova.arriveLeave';
 
-export interface ArriveLeave { hubUrl: string; personId: string; key: string; home: LatLon }
+export interface ArriveLeave {
+  /** The hub's address when this was turned on (the one used when there's no list). */
+  hubUrl: string;
+  /** Every address of the hub, and its ID: crossing the circle, the phone is often between home Wi-Fi and not. */
+  addresses?: HubAddress[];
+  hubId?: string | null;
+  personId: string;
+  key: string;
+  home: LatLon;
+}
 
 export async function report(c: ArriveLeave, home: boolean): Promise<void> {
-  const url = `${c.hubUrl}/api/people/${encodeURIComponent(c.personId)}/presence?key=${encodeURIComponent(c.key)}`;
+  // Whichever address answers as this hub (home network first), before the person's key goes to it.
+  const list = c.addresses?.length ? c.addresses : [{ url: c.hubUrl, kind: 'local' as const }];
+  const to = await chooseAddress(list, { hello, hubId: c.hubId, lastGood: c.hubUrl });
+  if (!to) throw new Error('The hub didn’t answer');
+  const url = `${to.url}/api/people/${encodeURIComponent(c.personId)}/presence?key=${encodeURIComponent(c.key)}`;
   const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ home, source: 'Kova app (location)' }) });
   if (!res.ok) throw new Error(`Hub said HTTP ${res.status}`);
 }
@@ -50,6 +65,14 @@ export async function startArriveLeave(c: ArriveLeave): Promise<StartResult> {
 export async function stopArriveLeave(): Promise<void> {
   await setJson(KEY, null);
   if (Platform.OS !== 'web' && await Location.hasStartedGeofencingAsync(GEOFENCE_TASK).catch(() => false)) await Location.stopGeofencingAsync(GEOFENCE_TASK);
+}
+
+/** Keep the background reports' addresses in step with the app's (only when it's on, and only when they changed). */
+export async function followHub(addresses: HubAddress[], hubId: string | null, current: string): Promise<void> {
+  const c = await getJson<ArriveLeave>(KEY);
+  if (!c || !addresses.length) return;
+  const next: ArriveLeave = { ...c, hubUrl: current || c.hubUrl, addresses, hubId: hubId ?? c.hubId ?? null };
+  if (JSON.stringify(next) !== JSON.stringify(c)) await setJson(KEY, next);
 }
 
 export async function arriveLeaveOn(): Promise<boolean> {
