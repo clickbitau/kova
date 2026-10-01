@@ -1,8 +1,16 @@
 // Kova's domain model. Everything in the hub speaks these types; adapters
 // translate brand-specific protocols into and out of them.
 
-/** What kind of thing a device is. Drives which capabilities it has. `internet` is a device's internet access (on = allowed), from the router. */
-export type DeviceType = 'light' | 'dimmer' | 'fan' | 'media' | 'tv' | 'plug' | 'camera' | 'sensor' | 'vacuum' | 'internet';
+/**
+ * What kind of thing a device is. Drives which capabilities it has. `internet` is a device's internet access (on = allowed),
+ * from the router. `climate` is an air conditioner, heat pump or thermostat.
+ */
+export type DeviceType = 'light' | 'dimmer' | 'fan' | 'media' | 'tv' | 'plug' | 'camera' | 'sensor' | 'vacuum' | 'internet' | 'climate';
+
+/** What an air conditioner or heat pump is doing when it's on. */
+export type HvacMode = 'cool' | 'heat' | 'dry' | 'fan' | 'auto';
+/** Its fan, from quietest to strongest; `auto` lets the unit choose. */
+export type FanSpeed = 'auto' | 'quiet' | 'low' | 'medium' | 'high' | 'turbo';
 
 /**
  * Normalised device state. Every field is optional because devices only carry
@@ -47,6 +55,11 @@ export interface DeviceState {
   activity?: VacuumActivity;
   /** Battery charge 0–100. */
   battery?: number | null;
+  /** Climate (the `climate` capability): what it's doing when on, the temperature it aims for and the room's, in °C, and its fan. */
+  hvac?: HvacMode | null;
+  target?: number | null;
+  temp?: number | null;
+  fanSpeed?: FanSpeed | null;
   online?: boolean;
 }
 
@@ -55,7 +68,7 @@ export interface Track { title: string; artist?: string; album?: string; art?: s
 
 export type VacuumActivity = 'cleaning' | 'returning' | 'docked' | 'paused' | 'idle' | 'error';
 
-export type Capability = 'onoff' | 'brightness' | 'colorTemp' | 'color' | 'fanMode' | 'media' | 'volume' | 'power' | 'energy' | 'events' | 'vacuum' | 'battery' | 'pause' | 'library' | 'input' | 'queue' | 'mute' | 'sound';
+export type Capability = 'onoff' | 'brightness' | 'colorTemp' | 'color' | 'fanMode' | 'media' | 'volume' | 'power' | 'energy' | 'events' | 'vacuum' | 'battery' | 'pause' | 'library' | 'input' | 'queue' | 'mute' | 'sound' | 'climate';
 
 export interface Device {
   id: string;

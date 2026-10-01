@@ -1,0 +1,172 @@
+{
+  "name": "Kova",
+  "slug": "kova",
+  "version": "0.2.2",
+  "runtimeVersion": "kova-mobile-0.2",
+  "updates": {
+    "enabled": true,
+    "url": "https://updates.invalid/api/app/manifest",
+    "checkAutomatically": "ON_LOAD",
+    "fallbackToCacheTimeout": 0,
+    "disableAntiBrickingMeasures": true
+  },
+  "scheme": "kova",
+  "orientation": "portrait",
+  "userInterfaceStyle": "dark",
+  "backgroundColor": "#0e0f10",
+  "icon": "./assets/images/icon.png",
+  "ios": {
+    "supportsTablet": true,
+    "bundleIdentifier": "au.clickbit.kova",
+    "appleTeamId": "G5W29SJ797",
+    "buildNumber": "1",
+    "infoPlist": {
+      "NSLocalNetworkUsageDescription": "Kova talks to your home’s Kova hub on your Wi-Fi.",
+      "NSBonjourServices": [
+        "_http._tcp."
+      ],
+      "NSAppTransportSecurity": {
+        "NSAllowsLocalNetworking": true,
+        "NSAllowsArbitraryLoadsInWebContent": true
+      },
+      "NSCameraUsageDescription": "Kova uses the camera to scan the code that connects it to your home.",
+      "NSLocationWhenInUseUsageDescription": "Kova uses your location to know when you arrive home and leave.",
+      "NSLocationAlwaysAndWhenInUseUsageDescription": "Kova watches a circle around your home, so the house knows when you arrive and leave even with the app closed. Your location stays on this phone.",
+      "UIBackgroundModes": [
+        "location",
+        "remote-notification"
+      ],
+      "ITSAppUsesNonExemptEncryption": false,
+      "NSSupportsLiveActivities": true
+    },
+    "entitlements": {
+      "com.apple.security.application-groups": [
+        "group.au.clickbit.kova"
+      ]
+    }
+  },
+  "android": {
+    "package": "au.clickbit.kova",
+    "versionCode": 1,
+    "adaptiveIcon": {
+      "foregroundImage": "./assets/images/adaptive-icon.png",
+      "backgroundColor": "#1d1e21"
+    },
+    "permissions": [
+      "ACCESS_COARSE_LOCATION",
+      "ACCESS_FINE_LOCATION",
+      "ACCESS_BACKGROUND_LOCATION",
+      "CAMERA",
+      "POST_NOTIFICATIONS",
+      "android.permission.CAMERA",
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.ACCESS_BACKGROUND_LOCATION",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.FOREGROUND_SERVICE_LOCATION"
+    ]
+  },
+  "web": {
+    "bundler": "metro",
+    "favicon": "./assets/images/splash-icon.png"
+  },
+  "plugins": [
+    "expo-font",
+    "expo-secure-store",
+    [
+      "expo-camera",
+      {
+        "cameraPermission": "Kova uses the camera to scan the code that connects it to your home.",
+        "microphonePermission": false,
+        "recordAudioAndroid": false
+      }
+    ],
+    [
+      "expo-location",
+      {
+        "locationAlwaysAndWhenInUsePermission": "Kova watches a circle around your home, so the house knows when you arrive and leave even with the app closed. Your location stays on this phone.",
+        "isIosBackgroundLocationEnabled": true,
+        "isAndroidBackgroundLocationEnabled": true
+      }
+    ],
+    [
+      "expo-notifications",
+      {
+        "icon": "./assets/images/notification-icon.png",
+        "color": "#f2b14c"
+      }
+    ],
+    [
+      "expo-splash-screen",
+      {
+        "image": "./assets/images/splash-icon.png",
+        "imageWidth": 120,
+        "resizeMode": "contain",
+        "backgroundColor": "#0e0f10"
+      }
+    ],
+    [
+      "expo-build-properties",
+      {
+        "android": {
+          "usesCleartextTraffic": true
+        },
+        "ios": {
+          "deploymentTarget": "17.0"
+        }
+      }
+    ],
+    "@bacons/apple-targets",
+    "./plugins/withSiriShortcuts",
+    "./plugins/withIOSSceneLifecycle",
+    "./plugins/withWidgetVersion",
+    "expo-quick-actions",
+    [
+      "react-native-android-widget",
+      {
+        "widgets": [
+          {
+            "name": "KovaHome",
+            "label": "Kova",
+            "description": "The mode, lights on, and four favourites to tap.",
+            "minWidth": "250dp",
+            "minHeight": "110dp",
+            "targetCellWidth": 4,
+            "targetCellHeight": 2,
+            "resizeMode": "horizontal|vertical",
+            "updatePeriodMillis": 1800000
+          }
+        ]
+      }
+    ]
+  ],
+  "owner": "dkathel",
+  "extra": {
+    "eas": {
+      "projectId": "8f877da4-d63a-49ef-9561-cd3e8fc9a9df",
+      "build": {
+        "experimental": {
+          "ios": {
+            "appExtensions": [
+              {
+                "bundleIdentifier": "au.clickbit.kova.widget",
+                "targetName": "KovaWidgets",
+                "entitlements": {
+                  "com.apple.security.application-groups": [
+                    "group.au.clickbit.kova"
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "sdkVersion": "57.0.0",
+  "platforms": [
+    "ios",
+    "android",
+    "web"
+  ]
+}

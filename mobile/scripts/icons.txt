@@ -18,3 +18,4 @@ water_drop sunny partly_cloudy_day rainy foggy ac_unit mode_fan sensor_door bath
 # Helix music on speakers
 skip_previous shuffle queue_music
 settings_input_hdmi bluetooth surround_sound sports_esports nightlight equalizer
+local_fire_department autorenew remove

@@ -11,12 +11,14 @@ export const CAPS: Record<DeviceType, Capability[]> = {
   sensor: ['events'],
   vacuum: ['onoff', 'vacuum', 'battery'],
   internet: ['onoff'],
+  climate: ['onoff', 'climate'],
 };
 
 const FIELD_CAP: Record<string, Capability> = {
   on: 'onoff', bri: 'brightness', k: 'colorTemp', color: 'color', mode: 'fanMode', media: 'media', vol: 'volume', power: 'power',
   activity: 'vacuum', battery: 'battery', paused: 'pause', input: 'input', skip: 'queue', shuffle: 'queue',
   muted: 'mute', sound: 'sound', night: 'sound', volStep: 'volume',
+  hvac: 'climate', target: 'climate', fanSpeed: 'climate',
 };
 
 /** Drop fields the device can't do, so a mode can target mixed brands safely. */
@@ -37,6 +39,7 @@ export function targetLabel(d: Device, t: Command): string {
   if (d.type === 'vacuum') return t.on === false || t.activity === 'returning' || t.activity === 'docked' ? `${d.name} docks` : `${d.name} cleans`;
   if (d.type === 'fan') return `${d.name} on ${t.mode ?? (t.on === false ? 'off' : 'Auto')}`;
   if (d.type === 'internet') return `${d.name} internet ${t.on === false ? 'paused' : 'on'}`;
+  if (d.type === 'climate') return t.on === false ? `${d.name} off` : [`${d.name}`, t.hvac ?? 'on', t.target != null ? `${t.target}°` : ''].filter(Boolean).join(' ');
   if (isPlayer(d) && t.skip && t.media === undefined) return `${d.name} ${t.skip > 0 ? 'next song' : 'previous song'}`;
   if (isPlayer(d) && t.volStep && t.media === undefined && t.on === undefined) return `${d.name} volume ${t.volStep > 0 ? 'up' : 'down'}`;
   if (isPlayer(d) && t.media === undefined && t.on === undefined && (t.input || t.muted !== undefined || t.sound || t.night !== undefined)) {
@@ -57,6 +60,14 @@ export function changeSentence(d: Device, prev: Command, next: Command): string 
     if (a) return `${d.name} ${says[a]}`;
   }
   if (d.type === 'fan' && next.mode) return `${d.name} set to ${next.mode}`;
+  if (d.type === 'climate') {
+    const HV: Record<string, string> = { cool: 'cooling', heat: 'heating', dry: 'drying', fan: 'fan only', auto: 'auto' };
+    if (next.on === false) return `${d.name} off`;
+    if (next.hvac) return `${d.name} ${HV[next.hvac] ?? next.hvac}${next.target != null ? ` to ${next.target}°` : ''}`;
+    if (next.target != null) return `${d.name} set to ${next.target}°`;
+    if (next.fanSpeed) return `${d.name} fan ${next.fanSpeed}`;
+    if (next.on === true) return `${d.name} on`;
+  }
   if (d.type === 'internet' && next.on !== undefined) return `${d.name}: internet ${next.on ? 'back on' : 'paused'}`;
   if (isPlayer(d)) {
     if (next.on === false || next.media === null) return `${d.name} stopped`;

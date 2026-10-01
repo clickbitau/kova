@@ -29,6 +29,8 @@ interface HubCtx {
   act(method: 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, body: unknown, done: string): Promise<void>;
   say(text: string, opts?: { undo?: string; error?: boolean }): void;
   undo(id: string): Promise<void>;
+  /** Pull to refresh: the hub's state read again now, and the live link reopened if it had dropped. */
+  refresh(): Promise<void>;
 }
 
 const Ctx = createContext<HubCtx | null>(null);
@@ -43,6 +45,8 @@ export function HubProvider({ children }: { children: ReactNode }) {
   const ws = useRef<WebSocket | null>(null);
   const retry = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Bumped to reopen the live link at once (pull to refresh while offline). */
+  const [kick, setKick] = useState(0);
 
   // Whatever the keychain says (or fails to), the app moves on from the splash.
   useEffect(() => { void getJson<HubConfig>(KEY).catch(() => null).then(c => { setCfg(c); setLoading(false); }); }, []);
@@ -84,7 +88,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
       ws.current?.close();
       ws.current = null;
     };
-  }, [cfg]);
+  }, [cfg, kick]);
 
   const say = useCallback((text: string, opts: { undo?: string; error?: boolean } = {}) => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -139,6 +143,12 @@ export function HubProvider({ children }: { children: ReactNode }) {
     try { await api('POST', `/api/undo/${encodeURIComponent(id)}`); say('Undone'); } catch (e) { say((e as Error).message, { error: true }); }
   }, [api, say]);
 
+  const refresh = useCallback(async () => {
+    if (!cfg) return;
+    if (!ws.current || ws.current.readyState !== WebSocket.OPEN) setKick(k => k + 1);
+    try { setSnap(await call<Snapshot>(cfg, 'GET', '/api/state')); } catch (e) { say((e as Error).message, { error: true }); }
+  }, [cfg, say]);
+
   const connect = useCallback(async (c: HubConfig) => { await setJson(KEY, c); setSnap(null); setCfg(c); }, []);
   const forget = useCallback(async () => { await setJson(KEY, null); setSnap(null); setCfg(null); }, []);
   const setPerson = useCallback(async (personId: string | undefined) => {
@@ -148,8 +158,8 @@ export function HubProvider({ children }: { children: ReactNode }) {
     setCfg(next);
   }, [cfg]);
 
-  const value = useMemo<HubCtx>(() => ({ cfg, loading, snap, conn, toast, connect, forget, setPerson, api, send, act, say, undo }),
-    [cfg, loading, snap, conn, toast, connect, forget, setPerson, api, send, act, say, undo]);
+  const value = useMemo<HubCtx>(() => ({ cfg, loading, snap, conn, toast, connect, forget, setPerson, api, send, act, say, undo, refresh }),
+    [cfg, loading, snap, conn, toast, connect, forget, setPerson, api, send, act, say, undo, refresh]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

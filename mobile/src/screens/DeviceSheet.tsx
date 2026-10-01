@@ -5,7 +5,7 @@ import { C, F } from '../theme';
 import { useHub } from '../state/hub';
 import { useSheet } from '../state/sheet';
 import { useNav } from '../navigation';
-import { devs, has, ICON, isPlayer, stateOf, tint } from '../logic/devices';
+import { devs, FAN_SPEEDS, has, HVAC, ICON, isPlayer, stateOf, tint } from '../logic/devices';
 import { Icon } from '../ui/Icon';
 import { Button, HScroll, Pill, Press, Sheet, Slider, Switch } from '../ui/kit';
 import { T } from '../ui/Text';
@@ -99,6 +99,35 @@ export function DeviceSheet() {
             {COLOURS.map(c => (
               <Press key={c} onPress={() => void send(D.id, { on: true, color: c })} label={`Colour ${c}`} style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: c, borderWidth: (D.color ?? '').toLowerCase() === c ? 2 : 0, borderColor: '#fff' }} />
             ))}
+          </View>
+        </View>
+      ) : null}
+
+      {D.type === 'climate' ? (
+        <View style={{ gap: 16 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14, borderRadius: 18, backgroundColor: C.inset, opacity: D.on ? 1 : 0.5 }}>
+            <Press label="Cooler" onPress={() => void send(D.id, { target: Math.max(16, (D.target ?? 24) - 1) })} style={{ width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: C.control }}>
+              <Icon name="remove" size={24} color={C.bone} />
+            </Press>
+            <View style={{ alignItems: 'center' }}>
+              <T size={40} weight={700} tracking={-0.02}>{`${D.target ?? 24}°`}</T>
+              {D.temp != null ? <T size={12} color={C.stone}>{`Room ${D.temp}°`}</T> : null}
+            </View>
+            <Press label="Warmer" onPress={() => void send(D.id, { target: Math.min(32, (D.target ?? 24) + 1) })} style={{ width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: C.control }}>
+              <Icon name="add" size={24} color={C.bone} />
+            </Press>
+          </View>
+          <View style={{ gap: 8 }}>
+            <Label>Mode</Label>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              {HVAC.map(([id, label, icon]) => <Choice key={id} label={label} icon={icon} on={!!D.on && D.hvac === id} onPress={() => void send(D.id, { on: true, hvac: id })} />)}
+            </View>
+          </View>
+          <View style={{ gap: 8 }}>
+            <Label>Fan</Label>
+            <HScroll>
+              {FAN_SPEEDS.map(([id, label]) => <Pill key={id} label={label} on={D.fanSpeed === id} onPress={() => void send(D.id, { fanSpeed: id })} />)}
+            </HScroll>
           </View>
         </View>
       ) : null}
