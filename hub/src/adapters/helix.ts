@@ -61,11 +61,6 @@ export interface PlaybackEvent {
   player?: { id: string; name?: string; client?: string };
   item?: HelixItem; profile?: { id: string; name: string } | null;
   state?: string; positionMs?: number; durationMs?: number; reason?: string;
-  /**
-   * Where the box's sound goes (D101): "earc" through the TV to the soundbar's eARC, or "soundbar" straight into the
-   * soundbar's HDMI in (7.1 PCM and DTS). On playback.* events, and as playback.audio when it changes mid-play.
-   */
-  audio?: { route?: string };
 }
 
 /** "S01E02" for an episode, else nothing. */
@@ -87,6 +82,11 @@ export class HelixApi {
   /** Control a screen through the server (which carries the box's remote key): play, pause, resume, stop, volume… */
   control<T = unknown>(playerId: string, verb: 'play' | 'pause' | 'resume' | 'stop' | 'next' | 'previous' | 'seek' | 'volume' | 'mute' | 'tracks', body?: unknown): Promise<T> {
     return this.post(`/v1/players/${encodeURIComponent(playerId)}/${verb}`, body ?? {});
+  }
+
+  /** A card on the screen over whatever plays (D98.5): title, body, a picture Helix fetches from imageUrl, for some seconds. */
+  notify(playerId: string, n: { title: string; body?: string; imageUrl?: string; seconds?: number }): Promise<unknown> {
+    return this.post(`/v1/players/${encodeURIComponent(playerId)}/notify`, n);
   }
 
   /** What to play for spoken words, decided by Helix: the episode you're on and where you stopped, a film, music. */
@@ -237,13 +237,13 @@ export class HelixAdapter implements Adapter {
   }
 
   /** Pass on a box's new state, with the events modes act on when it changed. */
-  private observe(id: string, next: DeviceState, kind: 'video' | 'music', what = '', route?: string): void {
+  private observe(id: string, next: DeviceState, kind: 'video' | 'music', what = ''): void {
     const prev = this.observed.get(id);
     this.observed.set(id, next);
     this.states.set(id, next);
     this.ctx.report(id, next);
     if (next.online === false) return;
-    const data = { title: next.media ?? '', what, ...(route ? { route } : {}) };
+    const data = { title: next.media ?? '', what };
     if (next.on && !next.paused && (!prev?.on || prev.media !== next.media)) this.ctx.event(id, `${kind}-started`, data);
     else if (next.on && next.paused && prev?.on && !prev.paused) this.ctx.event(id, 'paused', data);
     else if (next.on && !next.paused && prev?.on && prev.paused) this.ctx.event(id, 'resumed', data);
@@ -329,15 +329,10 @@ export class HelixAdapter implements Adapter {
     const cur = this.observed.get(id) ?? boxState(null, true);
     const kind = ev.item?.kind === 'music' ? 'music' : 'video';
     const title = ev.item?.title || cur.media || '';
-    const route = ev.audio?.route;
     switch (ev.type) {
       case 'playback.started':
       case 'playback.resumed':
-        this.observe(id, { ...cur, on: true, media: title, paused: false, online: true }, kind, episodeTag(ev.item), route);
-        break;
-      case 'playback.audio':
-        // The box moved its sound between the TV's eARC and the soundbar's HDMI in (Helix auto-switching follows it).
-        if (route) this.ctx.event(id, 'audio-route', { route, title });
+        this.observe(id, { ...cur, on: true, media: title, paused: false, online: true }, kind, episodeTag(ev.item));
         break;
       case 'playback.paused':
         this.observe(id, { ...cur, on: true, media: title, paused: true, online: true }, kind, episodeTag(ev.item));
@@ -363,6 +358,11 @@ export class HelixAdapter implements Adapter {
     const b = this.boxes.get(device.id);
     if (!b) throw new Error(`${device.name} isn’t known to Helix Server any more`);
     return b;
+  }
+
+  /** Put a card on this box's screen (the doorbell's snapshot while a film plays). */
+  async notice(device: Device, n: { title: string; body?: string; imageUrl?: string; seconds?: number }): Promise<void> {
+    await this.api.notify(this.box(device).id, n);
   }
 
   async command(device: Device, cmd: Command): Promise<void | DeviceState> {

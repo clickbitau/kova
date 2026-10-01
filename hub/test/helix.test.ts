@@ -161,15 +161,9 @@ test('Helix: pair with a code, boxes are TVs, play by name, pause for the doorbe
     hx.publish('playback.stopped', { player: hx.player, item: hx.items.office, state: 'stopped', reason: 'stopped' });
 
     // Something started on the TV itself, with Kova not involved: Kova still knows, and Movie starts again.
-    // Where its sound goes (eARC or the soundbar's HDMI in) rides along, and a change mid-play is its own event.
-    const heard: { type: string; route?: unknown }[] = [];
-    t.hub.reg.on('event', e => { if (e.device.id === id) heard.push({ type: e.type, route: e.data.route }); });
-    hx.publish('playback.started', { player: hx.player, item: hx.items.dune, state: 'playing', audio: { route: 'earc' } });
+    hx.publish('playback.started', { player: hx.player, item: hx.items.dune, state: 'playing' });
     await until('Dune playing', () => t.dev(id).media === 'Dune: Part Two');
     await until('Movie again', () => t.hub.engine.overlay?.id === 'movie');
-    hx.publish('playback.audio', { player: hx.player, item: hx.items.dune, audio: { route: 'soundbar' } });
-    await until('audio route', () => heard.some(h => h.type === 'audio-route'));
-    assert.deepEqual(heard.filter(h => h.type !== 'stopped'), [{ type: 'video-started', route: 'earc' }, { type: 'audio-route', route: 'soundbar' }]);
     hx.publish('playback.ended', { player: hx.player, item: hx.items.dune, state: 'stopped' });
     await until('ended', () => t.dev(id).on === false);
 

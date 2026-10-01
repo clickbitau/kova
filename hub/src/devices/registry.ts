@@ -155,8 +155,7 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
    * Send a command to a device and record it. Returns the previous values of
    * the fields that changed, which is exactly what an undo needs.
    */
-  /** `retrying`: the caller tries again on failure, so a failure isn't logged (its last try is). */
-  async command(id: string, cmd: Command, cause: Cause, opts: { quiet?: boolean; retrying?: boolean } = {}): Promise<Command> {
+  async command(id: string, cmd: Command, cause: Cause, opts: { quiet?: boolean } = {}): Promise<Command> {
     const d = this.devices.get(id);
     if (!d) throw new Error(`Unknown device ${id}`);
     if (typeof cmd.media === 'string' && !d.capabilities.includes('queue') && !d.capabilities.includes('library') && !this.sourceUrl(cmd.media) && this.isMusic?.(cmd.media)) {
@@ -166,13 +165,13 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
     if (!Object.keys(patch).length) return {};
     const adapter = this.adapters.get(d.adapter);
     if (!adapter) throw new Error(`No adapter ${d.adapter} for ${id}`);
-    // Who asked a device for what, before it's done (Helix auto-switching notices an input someone chose by hand).
+    // Who asked a device for what, before it's done (the Helix link tells Helix who last changed an input).
     this.emit('sent', { device: d, cmd: patch, cause });
     let did: void | DeviceState;
     try {
       did = await adapter.command(d, patch, cause);
     } catch (err) {
-      if (!opts.retrying) this.store.append({ kind: 'system', device: id, feed: 'system', what: `${d.name} didn't respond`, data: { error: String(err), patch }, cause });
+      this.store.append({ kind: 'system', device: id, feed: 'system', what: `${d.name} didn't respond`, data: { error: String(err), patch }, cause });
       throw err;
     }
     const { skip: _skip, volStep: _step, ...kept } = did ? { ...patch, ...did } : patch;
