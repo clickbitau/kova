@@ -223,10 +223,17 @@ Docker: `docker compose stop kova && docker compose run --rm kova node --import 
 button, **Check now**, and *Overnight updates* (off by default: at 3:00, when an update is waiting and nothing is
 playing). You get a notification when a new version is out, and after an update, whether it worked.
 
-**Releases come from ClickBit**, like Helix's and Warden's: tap **Add licence key** on that card and enter the
-hub's licence key. The hub activates it with ClickBit (`POST /v1/device/activate`) and keeps the key and the
-device token it gets in `/var/lib/kova/update/licence.json` (never shown back); updates then come from ClickBit's
-release catalog. Without a licence the card says *No device token — install a licence to enable updates*.
+**Releases come from ClickBit**, like Helix's and Warden's, and need a Kova licence:
+
+1. The update card shows this hub's **hub ID** (`KOVA-XXXX-XXXX-XXXX`, made once, kept in `/var/lib/kova/hub-id`).
+2. ClickBit issues a licence for that hub ID (clickbit-admin: Licensing → Kova → New licence) and gives you a key
+   starting `CR1-` (shown once).
+3. Tap **Add licence key** on the card and paste it. The hub checks it there and then (ClickBit's signature, that
+   it's a Kova licence, for this hub, not expired), activates it with ClickBit, and keeps the key and the device
+   token in `/var/lib/kova/update/licence.json` (never shown back). Updates then come from ClickBit's catalog.
+
+Without a licence the card says *No device token — install a licence to enable updates*; a revoked or expired one,
+or one issued for another hub, says so. The licence only unlocks updates: nothing in the home ever stops working.
 
 How it works: the hub runs as the unprivileged `kova` user, so it can't update itself. A small updater runs as root
 on the box instead (`deploy/updater.sh`, installed by `install.sh` as systemd units):

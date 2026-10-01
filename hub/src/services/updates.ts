@@ -54,9 +54,9 @@ export class Updates {
 
   readonly catalog: Catalog;
 
-  constructor(private hub: Hub, private o: { dataDir: string; notify?: Notify; now?: () => number; everyMs?: number; catalog?: { url?: string; channel?: string; product?: string; fetch?: typeof fetch } }) {
+  constructor(private hub: Hub, private o: { dataDir: string; notify?: Notify; now?: () => number; everyMs?: number; catalog?: { url?: string; channel?: string; product?: string; fetch?: typeof fetch; pubkey?: string } }) {
     this.dir = join(o.dataDir, 'update');
-    this.catalog = new Catalog({ ...o.catalog, version: KOVA_VERSION, dir: this.dir, now: o.now });
+    this.catalog = new Catalog({ ...o.catalog, version: KOVA_VERSION, dir: this.dir, hubIdFile: join(o.dataDir, 'hub-id'), now: o.now });
   }
 
   /** Install the licence key: activated with ClickBit now, so a wrong key is said here, then the updater checks. */

@@ -7,6 +7,7 @@ import { testHub, at } from './helpers.ts';
 import { buildServer } from '../src/api/server.ts';
 import { Updates } from '../src/services/updates.ts';
 import { KOVA_VERSION } from '../src/version.ts';
+import { TEST_PUBKEY, mintKey } from './licence-helpers.ts';
 
 const webRoot = resolve(import.meta.dirname, '../../web');
 
@@ -117,11 +118,11 @@ test('Hub updates: the licence key is activated with ClickBit from the hub, neve
   const fakeFetch = (async (url: string | URL, init?: RequestInit) => {
     asked.push(String(url));
     const body = JSON.parse(String(init?.body ?? '{}'));
-    return body.licenceKey === 'KOVA-1234-GOOD'
+    return body.siteId === u.catalog.hubId()
       ? new Response(JSON.stringify({ status: 'active', edition: 'home', deviceToken: 'tok' }), { status: 200 })
       : new Response(JSON.stringify({ error: 'Licence not found' }), { status: 403 });
   }) as typeof fetch;
-  const u = new Updates(t.hub, { dataDir, now: () => t.clock.t, everyMs: 0, catalog: { url: 'https://catalog.test/api', fetch: fakeFetch } });
+  const u = new Updates(t.hub, { dataDir, now: () => t.clock.t, everyMs: 0, catalog: { url: 'https://catalog.test/api', fetch: fakeFetch, pubkey: TEST_PUBKEY } });
   t.hub.updates = u;
   const app = await buildServer(t.hub, { webRoot });
   try {
@@ -129,18 +130,24 @@ test('Hub updates: the licence key is activated with ClickBit from the hub, neve
     const before = (await app.inject({ method: 'GET', url: '/api/update' })).json();
     assert.deepEqual({ source: before.source, note: before.note, licence: before.licence.installed }, { source: 'release', note: 'No device token — install a licence to enable updates', licence: false });
 
-    const bad = await app.inject({ method: 'PUT', url: '/api/update/licence', payload: { key: 'nope' } });
+    // The hub's ID, for the admin issuing the licence.
+    const hubId = before.licence.hubId;
+    assert.match(hubId, /^KOVA-/);
+    const bad = await app.inject({ method: 'PUT', url: '/api/update/licence', payload: { key: mintKey({ site: 'KOVA-AAAA-BBBB-CCCC' }) } });
     assert.equal(bad.statusCode, 400);
-    assert.match(bad.json().error, /403 Licence not found/);
+    assert.match(bad.json().error, new RegExp(`for hub KOVA-AAAA-BBBB-CCCC; this hub is ${hubId}`));
+    assert.equal(asked.length, 0, 'refused on the hub');
 
-    const r = await app.inject({ method: 'PUT', url: '/api/update/licence', payload: { key: ' KOVA-1234-GOOD ' } });
+    const key = mintKey({ site: hubId });
+    const r = await app.inject({ method: 'PUT', url: '/api/update/licence', payload: { key: ` ${key} ` } });
     assert.equal(r.statusCode, 200, r.body);
-    assert.deepEqual(r.json().licence, { installed: true, activated: true, status: 'active', edition: 'home', key: '…GOOD', error: null });
+    assert.deepEqual(r.json().licence, { hubId, installed: true, activated: true, status: 'active', edition: 'home', features: ['updates'], expiresAt: null, key: `…${key.slice(-4)}`, error: null });
     assert.equal(asked.at(-1), 'https://catalog.test/api/v1/device/activate');
     assert.equal(readFileSync(join(dataDir, 'update', 'request'), 'utf8'), 'check\n');
     // The key and the token stay on the box: not in the API, nor the snapshot.
     const state = (await app.inject({ method: 'GET', url: '/api/state' })).body;
-    assert.doesNotMatch(state + r.body, /KOVA-1234-GOOD|"tok"/);
+    assert.equal((state + r.body).includes(key), false);
+    assert.doesNotMatch(state + r.body, /"tok"/);
 
     assert.equal((await app.inject({ method: 'DELETE', url: '/api/update/licence' })).json().licence.installed, false);
   } finally {
