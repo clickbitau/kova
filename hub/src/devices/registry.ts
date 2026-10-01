@@ -157,7 +157,7 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
     const d = this.devices.get(id);
     if (!d) throw new Error(`Unknown device ${id}`);
     if (typeof cmd.media === 'string' && !d.capabilities.includes('queue') && !d.capabilities.includes('library') && !this.sourceUrl(cmd.media) && this.isMusic?.(cmd.media)) {
-      throw new Error(`${d.name} can’t play Helix music yet (Google Cast and Sonos speakers can)`);
+      throw new Error(`${d.name} can’t play Helix music yet (Google Cast, Sonos and AirPlay speakers can)`);
     }
     const patch = this.diff(d, fitCommand(d, cmd));
     if (!Object.keys(patch).length) return {};

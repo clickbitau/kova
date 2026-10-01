@@ -1015,7 +1015,7 @@ class Component extends DCLogic {
         shuffle:()=>{if(q)this.send(P.id,{shuffle:!P.shuffle},P.shuffle?'Back in order':'Shuffled')},shuffleFg:P.shuffle&&q?'#c79bf2':'#a3a09a'}}
     // Helix music: on speakers that play a queue (Cast, Sonos, their groups)
     const PQ=P&&(P.capabilities||[]).includes('queue');
-    const playMusic=(name,shuffle)=>{if(!P)return;if(!PQ){this.toast(`${P.name} can’t play Helix music yet (Google Cast and Sonos speakers can)`);return}
+    const playMusic=(name,shuffle)=>{if(!P)return;if(!PQ){this.toast(`${P.name} can’t play Helix music yet (Google Cast, Sonos and AirPlay speakers can)`);return}
       this.send(P.id,{on:true,media:name,shuffle:!!shuffle},`Playing ${name}${shuffle&&name!=='Shuffle all'?' on shuffle':''} on ${P.name}`)};
     const musicItems=(H.music||[]).map(m=>({name:m.name,icon:m.icon,play:()=>playMusic(m.name,m.kind==='all'||!!s.musicShuffle)}));
     const musicUi={hasMusic:!!(H.music&&H.music.length),musicItems,musicShuffleLabel:s.musicShuffle?'Shuffle on':'Shuffle off',musicShuffleFg:s.musicShuffle?'#c79bf2':'#a3a09a',toggleMusicShuffle:()=>this.setState(p=>({musicShuffle:!p.musicShuffle})),

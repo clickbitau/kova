@@ -237,7 +237,9 @@ export class HelixMusic {
     if (!playable.length) throw new Error(`Helix has no songs to play in “${label}”`);
     const ordered = shuffle ? shuffled(playable, this.o.random) : playable;
     const signed = new Set<QueueTrack>();
-    return { label, tracks: ordered, shuffle: shown, prepare: (from, to) => this.sign(ordered.slice(from, to).filter(t => !signed.has(t)), signed) };
+    const sign = (tracks: QueueTrack[]) => this.sign(tracks.filter(t => !signed.has(t)), signed);
+    // A method, not an arrow: a speaker that reorders the queue ({...queue, tracks}) gets the songs of its own order signed.
+    return { label, tracks: ordered, shuffle: shown, prepare(from, to) { return sign(this.tracks.slice(from, to)); } };
   }
 
   /** Swap the token URLs of these songs for ones Helix signs (no token, that song only). An older Helix keeps the token URLs. */
