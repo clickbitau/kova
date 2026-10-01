@@ -19,22 +19,27 @@ export interface AirCastOptions {
   codec?: string;
   /** Buffering in ms, "<rtp>:<http>". Raise it if audio stutters. */
   latency?: string;
-  /** Cast device names that should not appear in AirPlay. */
+  /** Cast device names that should not appear in AirPlay (those with AirPlay of their own). */
   exclude?: string[];
+  /**
+   * Cast ids for those names. aircast knows a device by its id (udn), not its name, so a name alone
+   * doesn't keep it out; Kova's Cast adapter knows both.
+   */
+  castIds?: (names: string[]) => Record<string, string>;
   /** Restart delay after a crash, in ms. */
   restartMs?: number;
 }
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-/** aircast's config file. Kept small: common settings, plus disabled devices. */
-export function aircastConfig(o: AirCastOptions): string {
+/** aircast's config file. Kept small: common settings, plus disabled devices (by id, with the name aircast would give them). */
+export function aircastConfig(o: AirCastOptions, ids: Record<string, string> = o.castIds?.(o.exclude ?? []) ?? {}): string {
   const common = [
     '<enabled>1</enabled>',
     `<codec>${esc(o.codec ?? 'flac')}</codec>`,
     ...(o.latency ? [`<latency>${esc(o.latency)}</latency>`] : []),
   ];
-  const devices = (o.exclude ?? []).map(n => `  <device><name>${esc(n)}</name><enabled>0</enabled></device>`);
+  const devices = (o.exclude ?? []).map(n => `  <device>${ids[n] ? `<udn>${esc(ids[n])}</udn>` : ''}<name>${esc(n.replace(/\+$/, ''))}+</name><enabled>0</enabled></device>`);
   return `<?xml version="1.0"?>\n<aircast>\n  <common>${common.join('')}</common>\n${devices.join('\n')}${devices.length ? '\n' : ''}</aircast>\n`;
 }
 

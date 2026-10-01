@@ -81,7 +81,7 @@ test('AirCast: writes its config, runs aircast, restarts it when it dies', async
   try {
     const cfg = readFileSync(join(dir, 'work', 'aircast.xml'), 'utf8');
     assert.match(cfg, /<codec>flac<\/codec>/);
-    assert.match(cfg, /<name>Bedroom Oled<\/name><enabled>0<\/enabled>/);
+    assert.match(cfg, /<name>Bedroom Oled\+<\/name><enabled>0<\/enabled>/);
     for (let i = 0; i < 100 && !(b.running && b.restarts > 0); i++) await new Promise(r => setTimeout(r, 20));
     assert.equal(b.restarts, 1);
     assert.equal(b.running, true);
@@ -97,4 +97,8 @@ test('AirCast: writes its config, runs aircast, restarts it when it dies', async
 
 test('AirCast config escapes names', () => {
   assert.match(aircastConfig({ binary: 'x', workDir: '/tmp', exclude: ['A & B <1>'] }), /A &amp; B &lt;1&gt;/);
+  // aircast knows devices by id: a left-out speaker is written with its Cast id, and the name aircast gives it.
+  const cfg = aircastConfig({ binary: 'x', workDir: '/tmp', exclude: ['Bedroom Oled', 'Unknown speaker'], castIds: () => ({ 'Bedroom Oled': '37e725f67dec7746ce99fa386caf278e' }) });
+  assert.match(cfg, /<device><udn>37e725f67dec7746ce99fa386caf278e<\/udn><name>Bedroom Oled\+<\/name><enabled>0<\/enabled><\/device>/);
+  assert.match(cfg, /<device><name>Unknown speaker\+<\/name><enabled>0<\/enabled><\/device>/);
 });
