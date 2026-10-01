@@ -193,3 +193,40 @@ test('Helix boxes: only screens are TVs, not Kova itself, a phone or the desktop
   assert.equal(isScreen({ name: 'Kova', client: 'kova/1' }), false);
   assert.equal(isScreen({ name: 'Kova' }), false);
 });
+
+test('Helix boxes: a box that gets a stable id is followed, and the old entry goes, so it stays one screen', async () => {
+  let boxes = [
+    { id: 'addr:10.10.30.224', name: '', client: 'helix-tv', address: '10.10.30.224', online: true },
+    { id: 'd-f319d15f52060c18', name: 'Helix on macbookpro', client: 'helix-desktop', online: true },
+    { id: 'd-kova', name: 'Kova', client: 'kova/1', online: true },
+  ];
+  const server = http.createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify(req.url === '/v1/boxes' ? { boxes } : { mode: 'browse' }));
+  });
+  await new Promise<void>(r => server.listen(0, '127.0.0.1', r));
+  const { HelixAdapter } = await import('../src/adapters/helix.ts');
+  const t = await testHub(12);
+  const tvs = new Tvs();
+  await t.hub.reg.addAdapter(tvs);
+  const helix = new HelixAdapter({ url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, token: 'hxd_x', pollSec: 0, feed: false, boxesSec: 0 });
+  try {
+    await t.hub.reg.addAdapter(helix);
+    const screens = () => helixScreens(t.hub.reg.devices.values()).map(s => s.playerId);
+    const boxIds = () => t.hub.reg.list().filter(d => d.adapter === 'helix').map(d => d.address);
+    // Only the TV box is a box: not the desktop app, not Kova.
+    assert.deepEqual(boxIds(), ['addr:10.10.30.224']);
+    // The box gets its stable id (and its paired name): Kova follows it, and the address-based entry goes.
+    boxes = [{ id: 'd-f2c33be4dd4e34ab', name: 'kam-lx', client: 'helix-tv', address: '10.10.30.224', online: true }, ...boxes.slice(1)];
+    await helix.refreshBoxes();
+    assert.deepEqual(boxIds(), ['d-f2c33be4dd4e34ab']);
+    // Same name, new id: announced again with it.
+    boxes = [{ ...boxes[0], id: 'd-f2c33be4dd4e34ab-2' }, ...boxes.slice(1)];
+    await helix.refreshBoxes();
+    assert.deepEqual(boxIds(), ['d-f2c33be4dd4e34ab-2']);
+    assert.equal(screens().length <= 1, true);
+  } finally {
+    await t.hub.stop();
+    server.close();
+  }
+});
