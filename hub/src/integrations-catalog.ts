@@ -307,6 +307,16 @@ export const CATALOG: CatalogItem[] = [
         key: 'rooms', label: 'Boxes', type: 'list', shape: 'map', mapKey: 'box', mapValue: 'room', addLabel: 'Put a box in a room',
         item: [{ key: 'box', label: 'Box name', type: 'text', required: true, placeholder: 'Lounge' }, room()],
       },
+      {
+        key: 'screens', label: 'TVs the boxes are on', type: 'list', shape: 'map', mapKey: 'box', addLabel: 'Choose a box’s TV',
+        help: 'Helix turns the TV on and switches it to the box through Kova. A box finds the TV in its own room by itself; set one here when there are two, or to say which input the box is on.',
+        item: [
+          { key: 'box', label: 'Box name', type: 'text', required: true, placeholder: 'Lounge' },
+          { key: 'tv', label: 'TV (Kova id)', type: 'text', placeholder: 'lounge_tv' },
+          { key: 'input', label: 'Box is on', type: 'select', options: [{ value: 'hdmi1', label: 'HDMI 1' }, { value: 'hdmi2', label: 'HDMI 2' }, { value: 'hdmi3', label: 'HDMI 3' }, { value: 'hdmi4', label: 'HDMI 4' }] },
+        ],
+      },
+      { key: 'kovaUrl', label: 'Kova’s address for Helix', type: 'text', placeholder: 'http://10.10.10.5:8140', help: 'Optional. Kova uses its own address on Helix Server’s network.' },
     ],
     actions: [
       { id: 'find', label: 'Find Helix Server', icon: 'search', method: 'GET', path: '/api/integrations/helix/find' },

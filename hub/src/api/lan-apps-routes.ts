@@ -3,6 +3,7 @@ import type { IntegrationsManager } from '../integrations-store.ts';
 import { Warden, linkWarden, normMac } from '../adapters/warden.ts';
 import { findHelixServers, helixPairPoll, helixPairStart } from '../adapters/helix.ts';
 import { trimUrl } from '../util/lan-http.ts';
+import type { HelixLink } from '../services/helix-link.ts';
 
 // Linking Kova with the home's own apps: Warden (sign in once, Kova makes its own token) and
 // Helix (pair with a code, like any Helix app). What they hand back is saved straight into
@@ -13,6 +14,8 @@ const msg = (e: unknown) => e instanceof Error ? e.message : String(e);
 
 export interface LanAppsOptions {
   integrations?: IntegrationsManager;
+  /** Paired with Helix: tell it where Kova is and which TVs its boxes are on. */
+  helixLink?: HelixLink;
   /** Tests narrow the Helix search to known hosts. */
   helixFindHosts?: string[];
   helixFindPort?: number;
@@ -77,6 +80,7 @@ export function registerLanAppRoutes(app: FastifyInstance, o: LanAppsOptions): v
           p.status = 'approved';
           const prev = o.integrations?.raw('helix');
           await o.integrations?.update('helix', { ...prev, url: p.url, token: r.token });
+          await o.helixLink?.sync(true);
           return;
         }
       } catch (e) { p.error = msg(e); }

@@ -16,6 +16,7 @@ import type { HomeKitBridge } from '../bridges/homekit.ts';
 import type { MatterBridge } from '../bridges/matter-bridge.ts';
 import { LiveViewUnavailable, NEST_DEFAULT_REDIRECT, exchangeNestCode, nestAuthUrl, type NestOptions } from '../adapters/nest.ts';
 import type { Presence } from '../services/presence.ts';
+import type { HelixLink } from '../services/helix-link.ts';
 import type { Notifier } from '../services/notify.ts';
 import type { PushSubscription } from 'web-push';
 import { importFromCloud, type CloudImportOptions } from '../adapters/tuya/cloud.ts';
@@ -46,6 +47,8 @@ export interface ServerOptions {
   nest?: Partial<Pick<NestOptions, 'projectId' | 'clientId' | 'clientSecret' | 'tokenUrl'>>;
   /** Presence sources and per-person keys for phone automations. */
   presence?: Presence;
+  /** Helix's own token: it may switch the TVs its boxes sit on, and nothing else. */
+  helixLink?: HelixLink;
   /** Web Push / ntfy notifications. */
   notifier?: Notifier;
   /** Where integrations.json lives, for imports that write to it (e.g. Tuya cloud keys). */
@@ -94,10 +97,27 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
     return !!m && !!opts.presence && opts.presence.checkKey(decodeURIComponent(m[1]), key);
   };
 
-  if (opts.token) {
+  // Helix Server calls back with the token Kova gave it (services/helix-link.ts): only its linked TVs, only on and input.
+  const fromHelix = new WeakSet<FastifyRequest>();
+  const helixTokenOk = (req: FastifyRequest, path: string): boolean => {
+    const given = req.headers.authorization?.replace(/^Bearer\s+/i, '') ?? '';
+    return !!opts.helixLink && !!given && opts.helixLink.isToken(given) && opts.helixLink.allows(req.method, path);
+  };
+
+  if (opts.token || opts.helixLink) {
     app.addHook('onRequest', async (req, reply) => {
       const path = req.url.split('?')[0];
-      if (path.startsWith('/api/') && path !== '/api/health' && !tokenOk(req, opts.token!) && !personKeyOk(req)) return reply.code(401).send({ error: 'unauthorised' });
+      if (!path.startsWith('/api/') || path === '/api/health') return;
+      if (opts.token && tokenOk(req, opts.token)) return;
+      if (helixTokenOk(req, path)) { fromHelix.add(req); return; }
+      if (opts.token && !personKeyOk(req)) return reply.code(401).send({ error: 'unauthorised' });
+    });
+    app.addHook('preHandler', async (req, reply) => {
+      if (!fromHelix.has(req)) return;
+      if (req.method === 'GET') return reply.send(opts.helixLink!.state());
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const keys = Object.keys(body);
+      if (!keys.length || keys.some(k => k !== 'on' && k !== 'input')) return reply.code(403).send({ error: 'Helix may only switch this TV on or off, or change its input' });
     });
   }
 
@@ -322,7 +342,7 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
   registerEditRoutes(app, hub);
   registerImportRoutes(app, opts.haImport);
   registerHomeRoutes(app, hub);
-  registerLanAppRoutes(app, { integrations: opts.integrations, ...opts.lanApps });
+  registerLanAppRoutes(app, { integrations: opts.integrations, helixLink: opts.helixLink, ...opts.lanApps });
   registerAppLinkRoutes(app, { token: opts.token, port: () => { const a = app.server.address(); return typeof a === 'object' && a ? a.port : Number(process.env.KOVA_PORT ?? 8140); } });
 
   // Presence from a phone: the Kova app, or an iOS Shortcut / Android automation ("When I arrive home → Get contents of URL").
