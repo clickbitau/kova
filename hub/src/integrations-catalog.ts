@@ -243,6 +243,7 @@ export const CATALOG: CatalogItem[] = [
       { key: 'email', label: 'Ecovacs email', type: 'text', required: true, placeholder: 'you@example.com' },
       { key: 'password', label: 'Password', type: 'password', required: true },
       { key: 'country', label: 'Country', type: 'text', required: true, placeholder: 'au', help: 'The two-letter country your Ecovacs account is in.' },
+      { key: 'verifyCode', label: 'Email code', type: 'text', placeholder: 'only if asked', help: 'The first time Kova signs in, Ecovacs emails you a code to verify it. Enter it here and save.' },
     ],
   },
   {

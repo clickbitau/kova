@@ -7,13 +7,14 @@ import { Store } from '../src/store/db.ts';
 import { Registry } from '../src/devices/registry.ts';
 import { VeSyncAdapter, isCorePurifier, statusToState, toVeSyncMode } from '../src/adapters/vesync.ts';
 
-// A fake VeSync cloud: v1 login, device list, and the bypassV2 relay to one Core300S.
+// A fake VeSync cloud: the two-step login (with an optional cross-region redirect), device list, and the bypassV2 relay to one Core300S.
 function fakeCloud(email: string, password: string) {
   let token = '';
   let n = 0;
   const purifier = { enabled: false, mode: 'auto', level: 2, display: true, filter_life: 90, air_quality: 1 };
   const calls: { path: string; body: Record<string, any>; headers: http.IncomingHttpHeaders }[] = [];
-  const state = { logins: 0, expire: () => { token = 'expired-' + token; } };
+  const state = { logins: 0, crossRegion: false, expire: () => { token = 'expired-' + token; } };
+  let code = '';
   const list = [
     { deviceName: 'Bedroom Purifier', deviceType: 'Core300S', cid: 'vsaqABCDEF0123456789', configModule: 'VeSyncAirBypass', connectionStatus: 'online', deviceStatus: 'off', deviceRegion: 'US' },
     { deviceName: 'Office Purifier', deviceType: 'LAP-C201S-AUSR', cid: 'vsaqOFFLINE000000001', configModule: 'VeSyncAirBypass', connectionStatus: 'offline', deviceRegion: 'US' },
@@ -26,12 +27,21 @@ function fakeCloud(email: string, password: string) {
       const body = JSON.parse(Buffer.concat(chunks).toString() || '{}');
       calls.push({ path: req.url!, body, headers: req.headers });
       const send = (j: unknown) => { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(j)); };
-      if (req.url === '/cloud/v1/user/login') {
-        const ok = body.email === email && body.password === createHash('md5').update(password).digest('hex') && body.method === 'login';
+      if (req.url === '/cloud/v1/user/login') return send({ code: -11000022, msg: 'app version is too low' }); // what VeSync says to the old login now
+      if (req.url === '/globalPlatform/api/accountAuth/v1/authByPWDOrOTM') {
+        if (!/^VeSync [5-9]\./.test(String(body.clientVersion))) return send({ code: -11000022, msg: 'app version is too low' });
+        const ok = body.email === email && body.password === createHash('md5').update(password).digest('hex') && body.method === 'authByPWDOrOTM';
         if (!ok) return send({ code: -11201000, msg: 'password incorrect' });
+        code = `code${++n}`;
+        return send({ code: 0, result: { accountID: '4242', authorizeCode: code } });
+      }
+      if (req.url === '/user/api/accountManage/v1/loginByAuthorizeCode4Vesync') {
+        if (body.method !== 'loginByAuthorizeCode4Vesync' || body.authorizeCode !== code) return send({ code: -11201000, msg: 'bad authorize code' });
+        if (state.crossRegion && body.bizToken !== 'biz-1') return send({ code: -11260022, msg: 'cross region', result: { accountID: '4242', acceptLanguage: 'en', countryCode: 'AU', token: '', bizToken: 'biz-1', currentRegion: 'US' } });
+        if (state.crossRegion) assert.equal(body.regionChange, 'lastRegion');
         state.logins++;
         token = `tok${++n}`;
-        return send({ code: 0, msg: 'request success', result: { token, accountID: '4242', countryCode: 'AU' } });
+        return send({ code: 0, msg: 'request success', result: { token, accountID: '4242', acceptLanguage: 'en', countryCode: 'AU' } });
       }
       if (req.headers.tk !== token || body.token !== token || body.accountID !== '4242') return send({ code: -11012022, msg: 'token expired' });
       if (req.url === '/cloud/v1/deviceManaged/devices') return send({ code: 0, result: { list, total: list.length } });
@@ -130,6 +140,24 @@ test('VeSync: a wrong password is reported, not thrown', async () => {
     assert.equal(reg.list().length, 0);
     assert.equal(vs.status().ok, false);
     assert.match(vs.status().note!, /login failed/);
+  } finally { await reg.stop(); fake.server.close(); }
+});
+
+test('VeSync: follows the cross-region redirect at login', async () => {
+  const fake = fakeCloud('me@example.com', 'hunter2');
+  fake.state.crossRegion = true;
+  await new Promise<void>(r => fake.server.listen(0, '127.0.0.1', r));
+  const baseUrl = `http://127.0.0.1:${(fake.server.address() as AddressInfo).port}`;
+  const reg = new Registry(new Store(':memory:'));
+  const vs = new VeSyncAdapter({ email: 'me@example.com', password: 'hunter2', baseUrl, pollMs: 0 });
+  await reg.addAdapter(vs);
+  try {
+    assert.equal(fake.state.logins, 1);
+    assert.ok(reg.list().length > 0, 'devices listed after the redirect');
+    const steps = fake.calls.filter(c => c.path.includes('loginByAuthorizeCode4Vesync'));
+    assert.equal(steps.length, 2);
+    assert.equal(steps[1].body.bizToken, 'biz-1');
+    assert.equal(fake.calls.some(c => c.path === '/cloud/v1/user/login'), false, 'never the old login');
   } finally { await reg.stop(); fake.server.close(); }
 });
 

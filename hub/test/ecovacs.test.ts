@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { createHash } from 'node:crypto';
+import { constants, createHash, generateKeyPairSync, privateDecrypt } from 'node:crypto';
 import { Store } from '../src/store/db.ts';
 import { Registry } from '../src/devices/registry.ts';
 import { EcovacsAdapter, activityToState, commandFor, continentFor, ecovacsUrls, isJsonVacuum, signParams, toActivity } from '../src/adapters/ecovacs.ts';
@@ -21,7 +21,11 @@ function fakeCloud(email: string, password: string) {
   let n = 0;
   const bot = { activity: 'docked' as string, battery: 100 };
   const calls: { cmdName: string; data?: unknown; body: Record<string, any>; query: URLSearchParams }[] = [];
-  const state = { logins: 0, portalLogins: 0, expire: () => { token = 'expired-' + token; } };
+  const state = { logins: 0, portalLogins: 0, needsVerify: false, codesSent: 0, verified: 0, expire: () => { token = 'expired-' + token; } };
+  // Ecovacs' published key for encrypting the account in the email-verification calls.
+  const rsa = generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const publicKey = rsa.publicKey.export({ type: 'spki', format: 'der' }).toString('base64');
+  const decrypt = (b64: string | null) => privateDecrypt({ key: rsa.privateKey, padding: constants.RSA_PKCS1_PADDING }, Buffer.from(String(b64), 'base64')).toString();
   const devices = [
     { did: 'e0001234-aaaa-bbbb-cccc-t50omni00001', name: 'E0001234', class: 'lf3bn4', resource: 'Hrk3', nick: 'Deebot', company: 'eco-ng', deviceName: 'DEEBOT T50 OMNI', status: 1, product_category: 'DEEBOT' },
     { did: 'e0009999-offline0000000002', name: 'E0009999', class: 'lf3bn4', resource: 'Xy12', nick: 'Upstairs', company: 'eco-ng', deviceName: 'DEEBOT T50 OMNI', status: 0 },
@@ -36,15 +40,33 @@ function fakeCloud(email: string, password: string) {
       const q = url.searchParams;
       const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : {};
       const send = (j: unknown) => { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(j)); };
-      const login = url.pathname.match(/^\/login\/v1\/private\/(\w+)\/EN\/([0-9a-f]{32})\/global_e\/1\.6\.3\/google_play\/1\/user\/login$/);
-      if (login) {
+      const priv = url.pathname.match(/^\/login\/v1\/private\/(\w+)\/EN\/([0-9a-f]{32})\/global_e\/([\d.]+)\/google_play\/1\/([\w/]+)$/);
+      if (priv) {
+        const [, country, deviceId, version, endpoint] = priv;
+        if (version !== '3.14.0') return send({ code: '1011', msg: 'Please update to the latest version to continue.' }); // what Ecovacs says to old apps now
         const params = Object.fromEntries(q);
-        const expected = sign(params, { country: login[1], deviceId: login[2], lang: 'EN', appCode: 'global_e', appVersion: '1.6.3', channel: 'google_play', deviceType: '1' }, '1520391301804', '6c319b2a5cd3e66e39159c2e28f2fce9');
-        assert.equal(q.get('authSign'), expected, 'login is signed');
+        const expected = sign(params, { country, deviceId, lang: 'EN', appCode: 'global_e', appVersion: version, channel: 'google_play', deviceType: '1' }, '1520391301804', '6c319b2a5cd3e66e39159c2e28f2fce9');
+        assert.equal(q.get('authSign'), expected, `${endpoint} is signed`);
         assert.equal(q.get('authAppkey'), '1520391301804');
-        if (q.get('account') !== email || q.get('password') !== md5(password)) return send({ code: '1005', msg: 'wrong password' });
-        state.logins++;
-        return send({ code: '0000', msg: 'ok', data: { uid: 'u42', accessToken: 'acc42' } });
+        if (endpoint === 'user/login') {
+          if (q.get('account') !== email || q.get('password') !== md5(password)) return send({ code: '1005', msg: 'wrong password' });
+          if (state.needsVerify) return send({ code: '1013', msg: 'verify this device' });
+          state.logins++;
+          return send({ code: '0000', msg: 'ok', data: { uid: 'u42', accessToken: 'acc42' } });
+        }
+        if (endpoint === 'common/getConfig') return send({ code: '0000', data: [{ key: 'PUBLIC.KEY.CONFIG', value: JSON.stringify({ publicKey }) }] });
+        if (endpoint === 'user/sendEmailVerifyCode') {
+          assert.equal(decrypt(q.get('encryptEmail')), email, 'email encrypted with the published key');
+          assert.equal(q.get('verifyType'), 'EMAIL_VERIFY_DEVICE');
+          state.codesSent++;
+          return send({ code: '0000' });
+        }
+        if (endpoint === 'user/verifyDevice') {
+          assert.equal(decrypt(q.get('encryptAccount')), email);
+          if (q.get('verifyCode') !== '123456') return send({ code: '1012', msg: 'wrong code' });
+          state.needsVerify = false; state.verified++; state.logins++;
+          return send({ code: '0000', data: { uid: 'u42', accessToken: 'acc42' } });
+        }
       }
       if (url.pathname === '/auth/v1/global/auth/getAuthCode') {
         const params = Object.fromEntries(q);
@@ -191,6 +213,32 @@ test('Ecovacs: logs in again once when the portal token expires', async () => {
     assert.equal(fake.state.portalLogins, 2);
     assert.equal(fake.bot.activity, 'cleaning');
   } finally { await done(); }
+});
+
+test('Ecovacs: a new device is verified with the code Ecovacs emails, asked for once', async () => {
+  const fake = fakeCloud('me@example.com', 'hunter2');
+  fake.state.needsVerify = true;
+  await new Promise<void>(r => fake.server.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${(fake.server.address() as AddressInfo).port}`;
+  const urls = { login: `${base}/login`, auth: `${base}/auth`, portal: `${base}/api` };
+  const reg = new Registry(new Store(':memory:'));
+  const first = new EcovacsAdapter({ email: 'me@example.com', password: 'hunter2', country: 'au', urls, pollMs: 0 });
+  await reg.addAdapter(first);
+  try {
+    assert.equal(fake.state.codesSent, 1, 'Ecovacs was asked to email a code');
+    assert.match(first.status().note!, /emailed you a code/);
+    await first.poll();
+    assert.equal(fake.state.codesSent, 1, 'not asked again while waiting for the code');
+  } finally { await reg.stop(); }
+  // The owner enters the code in the setup; the adapter restarts with it.
+  const reg2 = new Registry(new Store(':memory:'));
+  const second = new EcovacsAdapter({ email: 'me@example.com', password: 'hunter2', country: 'au', urls, pollMs: 0, verifyCode: ' 123456 ' });
+  await reg2.addAdapter(second);
+  try {
+    assert.equal(fake.state.verified, 1);
+    assert.doesNotMatch(second.status().note!, /code|login failed/, 'signed in');
+    assert.ok(reg2.list().length > 0, 'vacuums listed after verifying');
+  } finally { await reg2.stop(); fake.server.close(); }
 });
 
 test('Ecovacs: a wrong password is reported, not thrown, and not retried', async () => {
