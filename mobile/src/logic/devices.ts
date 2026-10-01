@@ -9,8 +9,15 @@ const C = { amber: '#f2b14c', blue: '#7cb8f0', green: '#7fd4a0', red: '#ff6b5e',
 
 export const ICON: Record<string, string> = {
   light: 'lightbulb', dimmer: 'lightbulb', fan: 'air_purifier', media: 'speaker', tv: 'tv', camera: 'videocam',
-  plug: 'outlet', sensor: 'sensors', vacuum: 'cleaning_services', internet: 'wifi',
+  plug: 'outlet', sensor: 'sensors', vacuum: 'cleaning_services', internet: 'wifi', climate: 'ac_unit',
 };
+
+/** Air conditioner modes: id, name, icon, colour. */
+export const HVAC: [NonNullable<Dev['hvac']>, string, string, string][] = [
+  ['cool', 'Cool', 'ac_unit', C.blue], ['heat', 'Heat', 'local_fire_department', C.amber], ['dry', 'Dry', 'water_drop', C.green],
+  ['fan', 'Fan', 'mode_fan', C.stone], ['auto', 'Auto', 'autorenew', '#c9a0f0'],
+];
+export const FAN_SPEEDS: [NonNullable<Dev['fanSpeed']>, string][] = [['auto', 'Auto'], ['quiet', 'Quiet'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['turbo', 'Turbo']];
 
 export const isLight = (d: Pick<Device, 'type'>) => d.type === 'light' || d.type === 'dimmer';
 export const isPlayer = (d: Pick<Device, 'type'>) => d.type === 'media' || d.type === 'tv';
@@ -38,6 +45,10 @@ export function stateOf(d: Dev): [string, string] {
     return [`${VAC[a] || 'Idle'}${d.battery != null ? ` · ${d.battery}%` : ''}`, a === 'error' ? C.red : a === 'cleaning' ? C.amber : C.stone];
   }
   if (d.type === 'fan') return [d.mode || 'Auto', C.blue];
+  if (d.type === 'climate') {
+    const m = HVAC.find(h => h[0] === d.hvac), room = d.temp != null ? `room ${d.temp}°` : '';
+    return d.on ? [[m?.[1] ?? 'On', d.target != null ? `${d.target}°` : '', room].filter(Boolean).join(' · '), m?.[3] ?? C.blue] : [['Off', room].filter(Boolean).join(' · '), C.stone];
+  }
   // A soundbar or TV Kova controls but can't stream to: on (and its input) or off, never "Playing".
   if (isPlayer(d) && !has(d, 'media')) return d.on ? [`On${inputName(d) ? ` · ${inputName(d)}` : ''}`, C.blue] : ['Off', C.stone];
   if (isPlayer(d)) return d.on ? [d.paused ? `Paused${d.media ? ` · ${d.media}` : ''}` : d.track ? `Playing ${d.track.title}${d.track.artist ? ` · ${d.track.artist}` : ''}` : d.media ? `Playing ${d.media}` : 'Playing', d.paused ? C.stone : C.blue] : ['Idle', C.stone];
@@ -50,7 +61,7 @@ export function stateOf(d: Dev): [string, string] {
 
 /** Tile colours: amber when a light is on, blue for media and air, green for cameras, muted when off. */
 export function tint(d: Dev): { bg: string; border: string; iconBg: string; iconFg: string } {
-  const media = isPlayer(d);
+  const media = isPlayer(d) || d.type === 'climate';
   if (d.type === 'camera' || d.type === 'sensor') return { bg: C.card, border: 'rgba(255,255,255,0.05)', iconBg: 'rgba(127,212,160,0.15)', iconFg: C.green };
   if (d.type === 'fan' || media) return {
     bg: d.on && media ? 'rgba(124,184,240,0.12)' : C.card, border: d.on && media ? 'rgba(124,184,240,0.3)' : 'rgba(255,255,255,0.05)',
@@ -89,7 +100,8 @@ export const TYPES: { id: string; label: string; icon: string; test: (d: Dev) =>
   { id: 'cameras', label: 'Cameras', icon: 'videocam', test: d => d.type === 'camera' },
   { id: 'plugs', label: 'Plugs', icon: 'outlet', test: d => d.type === 'plug' },
   { id: 'vacuum', label: 'Vacuum', icon: 'cleaning_services', test: d => d.type === 'vacuum' },
-  { id: 'other', label: 'Other', icon: 'category', test: d => !['light', 'dimmer', 'media', 'tv', 'fan', 'camera', 'plug', 'vacuum'].includes(d.type) },
+  { id: 'climate', label: 'Climate', icon: 'ac_unit', test: d => d.type === 'climate' },
+  { id: 'other', label: 'Other', icon: 'category', test: d => !['light', 'dimmer', 'media', 'tv', 'fan', 'camera', 'plug', 'vacuum', 'climate'].includes(d.type) },
 ];
 
 export interface DevGroup { id: string; name: string; icon: string; devices: Dev[]; lightsOn: number }

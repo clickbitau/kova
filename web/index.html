@@ -573,6 +573,23 @@
 </sc-for>
 </div></div>
 </sc-if>
+<sc-if value="{{ dr.isClimate }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px;border-radius:16px;background:#1c1d20;opacity:{{ dr.climOp }}">
+<div onClick="{{ dr.down }}" role="button" aria-label="Cooler" style="width:48px;height:48px;border-radius:24px;background:#2a2b2f;display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:24px">remove</span></div>
+<div style="display:flex;flex-direction:column;align-items:center;gap:2px"><span style="font-size:40px;font-weight:700;letter-spacing:-0.02em">{{ dr.climTarget }}</span><span style="font-size:12px;color:#a3a09a">{{ dr.climRoom }}</span></div>
+<div onClick="{{ dr.up }}" role="button" aria-label="Warmer" style="width:48px;height:48px;border-radius:24px;background:#2a2b2f;display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:24px">add</span></div>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:13px;font-weight:600">Mode</span><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px">
+<sc-for list="{{ dr.climModes }}" as="m" hint-placeholder-count="5">
+<div onClick="{{ m.pick }}" style="display:flex;align-items:center;gap:8px;padding:12px;border-radius:12px;cursor:pointer;background:{{ m.bg }};border:1px solid {{ m.border }};color:{{ m.fg }};font-size:13px;font-weight:600"><span style="font-family:'Material Symbols Rounded';font-size:20px;font-variation-settings:'FILL' 1;color:{{ m.iconFg }}">{{ m.icon }}</span>{{ m.label }}</div>
+</sc-for>
+</div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:13px;font-weight:600">Fan</span><div style="display:flex;flex-wrap:wrap;gap:6px">
+<sc-for list="{{ dr.climFans }}" as="f" hint-placeholder-count="6">
+<div onClick="{{ f.pick }}" style="padding:8px 12px;border-radius:999px;cursor:pointer;font-size:12px;font-weight:600;background:{{ f.bg }};color:{{ f.fg }};border:1px solid {{ f.border }}">{{ f.label }}</div>
+</sc-for>
+</div></div>
+</sc-if>
 </sc-if>
 <sc-if value="{{ tabDetails }}" hint-placeholder-val="{{ false }}">
 <div style="display:flex;flex-direction:column;background:#1c1d20;border-radius:14px;overflow:hidden">
@@ -701,7 +718,11 @@ async function api(method,path,body){
 }
 const EMPTY={home:{name:'Kova',timezone:'UTC',now:Date.now(),nowHour:new Date().getHours()+new Date().getMinutes()/60,date:'',dateLabel:'',clock:''},rooms:[],groups:{},people:[],devices:[],modes:[{id:'day',name:'Day',color:'#dcd27e',icon:'light_mode',startLabel:'',endLabel:'',groups:[],inherit:[],moments:[],test:{days:[],text:''},start:null}],current:{modeId:'day',untilLabel:'',nextId:'day',overlay:null},day:{bands:[],items:[],marks:[]},upcoming:[],overlays:[],sources:[],findings:[],activity:[],integrations:[],lightTheWay:[],weather:null,demo:false,offline:true};
 const BOOT=window.KOVA_BOOT||EMPTY;
-const ICON={light:'lightbulb',dimmer:'lightbulb',fan:'air_purifier',media:'speaker',tv:'tv',camera:'videocam',plug:'outlet',sensor:'sensors',vacuum:'cleaning_services',internet:'wifi'};
+const ICON={light:'lightbulb',dimmer:'lightbulb',fan:'air_purifier',media:'speaker',tv:'tv',camera:'videocam',plug:'outlet',sensor:'sensors',vacuum:'cleaning_services',internet:'wifi',climate:'ac_unit'};
+// Air conditioners: what each mode is called, its colour, and the fan speeds in order.
+const HVAC=[['cool','Cool','ac_unit','#7cb8f0'],['heat','Heat','local_fire_department','#f2b14c'],['dry','Dry','water_drop','#7fd4a0'],['fan','Fan','mode_fan','#a3a09a'],['auto','Auto','autorenew','#c9a0f0']];
+const FANSPEEDS=[['auto','Auto'],['quiet','Quiet'],['low','Low'],['medium','Medium'],['high','High'],['turbo','Turbo']];
+const climateLine=d=>{const m=HVAC.find(h=>h[0]===d.hvac);const room=d.temp!=null?`room ${d.temp}°`:'';return d.on?[[m?m[1]:'On',d.target!=null?`${d.target}°`:'',room].filter(Boolean).join(' · '),m?m[3]:'#7cb8f0']:[['Off',room].filter(Boolean).join(' · '),'#a3a09a']};
 const VAC={cleaning:'Cleaning',returning:'Returning to dock',docked:'Docked',paused:'Paused',idle:'Idle',error:'Needs attention'};
 const fmt=h=>{const m=Math.round(h*60);return String(Math.floor(m/60)%24).padStart(2,'0')+':'+String(m%60).padStart(2,'0')};
 const lst=xs=>xs.length<=1?xs.join(''):xs.slice(0,-1).join(', ')+' and '+xs[xs.length-1];
@@ -923,10 +944,15 @@ class Component extends DCLogic {
       res({rows:a.opensUrl&&r&&r.url?[{k:'Opened',v:'Google sign-in, in a new tab',font:'inherit'},{k:'Link',v:r.url,font:"'JetBrains Mono',monospace"}]:resRows(r)})}
     catch(e){res({err:/^not found$/i.test(e.message)?'This hub doesn’t have that yet. It arrives with the matching hub update.':e.message})}}
   // ---- derived data ----
+  // The air conditioner panel: its temperature with − and +, the modes, and the fan.
+  climateView(D){if(D.type!=='climate')return{isClimate:false};const on=!!D.on,t=D.target??24,step=v=>{const n=Math.max(16,Math.min(32,t+v));this.optimistic(D.id,{target:n});this.send(D.id,{target:n})};
+    return{isClimate:true,climTarget:`${t}°`,climRoom:D.temp!=null?`Room ${D.temp}°`:'',climOp:on?1:0.45,down:()=>step(-1),up:()=>step(1),
+      climModes:HVAC.map(([id,label,icon,col])=>{const sel=on&&D.hvac===id;return{label,icon,pick:()=>{this.optimistic(D.id,{on:true,hvac:id});this.send(D.id,{on:true,hvac:id})},bg:sel?col+'26':'#1c1d20',border:sel?col+'66':'rgba(255,255,255,0.06)',fg:sel?'#f1efea':'#a3a09a',iconFg:sel?col:'#8a8781'}}),
+      climFans:FANSPEEDS.map(([id,label])=>{const sel=D.fanSpeed===id;return{label,pick:()=>{this.optimistic(D.id,{fanSpeed:id});this.send(D.id,{fanSpeed:id})},bg:sel?'#2a2b2f':'transparent',fg:sel?'#f1efea':'#a3a09a',border:sel?'rgba(255,255,255,0.18)':'rgba(255,255,255,0.06)'}})}}
   devs(){const o={};this.state.hub.devices.forEach(d=>{o[d.id]=flat(d)});return o}
   modeById(id){const H=this.state.hub;return H.modes.find(m=>m.id===id)||H.modes[0]}
-  stateOf(d){if(d.id==='warden_internet')return d.online===false?['Warden not answering','#ff6b5e']:d.on?['Internet up','#7fd4a0']:['Internet down','#ff6b5e'];if(d.type==='camera'||d.type==='sensor')return d.online===false?['Offline','#ff6b5e']:['Live','#7fd4a0'];if(d.online===false)return['Not responding','#ff6b5e'];if(d.type==='vacuum'){const a=d.activity||(d.on?'cleaning':'idle');return[`${VAC[a]||'Idle'}${d.battery!=null?' · '+d.battery+'%':''}`,a==='error'?'#ff6b5e':a==='cleaning'?'#f2b14c':'#a3a09a']}if(d.type==='fan')return[d.mode||'Auto','#7cb8f0'];if(isPlayer(d)&&!(d.capabilities||[]).includes('media'))return d.on?[`On${inputName(d)?' · '+inputName(d):''}`,'#7cb8f0']:['Off','#a3a09a'];if(isPlayer(d))return d.on?[d.track&&!d.paused?`Playing ${d.track.title}${d.track.artist?' · '+d.track.artist:''}`:`${d.paused?'Paused':'Playing'} · ${d.media||'Audio'}${d.vol!=null?' · '+d.vol+'%':''}`,d.paused?'#a3a09a':'#7cb8f0']:['Idle','#a3a09a'];if(d.type==='internet')return d.on?['Internet on','#7fd4a0']:['Internet paused','#f2b14c'];if(d.type==='plug')return d.on?[`On${d.power!=null?' · '+d.power+' W':''}`,'#f2b14c']:['Off','#a3a09a'];if(!d.on)return['Off','#a3a09a'];if(d.type==='dimmer')return[`On · ${d.bri}%${d.k?' · '+d.k+'K':d.color?' · colour':''}`,'#f2b14c'];return['On','#f2b14c']}
-  tint(d){if(isPlayer(d)||d.type==='fan')return{bg:d.on&&d.type!=='fan'?'rgba(124,184,240,0.12)':'#16171a',border:d.on&&d.type!=='fan'?'rgba(124,184,240,0.3)':'rgba(255,255,255,0.05)',iconBg:d.on||d.type==='fan'?'rgba(124,184,240,0.2)':'#232428',iconFg:d.on||d.type==='fan'?'#7cb8f0':'#8a8781'};if(d.type==='camera'||d.type==='sensor')return{bg:'#16171a',border:'rgba(255,255,255,0.05)',iconBg:'rgba(127,212,160,0.15)',iconFg:'#7fd4a0'};const c=d.color||'#f2b14c';return d.on?{bg:'rgba(242,177,76,0.11)',border:'rgba(242,177,76,0.28)',iconBg:c,iconFg:'#1a1408'}:{bg:'#16171a',border:'rgba(255,255,255,0.05)',iconBg:'#232428',iconFg:'#8a8781'}}
+  stateOf(d){if(d.id==='warden_internet')return d.online===false?['Warden not answering','#ff6b5e']:d.on?['Internet up','#7fd4a0']:['Internet down','#ff6b5e'];if(d.type==='camera'||d.type==='sensor')return d.online===false?['Offline','#ff6b5e']:['Live','#7fd4a0'];if(d.online===false)return['Not responding','#ff6b5e'];if(d.type==='vacuum'){const a=d.activity||(d.on?'cleaning':'idle');return[`${VAC[a]||'Idle'}${d.battery!=null?' · '+d.battery+'%':''}`,a==='error'?'#ff6b5e':a==='cleaning'?'#f2b14c':'#a3a09a']}if(d.type==='fan')return[d.mode||'Auto','#7cb8f0'];if(d.type==='climate')return climateLine(d);if(isPlayer(d)&&!(d.capabilities||[]).includes('media'))return d.on?[`On${inputName(d)?' · '+inputName(d):''}`,'#7cb8f0']:['Off','#a3a09a'];if(isPlayer(d))return d.on?[d.track&&!d.paused?`Playing ${d.track.title}${d.track.artist?' · '+d.track.artist:''}`:`${d.paused?'Paused':'Playing'} · ${d.media||'Audio'}${d.vol!=null?' · '+d.vol+'%':''}`,d.paused?'#a3a09a':'#7cb8f0']:['Idle','#a3a09a'];if(d.type==='internet')return d.on?['Internet on','#7fd4a0']:['Internet paused','#f2b14c'];if(d.type==='plug')return d.on?[`On${d.power!=null?' · '+d.power+' W':''}`,'#f2b14c']:['Off','#a3a09a'];if(!d.on)return['Off','#a3a09a'];if(d.type==='dimmer')return[`On · ${d.bri}%${d.k?' · '+d.k+'K':d.color?' · colour':''}`,'#f2b14c'];return['On','#f2b14c']}
+  tint(d){if(isPlayer(d)||d.type==='fan'||d.type==='climate')return{bg:d.on&&d.type!=='fan'?'rgba(124,184,240,0.12)':'#16171a',border:d.on&&d.type!=='fan'?'rgba(124,184,240,0.3)':'rgba(255,255,255,0.05)',iconBg:d.on||d.type==='fan'?'rgba(124,184,240,0.2)':'#232428',iconFg:d.on||d.type==='fan'?'#7cb8f0':'#8a8781'};if(d.type==='camera'||d.type==='sensor')return{bg:'#16171a',border:'rgba(255,255,255,0.05)',iconBg:'rgba(127,212,160,0.15)',iconFg:'#7fd4a0'};const c=d.color||'#f2b14c';return d.on?{bg:'rgba(242,177,76,0.11)',border:'rgba(242,177,76,0.28)',iconBg:c,iconFg:'#1a1408'}:{bg:'#16171a',border:'rgba(255,255,255,0.05)',iconBg:'#232428',iconFg:'#8a8781'}}
 
   v3Vals(s,H,devs,go){
     const RN=Object.fromEntries(H.rooms.map(r=>[r.id,r.name]));
@@ -960,6 +986,7 @@ class Component extends DCLogic {
     const addDev=devs[s.addDevice]?s.addDevice:(DEVS[0]||{}).id;
     const AD=devs[addDev];
     const stateOptions=!AD?[]:AD.type==='fan'?[['{"mode":"Auto"}','Auto'],['{"mode":"Sleep"}','Sleep'],['{"on":false}','Off']]
+      :AD.type==='climate'?[['{"on":true,"hvac":"cool","target":24}','Cool to 24°'],['{"on":true,"hvac":"heat","target":21}','Heat to 21°'],['{"on":true,"hvac":"auto","target":23}','Auto at 23°'],['{"on":false}','Off']]
       :AD.type==='internet'?[['{"on":false}','Pause internet'],['{"on":true}','Internet on']]
       :(AD.capabilities||[]).includes('library')?[['{"paused":true}','Pause'],['{"on":false,"media":null}','Stop']]
       :isPlayer(AD)?[['{"on":false,"media":null}','Stop'],...H.sources.map(so=>[JSON.stringify({on:true,media:so.name,vol:30}),`Play ${so.name} at 30%`])]
@@ -1191,7 +1218,7 @@ class Component extends DCLogic {
       dr={name:D.name,room:RN[D.room]||'',icon:ICON[D.type],bg:t.bg,iconFg:D.on&&isLight(D)?(D.color||'#f2b14c'):t.iconFg,big:st.split(' · ')[0],dimmable:D.type==='dimmer'&&D.on,bri:D.bri,briLabel:D.bri+'%',hasWarmth:(D.capabilities||[]).includes('colorTemp')&&D.on,
         setBri:e=>this.patch(D.id,{bri:+e.target.value}),toggle:()=>this.toggleDev(D.id),
         temps:[2200,2700,3000,4000].map(k=>({label:k+'K',bg:k===2200?'#ffb56b':k===2700?'#ffc98a':k===3000?'#ffd9a8':'#fff1dc',ring:D.k===k?'2px solid #f2b14c':'none',pick:()=>this.send(D.id,{k,color:null})})),
-        facts:[['State',st],['Integration',D.integ],['Room',RN[D.room]||D.room],['Last changed',D.why.now]].map(([k,v])=>({k,v})),usedIn,usedNone:usedIn.length?'':'Not used by any mode, overlay or behaviour yet',
+        ...this.climateView(D),facts:[['State',st],['Integration',D.integ],['Room',RN[D.room]||D.room],['Last changed',D.why.now]].map(([k,v])=>({k,v})),usedIn,usedNone:usedIn.length?'':'Not used by any mode, overlay or behaviour yet',
         code:JSON.stringify({id:D.id,address:D.eid,type:D.type,capabilities:D.capabilities,state:D.state,integration:D.integ,room:D.room},null,2)}}
     const tabs=['simple','details'].concat(adv?['code']:[]).map(t=>({label:t[0].toUpperCase()+t.slice(1),go:()=>this.setState({tab:t}),bg:s.tab===t?'#2a2b2f':'transparent',fg:s.tab===t?'#f1efea':'#a3a09a'}));
     const home=H.people.filter(p=>p.home);

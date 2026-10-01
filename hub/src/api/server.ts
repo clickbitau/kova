@@ -15,6 +15,7 @@ import { isLight, isPlayer } from '../util/describe.ts';
 import type { HomeKitBridge } from '../bridges/homekit.ts';
 import type { MatterBridge } from '../bridges/matter-bridge.ts';
 import { LiveViewUnavailable, NEST_DEFAULT_REDIRECT, exchangeNestCode, nestAuthUrl, type NestOptions } from '../adapters/nest.ts';
+import { connectLifeAuthUrl, exchangeConnectLifeCode } from '../adapters/connectlife.ts';
 import { SMARTTHINGS_DEFAULT_REDIRECT, createSmartThingsApp, exchangeSmartThingsCode, smartThingsAuthUrl } from '../adapters/smartthings.ts';
 import type { Presence } from '../services/presence.ts';
 import { HELIX_AUTO, HELIX_REMOTE, type HelixLink } from '../services/helix-link.ts';
@@ -318,6 +319,22 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
       const r = await exchangeSmartThingsCode({ code: decodeURIComponent(code), clientId: c.clientId, clientSecret: c.clientSecret, redirectUri: req.body?.redirectUri, tokenUrl: c.tokenUrl });
       reply.header('cache-control', 'no-store');
       const applied = await opts.integrations!.update('smartthings', { ...c, refreshToken: r.refreshToken });
+      return { ok: true, linked: true, status: applied.status };
+    } catch (e) { return fail(reply, e); }
+  });
+
+  // Linking ConnectLife (Hisense air conditioners), once: sign in at auth-url; the page after won't load, and its address
+  // (…?code=…) is posted to auth-code.
+  app.get('/api/integrations/connectlife/auth-url', async () => ({ url: connectLifeAuthUrl(opts.integrations?.raw('connectlife')?.urls) }));
+  app.post<{ Body: { code?: string } }>('/api/integrations/connectlife/auth-code', async (req, reply) => {
+    const code = String(req.body?.code ?? '').trim();
+    if (!code) return reply.code(400).send({ error: 'Paste the address the sign-in ended on (it has ?code=…)' });
+    if (!opts.integrations) return reply.code(400).send({ error: 'Integrations can’t be changed here' });
+    const c = opts.integrations.raw('connectlife') ?? {};
+    try {
+      const r = await exchangeConnectLifeCode(code, c.urls);
+      reply.header('cache-control', 'no-store');
+      const applied = await opts.integrations.update('connectlife', { ...c, refreshToken: r.refreshToken });
       return { ok: true, linked: true, status: applied.status };
     } catch (e) { return fail(reply, e); }
   });
