@@ -22,6 +22,8 @@ import { ModesScreen } from './src/screens/ModesScreen';
 import { ActivityScreen } from './src/screens/ActivityScreen';
 import { ThisPhoneScreen } from './src/screens/ThisPhoneScreen';
 import { WebScreen } from './src/screens/WebScreen';
+import { AutomationsScreen } from './src/screens/AutomationsScreen';
+import { AutomationEditor } from './src/screens/AutomationEditor';
 import { DeviceSheet } from './src/screens/DeviceSheet';
 import { Mark, ToastHost } from './src/ui/kit';
 import { T } from './src/ui/Text';
@@ -62,6 +64,7 @@ function Home() {
     else if (r.lightsOff) void api<{ changed: string[]; undo: string }>('POST', '/api/lights/off').then(x => say(`${x.changed.length} lights off`, { undo: x.undo })).catch(() => {});
     else if (r.page === 'modes') nav.current?.navigate('Modes');
     else if (r.page === 'activity') nav.current?.navigate('Activity');
+    else if (r.page === 'autos' || r.page === 'automations') nav.current?.navigate('Automations');
     else if (r.page) nav.current?.navigate('Web', { title: r.page[0].toUpperCase() + r.page.slice(1), path: `/phone.html?embed=1&page=${r.page}` });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [last, !!snap]);
@@ -78,6 +81,8 @@ function Home() {
           <Stack.Screen name="Activity" component={ActivityScreen} />
           <Stack.Screen name="ThisPhone" component={ThisPhoneScreen} />
           <Stack.Screen name="Web" component={WebScreen} />
+          <Stack.Screen name="Automations" component={AutomationsScreen} />
+          <Stack.Screen name="AutomationEditor" component={AutomationEditor} />
         </Stack.Navigator>
         <DeviceSheet />
       </NavigationContainer>
