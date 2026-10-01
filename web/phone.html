@@ -304,6 +304,7 @@
 </sc-for>
 </div>
 </sc-if>
+<sc-if value="{{ upd.show }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:10px;padding:14px 16px;border-radius:16px;background:#16171a;border:1px solid {{ upd.border }}"><div style="display:flex;gap:12px;align-items:center"><div style="width:38px;height:38px;flex:none;border-radius:11px;background:rgba(124,184,240,0.16);display:flex;align-items:center;justify-content:center;color:#7cb8f0"><span style="font-family:'Material Symbols Rounded';font-size:20px">system_update</span></div><div style="display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font-size:15px;font-weight:700">{{ upd.title }}</span><span style="font-size:12.5px;color:#a3a09a;line-height:1.45">{{ upd.sub }}</span></div></div><sc-if value="{{ upd.hasChanges }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:4px;padding-left:50px"><sc-for list="{{ upd.changes }}" as="ch" hint-placeholder-count="3"><span style="font-size:12.5px;color:#d8d5cf">· {{ ch.c }}</span></sc-for></div></sc-if><div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding-left:50px"><sc-if value="{{ upd.canUpdate }}" hint-placeholder-val="{{ false }}"><div onClick="{{ upd.update }}" style="padding:9px 14px;border-radius:10px;background:#7cb8f0;color:#0d1a26;font-size:13px;font-weight:700;cursor:pointer">Update</div></sc-if><sc-if value="{{ upd.canCheck }}" hint-placeholder-val="{{ false }}"><div onClick="{{ upd.check }}" style="padding:9px 14px;border-radius:10px;background:#1c1d20;font-size:13px;font-weight:600;cursor:pointer">Check now</div></sc-if><span onClick="{{ upd.toggleAuto }}" style="font-size:12.5px;font-weight:700;cursor:pointer;color:{{ upd.autoFg }}">{{ upd.autoLabel }}</span></div></div></sc-if>
 <sc-if value="{{ igListOn }}" hint-placeholder-val="{{ true }}">
 <div style="display:flex;flex-direction:column;gap:8px">
 <sc-for list="{{ integrations }}" as="it" hint-placeholder-count="5">
@@ -610,6 +611,19 @@ const SRC_ICON={'Device control':'toggle_on','From the activity log':'history','
 const isLight=d=>d.type==='light'||d.type==='dimmer';
 const isPlayer=d=>d.type==='media'||d.type==='tv';
 /** A soundbar's controls (input, mute, night mode, sound mode), as pills. */
+/** The hub's own update (services/updates.ts), as the card on Integrations shows it. */
+const updUi=(H,self)=>{const u=H.update;if(!u)return{show:false};const a=u.available,l=u.last,busy=u.state!=='idle';
+  const when=t=>{if(!t)return'never';const m=Math.round((Date.now()-t)/60000);return m<1?'just now':m<60?`${m} min ago`:m<1440?`${Math.round(m/60)} h ago`:`${Math.round(m/1440)} d ago`};
+  const go=(what,done)=>api('POST','/api/update/'+what).then(()=>self.toast(done)).catch(x=>self.err(x));
+  const title=u.state==='updating'?`Updating Kova to ${a?a.version:'the new version'}…`:u.state==='requested'?'Asked the box…':a?`Kova ${a.version} is available`:`Kova ${u.current.version} is up to date`;
+  const last=l?(l.result==='updated'?`Updated ${l.from} → ${l.to} ${when(l.at)}`:l.result==='rolled-back'?`The update to a newer version didn’t start, so Kova went back to ${l.from} ${when(l.at)}`:`The last update failed ${when(l.at)}`):'';
+  const sub=!u.updater?'Updates need the updater on the box: run deploy/update.sh there once.':[a?`You have ${u.current.version}. ${a.behind} change${a.behind===1?'':'s'}.`:`Checked ${when(u.checkedAt)}.`,u.checkError?`Couldn’t check: ${u.checkError}`:'',last].filter(Boolean).join(' ');
+  return{show:true,title,sub,changes:a?a.changes.slice(0,5).map(c=>({c})):[],hasChanges:!!(a&&a.changes.length),busy,
+    canUpdate:!!a&&!busy&&u.updater,update:()=>go('apply','Updating: Kova restarts in a minute, then reconnects'),
+    canCheck:!busy&&u.updater,check:()=>go('check','Looking for a newer Kova'),
+    autoLabel:u.auto.on?`Overnight updates on, at ${u.auto.hour}:00`:'Overnight updates off',autoFg:u.auto.on?'#7fd4a0':'#a3a09a',
+    toggleAuto:()=>api('PUT','/api/update/settings',{on:!u.auto.on}).then(()=>self.toast(u.auto.on?'Overnight updates off':'Kova updates itself overnight when one is waiting and nothing plays')).catch(x=>self.err(x)),
+    border:a?'rgba(124,184,240,0.35)':'rgba(255,255,255,0.05)'}};
 const barItems=(D,send)=>{const c=D.capabilities||[];const on=a=>({bg:a?'rgba(124,184,240,0.2)':'#1c1d20',fg:a?'#7cb8f0':'#d8d5cf'});
   // A TV's source: marked when the TV can say which it's on (through SmartThings).
   if(c.includes('input')&&!c.includes('sound')&&D.type==='tv'&&D.on)return[['hdmi1','HDMI 1'],['hdmi2','HDMI 2'],['hdmi3','HDMI 3'],['hdmi4','HDMI 4'],['tv','TV']].map(([id,label])=>({label,...on(D.input===id),pick:()=>send({input:id})}));
@@ -798,7 +812,7 @@ class Component extends DCLogic {
     const acts=H.activity.length;
     const MORE=[['modes','Modes','routine','rgba(242,177,76,0.14)','#f2b14c',`${H.modes.length} modes · now ${(H.modes.find(m=>m.id===H.current.modeId)||{name:''}).name}${H.findings.length?` · ${H.findings.length} to look at`:''}`],
       ['activity','Activity','history','rgba(127,212,160,0.14)','#7fd4a0',acts?`Latest: ${H.activity[0].what}`:'Nothing yet'],
-      ['energy','Energy','electric_meter','rgba(242,177,76,0.14)','#f2b14c',E.available?`${kw(E.now.solar)} solar now · ${E.solarKwh.toFixed(1)} kWh today`:'No inverter or meter yet'],
+      ['energy','Energy','electric_meter','rgba(242,177,76,0.14)','#f2b14c',E.available?(H.integrations.some(i=>i.id==='goodwe')||E.solarKwh>0?`${kw(E.now.solar)} solar now · ${E.solarKwh.toFixed(1)} kWh today`:E.now.load!=null?`${E.estimated?'About ':''}${kw(E.now.load)} in use now`:'What’s using power'):'No inverter or meter yet'],
       ['media','Media','speaker','rgba(124,184,240,0.14)','#7cb8f0',`${pls.filter(d=>d.on).length} playing · ${pls.length} players`],
       ['customise','Customise home','tune','#232428','#d8d5cf',`${H.rooms.length} rooms · ${H.people.length} people · names, favourites`],
       ['integrations','Integrations','hub','#232428','#d8d5cf',bad.length?`${bad.length} need${bad.length===1?'s':''} attention: ${bad.map(i=>i.name).join(', ')}`:`${H.integrations.length} connected`],
@@ -823,11 +837,11 @@ class Component extends DCLogic {
     const maxH=Math.max(0.3,...E.hours.map(x=>Math.max(x.solar,x.use||0)));const nowHr=Math.floor(H.home.nowHour);
     const energyBars=(E.hours.length?E.hours:Array(24).fill({solar:0,use:null})).map((x,h)=>({solar:(x.solar/maxH*100)+'%',use:x.use==null?'3%':(x.use/maxH*100)+'%',useBg:x.use==null?'#1f2023':'#4a4b50',op:h>nowHr?0.25:1}));
     const energyStats=[['Solar made',E.solarKwh.toFixed(1)+' kWh','#f2b14c',E.peak&&E.peak.w>0?`Peak ${kw(E.peak.w)} at ${String(E.peak.hour).padStart(2,'0')}:00`:E.solarKwh>0?'From the inverter’s daily counter':'No production yet today'],
-      ['Home used',E.usedKwh==null?'—':E.usedKwh.toFixed(1)+' kWh','#f1efea',E.usedKwh==null?'Needs a grid meter':E.usedKwh>0?Math.round(Math.min(100,(E.solarKwh-(E.exportedKwh||0))/E.usedKwh*100))+'% from your own solar':''],
+      ['Home used',E.usedKwh==null?'—':E.usedKwh.toFixed(1)+' kWh','#f1efea',E.usedKwh==null?'Needs a grid meter':E.estimated?'About, from what’s on and the plugs that measure':E.usedKwh>0?Math.round(Math.min(100,(E.solarKwh-(E.exportedKwh||0))/E.usedKwh*100))+'% from your own solar':''],
       ['From grid',E.fromGridKwh==null?'—':E.fromGridKwh.toFixed(1)+' kWh','#f1efea',E.exportedKwh==null?'Needs a grid meter':`Sent back ${E.exportedKwh.toFixed(1)} kWh`],
       ['Right now',kw(E.now.solar),'#f1efea','Solar production']].map(([label,v,fg,sub])=>({label,v,fg,sub}));
     const maxP=Math.max(1,...E.devices.map(d=>d.w));
-    const energyDevices=E.devices.slice(0,8).map((d,i)=>({name:d.name,v:kw(d.w),w:(d.w/maxP*100)+'%',bg:i===0?'#f2b14c':'#6f6d69'}));
+    const energyDevices=E.devices.slice(0,8).map((d,i)=>({name:d.name,v:(d.estimated?'about ':'')+kw(d.w),w:(d.w/maxP*100)+'%',bg:i===0?'#f2b14c':'#6f6d69'}));
     // Media
     const P=devs[s.mediaSel]||pls.find(d=>d.on)||pls[0];
     let mp={has:false,name:'No speakers yet',room:'',state:'',fg:'#a3a09a',icon:'speaker',playIcon:'play_arrow',vol:0,volLabel:'',toggle:()=>{},setVol:()=>{}};
@@ -854,11 +868,11 @@ class Component extends DCLogic {
     return {isMore:pg==='more',isSecurity:pg==='security',isEnergy:pg==='energy',isMedia:pg==='media',isInteg:pg==='integrations',
       back:()=>this.back(),moreRows,hubLine:`Kova hub · ${list.length} devices · ${H.integrations.length} integrations`,
       secSummary:`${cams.length} camera${cams.length===1?'':'s'} · ${H.people.filter(p=>p.home).length} of ${H.people.length} home`,multiCam:cams.length>1,noCams:!cams.length,goNest:()=>{this.go('integrations');const open=()=>this.openInteg('nest');if(this.state.igCat)open();else this.loadInteg().then(open)},camMain,camThumbs,people,secEvents,noSecEvents:!secEvents.length,
-      enSub:E.available?`Today so far · ${(H.integrations.find(i=>i.id==='goodwe'||i.id==='virtual')||{name:'inverter'}).name}`:'Connect a solar inverter or grid meter',
+      enSub:E.available?(E.estimated?'Today so far · about, from what’s on (no meter for the whole home)':`Today so far · ${(H.integrations.find(i=>i.id==='goodwe'||i.id==='virtual')||{name:'inverter'}).name}`):'Connect a solar inverter or grid meter',
       enSolarNow:kw(E.now.solar),enSolarFg:E.now.solar>0?'#f2b14c':'#6f6d69',enSolarLabel:E.now.solar>0?'Solar':'Solar · idle',enLoadNow:kw(E.now.load),enGridNow:kw(E.now.grid),enGridLabel:E.now.grid==null?'Grid':E.now.grid<0?'To grid':'From grid',
-      enInsight:!E.available?'No energy source connected yet. Add your inverter in Integrations.':E.now.solar>0?`Producing ${kw(E.now.solar)} now${E.now.load!=null&&E.now.solar>E.now.load?', more than the home is using: a good time to run the dishwasher or laundry.':'.'}`:E.solarKwh>0?`Solar made ${E.solarKwh.toFixed(1)} kWh today and has stopped for the day.`:'Solar hasn’t started yet today.',
+      enInsight:!E.available?'No energy source connected yet. Add your inverter in Integrations.':E.estimated&&!E.solarKwh?`About ${kw(E.now.load||0)} in use now${E.devices[0]?`, most of it ${E.devices[0].name}`:''}. A plug that measures power makes it exact.`:E.now.solar>0?`Producing ${kw(E.now.solar)} now${E.now.load!=null&&E.now.solar>E.now.load?', more than the home is using: a good time to run the dishwasher or laundry.':'.'}`:E.solarKwh>0?`Solar made ${E.solarKwh.toFixed(1)} kWh today and has stopped for the day.`:'Solar hasn’t started yet today.',
       enFoot:E.devices.length?`${E.devices.length===1?'1 device reports':E.devices.length+' devices report'} power. Add a whole-home meter or smart plugs to see the rest.`:'Nothing reports its own power yet. Smart plugs with energy monitoring or a whole-home meter fill this in.',
-      energyBars,energyStats,energyDevices,
+      upd:updUi(H,this),energyBars,energyStats,energyDevices,
       mediaCount:`${pls.filter(d=>d.on).length} playing · ${pls.length} players`,mp,sources,
       hasMusic:!!(H.music&&H.music.length),musicItems,musicShuffleLabel:s.musicShuffle?'Shuffle on':'Shuffle off',musicShuffleFg:s.musicShuffle?'#c79bf2':'#a3a09a',toggleMusicShuffle:()=>this.setState(p=>({musicShuffle:!p.musicShuffle})),
       stationDraft:s.stationDraft||'',setStation:e=>{const t=e.target.value;this.setState({stationDraft:t})},playStation:()=>{const w=(this.state.stationDraft||'').trim();if(w)playMusic(`Station: ${w}`,true)},players,noPlayers:!pls.length,sourceRows,editSources:!!s.editSources,

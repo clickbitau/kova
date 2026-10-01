@@ -26,18 +26,20 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
   });
 
   // ---------------------------------------------------------------- devices --
-  app.patch<{ Params: { id: string }; Body: { name?: string | null; room?: string | null; hidden?: boolean; favourite?: boolean } }>('/api/devices/:id/settings', async (req, reply) => {
+  app.patch<{ Params: { id: string }; Body: { name?: string | null; room?: string | null; hidden?: boolean; favourite?: boolean; watts?: number | null } }>('/api/devices/:id/settings', async (req, reply) => {
     const d = hub.reg.get(req.params.id);
     if (!d) return bad(reply, 'Unknown device', 404);
     const b = req.body ?? {};
     if (b.room != null && !hub.config.get().rooms.some(r => r.id === b.room)) return bad(reply, 'Unknown room');
     if (b.name !== undefined && b.name !== null && !text(b.name)) return bad(reply, 'Give it a name');
+    if (b.watts != null && !(typeof b.watts === 'number' && b.watts >= 0 && b.watts <= 10_000)) return bad(reply, 'watts must be 0–10000');
     return edit(c => {
       const s = { ...(c.devices?.[d.id] ?? {}) };
       const orig = d.original ?? { name: d.name, room: d.room };
       if (b.name !== undefined) { const n = b.name === null ? '' : text(b.name); if (!n || n === orig.name) delete s.name; else s.name = n; }
       if (b.room !== undefined) { if (!b.room || b.room === orig.room) delete s.room; else s.room = b.room; }
       if (b.hidden !== undefined) { if (b.hidden) s.hidden = true; else delete s.hidden; }
+      if (b.watts !== undefined) { if (b.watts == null) delete s.watts; else s.watts = Math.round(b.watts); }
       c.devices = { ...(c.devices ?? {}) };
       if (Object.keys(s).length) c.devices[d.id] = s; else delete c.devices[d.id];
       if (b.favourite !== undefined) {

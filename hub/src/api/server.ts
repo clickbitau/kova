@@ -478,6 +478,16 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
 
   // ------------------------------------------------------------- backups --
   const noBackups = (reply: { code: (n: number) => { send: (b: unknown) => unknown } }) => reply.code(404).send({ error: 'Backups are not enabled' });
+  // Updating the hub itself (services/updates.ts): what's available, check now, update now, overnight updates.
+  const noUpdater = (reply: { code: (n: number) => { send: (b: unknown) => unknown } }) => reply.code(404).send({ error: 'Updates aren’t set up on this hub' });
+  app.get('/api/update', async (_req, reply) => hub.updates ? hub.updates.status() : noUpdater(reply));
+  app.post('/api/update/check', async (_req, reply) => { if (!hub.updates) return noUpdater(reply); try { return hub.updates.request('check'); } catch (e) { return fail(reply, e); } });
+  app.post('/api/update/apply', async (_req, reply) => { if (!hub.updates) return noUpdater(reply); try { return hub.updates.request('apply'); } catch (e) { return fail(reply, e); } });
+  app.put<{ Body: { on?: boolean; hour?: number } }>('/api/update/settings', async (req, reply) => {
+    if (!hub.updates) return noUpdater(reply);
+    try { return { auto: hub.updates.setAuto(req.body ?? {}) }; } catch (e) { return fail(reply, e); }
+  });
+
   app.get('/api/backups', async (_req, reply) => {
     const b = opts.backups;
     if (!b) return noBackups(reply);
