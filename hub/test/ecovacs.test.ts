@@ -257,7 +257,9 @@ test('Ecovacs helpers', () => {
   assert.equal(continentFor('AU'), 'ww');
   assert.equal(continentFor('de'), 'eu');
   assert.equal(continentFor('us'), 'na');
-  assert.deepEqual(ecovacsUrls('au'), { login: 'https://gl-au-api.ecovacs.com', auth: 'https://gl-au-openapi.ecovacs.com', portal: 'https://api-app.dc-ww.ww.ecouser.net/api' });
+  assert.deepEqual(ecovacsUrls('au'), { login: 'https://gl-au-api.ecovacs.com', auth: 'https://gl-au-openapi.ecovacs.com', portal: 'https://portal-ww.ecouser.net/api' });
+  assert.equal(ecovacsUrls('de').portal, 'https://portal-eu.ecouser.net/api');
+  assert.deepEqual(ecovacsUrls('cn'), { login: 'https://gl-cn-api.ecovacs.cn', auth: 'https://gl-cn-openapi.ecovacs.cn', portal: 'https://portal.ecouser.net/api' });
   const s = signParams({ b: '2', a: '1' }, { c: '3' }, { key: 'K', secret: 'S' });
   assert.deepEqual(s, { b: '2', a: '1', authAppkey: 'K', authSign: md5('Ka=1b=2c=3S') });
   assert.equal(toActivity({ state: 'clean', cleanState: { motionState: 'working' } }, false), 'cleaning');
