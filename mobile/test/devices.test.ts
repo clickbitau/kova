@@ -11,7 +11,7 @@ const snap = {
   devices: [
     d('lamp', 'dimmer', 'lounge', { on: true, bri: 40 }),
     d('ceiling', 'light', 'lounge', { on: false }),
-    d('speaker', 'media', 'kitchen', { on: false, vol: 20 }),
+    d('speaker', 'media', 'kitchen', { on: false, vol: 20 }, { capabilities: ['onoff', 'media', 'volume'] }),
     d('box', 'tv', 'lounge', { on: true, media: 'Dune', paused: true }, { capabilities: ['onoff', 'media', 'volume', 'pause', 'library'] }),
     d('ipad', 'internet', 'office', { on: false }),
     d('door', 'camera', 'front', { online: true }),
@@ -41,6 +41,12 @@ test('tapping a tile: lights switch, speakers start the first source, a Helix bo
   assert.equal(toggleCommand({ ...all.box, on: false } as Dev, src), null, 'nothing playing: open its panel to pick something');
   assert.equal(toggleCommand(all.door, src), null);
   assert.deepEqual(toggleCommand(all.ipad, src), { on: true });
+  // A soundbar Kova controls but can't stream to (SmartThings): on and off, not "play the first source".
+  const bar = { ...d('bar', 'media', 'lounge', {}, { capabilities: ['onoff', 'volume', 'mute', 'input', 'sound'] }), on: true, input: 'tv', vol: 19 } as unknown as Dev;
+  assert.deepEqual(toggleCommand(bar, src), { on: false });
+  assert.equal(stateOf(bar)[0], 'On · TV (eARC)', 'never "Playing"');
+  assert.equal(stateOf({ ...bar, input: 'hdmi1' } as Dev)[0], 'On · HDMI 1');
+  assert.equal(stateOf({ ...bar, on: false } as Dev)[0], 'Off');
 });
 
 test('devices by room, filtered and searched; hidden ones only on request', () => {

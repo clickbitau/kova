@@ -264,7 +264,7 @@ export class SmartThingsAdapter implements Adapter {
       this.ctx!.announce(fresh.map(d => {
         const name = d.label || d.name || 'Soundbar';
         return {
-          id: this.kovaId(d), name, type: 'media' as const, room: this.o.rooms?.[name] ?? name.toLowerCase().replace(/[^a-z0-9]+/g, '_'),
+          id: this.kovaId(d), name, type: 'media' as const, room: this.o.rooms?.[name] ?? 'unassigned', // not a room made up from its name: the owner puts it in one
           integration: `Samsung soundbar${d.ocf?.modelNumber ? ` · ${d.ocf.modelNumber.split('|')[0]}` : ''}`, address: d.deviceId,
           capabilities: ['onoff', 'volume', 'mute', 'input', 'sound'],
         };

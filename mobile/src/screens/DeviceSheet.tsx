@@ -13,9 +13,21 @@ import { T } from '../ui/Text';
 const TEMPS: [number, string][] = [[2200, '#ffb56b'], [2700, '#ffc98a'], [3000, '#ffd9a8'], [4000, '#fff1dc'], [5000, '#f4f7ff']];
 /** Inputs a TV with `input` can switch to. The one it's on is marked when the TV can say (through SmartThings). */
 const INPUTS: [string, string][] = [['hdmi1', 'HDMI 1'], ['hdmi2', 'HDMI 2'], ['hdmi3', 'HDMI 3'], ['hdmi4', 'HDMI 4'], ['tv', 'TV']];
-/** A soundbar's inputs (it says which it's on) and sound modes. */
-const BAR_INPUTS: [string, string][] = [['tv', 'TV'], ['hdmi1', 'HDMI in'], ['bluetooth', 'Bluetooth'], ['wifi', 'Wi-Fi']];
-const SOUNDS: [string, string][] = [['standard', 'Standard'], ['surround', 'Surround'], ['game', 'Game'], ['adaptive', 'Adaptive']];
+/** A soundbar's inputs (it says which it's on) and sound modes: [id, label, icon]. */
+const BAR_INPUTS: [string, string, string][] = [['tv', 'TV (eARC)', 'tv'], ['hdmi1', 'HDMI 1', 'settings_input_hdmi'], ['hdmi2', 'HDMI 2', 'settings_input_hdmi'], ['bluetooth', 'Bluetooth', 'bluetooth'], ['wifi', 'Wi-Fi', 'wifi']];
+const SOUNDS: [string, string, string][] = [['standard', 'Standard', 'equalizer'], ['surround', 'Surround', 'surround_sound'], ['game', 'Game', 'sports_esports'], ['adaptive', 'Adaptive', 'auto_awesome']];
+
+/** One choice of a few (an input, a sound mode): a tile with an icon, two to a row, the chosen one lit. */
+function Choice({ label, icon, on, onPress }: { label: string; icon: string; on: boolean; onPress: () => void }) {
+  return (
+    <Press label={label} onPress={onPress} style={{ flexBasis: '48%', flexGrow: 1, flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 12, borderRadius: 14,
+      backgroundColor: on ? 'rgba(124,184,240,0.16)' : C.inset, borderWidth: 1, borderColor: on ? 'rgba(124,184,240,0.45)' : 'transparent' }}>
+      <Icon name={icon} size={20} color={on ? C.blue : C.stone} fill={on} />
+      <T size={14} weight={on ? 700 : 600} color={on ? C.bone : C.stone} numberOfLines={1} style={{ flex: 1 }}>{label}</T>
+      {on ? <Icon name="check" size={18} color={C.blue} /> : null}
+    </Press>
+  );
+}
 const COLOURS = ['#ff5a4e', '#ff9f43', '#ffd93d', '#6bd968', '#3fd0c9', '#4aa3ff', '#8b6bff', '#ff6bd6'];
 
 const Label = ({ children }: { children: string }) => <T size={13} weight={600}>{children}</T>;
@@ -94,8 +106,12 @@ export function DeviceSheet() {
       {isPlayer(D) ? (
         <View style={{ gap: 10 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <Icon name="volume_down" size={20} color={C.stone} />
-            <View style={{ flex: 1 }}><Slider value={D.vol ?? 30} color={C.blue} onRelease={v => void send(D.id, { vol: v })} /></View>
+            {has(D, 'mute') ? (
+              <Press label={D.muted ? 'Unmute' : 'Mute'} onPress={() => void send(D.id, { muted: !D.muted })} style={{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: D.muted ? 'rgba(255,107,94,0.16)' : C.inset }}>
+                <Icon name={D.muted ? 'volume_off' : 'volume_up'} size={19} color={D.muted ? C.red : C.stone} />
+              </Press>
+            ) : <Icon name="volume_down" size={20} color={C.stone} />}
+            <View style={{ flex: 1, opacity: D.muted ? 0.45 : 1 }}><Slider value={D.vol ?? 30} color={C.blue} onRelease={v => void send(D.id, { vol: v })} /></View>
             <T mono size={12} color={C.stone} style={{ width: 36, textAlign: 'right' }}>{`${D.vol ?? 30}%`}</T>
           </View>
           {has(D, 'queue') && D.on && D.track ? (
@@ -144,16 +160,27 @@ export function DeviceSheet() {
             </View>
           ) : null}
           {has(D, 'sound') && D.on ? (
-            <View style={{ gap: 8 }}>
-              <Label>Soundbar</Label>
-              <HScroll>
-                {BAR_INPUTS.map(([id, label]) => <Pill key={id} label={label} on={D.input === id} onPress={() => void send(D.id, { input: id })} />)}
-              </HScroll>
-              <HScroll>
-                <Pill label={D.muted ? 'Muted' : 'Mute'} on={!!D.muted} onPress={() => void send(D.id, { muted: !D.muted })} />
-                <Pill label="Night mode" on={!!D.night} onPress={() => void send(D.id, { night: !D.night })} />
-                {SOUNDS.map(([id, label]) => <Pill key={id} label={label} on={D.sound === id} onPress={() => void send(D.id, { sound: id })} />)}
-              </HScroll>
+            <View style={{ gap: 18 }}>
+              <View style={{ gap: 8 }}>
+                <Label>Input</Label>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  {BAR_INPUTS.map(([id, label, icon]) => <Choice key={id} label={label} icon={icon} on={D.input === id} onPress={() => void send(D.id, { input: id })} />)}
+                </View>
+              </View>
+              <View style={{ gap: 8 }}>
+                <Label>Sound</Label>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  {SOUNDS.map(([id, label, icon]) => <Choice key={id} label={label} icon={icon} on={D.sound === id} onPress={() => void send(D.id, { sound: id })} />)}
+                </View>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 14, backgroundColor: C.inset }}>
+                <Icon name="nightlight" size={20} color={D.night ? C.blue : C.stone} fill={!!D.night} />
+                <View style={{ flex: 1, gap: 2 }}>
+                  <T size={14} weight={700}>Night mode</T>
+                  <T size={12} color={C.stone}>Softer loud scenes, clearer voices</T>
+                </View>
+                <Switch on={!!D.night} onChange={v => void send(D.id, { night: v })} />
+              </View>
             </View>
           ) : null}
           {has(D, 'input') && !has(D, 'sound') && D.on ? (
@@ -191,7 +218,7 @@ export function DeviceSheet() {
               </View>
               <T size={12} color={C.stone}>Shows carry on from where you left off.</T>
             </View>
-          ) : snap.sources.length ? (
+          ) : snap.sources.length && has(D, 'media') ? (
             <View style={{ gap: 8 }}>
               <Label>Play</Label>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
