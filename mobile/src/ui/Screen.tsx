@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { C } from '../theme';
 import { useHub } from '../state/hub';
+import { haptic } from './motion';
 
 /** The mode glow: a radial gradient in the mode colour behind the top-left of the screen. */
 export function Glow({ color }: { color: string }) {
@@ -30,7 +31,7 @@ export function Screen({ children, glow, onRefresh, refreshing, gap = 22 }: { ch
   const insets = useSafeAreaInsets();
   const { refresh } = useHub();
   const [pulling, setPulling] = useState(false);
-  const pull = onRefresh ?? (() => { setPulling(true); void refresh().finally(() => setPulling(false)); });
+  const pull = () => { haptic.light(); if (onRefresh) onRefresh(); else { setPulling(true); void refresh().finally(() => setPulling(false)); } };
   return (
     <View style={{ flex: 1, backgroundColor: C.page, overflow: 'hidden' }}>
       {glow ? <Glow color={glow} /> : null}

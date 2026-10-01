@@ -1,11 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AppState } from 'react-native';
-import * as Haptics from 'expo-haptics';
 import { call } from '../api/client';
 import type { Command, Snapshot } from '../api/types';
 import { wsUrl, type HubConfig } from '../logic/connect';
 import { getJson, setJson } from '../native/storage';
 import { checkForAppUpdate, pointUpdatesAtHub } from '../native/updates';
+import { haptic } from '../ui/motion';
 
 export type Conn = 'connecting' | 'live' | 'offline';
 
@@ -115,7 +115,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
   }, [cfg]);
 
   const send = useCallback(async (id: string, cmd: Command, done?: string) => {
-    void Haptics.selectionAsync().catch(() => {});
+    haptic.select();
     // Show it now; the hub's snapshot replaces this a moment later.
     setSnap(s => s && { ...s, devices: s.devices.map(d => d.id === id ? { ...d, state: { ...d.state, ...cmd } } : d) });
     try {
@@ -132,7 +132,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
   const act = useCallback(async (method: 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, body: unknown, done: string) => {
     try {
       const r = await api<{ undo?: string }>(method, path, body);
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      haptic.success();
       say(done, { undo: r?.undo });
     } catch (e) {
       say((e as Error).message, { error: true });

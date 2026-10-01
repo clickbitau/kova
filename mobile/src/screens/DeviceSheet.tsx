@@ -69,14 +69,14 @@ export function DeviceSheet() {
           <T size={13} color={sf}>{st}</T>
         </View>
         {!['camera', 'sensor'].includes(D.type) ? (
-          <Switch big on={!!D.on} onChange={v => void send(D.id, isPlayer(D) && !v ? { on: false, media: null } : { on: v })} />
+          <Switch big label={D.name} on={!!D.on} onChange={v => void send(D.id, isPlayer(D) && !v ? { on: false, media: null } : { on: v })} />
         ) : null}
       </View>
 
       {(D.type === 'dimmer' || has(D, 'brightness')) && D.on ? (
         <View style={{ gap: 6 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><Label>Brightness</Label><T mono size={12} color={C.stone}>{`${D.bri}%`}</T></View>
-          <Slider value={D.bri ?? 100} min={1} onRelease={v => void send(D.id, { on: true, bri: v })} />
+          <Slider value={D.bri ?? 100} min={1} suffix="%" label="Brightness" onRelease={v => void send(D.id, { on: true, bri: v })} />
         </View>
       ) : null}
       {has(D, 'colorTemp') && D.on ? (
@@ -140,7 +140,7 @@ export function DeviceSheet() {
                 <Icon name={D.muted ? 'volume_off' : 'volume_up'} size={19} color={D.muted ? C.red : C.stone} />
               </Press>
             ) : <Icon name="volume_down" size={20} color={C.stone} />}
-            <View style={{ flex: 1, opacity: D.muted ? 0.45 : 1 }}><Slider value={D.vol ?? 30} color={C.blue} onRelease={v => void send(D.id, { vol: v })} /></View>
+            <View style={{ flex: 1, opacity: D.muted ? 0.45 : 1 }}><Slider value={D.vol ?? 30} color={C.blue} suffix="%" label="Volume" onRelease={v => void send(D.id, { vol: v })} /></View>
             <T mono size={12} color={C.stone} style={{ width: 36, textAlign: 'right' }}>{`${D.vol ?? 30}%`}</T>
           </View>
           {has(D, 'queue') && D.on && D.track ? (
@@ -208,7 +208,7 @@ export function DeviceSheet() {
                   <T size={14} weight={700}>Night mode</T>
                   <T size={12} color={C.stone}>Softer loud scenes, clearer voices</T>
                 </View>
-                <Switch on={!!D.night} onChange={v => void send(D.id, { night: v })} />
+                <Switch label="Night mode" on={!!D.night} onChange={v => void send(D.id, { night: v })} />
               </View>
             </View>
           ) : null}
@@ -359,7 +359,7 @@ export function DeviceSheet() {
                   <T size={14.5} weight={600}>{k}</T>
                   <T size={12} color={C.stone}>{sub}</T>
                 </View>
-                <Switch on={v} onChange={go} />
+                <Switch label={k} on={v} onChange={go} />
               </View>
             ))}
         </View>

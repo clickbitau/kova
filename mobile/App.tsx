@@ -23,7 +23,7 @@ import { ActivityScreen } from './src/screens/ActivityScreen';
 import { ThisPhoneScreen } from './src/screens/ThisPhoneScreen';
 import { WebScreen } from './src/screens/WebScreen';
 import { DeviceSheet } from './src/screens/DeviceSheet';
-import { Mark, ToastView } from './src/ui/kit';
+import { Mark, ToastHost } from './src/ui/kit';
 import { T } from './src/ui/Text';
 
 const Stack = createNativeStackNavigator<StackParams>();
@@ -86,7 +86,7 @@ function Home() {
           <T size={12} weight={700} color={C.red}>Reconnecting to your hub…</T>
         </View>
       ) : null}
-      {toast ? <ToastView key={toast.id} text={toast.text} undo={!!toast.undo} error={toast.error} onUndo={() => toast.undo && void undo(toast.undo)} bottom={insets.bottom + 92} /> : null}
+      <ToastHost toast={toast} onUndo={t => t.undo && void undo(t.undo)} bottom={insets.bottom + 92} />
     </SheetProvider>
   );
 }

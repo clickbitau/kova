@@ -8,6 +8,7 @@ import { Icon } from '../ui/Icon';
 import { HScroll, Mark, Press, SectionTitle } from '../ui/kit';
 import { Screen } from '../ui/Screen';
 import { T } from '../ui/Text';
+import { Appear } from '../ui/motion';
 import { TileGrid } from '../ui/Tile';
 
 /** "Wednesday 30 Sept" → "Wed 30 Sep", as in the phone design. */
@@ -81,10 +82,10 @@ export function NowScreen() {
         <View style={{ gap: 10 }}>
           <SectionTitle>Coming up</SectionTitle>
           <HScroll gap={10}>
-            {s.upcoming.map(u => {
+            {s.upcoming.map((u, i) => {
               const color = modeById(u.modeId)?.color ?? C.stone;
               return (
-                <View key={u.id} style={{ width: 200, borderRadius: 16, padding: 14, backgroundColor: C.card, gap: 8, opacity: u.skipped ? 0.55 : 1 }}>
+                <Appear key={u.id} index={i} style={{ width: 200, borderRadius: 16, padding: 14, backgroundColor: C.card, gap: 8, opacity: u.skipped ? 0.55 : 1 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
                     <T mono size={12} color={color}>{u.t}</T>
@@ -94,7 +95,7 @@ export function NowScreen() {
                   <Press onPress={() => void api('POST', '/api/plan/skip', { id: u.id, skip: !u.skipped }).catch(e => say((e as Error).message, { error: true }))} style={{ paddingVertical: 7, paddingHorizontal: 10, borderRadius: 9, backgroundColor: C.control2, alignSelf: 'flex-start' }}>
                     <T size={12} weight={700}>{u.skipped ? 'Undo' : 'Skip tonight'}</T>
                   </Press>
-                </View>
+                </Appear>
               );
             })}
           </HScroll>
@@ -139,15 +140,15 @@ export function NowScreen() {
       ) : null}
 
       <View style={{ gap: 6 }}>
-        <SectionTitle right={<Press onPress={() => nav.navigate('Activity')}><T size={13} weight={600} color={C.amber}>See all</T></Press>}>Just happened</SectionTitle>
-        {happened.map(h => (
-          <View key={h.id} style={{ flexDirection: 'row', gap: 12, paddingVertical: 10, borderTopWidth: 1, borderTopColor: C.hairline }}>
+        <SectionTitle right={<Press onPress={() => nav.navigate('Activity')} hitSlop={12}><T size={13} weight={600} color={C.amber}>See all</T></Press>}>Just happened</SectionTitle>
+        {happened.map((h, i) => (
+          <Appear key={h.id} index={i} style={{ flexDirection: 'row', gap: 12, paddingVertical: 10, borderTopWidth: 1, borderTopColor: C.hairline }}>
             <T mono size={12} color={C.stone} style={{ width: 38, paddingTop: 1 }}>{h.t}</T>
             <View style={{ flex: 1, gap: 2 }}>
               <T size={13.5} weight={600}>{h.what}</T>
               {h.why ? <T size={12} color={C.stone}>{`↳ ${h.why}`}</T> : null}
             </View>
-          </View>
+          </Appear>
         ))}
       </View>
     </Screen>

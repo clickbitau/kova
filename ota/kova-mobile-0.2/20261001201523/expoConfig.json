@@ -1,7 +1,7 @@
 {
   "name": "Kova",
   "slug": "kova",
-  "version": "0.2.1",
+  "version": "0.2.3",
   "runtimeVersion": "kova-mobile-0.2",
   "updates": {
     "enabled": true,

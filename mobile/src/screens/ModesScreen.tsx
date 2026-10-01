@@ -7,6 +7,7 @@ import { Icon } from '../ui/Icon';
 import { PageHead, Press } from '../ui/kit';
 import { Screen } from '../ui/Screen';
 import { T } from '../ui/Text';
+import { animateLayout } from '../ui/motion';
 
 const DAY = { ok: '', problem: '#ff6b5e', skipped: '#26272b', none: '#1c1d20' } as const;
 
@@ -48,7 +49,7 @@ export function ModesScreen() {
           const isOpen = open === m.id, now = m.id === s.current.modeId;
           const chips = m.groups.flatMap(g => g.chips.map(c => `${g.room}: ${c}`));
           return (
-            <Press key={m.id} onPress={() => setOpen(isOpen ? '' : m.id)} style={{ borderRadius: 18, overflow: 'hidden', backgroundColor: C.card, borderWidth: 1, borderColor: isOpen ? alpha(m.color, 0.4) : 'rgba(255,255,255,0.04)' }}>
+            <Press key={m.id} onPress={() => { animateLayout(); setOpen(isOpen ? '' : m.id); }} style={{ borderRadius: 18, overflow: 'hidden', backgroundColor: C.card, borderWidth: 1, borderColor: isOpen ? alpha(m.color, 0.4) : 'rgba(255,255,255,0.04)' }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, paddingHorizontal: 16 }}>
                 <View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: alpha(m.color, 0.14), alignItems: 'center', justifyContent: 'center' }}>
                   <Icon name={m.icon} size={21} color={m.color} fill />
