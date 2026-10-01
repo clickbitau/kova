@@ -377,6 +377,7 @@ export const CATALOG: CatalogItem[] = [
         ],
       },
       { key: 'kovaUrl', label: 'Kova’s address for Helix', type: 'text', placeholder: 'http://10.10.10.5:8140', help: 'Optional. Kova uses its own address on Helix Server’s network.' },
+      { key: 'tvOffWithBox', label: 'Turn the TV off when the Helix box shuts down', type: 'select', options: [{ value: 'on', label: 'Yes (default)' }, { value: 'off', label: 'No' }], help: 'When a box goes offline while its TV is still on the box’s input, Kova turns that TV and its soundbar off. Never when the TV is on another input or its own apps.' },
     ],
     actions: [
       { id: 'find', label: 'Find Helix Server', icon: 'search', method: 'GET', path: '/api/integrations/helix/find' },

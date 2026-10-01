@@ -143,7 +143,8 @@ async function smartThingsToken(o: Pick<SmartThingsOptions, 'clientId' | 'client
 /** Where to send the owner to allow Kova (then they paste the code from the address bar). */
 export function smartThingsAuthUrl(o: { clientId: string; redirectUri?: string }): string {
   const q = new URLSearchParams({ client_id: o.clientId, response_type: 'code', redirect_uri: o.redirectUri ?? SMARTTHINGS_DEFAULT_REDIRECT, scope: SCOPES });
-  return `${SMARTTHINGS_URLS.authorize}?${q}`;
+  // "*" written as %2A: a trailing "*" is dropped when the link is copied or made clickable (scope "x:devices:" → invalid_scope).
+  return `${SMARTTHINGS_URLS.authorize}?${q.toString().replace(/\*/g, '%2A')}`;
 }
 
 /**

@@ -33,7 +33,15 @@ export interface HelixLinkConfig {
    * the one TV (and the one soundbar) in its room.
    */
   screens?: Record<string, { tv?: string; input?: string; soundbar?: string; soundbarInput?: string }>;
+  /**
+   * "Turn the TV off when the Helix box shuts down" (default on): a backstop for Helix's own standby commands.
+   * When a box goes offline while its TV is on and still on the box's input, Kova turns that TV and its soundbar off.
+   */
+  tvOffWithBox?: boolean | 'on' | 'off';
 }
+
+/** Kova acting for a Helix box that went away (the TV and soundbar it turns off). */
+export const HELIX_BOX_GONE = { kind: 'device' as const, id: 'helix-box-off', label: 'Helix box shut down', detail: 'the TV was still on the box’s input' };
 
 export interface Input { id: string; name: string }
 export interface HelixScreen {
@@ -150,10 +158,28 @@ export class HelixLink {
     this.inputs.set(device.id, { input: cmd.input ?? null, at: Date.now(), by: cause.id === HELIX_AUTO.id ? 'helix-auto' : cause.kind === 'user' ? cause.label : cause.id ?? cause.kind });
   };
   /** An input changed at the device itself (the soundbar's own remote), read back by its integration. */
-  private onChange = ({ device, patch, cause }: ChangeEvent): void => {
+  private onChange = ({ device, prev, patch, cause }: ChangeEvent): void => {
+    if (device.adapter === 'helix' && patch.online === false && prev?.online !== false) void this.boxGone(device);
     if (cause.kind !== 'device' || typeof patch.input !== 'string') return;
     this.inputs.set(device.id, { input: patch.input, at: Date.now(), by: 'remote' });
   };
+
+  /**
+   * A Helix box went offline (shut down, slept, unplugged). If its TV is still on and still showing the box's input,
+   * nobody is watching anything else on it: turn the TV and its soundbar off. Never when the TV is on another
+   * input or its own apps, or when Kova can't tell which input it's on.
+   */
+  private async boxGone(box: Device): Promise<void> {
+    const c = this.o.helix();
+    if (c?.tvOffWithBox === false || c?.tvOffWithBox === 'off') return;
+    const s = this.screens().find(x => x.playerId === box.address);
+    if (!s?.helixInput) return;
+    const tv = this.hub.reg.get(s.tvDeviceId);
+    if (!tv?.state.on || tv.state.input !== s.helixInput) return;
+    await this.hub.reg.command(tv.id, { on: false }, HELIX_BOX_GONE).catch(() => {});
+    const bar = s.soundbarDeviceId ? this.hub.reg.get(s.soundbarDeviceId) : undefined;
+    if (bar?.state.on) await this.hub.reg.command(bar.id, { on: false }, HELIX_BOX_GONE).catch(() => {});
+  }
 
   /** Helix's command for a linked device, as Kova's, or why not: one key, by Helix's names (D98.11). */
   translate(deviceId: string, body: Record<string, unknown>): { cmd: Command } | { error: string } {
