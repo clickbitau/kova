@@ -45,13 +45,25 @@ manifest.json        last entry
 }
 ```
 
+## Licences
+
+- Each hub has a **hub ID**, `KOVA-` and 12 base32 characters (`KOVA-7QH2-M9XC-4TPR`), made once and shown on its
+  update card. An admin issues the Kova licence for it (Licensing → Kova → New licence); it is the key's `site` and
+  the `siteId` the hub activates with.
+- Keys are ClickBit's `CR1-<payload>.<signature>` (Ed25519, the same signing key as Helix and Warden, compiled into
+  `hub/src/services/licence-key.ts`; `GET /v1/public/pubkey` serves it). The hub accepts a key only when the
+  signature verifies, `product` is `kova` (keys without a product are refused), `site` is this hub's ID (or empty),
+  and it isn't past `expiresAt`, so a wrong key is caught before anything is sent.
+- The licence gates release updates only. `features` and `edition` are shown on the card; no Kova feature is
+  locked behind them yet.
+
 ## What the hub asks the catalog
 
 Same calls and auth as Helix (`https://admin.clickbit.com.au/api`; `KOVA_UPDATE_URL` overrides):
 
 | Call | When |
 |---|---|
-| `POST /v1/device/activate {licenceKey, deviceFingerprint, productVersion}` → `{status, edition, features, deviceToken}` | The owner enters the licence key (Integrations → Kova updates); again when the token is about to expire, and on any 401 |
+| `POST /v1/device/activate {licenceKey, siteId: <hub ID>, deviceFingerprint, productVersion}` → `{status, edition, features, deviceToken}` (`deviceToken` null with `reason`, e.g. `site_mismatch`, when it can't be used) | The owner enters the licence key (Integrations → Kova updates); again when the token is about to expire, and on any 401. A 403 from the catalog shows as "the licence isn't active for Kova updates" |
 | `GET /v1/updates/check?product=kova&channel=stable&currentVersion=<v>`, `Authorization: Bearer <deviceToken>` → `{updateAvailable, version, gitSha, releaseNotes, sha256, size}` | Every 6 hours, and **Check now** |
 | `POST /v1/updates/download-token {product, channel, version}` → `{downloadPath, sha256, size}` | **Update** (or overnight) |
 | `GET <origin><downloadPath>` | Then; refused unless `sha256` and `size` are given, and kept only when the bytes match both |

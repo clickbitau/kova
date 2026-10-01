@@ -77,7 +77,7 @@ check_release() {
     const p = { state: "idle", updater: 1, source: "release", checkedAt: at, checkError: r.error ? [r.error] : null, soft: r.soft || null };
     if (!r.error) {
       p.current = { version: (r.current && r.current.version) || cur, ...(r.current && r.current.commit ? { commit: r.current.commit.slice(0, 7) } : {}) };
-      p.available = o ? { version: o.version, commit: (o.gitSha || "").slice(0, 7), behind: Math.max(changes.length, 1), changes } : null;
+      p.available = o ? { version: o.version, commit: (o.gitSha || "").slice(0, 7), behind: Math.max(changes.length, 1), changes, ...(o.requiresMigration ? { requiresMigration: true } : {}) } : null;
     }
     console.log(JSON.stringify(p));
   ' "$out" "$(now)" "$(running_version)")"

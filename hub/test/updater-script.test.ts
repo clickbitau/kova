@@ -7,6 +7,7 @@ import { chmodSync, cpSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, re
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Catalog } from '../src/services/release-client.ts';
+import { TEST_PUBKEY, mintKey } from './licence-helpers.ts';
 
 const deploy = resolve(import.meta.dirname, '../../deploy');
 const repo = resolve(import.meta.dirname, '../..');
@@ -123,7 +124,7 @@ test('Updater: releases from the catalog — licence, check, download, install b
     let raw = ''; for await (const c of req) raw += c;
     const url = new URL(req.url!, 'http://x');
     const send = (j: unknown, code = 200) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(j)); };
-    if (url.pathname === '/api/v1/device/activate') return send({ status: 'active', edition: 'home', deviceToken: 'tok' });
+    if (url.pathname === '/api/v1/device/activate') return send({ status: 'active', edition: 'home', deviceToken: JSON.parse(raw).siteId ? 'tok' : null });
     if (req.headers.authorization !== 'Bearer tok' && url.pathname !== '/api/v1/updates/download') return send({ error: 'Expired deviceToken' }, 401);
     if (url.pathname === '/api/v1/updates/check') {
       const cur = url.searchParams.get('currentVersion');
@@ -147,7 +148,7 @@ test('Updater: releases from the catalog — licence, check, download, install b
   shim('curl', CURL);
   // The pre-release kova.service: install-updater.sh moves it onto `current`.
   writeFileSync(join(units, 'kova.service'), `[Service]\nWorkingDirectory=${kova}/hub\n`);
-  const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, KOVA_DIR: kova, KOVA_DATA: data, KOVA_ENV_FILE: join(root, 'kova.env'), KOVA_HEALTH_WAIT: '2', KOVA_SYSTEMD_DIR: units, SHIM_LOG: join(root, 'shim.log'), KOVA_UPDATE_URL: catalogUrl };
+  const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, KOVA_DIR: kova, KOVA_DATA: data, KOVA_ENV_FILE: join(root, 'kova.env'), KOVA_HEALTH_WAIT: '2', KOVA_SYSTEMD_DIR: units, SHIM_LOG: join(root, 'shim.log'), KOVA_UPDATE_URL: catalogUrl, KOVA_LICENCE_PUBKEY: TEST_PUBKEY };
   const run = (cmd: string, extra: Record<string, string> = {}) => new Promise<{ status: number | null; out: string }>(ok => {
     const p = spawn('bash', [join(kova, 'current', 'deploy', 'updater.sh'), cmd], { env: { ...env, ...extra } });
     let out = ''; p.stdout.on('data', d => out += d); p.stderr.on('data', d => out += d);
@@ -162,7 +163,8 @@ test('Updater: releases from the catalog — licence, check, download, install b
     assert.deepEqual({ source: status().source, soft: status().soft, available: status().available }, { source: 'release', soft: 'No device token — install a licence to enable updates', available: null });
 
     // The licence (what PUT /api/update/licence does), then a newer Kova in the catalog.
-    await new Catalog({ url: catalogUrl, version: '1.0.0', dir: join(data, 'update') }).activate('KOVA-GOOD');
+    const hubCatalog = new Catalog({ url: catalogUrl, version: '1.0.0', dir: join(data, 'update'), hubIdFile: join(data, 'hub-id'), pubkey: TEST_PUBKEY });
+    await hubCatalog.activate(mintKey({ site: hubCatalog.hubId() }));
     publish('1.1.0'); latest = '1.1.0';
     await run('check');
     assert.deepEqual({ v: status().available.version, changes: status().available.changes, soft: status().soft, err: status().checkError }, { v: '1.1.0', changes: ['Kova 1.1.0', 'From the catalog'], soft: null, err: null });

@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, chownSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { Readable } from 'node:stream';
+import { parseLicenceKey } from './licence-key.ts';
 import { pipeline } from 'node:stream/promises';
 
 /**
@@ -9,8 +10,9 @@ import { pipeline } from 'node:stream/promises';
  * (helix server/internal/update and internal/licencecloud). No hub imports: the root updater runs this through
  * src/tools/release.ts as well as the hub.
  *
- * - The licence: POST /v1/device/activate {licenceKey, deviceFingerprint, productVersion} → {status, edition,
- *   features, deviceToken}. The token (a JWT, about an hour) is renewed by activating again with the stored key,
+ * - The licence: a CR1- key ClickBit issues for this hub's ID (hub-id, made once; services/licence-key.ts checks it
+ *   offline), then POST /v1/device/activate {licenceKey, siteId: hub ID, deviceFingerprint, productVersion} →
+ *   {status, edition, features, deviceToken} (no token, and a reason, when it's revoked, expired or for another hub). The token (a JWT, about an hour) is renewed by activating again with the stored key,
  *   when it's about to expire and when the catalog answers 401. Kept in <KOVA_DATA>/update/licence.json.
  * - Is there a newer Kova: GET /v1/updates/check?product=kova&channel=stable&currentVersion=<v>, Bearer token.
  * - Getting it: POST /v1/updates/download-token {product, channel, version} → {downloadPath, sha256, size}; the
@@ -33,6 +35,10 @@ export interface CatalogOpts {
   dir: string;
   fetch?: typeof fetch;
   now?: () => number;
+  /** The licence signing key, instead of ClickBit's (tests). */
+  pubkey?: string;
+  /** Where the hub's ID is kept (default <dir>/hub-id; the hub and the updater use <KOVA_DATA>/hub-id). */
+  hubIdFile?: string;
 }
 
 export interface LicenceState {
@@ -43,10 +49,11 @@ export interface LicenceState {
   edition?: string;
   features?: string[];
   activatedAt?: number;
+  expiresAt?: string;
   error?: string;
 }
 
-export interface Offer { version: string; gitSha?: string; sha256?: string; size?: number; releaseNotes?: string; artifactType?: string }
+export interface Offer { version: string; gitSha?: string; sha256?: string; size?: number; releaseNotes?: string; artifactType?: string; requiresMigration?: boolean }
 
 export class CatalogError extends Error {
   constructor(message: string, readonly code = 0) { super(message); }
@@ -102,10 +109,27 @@ export class Catalog {
 
   private saveLicence(s: LicenceState): void { writeShared(this.licenceFile, `${JSON.stringify(s, null, 2)}\n`); }
 
+  /**
+   * This hub's ID: what an admin issues a Kova licence for (the key's "site", sent as siteId). Made once, kept apart
+   * from the licence so forgetting a key doesn't change it: KOVA- and 12 base32 characters in groups of four.
+   */
+  hubId(): string {
+    const f = this.o.hubIdFile ?? join(this.o.dir, 'hub-id');
+    try { const id = readFileSync(f, 'utf8').trim(); if (/^KOVA-[A-Z0-9-]+$/.test(id)) return id; } catch { /* first time */ }
+    const A = 'ABCDEFGHJKMNPQRSTVWXYZ0123456789';
+    const c = [...randomBytes(12)].map(b => A[b % 32]).join('');
+    const id = `KOVA-${c.slice(0, 4)}-${c.slice(4, 8)}-${c.slice(8, 12)}`;
+    writeShared(f, `${id}\n`);
+    return id;
+  }
+
   /** What the hub shows: never the key or the token. */
-  licenceView(): { installed: boolean; activated: boolean; status: string | null; edition: string | null; key: string | null; error: string | null } {
+  licenceView(): { hubId: string; installed: boolean; activated: boolean; status: string | null; edition: string | null; features: string[]; expiresAt: string | null; key: string | null; error: string | null } {
     const l = this.licence();
-    return { installed: !!l.key, activated: !!l.deviceToken, status: l.status ?? null, edition: l.edition ?? null, key: l.key ? `…${l.key.slice(-4)}` : null, error: l.error ?? null };
+    return {
+      hubId: this.hubId(), installed: !!l.key, activated: !!l.deviceToken, status: l.status ?? null, edition: l.edition ?? null, features: l.features ?? [],
+      expiresAt: l.expiresAt ?? null, key: l.key ? `…${l.key.slice(-4)}` : null, error: l.error ?? null,
+    };
   }
 
   private fingerprint(): string {
@@ -116,21 +140,38 @@ export class Catalog {
     return fp;
   }
 
-  /** Exchange the licence key for a device token (and remember both). */
+  /**
+   * Check the key offline, then exchange it for a device token (and remember both). A new key that fails changes
+   * nothing installed; the installed key failing (revoked, expired) is kept with the reason, for the owner to see.
+   */
   async activate(key = this.licence().key ?? ''): Promise<LicenceState> {
     key = key.trim();
     if (!key) throw new CatalogError('No licence key');
+    const installed = key === this.licence().key;
+    const refused = (message: string, code = 0) => {
+      if (installed) this.saveLicence({ ...this.licence(), deviceToken: undefined, error: message });
+      return new CatalogError(message, code);
+    };
+    const hubId = this.hubId();
+    let claim;
+    try { claim = parseLicenceKey(key, { hubId, now: this.now, pubkey: this.o.pubkey }); } catch (e) { throw refused((e as Error).message); }
     const fp = this.fingerprint();
-    let out: { status?: string; edition?: string; features?: string[]; deviceToken?: string | null };
+    let out: { status?: string; edition?: string; features?: string[]; deviceToken?: string | null; reason?: string };
     try {
-      out = await this.json('POST', `${this.base}/v1/device/activate`, null, { licenceKey: key, deviceFingerprint: fp, productVersion: this.o.version });
+      out = await this.json('POST', `${this.base}/v1/device/activate`, null, { licenceKey: key, siteId: hubId, deviceFingerprint: fp, productVersion: this.o.version });
     } catch (e) {
-      // A key the portal refused stays (the owner sees why); a portal that's down changes nothing.
-      if (e instanceof CatalogError && e.code >= 400 && e.code < 500) this.saveLicence({ ...this.licence(), key, deviceToken: undefined, error: e.message });
+      // ClickBit refused it: said. ClickBit down: nothing changes.
+      if (e instanceof CatalogError && e.code >= 400 && e.code < 500) throw refused(`ClickBit refused the licence: ${e.message}`, e.code);
       throw e;
     }
-    const s: LicenceState = { ...this.licence(), key, deviceFingerprint: fp, status: out.status, edition: out.edition, features: out.features, activatedAt: this.now, error: undefined };
-    if (out.deviceToken) s.deviceToken = out.deviceToken.trim();
+    if (!out.deviceToken) {
+      const why = out.reason === 'site_mismatch' ? `it was issued for another hub (this one is ${hubId})` : out.reason ?? out.status ?? 'no reason given';
+      throw refused(`ClickBit didn’t activate the licence: ${why}`);
+    }
+    const s: LicenceState = {
+      ...this.licence(), key, deviceFingerprint: fp, deviceToken: out.deviceToken.trim(), status: out.status, edition: out.edition ?? claim.edition,
+      features: out.features ?? claim.features, expiresAt: claim.expiresAt, activatedAt: this.now, error: undefined,
+    };
     this.saveLicence(s);
     return s;
   }
@@ -178,6 +219,7 @@ export class Catalog {
     try {
       return await this.json<T>(method, url, token, body);
     } catch (e) {
+      if (e instanceof CatalogError && e.code === 403) throw new CatalogError(`The licence isn’t active for Kova updates (${e.message})`, 403);
       if (!(e instanceof CatalogError) || e.code !== 401) throw e;
       let why = 'the catalog refused it';
       if (this.licence().key) {
@@ -217,7 +259,7 @@ export class Catalog {
     const q = new URLSearchParams({ product: this.product, channel: this.channel, currentVersion: this.o.version });
     const c = await this.authed<{ updateAvailable?: boolean } & Partial<Offer>>('GET', `${this.base}/v1/updates/check?${q}`);
     if (!c.updateAvailable || !c.version) return { offer: null };
-    const offer: Offer = { version: String(c.version), gitSha: c.gitSha, sha256: c.sha256, size: c.size, releaseNotes: c.releaseNotes, artifactType: c.artifactType };
+    const offer: Offer = { version: String(c.version), gitSha: c.gitSha, sha256: c.sha256, size: c.size, releaseNotes: c.releaseNotes, artifactType: c.artifactType, ...(c.requiresMigration ? { requiresMigration: true } : {}) };
     if (this.sameBuild(offer) || newer(offer.version, this.o.version) === false) return { offer: null };
     if (this.badVersions().includes(offer.version)) return { offer: null, soft: `Kova ${offer.version} was undone on this box after it didn’t start; waiting for a newer one` };
     return { offer };

@@ -717,12 +717,15 @@ const updUi=(H,self)=>{const u=H.update;if(!u)return{show:false};const a=u.avail
   // Releases come from ClickBit's catalog with the hub's licence (services/release-client.ts).
   const lic=u.licence||{},showKey=u.source!=='git'||!!lic.installed;
   const keyLabel=lic.activated?`Licence ${lic.key||''}${lic.edition?' · '+lic.edition:''}`:lic.installed?'Licence key refused: change it':'Add licence key';
-  const setKey=()=>{const k=window.prompt('Kova licence key (from ClickBit). Updates come from ClickBit’s release catalog once it’s activated.');if(!k)return;api('PUT','/api/update/licence',{key:k.trim()}).then(()=>self.toast('Licence activated: looking for a newer Kova')).catch(x=>self.err(x))};
+  // ClickBit issues a Kova licence for this hub's ID, so it's shown until one is activated.
+  const hubLine=showKey&&!lic.activated&&lic.hubId?`Hub ID ${lic.hubId} (for the licence).`:'';
+  const setKey=()=>{const k=window.prompt(`Kova licence key from ClickBit, issued for hub ID ${lic.hubId||''}. Updates come from ClickBit’s release catalog once it’s activated.`);if(!k)return;api('PUT','/api/update/licence',{key:k.trim()}).then(()=>self.toast('Licence activated: looking for a newer Kova')).catch(x=>self.err(x))};
   return{show:true,title,sub,changes:a?a.changes.slice(0,5).map(c=>({c})):[],hasChanges:!!(a&&a.changes.length),busy,
     canUpdate:!!a&&!busy&&u.updater,update:()=>go('apply','Updating: Kova restarts in a minute, then reconnects'),
     canCheck:!busy&&u.updater,check:()=>go('check','Looking for a newer Kova'),
     autoLabel:u.auto.on?`Overnight updates on, at ${u.auto.hour}:00`:'Overnight updates off',autoFg:u.auto.on?'#7fd4a0':'#a3a09a',
     toggleAuto:()=>api('PUT','/api/update/settings',{on:!u.auto.on}).then(()=>self.toast(u.auto.on?'Overnight updates off':'Kova updates itself overnight when one is waiting and nothing plays')).catch(x=>self.err(x)),
+    sub:[sub,hubLine,lic.error&&lic.installed?`Licence: ${lic.error}`:''].filter(Boolean).join(' '),
     showKey,keyLabel,setKey,keyFg:lic.activated?'#a3a09a':'#f2b14c',
     border:a?'rgba(124,184,240,0.35)':'rgba(255,255,255,0.05)'}};
 const barItems=(D,send)=>{const c=D.capabilities||[];const on=a=>({bg:a?'rgba(124,184,240,0.2)':'#1c1d20',fg:a?'#7cb8f0':'#d8d5cf'});

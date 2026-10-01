@@ -21,6 +21,7 @@ const catalog = new Catalog({
   version: KOVA_VERSION,
   gitSha: KOVA_COMMIT ?? (env.KOVA_GIT_SHA || undefined),
   dir: join(env.KOVA_DATA || '/var/lib/kova', 'update'),
+  hubIdFile: join(env.KOVA_DATA || '/var/lib/kova', 'hub-id'),
 });
 
 const say = (o: unknown) => process.stdout.write(`${JSON.stringify(o)}\n`);
