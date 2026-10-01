@@ -187,7 +187,7 @@ Once Kova is paired with Helix, every Google Cast and Sonos speaker (and Kova sp
   - Cast: `QUEUE_LOAD` of 20 songs, more added with `QUEUE_INSERT` as it plays. Each item carries its place in Kova's queue (`customData.kova`), so `MEDIA_STATUS` says which song is on.
   - Sonos: the speaker's queue (`AddURIToQueue` with DIDL title, artist and cover, `x-rincon-queue`), 50 songs at a time, followed with `GetPositionInfo`.
   - Speakers that match a Cast group exactly play one queue through it, in perfect sync.
-- **What a speaker fetches:** Helix signs a URL per song (`POST /v1/items/{id}/play-url`, AAC at up to 48 kHz, 6 hours, no token in it), asked for just before each window is queued (`Queue.prepare`). An older Helix gets token URLs (`/stream?max=aac&token=…`). Cover art URLs still carry the token, since Helix doesn't sign images yet.
+- **What a speaker fetches:** Helix signs a URL per song (`POST /v1/items/{id}/play-url`, AAC at up to 48 kHz, 6 hours, no token in it), asked for just before each window is queued (`Queue.prepare`). An older Helix gets token URLs (`/stream?max=aac&token=…`). Covers are signed too (Helix 1.227): `play-url` returns the song's cover as `artUrl`, and any other cover in the window goes through `POST /v1/art-urls` in one call; one Helix won't sign is left out rather than sent with the token. A Helix without either keeps token cover URLs.
 - **Control:**
   - `{skip: 1 | -1}` is next or previous song (momentary, never kept as state).
   - `{shuffle}` reorders what's left and carries on with the same song at the same position.

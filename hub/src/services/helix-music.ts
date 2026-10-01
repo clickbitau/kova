@@ -17,6 +17,10 @@ import { lanJson, trimUrl } from '../util/lan-http.ts';
  * Kova asks for them a window at a time, just before a speaker queues those songs (Queue.prepare). A Helix
  * from before signed URLs gets `/v1/music/tracks/<id>/stream?max=aac&token=<Kova's device token>` instead.
  * Shuffle all is Helix's own uniform shuffle of the whole library (`?shuffle=1`) where it has one.
+ * Covers are signed the same way: play-url also returns the song's cover as `artUrl`, and any cover still carrying
+ * the token (a song from a service, a Helix that signs songs but not covers) goes through `POST /v1/art-urls` in one
+ * call per window. Only a Helix with neither keeps the token cover URL.
+ *
  * Every song a speaker starts is counted as played in Helix (`POST /v1/music/tracks/<id>/played`).
  */
 export interface HelixMusicConfig { url?: string; token?: string; /** Helix profile whose loved songs and playlists Kova uses. Default "default". */ musicProfile?: string }
@@ -56,6 +60,10 @@ export class HelixMusic {
   private recent = new Map<string, { at: number; queue: Promise<Queue | null> }>();
   /** Whether Helix signs per-song URLs (null: not asked yet). */
   private signing: boolean | null = null;
+  /** Whether Helix signs cover URLs in a batch (null: not asked yet). */
+  private artSigning: boolean | null = null;
+  /** Each song's cover as Helix listed it, without the token, for signing. */
+  private artPath = new WeakMap<QueueTrack, string>();
 
   constructor(private cfg: () => HelixMusicConfig | undefined, private o: { random?: () => number; now?: () => number } = {}) {}
 
@@ -242,11 +250,13 @@ export class HelixMusic {
         // Songs on disk only (a service's song plays through Helix's relay URL as it is).
         if (!/^helix:/.test(t.id) || done.has(t) || !t.url.includes('/stream?max=aac&token=')) return;
         try {
-          const r = await this.post<{ url?: string; path?: string }>(`/v1/items/${encodeURIComponent(t.id.replace(/^helix:/, ''))}/play-url`, { format: 'aac', maxRate: 48000, ttl: 21600, profile: h.profile });
+          const r = await this.post<{ url?: string; path?: string; artUrl?: string }>(`/v1/items/${encodeURIComponent(t.id.replace(/^helix:/, ''))}/play-url`, { format: 'aac', maxRate: 48000, ttl: 21600, profile: h.profile });
           const url = r.url && /^https?:\/\//.test(r.url) ? r.url : r.path ? `${h.url}${r.path}` : null;
           if (!url) return;
           t.url = url;
           t.contentType = 'audio/aac';
+          const art = r.artUrl ? abs(h.url, r.artUrl) : null;
+          if (art) t.art = art;
           done.add(t);
           this.signing = true;
         } catch (e) {
@@ -258,18 +268,40 @@ export class HelixMusic {
       }));
       if ((this.signing as boolean | null) === false) return;
     }
+    await this.signArt(tracks.filter(t => t.art?.includes('token=') && this.artPath.has(t)), h.url);
+  }
+
+  /** Swap token cover URLs for signed ones in one call. A cover Helix won't sign (null) is dropped rather than sent with the token. */
+  private async signArt(tracks: QueueTrack[], base: string): Promise<void> {
+    if (!tracks.length || this.artSigning === false) return;
+    try {
+      const r = await this.post<{ urls?: (string | null)[] } | (string | null)[]>('/v1/art-urls', { urls: tracks.map(t => this.artPath.get(t)!), ttl: 21600 });
+      const urls = Array.isArray(r) ? r : r.urls ?? [];
+      if (urls.length !== tracks.length) return;
+      tracks.forEach((t, i) => { const u = urls[i] ? abs(base, urls[i]!) : null; if (u) t.art = u; else delete t.art; });
+      this.artSigning = true;
+    } catch (e) {
+      const { status, body } = e as { status?: number; body?: unknown };
+      if (this.artSigning === null && (status === 405 || (status === 404 && !(body && typeof body === 'object')))) this.artSigning = false;
+    }
   }
 
   private track(t: HelixTrack, h: { url: string; token: string }): QueueTrack {
     const tok = `token=${encodeURIComponent(h.token)}`;
     // A song on disk: the AAC/MP4 rendition every speaker plays. A service's song: Helix's relay (its url already carries the token).
     const url = t.hasFile ? `${h.url}/v1/music/tracks/${encodeURIComponent(t.id.replace(/^helix:/, ''))}/stream?max=aac&${tok}` : t.url!;
-    const art = t.posterUrl ? (/^https?:\/\//.test(t.posterUrl) ? t.posterUrl : `${h.url}${t.posterUrl}${t.posterUrl.includes('?') ? '&' : '?'}w=600&${tok}`) : undefined;
-    return {
+    const path = t.posterUrl && !/^https?:\/\//.test(t.posterUrl) ? `${t.posterUrl}${t.posterUrl.includes('?') ? '&' : '?'}w=600` : null;
+    const art = path ? `${h.url}${path}&${tok}` : t.posterUrl || undefined;
+    const q: QueueTrack = {
       // max=aac turns lossless into AAC/MP4 and passes lossy files through as they are.
       id: t.id, url, contentType: /mp3|mpeg/i.test(t.codec ?? '') ? 'audio/mpeg' : t.hasFile ? 'audio/mp4' : 'audio/mpeg',
       title: t.title, ...(t.artist ? { artist: t.artist } : {}), ...(t.album ? { album: t.album } : {}),
       ...(art ? { art } : {}), ...(t.durationMs ? { durationMs: t.durationMs } : {}),
     };
+    if (path) this.artPath.set(q, path);
+    return q;
   }
 }
+
+/** A URL Helix handed back, absolute or a path on Helix. */
+const abs = (base: string, u: string): string | null => /^https?:\/\//.test(u) ? u : u.startsWith('/') ? `${base}${u}` : null;
