@@ -2,10 +2,14 @@ import type { FastifyInstance } from 'fastify';
 import type { IncomingMessage } from 'node:http';
 import { ImportError } from '../import/ha-source.ts';
 import type { HaImport } from '../import/ha-scan.ts';
+import type { Hub } from '../hub.ts';
+import type { Automation } from '../model/types.ts';
+import { randomUUID } from 'node:crypto';
+import { checkAutomation } from '../engine/automation-check.ts';
 
 // Import from Home Assistant, in the app. Upload a backup (streamed: HA's history database
 // goes past without being stored), or point at a config folder on the hub; review; switch over.
-export function registerImportRoutes(app: FastifyInstance, ha: HaImport | undefined): void {
+export function registerImportRoutes(app: FastifyInstance, ha: HaImport | undefined, hub: Hub): void {
   // Raw uploads arrive as a stream; nothing is buffered here.
   app.addContentTypeParser('application/octet-stream', (_req, payload, done) => done(null, payload));
 
@@ -17,6 +21,22 @@ export function registerImportRoutes(app: FastifyInstance, ha: HaImport | undefi
 
   app.get('/api/import/ha', async (_req, reply) => (ha ? ha.summary() ?? { scanned: false } : need(reply)));
   app.get('/api/import/ha/automations', async (_req, reply) => (ha ? { automations: ha.automations() } : need(reply)));
+  // Make Kova automations from them (all that can be, or { ids }). They start switched off: Home Assistant may still run the originals.
+  app.post<{ Body: { ids?: string[] } }>('/api/import/ha/automations/convert', async (req, reply) => {
+    if (!ha) return need(reply);
+    try {
+      const ctx = { device: (id: string) => hub.reg.get(id), cfg: hub.config.get() };
+      const fresh: Automation[] = [];
+      const r = ha.convert(Array.isArray(req.body?.ids) ? req.body.ids.map(String) : undefined, a => {
+        const clean = checkAutomation(a, ctx);
+        const id = `${clean.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 40) || 'automation'}_${randomUUID().slice(0, 4)}`;
+        fresh.push({ id, ...clean, enabled: false });
+        return id;
+      });
+      const undo = fresh.length ? hub.engine.registerUndo(hub.config.update(c => { (c.automations ??= []).push(...fresh); })) : null;
+      return { ...r, undo };
+    } catch (e) { return reply.code(400).send({ error: (e as Error).message }); }
+  });
 
   // Body: the backup file as application/octet-stream. Header x-backup-key: the backup's encryption key, if it has one.
   app.post('/api/import/ha/backup', { bodyLimit: 64 * 1024 * 1024 * 1024 }, async (req, reply) => {

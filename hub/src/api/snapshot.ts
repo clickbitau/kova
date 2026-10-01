@@ -4,7 +4,8 @@ import type { LogEntry } from '../store/db.ts';
 import { clock, localDate, localHour, atLocal } from '../util/time.ts';
 import { isLight, targetLabel } from '../util/describe.ts';
 import { rhythmLabel } from '../rhythms/rhythms.ts';
-import { automationIdeas, ifLabel, thenLabels, whenLabel } from '../engine/automation-ideas.ts';
+import { automationIdeas } from '../engine/automation-ideas.ts';
+import { actionWords, condWords, triggerWords } from '../engine/automations.ts';
 import SunCalc from 'suncalc';
 
 const FEED_ICON: Record<string, string> = { mode: 'routine', run: 'bolt', presence: 'person_pin_circle', state: 'lightbulb', system: 'info', skip: 'event_busy' };
@@ -52,6 +53,15 @@ export function snapshot(hub: Hub) {
     return { deviceId: id, name: d ? `${roomName(d.room)} ${d.name.toLowerCase()}` : `${id} (missing)`, label: d ? targetLabel(d, cmd) : 'Device not found', target: cmd, missing: !d };
   });
   const findings = checker.findings();
+  // Each part of an automation in words, for lists and the editor's summary.
+  const words = { reg, cfg };
+  const tgt = (id: string, cmd: object) => { const d = reg.get(id); return d ? targetLabel(d, cmd) : id; };
+  const autoWords = (a: Pick<import('../model/types.ts').Automation, 'triggers' | 'conditions' | 'actions'>) => ({
+    triggerLabels: a.triggers.map(t => triggerWords(t, words)),
+    conditionLabels: a.conditions.map(c => condWords(c, words)),
+    actionLabels: a.actions.map(x => actionWords(x, words, tgt)),
+  });
+  const runSummary = (r?: import('../model/types.ts').AutomationRun) => r ? { at: r.at, atLabel: clock(r.at, cfg.timezone), result: r.result, why: r.why, detail: r.detail ?? null } : null;
 
   const modes = cfg.modes.map((m: Mode, i) => {
     const next = cfg.modes[(i + 1) % cfg.modes.length];
@@ -131,8 +141,8 @@ export function snapshot(hub: Hub) {
     upcoming,
     lightTheWay: cfg.lightTheWay.triggers.map(t => ({ id: t.id, label: t.label, minutes: t.minutes, lights: t.lights })),
     // When / if / then, with each part in words; and ones Kova suggests from how devices are connected.
-    automations: (cfg.automations ?? []).map(a => ({ ...a, whenLabel: whenLabel(a.when, reg.devices), ifLabels: a.if.map(c => ifLabel(c, reg.devices)), thenLabels: thenLabels(a.then, reg.devices) })),
-    automationIdeas: automationIdeas(cfg, reg.devices, hub.screens()).map(i => ({ ...i, whenLabel: whenLabel(i.when, reg.devices), ifLabels: i.if.map(c => ifLabel(c, reg.devices)), thenLabels: thenLabels(i.then, reg.devices) })),
+    automations: engine.automations.list().map(a => ({ ...a, ...autoWords(a), lastRun: runSummary(engine.automations.lastRun(a.id)), running: engine.automations.running(a.id) })),
+    automationIdeas: automationIdeas(cfg, reg.devices, hub.screens()).map(i => ({ ...i, ...autoWords(i) })),
     overlays: cfg.overlays.map(o => ({ id: o.id, name: o.name, icon: o.icon, endsLabel: o.endsLabel, targets: targetList(o.targets) })),
     moments: cfg.moments.map(mo => ({ id: mo.id, label: mo.label, what: mo.what, at: mo.at, atLabel: rhythmLabel(mo.at), targets: targetList(mo.targets) })),
     sources: cfg.sources,

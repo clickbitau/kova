@@ -428,7 +428,7 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
   });
 
   registerEditRoutes(app, hub);
-  registerImportRoutes(app, opts.haImport);
+  registerImportRoutes(app, opts.haImport, hub);
   registerHomeRoutes(app, hub);
   registerLanAppRoutes(app, { integrations: opts.integrations, helixLink: opts.helixLink, ...opts.lanApps });
   if (opts.otaDir) registerAppUpdateRoutes(app, new AppUpdates(opts.otaDir));

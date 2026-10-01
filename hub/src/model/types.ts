@@ -198,29 +198,106 @@ export interface LightTheWayTrigger {
 // ------------------------------------------------------------ automations --
 
 /**
- * What starts an automation: a device changing (switched on or off, gone offline or back) or a device event
- * (a camera seeing a person, a doorbell ring, a player starting a film).
+ * A device's state to match: every field given has to hold. `playing` is a player that's on and not paused.
+ * Unknown on/off counts as off; unknown online counts as online.
  */
-export type AutomationWhen =
-  | { device: string; becomes: 'on' | 'off' | 'offline' | 'online' }
-  | { device: string; event: string };
-
-/** Only go ahead while a device is like this: on or off, online, on an input, in a mode (fans, air conditioners). */
-export interface AutomationIf {
-  device: string;
-  is: { on?: boolean; online?: boolean; input?: string; hvac?: HvacMode };
+export interface StateMatch {
+  on?: boolean;
+  online?: boolean;
+  input?: string;
+  hvac?: HvacMode;
+  activity?: VacuumActivity;
+  playing?: boolean;
+  muted?: boolean;
+  mode?: string;
 }
 
-/** The home's own rules: "when the TV box shuts down, if the TV is still on its input, turn the TV and soundbar off". */
+/** A device reading a number can be compared on. */
+export type NumericField = 'temp' | 'target' | 'power' | 'energy' | 'battery' | 'bri' | 'vol' | 'grid' | 'load';
+
+/** What starts an automation. Any one of an automation's triggers starts it. */
+export type Trigger =
+  /** A device changes to (and/or from) a state; with `forSec`, only once it has stayed so that long. */
+  | { kind: 'device'; device: string; to?: StateMatch; from?: StateMatch; forSec?: number }
+  /** A reading crosses above and/or below a value (fires on the crossing, not while it stays there). */
+  | { kind: 'numeric'; device: string; field: NumericField; above?: number; below?: number; forSec?: number }
+  /** A momentary device event: a camera seeing a person, a doorbell ring, a player starting a film. */
+  | { kind: 'event'; device: string; event: string }
+  /** A time of day (a clock time, sun or prayer time, with an offset), on the given days (0 = Sunday; all when empty). */
+  | { kind: 'time'; at: Rhythm; days?: number[] }
+  /** Every so many minutes, from local midnight. */
+  | { kind: 'every'; minutes: number }
+  /** People coming and going: one person (or anyone), the first to arrive, the last to leave. */
+  | { kind: 'presence'; event: 'arrives' | 'leaves' | 'first-arrives' | 'last-leaves'; person?: string }
+  /** A mode starting. */
+  | { kind: 'mode'; mode: string }
+  /** An overlay starting or ending. */
+  | { kind: 'overlay'; overlay: string; event: 'starts' | 'ends' }
+  /** The hub starting (after an update or a power cut). */
+  | { kind: 'hub'; event: 'start' };
+
+/** Whether to go ahead. Every condition in a list has to hold, unless grouped with any / not. */
+export type Condition =
+  | { kind: 'device'; device: string; is: StateMatch }
+  | { kind: 'numeric'; device: string; field: NumericField; above?: number; below?: number }
+  /** Between two times (may cross midnight), and/or on the given days (0 = Sunday). */
+  | { kind: 'time'; after?: Rhythm; before?: Rhythm; days?: number[] }
+  /** Someone in particular, anyone, or no one is home. */
+  | { kind: 'presence'; who: 'anyone' | 'no-one' | string; home: boolean }
+  | { kind: 'mode'; modes: string[] }
+  /** An overlay (or any overlay, when none is named) is on, or not. */
+  | { kind: 'overlay'; overlay?: string; active: boolean }
+  | { kind: 'all' | 'any' | 'not'; conditions: Condition[] };
+
+/** What an automation does, in order. */
+export type Action =
+  | { kind: 'set'; targets: Targets }
+  | { kind: 'delay'; seconds: number }
+  /** Wait until a condition holds; after `timeoutSec`, carry on (or stop when `stopOnTimeout`). */
+  | { kind: 'wait'; until: Condition; timeoutSec?: number; stopOnTimeout?: boolean }
+  /** A push notification to everyone's phones, or to some people's. */
+  | { kind: 'notify'; title?: string; message: string; people?: string[] }
+  | { kind: 'overlay'; overlay: string; op: 'start' | 'end' }
+  | { kind: 'if'; conditions: Condition[]; then: Action[]; else?: Action[] }
+  | { kind: 'repeat'; times: number; actions: Action[] }
+  /** Run another automation's actions (its triggers and conditions are skipped). */
+  | { kind: 'run'; automation: string }
+  /** Stop here. */
+  | { kind: 'stop' };
+
+/**
+ * When it starts again while still running (waiting or in a delay): ignore the new start (single),
+ * cancel the run and start over (restart), run after it (queued), or run alongside it (parallel).
+ */
+export type RunMode = 'single' | 'restart' | 'queued' | 'parallel';
+
+/** The home's own rules: when (any trigger), if (all conditions), then (actions in order). */
 export interface Automation {
   id: string;
   name: string;
+  description?: string;
   /** Off: kept, but doesn't run. */
   enabled: boolean;
-  when: AutomationWhen;
-  /** Every one has to hold. */
-  if: AutomationIf[];
-  then: Targets;
+  triggers: Trigger[];
+  conditions: Condition[];
+  actions: Action[];
+  mode: RunMode;
+  /** Where it came from, when it was converted from another system. */
+  origin?: { from: 'home-assistant'; id: string; notes?: string[] };
+}
+
+/** One run of an automation, step by step: for its history. */
+export interface AutomationRun {
+  id: string;
+  automation: string;
+  at: number;
+  /** What started it, in words. */
+  why: string;
+  result: 'running' | 'done' | 'stopped' | 'skipped' | 'cancelled' | 'failed';
+  /** Why it was skipped (the condition that didn't hold) or failed. */
+  detail?: string;
+  steps: { at: number; text: string; ok: boolean; detail?: string }[];
+  endedAt?: number;
 }
 
 export interface HomeConfig {

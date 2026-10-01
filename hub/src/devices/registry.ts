@@ -19,7 +19,7 @@ export interface SentEvent { device: Device; cmd: Command; cause: Cause }
  * Holds every device and its live state. All changes go through here so each
  * one is written to the event log with its cause.
  */
-export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [DeviceEvent]; devices: []; measure: []; sent: [SentEvent] }> {
+export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [DeviceEvent]; devices: []; measure: []; sent: [SentEvent]; reading: [ChangeEvent] }> {
   readonly devices = new Map<string, Device>();
   readonly adapters = new Map<string, Adapter>();
 
@@ -221,8 +221,12 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
     const onlyOnline = Object.keys(patch).every(k => MEASUREMENTS.has(k));
     if (onlyOnline) {
       const wasOnline = d.state.online;
+      const prev: DeviceState = {};
+      for (const k of Object.keys(patch)) (prev as Record<string, unknown>)[k] = (d.state as Record<string, unknown>)[k] ?? null;
       d.state = { ...d.state, ...patch };
       this.emit('measure');
+      // Readings (power, energy, battery…) for automations that compare them; not a change for screens.
+      this.emit('reading', { device: d, prev, patch, cause: { kind: 'device', label: d.integration, detail: 'reading' } });
       // Going offline or coming back isn't news for Activity, but automations start on it.
       if ('online' in patch && patch.online !== wasOnline) {
         this.emit('change', { device: d, prev: { online: wasOnline }, patch: { online: patch.online }, cause: { kind: 'device', label: d.integration, detail: patch.online ? 'back online' : 'went offline' } });
