@@ -53,3 +53,40 @@ export const alpha = (hex: string, a: number) => {
   const n = parseInt(h, 16);
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 };
+
+/**
+ * Motion tokens. Durations from the design language (120 ms press to 0.97, 200 ms state changes, 280 ms sheets);
+ * springs for anything a finger lets go of, so it settles with a little weight instead of stopping dead.
+ * Springs are stiffness / damping / mass, as Animated.spring takes them. ui/motion.ts turns these into
+ * animations, and into instant changes when the phone asks for reduced motion.
+ */
+export const MOTION = {
+  dur: { press: 120, state: 200, sheet: 280, exit: 180, fade: 160 },
+  /** cubic-bezier control points: `out` for things arriving, `in` for things leaving. */
+  ease: { out: [0.2, 0.8, 0.2, 1], in: [0.4, 0, 1, 1] },
+  /** A press scales to 0.97 (the design) and dims a touch; with reduced motion it only dims, a little more. */
+  press: { scale: 0.97, dim: 0.88, dimReduced: 0.6 },
+  spring: {
+    /** A button coming back up after a press: quick, a hint of overshoot. */
+    press: { stiffness: 480, damping: 26, mass: 1 },
+    /** A switch's thumb crossing over. */
+    toggle: { stiffness: 560, damping: 32, mass: 1 },
+    /** A sheet rising, or settling back after a drag. */
+    sheet: { stiffness: 320, damping: 34, mass: 1 },
+    /** Toasts and icons popping in. */
+    pop: { stiffness: 420, damping: 20, mass: 1 },
+    /** A slider thumb growing under the finger. */
+    grow: { stiffness: 520, damping: 28, mass: 1 },
+  },
+  /** List items fading up one after another: per-item delay, how many get a delay, how far they rise, how long. */
+  stagger: { step: 32, max: 10, rise: 10, dur: 260 },
+  /** Touch targets are at least this big (points): the hit area is padded when the visible control is smaller. */
+  target: 44,
+} as const;
+
+/** Elevation for things that float over the page (sheets, toasts), and the glow of a lit tile. */
+export const SHADOW = {
+  sheet: '0px -10px 40px rgba(0,0,0,0.55)',
+  toast: '0px 10px 28px rgba(0,0,0,0.45)',
+  raised: '0px 4px 14px rgba(0,0,0,0.35)',
+} as const;

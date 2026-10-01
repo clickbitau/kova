@@ -10,6 +10,7 @@ import { Empty, HScroll, PageHead, Pill, Press } from '../ui/kit';
 import { Screen } from '../ui/Screen';
 import { T } from '../ui/Text';
 import { TileGrid } from '../ui/Tile';
+import { animateLayout } from '../ui/motion';
 
 export function DevicesScreen() {
   const s = useSnap();
@@ -60,7 +61,7 @@ export function DevicesScreen() {
             {types.map(t => {
               const on = type === t.id;
               return (
-                <Press key={t.id} onPress={() => setType(t.id)} style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 6, paddingHorizontal: 11, borderRadius: 10, backgroundColor: on ? 'rgba(242,177,76,0.14)' : 'transparent', borderWidth: 1, borderColor: on ? 'rgba(242,177,76,0.4)' : C.line }}>
+                <Press key={t.id} haptic="select" onPress={() => setType(t.id)} hitSlop={{ top: 6, bottom: 6 }} style={{ minHeight: 32, flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 6, paddingHorizontal: 11, borderRadius: 10, backgroundColor: on ? 'rgba(242,177,76,0.14)' : 'transparent', borderWidth: 1, borderColor: on ? 'rgba(242,177,76,0.4)' : C.line }}>
                   <Icon name={t.icon} size={15} color={on ? C.amber : C.bone2} />
                   <T size={12} weight={700} color={on ? C.amber : C.bone2}>{t.label}</T>
                 </Press>
@@ -79,7 +80,7 @@ export function DevicesScreen() {
               <T size={12} color={C.stone2}>{plural(g.devices.length, 'device')}</T>
             </View>
             {g.lightsOn && g.id !== 'unassigned' ? (
-              <Press onPress={() => void act('POST', `/api/rooms/${encodeURIComponent(g.id)}/off`, {}, `${g.name}: lights off`)}>
+              <Press hitSlop={12} onPress={() => void act('POST', `/api/rooms/${encodeURIComponent(g.id)}/off`, {}, `${g.name}: lights off`)}>
                 <T size={13} weight={600} color={C.amber}>All off</T>
               </Press>
             ) : null}
@@ -95,7 +96,7 @@ export function DevicesScreen() {
       ) : null}
 
       {hidden ? (
-        <Press onPress={() => setShowHidden(v => !v)} style={{ alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.06)' }}>
+        <Press onPress={() => { animateLayout(); setShowHidden(v => !v); }} style={{ alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.06)' }}>
           <Icon name={showHidden ? 'visibility_off' : 'visibility'} size={17} color={C.stone} />
           <T size={12.5} weight={600} color={C.stone}>{showHidden ? 'Hide hidden devices' : `Show ${plural(hidden, 'hidden device')}`}</T>
         </Press>

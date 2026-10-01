@@ -5,6 +5,7 @@ import { C } from './theme';
 import { useSnap } from './state/hub';
 import { Icon } from './ui/Icon';
 import { Press } from './ui/kit';
+import { haptic, useReducedMotion } from './ui/motion';
 import { T } from './ui/Text';
 import { NowScreen } from './screens/NowScreen';
 import { DevicesScreen } from './screens/DevicesScreen';
@@ -25,7 +26,7 @@ function Bar({ state, navigation }: BottomTabBarProps) {
       {TABS.map(([name, label, icon], i) => {
         const active = state.index === i, centre = name === 'Ask';
         return (
-          <Press key={name} label={label} onPress={() => navigation.navigate(name)} style={{ width: 60, alignItems: 'center', gap: 3 }}>
+          <Press key={name} label={label} onPress={() => { if (!active) haptic.select(); navigation.navigate(name); }} style={{ width: 60, minHeight: 44, alignItems: 'center', justifyContent: 'flex-end', gap: 3 }}>
             <View style={{ width: centre ? 46 : 28, height: centre ? 46 : 28, borderRadius: 23, marginTop: centre ? -20 : 0, backgroundColor: centre ? C.amber : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
               <Icon name={icon} size={centre ? 24 : 23} fill={active || centre} color={centre ? C.onAmber : active ? C.amber : C.stone2} />
               {name === 'More' && moreDot ? <View style={{ position: 'absolute', top: 0, right: -2, width: 8, height: 8, borderRadius: 4, backgroundColor: C.amber, borderWidth: 2, borderColor: C.nav }} /> : null}
@@ -39,8 +40,10 @@ function Bar({ state, navigation }: BottomTabBarProps) {
 }
 
 export function Tabs() {
+  // Tabs cross-fade (nothing slides with reduced motion).
+  const reduced = useReducedMotion();
   return (
-    <Tab.Navigator tabBar={p => <Bar {...p} />} screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: C.page } }}>
+    <Tab.Navigator tabBar={p => <Bar {...p} />} screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: C.page }, animation: reduced ? 'none' : 'fade' }}>
       <Tab.Screen name="Now" component={NowScreen} />
       <Tab.Screen name="Devices" component={DevicesScreen} />
       <Tab.Screen name="Ask" component={AskScreen} />
