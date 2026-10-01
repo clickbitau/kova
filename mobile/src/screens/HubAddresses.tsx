@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { TextInput, View } from 'react-native';
-import { C, F } from '../theme';
+import { C, F, R, SP } from '../theme';
 import { hello } from '../api/client';
 import { addManual, display, kindFor, KIND_LABEL, remove, sameHub } from '../logic/addresses';
 import { normalizeHubUrl } from '../logic/connect';
 import { useHub } from '../state/hub';
 import { Icon } from '../ui/Icon';
-import { Press } from '../ui/kit';
+import { Group, IconButton, Press, Row, Spinner } from '../ui/kit';
 import { T } from '../ui/Text';
 
 /**
@@ -35,46 +35,34 @@ export function HubAddresses() {
   };
 
   return (
-    <View style={{ gap: 10 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-        <Icon name="hub" size={20} color={C.stone} />
-        <View style={{ flex: 1, gap: 2 }}>
-          <T size={14} weight={700}>Hub</T>
-          <T size={12} color={C.stone}>{conn === 'live' && route ? `Connected · ${KIND_LABEL[route.kind]}` : conn === 'offline' ? 'Can’t reach it right now' : 'Connecting…'}</T>
-        </View>
-      </View>
+    <Group title="Hub" note="Kova uses the home network address at home and the remote one away, by itself.">
+      <Row first icon="router" iconFg={conn === 'live' ? C.green : conn === 'offline' ? C.red : C.amber} title={conn === 'live' && route ? `Connected · ${KIND_LABEL[route.kind]}` : conn === 'offline' ? 'Can’t reach it right now' : 'Connecting…'} />
       {addresses.map(a => {
         const inUse = route?.url === a.url;
         return (
-          <View key={a.url} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <Icon name={a.kind === 'local' ? 'home' : 'cloud'} size={17} color={inUse ? C.green : C.stone} />
+          <View key={a.url} style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3], minHeight: 56, paddingVertical: SP[2], paddingLeft: SP[4], paddingRight: SP[2], borderTopWidth: 1, borderTopColor: C.hairline }}>
+            <Icon name={a.kind === 'local' ? 'home' : 'cloud'} size={19} color={inUse ? C.green : C.stone} fill={inUse} />
             <View style={{ flex: 1, gap: 1 }}>
-              <T mono size={11.5} color={inUse ? C.bone : C.stone} numberOfLines={1}>{display(a.url)}</T>
-              <T size={11} color={C.stone2}>{`${KIND_LABEL[a.kind]}${a.manual ? ' · added by you' : ''}${inUse ? ' · in use' : ''}`}</T>
+              <T mono size={12} color={inUse ? C.bone : C.bone2} numberOfLines={1}>{display(a.url)}</T>
+              <T v="footnote" size={11.5} color={inUse ? C.green : C.stone2}>{`${KIND_LABEL[a.kind]}${a.manual ? ' · added by you' : ''}${inUse ? ' · in use' : ''}`}</T>
             </View>
-            {addresses.length > 1 ? (
-              <Press label={`Remove ${display(a.url)}`} hitSlop={8} onPress={() => void setAddresses(remove(addresses, a.url))}>
-                <Icon name="close" size={17} color={C.stone2} />
-              </Press>
-            ) : null}
+            {addresses.length > 1 ? <IconButton icon="close" label={`Remove ${display(a.url)}`} tone="ghost" size={36} color={C.stone2} onPress={() => void setAddresses(remove(addresses, a.url))} /> : null}
           </View>
         );
       })}
       {adding ? (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <TextInput value={text} onChangeText={setText} placeholder="192.168.1.20 or https://…" placeholderTextColor={C.stone3} autoCapitalize="none" autoCorrect={false} keyboardType="url" autoFocus
-            onSubmitEditing={() => void add()}
-            style={{ flex: 1, paddingVertical: 9, paddingHorizontal: 11, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', backgroundColor: C.page, color: C.bone, fontFamily: F[400], fontSize: 14 }} />
-          <Press label="Add" onPress={busy ? undefined : () => void add()} style={{ padding: 6, opacity: busy ? 0.5 : 1 }}>
-            <Icon name="check_circle" size={22} color={C.amber} />
-          </Press>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2], padding: SP[3], borderTopWidth: 1, borderTopColor: C.hairline }}>
+          <TextInput value={text} onChangeText={setText} placeholder="192.168.1.20 or https://…" placeholderTextColor={C.stone2} autoCapitalize="none" autoCorrect={false} keyboardType="url" autoFocus
+            onSubmitEditing={() => void add()} accessibilityLabel="New address"
+            style={{ flex: 1, height: 44, paddingHorizontal: SP[3], borderRadius: R.sm + 2, borderWidth: 1, borderColor: C.line, backgroundColor: C.page, color: C.bone, fontFamily: F[500], fontSize: 15 }} />
+          {busy ? <Spinner /> : <IconButton icon="check" label="Add" tone="amber" size={40} onPress={() => void add()} />}
         </View>
       ) : (
-        <Press onPress={() => setAdding(true)} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 2 }}>
-          <Icon name="add" size={17} color={C.amber} />
-          <T size={12.5} weight={600} color={C.amber}>Add an address</T>
+        <Press onPress={() => setAdding(true)} label="Add an address" style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2], minHeight: 48, paddingHorizontal: SP[4], borderTopWidth: 1, borderTopColor: C.hairline }}>
+          <Icon name="add" size={19} color={C.amber} />
+          <T v="labelSm" color={C.amber}>Add an address</T>
         </Press>
       )}
-    </View>
+    </Group>
   );
 }

@@ -1,17 +1,61 @@
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { Image } from 'expo-image';
-import { C } from '../theme';
+import { C, R, SP } from '../theme';
 import { useHub, useSnap } from '../state/hub';
 import { useNav } from '../navigation';
 import { hubUrl } from '../logic/connect';
-import { stateOf, devs } from '../logic/devices';
+import { stateOf, devs, type Dev } from '../logic/devices';
 import { Icon } from '../ui/Icon';
-import { Card, PageHead, Press, SectionTitle } from '../ui/kit';
+import { Avatar, Card, Empty, Press, PulseDot, Section, Skeleton } from '../ui/kit';
 import { Screen } from '../ui/Screen';
 import { T } from '../ui/Text';
+import { Appear } from '../ui/motion';
 
-/** Cameras (latest event image, tap for live), who's home, the network (Warden), and today's events. */
+/**
+ * A camera's latest picture: shimmering while it comes, the camera icon if there's none yet (or it's
+ * offline), cross-fading in when it arrives. Fills its parent.
+ */
+export function CameraStill({ uri, off, label }: { uri: string | null; off?: boolean; label?: string }) {
+  const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
+  return (
+    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: C.inset, alignItems: 'center', justifyContent: 'center' }}>
+      {!loaded && !failed && !off ? <Skeleton h={400} r={0} style={{ position: 'absolute', left: 0, right: 0, top: 0 }} /> : null}
+      <Icon name={off ? 'videocam_off' : 'videocam'} size={28} color={off || failed ? C.stone2 : C.stone3} />
+      {failed && !off ? <T v="micro" color={C.stone2} style={{ marginTop: 6 }}>No picture yet</T> : null}
+      {uri && !off ? <Image source={{ uri }} onLoad={() => { setLoaded(true); setFailed(false); }} onError={() => setFailed(true)} accessibilityLabel={label} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} contentFit="cover" transition={250} /> : null}
+    </View>
+  );
+}
+
+/** A camera: its latest picture (shimmering until it comes), its name and last event; tap for live video. */
+function CameraCard({ c, uri, wide, index, onPress }: { c: Dev; uri: string | null; wide: boolean; index: number; onPress: () => void }) {
+  const [st, fg] = stateOf(c);
+  const off = c.online === false;
+  const line = c.why?.now && !/No change/.test(c.why.now) ? c.why.now : st;
+  return (
+    <Appear index={index} style={{ flexBasis: wide ? '100%' : '47%', flexGrow: 1 }}>
+      <Press onPress={onPress} give="soft" label={`${c.name}, ${line}. Watch live`}>
+        <Card style={{ overflow: 'hidden' }}>
+          <View style={{ aspectRatio: 16 / 9, backgroundColor: C.inset, alignItems: 'center', justifyContent: 'center' }}>
+            <CameraStill uri={uri} off={off} />
+            <View style={{ position: 'absolute', left: SP[2] + 2, top: SP[2] + 2, flexDirection: 'row', alignItems: 'center', gap: 6, height: 24, paddingHorizontal: 9, borderRadius: R.full, backgroundColor: 'rgba(14,15,16,0.72)' }}>
+              {off ? <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: C.red }} /> : <PulseDot color={C.green} size={7} />}
+              <T v="micro" color={C.bone}>{off ? 'Offline' : 'Watch live'}</T>
+            </View>
+          </View>
+          <View style={{ paddingVertical: SP[3], paddingHorizontal: SP[3] + 2, gap: 2 }}>
+            <T v="headline" numberOfLines={1}>{c.name}</T>
+            <T v="footnote" color={off ? C.red : line === st ? fg : C.stone} numberOfLines={1}>{line}</T>
+          </View>
+        </Card>
+      </Press>
+    </Appear>
+  );
+}
+
+/** Cameras (latest picture, tap for live), who's home, the network, and today's comings and goings. */
 export function SecurityScreen() {
   const s = useSnap();
   const { cfg } = useHub();
@@ -26,89 +70,66 @@ export function SecurityScreen() {
   const [tick, setTick] = useState(0);
   useEffect(() => { const t = setInterval(() => setTick(x => x + 1), 60_000); return () => clearInterval(t); }, []);
   const watch = (id: string, name: string) => nav.navigate('Web', { title: name, path: `/phone.html?embed=1&cam=${encodeURIComponent(id)}` });
-  const summary = `${home.length ? `${home.map(p => p.name).join(' and ')} home` : 'Nobody home'} · ${cams.length} camera${cams.length === 1 ? '' : 's'}`;
+  const summary = `${home.length ? (home.length === s.people.length && home.length > 1 ? 'Everyone home' : `${home.map(p => p.name).join(' and ')} home`) : 'Nobody home'} · ${cams.length} camera${cams.length === 1 ? '' : 's'}`;
+  const netBad = internet?.on === false || internet?.online === false;
 
   return (
-    <Screen>
-      <PageHead over={summary} title="Security" />
-
+    <Screen title="Security" over={summary}>
       {cams.length ? (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-          {cams.map(c => {
-            const [st, fg] = stateOf(c);
-            return (
-              <Press key={c.id} onPress={() => watch(c.id, c.name)} style={{ width: cams.length === 1 ? '100%' : undefined, flexBasis: cams.length === 1 ? '100%' : '47%', flexGrow: 1, borderRadius: 16, overflow: 'hidden', backgroundColor: C.card }}>
-                <View style={{ aspectRatio: 16 / 9, backgroundColor: '#1b1c1f', alignItems: 'center', justifyContent: 'center' }}>
-                  <Icon name="videocam" size={26} color="#4a4b50" />
-                  {cfg ? <Image source={{ uri: `${hubUrl(cfg, `/api/devices/${encodeURIComponent(c.id)}/snapshot`, true)}${cfg.token ? '&' : '?'}t=${tick}` }} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} contentFit="cover" transition={200} /> : null}
-                  <View style={{ position: 'absolute', left: 10, bottom: 10, flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6, paddingLeft: 8, paddingRight: 12, borderRadius: 999, backgroundColor: 'rgba(14,15,16,0.78)' }}>
-                    <Icon name="play_arrow" size={17} color={C.red} fill />
-                    <T size={12.5} weight={700}>Live</T>
-                  </View>
-                </View>
-                <View style={{ paddingVertical: 10, paddingHorizontal: 12, gap: 2 }}>
-                  <T size={14} weight={700}>{c.name}</T>
-                  <T size={12} color={fg} numberOfLines={1}>{c.why?.now && !/No change/.test(c.why.now) ? c.why.now : st}</T>
-                </View>
-              </Press>
-            );
-          })}
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SP[2] + 2 }}>
+          {cams.map((c, i) => (
+            <CameraCard key={c.id} c={c} index={i} wide={cams.length === 1 || (cams.length % 2 === 1 && i === cams.length - 1)} onPress={() => watch(c.id, c.name)}
+              uri={cfg ? `${hubUrl(cfg, `/api/devices/${encodeURIComponent(c.id)}/snapshot`, true)}${cfg.token ? '&' : '?'}t=${tick}` : null} />
+          ))}
         </View>
       ) : (
-        <View style={{ borderRadius: 18, padding: 18, borderWidth: 1, borderStyle: 'dashed', borderColor: 'rgba(255,255,255,0.14)', flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-          <Icon name="videocam" size={24} color={C.stone} />
-          <View style={{ flex: 1, gap: 2 }}>
-            <T size={14} weight={700}>No cameras yet</T>
-            <T size={12} color={C.stone} lineHeight={1.4}>Link Google Nest to see your doorbell and cameras here.</T>
-          </View>
-          <Press onPress={() => nav.navigate('Web', { title: 'Google Nest', path: '/phone.html?embed=1&setup=nest' })} style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.08)' }}>
-            <T size={12.5} weight={700}>Set up</T>
-          </Press>
-        </View>
+        <Empty compact icon="videocam" title="No cameras yet" text="Link Google Nest to see your doorbell and cameras here." action="Set up" onAction={() => nav.navigate('Web', { title: 'Google Nest', path: '/phone.html?embed=1&setup=nest' })} />
       )}
 
-      <Card style={{ padding: 16, gap: 12 }}>
-        <T size={15} weight={700}>Who’s home</T>
-        {s.people.length ? s.people.map(p => (
-          <View key={p.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: p.home ? 'rgba(127,212,160,0.18)' : C.control, alignItems: 'center', justifyContent: 'center' }}>
-              <T size={13} weight={800} color={p.home ? C.green : C.stone}>{p.name[0]}</T>
-            </View>
-            <View style={{ flex: 1, gap: 1 }}>
-              <T size={14} weight={600}>{p.name}</T>
-              <T size={12} color={C.stone}>{`${p.home ? 'Home' : 'Out'}${p.sinceLabel ? ` since ${p.sinceLabel}` : ''}${p.detail ? ` · ${p.detail}` : ''}`}</T>
-            </View>
-            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: p.home ? C.green : C.stone3 }} />
-          </View>
-        )) : <T size={13} color={C.stone}>Add the people who live here in Customise home.</T>}
-      </Card>
+      <Section title="Who’s home">
+        {s.people.length ? (
+          <Card style={{ overflow: 'hidden' }}>
+            {s.people.map((p, i) => (
+              <View key={p.id} style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3], paddingVertical: SP[3], paddingHorizontal: SP[4], borderTopWidth: i ? 1 : 0, borderTopColor: C.hairline }}>
+                <Avatar name={p.name} home={p.home} size={38} ring={C.card} />
+                <View style={{ flex: 1, gap: 1 }}>
+                  <T v="headline">{p.name}</T>
+                  <T v="footnote" color={C.stone}>{`${p.home ? 'Home' : 'Out'}${p.sinceLabel ? ` since ${p.sinceLabel}` : ''}${p.detail ? ` · ${p.detail}` : ''}`}</T>
+                </View>
+                <T v="micro" color={p.home ? C.green : C.stone2}>{p.home ? 'HOME' : 'OUT'}</T>
+              </View>
+            ))}
+          </Card>
+        ) : <Empty compact icon="group" title="No people yet" text="Add the people who live here in Customise home." />}
+      </Section>
 
       {internet || warden ? (
-        <Card style={{ padding: 16, gap: 10 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <Icon name="router" size={20} color={internet?.on === false ? C.red : C.green} />
-            <T size={15} weight={700} style={{ flex: 1 }}>Network</T>
-            {internet ? <T size={12.5} weight={600} color={stateOf(internet)[1]}>{stateOf(internet)[0]}</T> : null}
-          </View>
-          {warden?.note ? <T size={12.5} color={C.stone} lineHeight={1.4}>{warden.note}</T> : null}
-        </Card>
+        <Section title="Network">
+          <Card style={{ padding: SP[4], gap: SP[2] }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3] }}>
+              <Icon name="router" size={22} color={netBad ? C.red : C.green} />
+              <T v="headline" style={{ flex: 1 }}>{internet ? stateOf(internet)[0] : 'Warden'}</T>
+              {internet ? <PulseDot color={netBad ? C.red : C.green} size={7} /> : null}
+            </View>
+            {warden?.note ? <T v="footnote" color={C.stone}>{warden.note}</T> : null}
+          </Card>
+        </Section>
       ) : null}
 
-      <View style={{ gap: 6 }}>
-        <SectionTitle>Today</SectionTitle>
-        {events.length ? events.map(e => (
-          <View key={e.id} style={{ flexDirection: 'row', gap: 12, paddingVertical: 10, borderTopWidth: 1, borderTopColor: C.hairline, alignItems: 'center' }}>
-            <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: 'rgba(127,212,160,0.14)', alignItems: 'center', justifyContent: 'center' }}>
+      <Section title="Today" gap={SP[1]}>
+        {events.length ? events.map((e, i) => (
+          <Appear key={e.id} index={i} style={{ flexDirection: 'row', gap: SP[3], paddingVertical: SP[3], borderTopWidth: i ? 1 : 0, borderTopColor: C.hairline, alignItems: 'center' }}>
+            <View style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: C.greenTint, alignItems: 'center', justifyContent: 'center' }}>
               <Icon name={e.icon} size={18} color={C.green} />
             </View>
             <View style={{ flex: 1, gap: 2 }}>
-              <T size={13.5} weight={600}>{e.what}</T>
-              {e.why ? <T size={12} color={C.stone}>{e.why}</T> : null}
+              <T v="callout" weight={600} color={C.bone}>{e.what}</T>
+              {e.why ? <T v="footnote" color={C.stone}>{e.why}</T> : null}
             </View>
-            <T mono size={11.5} color={C.stone}>{e.t}</T>
-          </View>
-        )) : <T size={13} color={C.stone}>Nothing yet today.</T>}
-      </View>
+            <T mono size={11.5} color={C.stone2}>{e.t}</T>
+          </Appear>
+        )) : <Empty compact icon="shield" tone={C.green} title="All quiet today" text="Doorbell rings and people coming and going show up here." />}
+      </Section>
     </Screen>
   );
 }

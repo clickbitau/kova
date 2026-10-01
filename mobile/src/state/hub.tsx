@@ -7,12 +7,15 @@ import { addressesOf, chooseAddress, learn, type HubAddress, type Route } from '
 import { wsUrl, type HubConfig } from '../logic/connect';
 import { followHub } from '../native/arrive-leave';
 import { getJson, setJson } from '../native/storage';
-import { checkForAppUpdate, pointUpdatesAtHub } from '../native/updates';
+import { applyAppUpdate, checkForAppUpdate, pointUpdatesAtHub } from '../native/updates';
 import { haptic } from '../ui/motion';
 
 export type Conn = 'connecting' | 'live' | 'offline';
 
-export interface Toast { id: number; text: string; undo?: string; error?: boolean }
+export interface Toast { id: number; text: string; undo?: string; error?: boolean; action?: { label: string; run: () => void } }
+
+/** A device command on its way: `busy` until the hub answers, `failed` for a moment when it refused. */
+export type Pending = Record<string, 'busy' | 'failed'>;
 
 interface HubCtx {
   cfg: HubConfig | null;
@@ -25,6 +28,8 @@ interface HubCtx {
   /** Every address this hub may be reached at, home network first. */
   addresses: HubAddress[];
   toast: Toast | null;
+  /** Devices with a command in flight, or one that just failed (tiles show a ring, or shake). */
+  pending: Pending;
   connect(cfg: HubConfig): Promise<void>;
   forget(): Promise<void>;
   setPerson(personId: string | undefined): Promise<void>;
@@ -34,9 +39,9 @@ interface HubCtx {
   /** Change a device, showing the change at once; the hub's next snapshot has the final word. */
   /** Resolves true when the hub took it (errors are shown here). */
   send(id: string, cmd: Command, done?: string): Promise<boolean>;
-  /** A call that returns { undo }: toast with an Undo button. */
-  act(method: 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, body: unknown, done: string): Promise<void>;
-  say(text: string, opts?: { undo?: string; error?: boolean }): void;
+  /** A call that returns { undo }: toast with an Undo button. Resolves true when the hub took it. */
+  act(method: 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, body: unknown, done: string): Promise<boolean>;
+  say(text: string, opts?: { undo?: string; error?: boolean; action?: Toast['action'] }): void;
   undo(id: string): Promise<void>;
   /** Pull to refresh: the hub's state read again now, and the live link reopened if it had dropped. */
   refresh(): Promise<void>;
@@ -54,6 +59,12 @@ export function HubProvider({ children }: { children: ReactNode }) {
   const [conn, setConn] = useState<Conn>('connecting');
   const [route, setRoute] = useState<Route | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
+  const [pending, setPending] = useState<Pending>({});
+  const mark = useCallback((id: string, p: 'busy' | 'failed' | null) => setPending(o => {
+    const n = { ...o };
+    if (p) n[id] = p; else delete n[id];
+    return n;
+  }), []);
   const ws = useRef<WebSocket | null>(null);
   const retry = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -227,10 +238,10 @@ export function HubProvider({ children }: { children: ReactNode }) {
       .catch(() => {});
   }, [routeUrl, save]);
 
-  const say = useCallback((text: string, opts: { undo?: string; error?: boolean } = {}) => {
+  const say = useCallback((text: string, opts: { undo?: string; error?: boolean; action?: Toast['action'] } = {}) => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     setToast({ id: Date.now(), text, ...opts });
-    toastTimer.current = setTimeout(() => setToast(null), opts.undo ? 6000 : 3500);
+    toastTimer.current = setTimeout(() => setToast(null), opts.action ? 9000 : opts.undo ? 6000 : 3500);
   }, []);
 
   // App updates come from this hub (native/updates.ts): point the updater at it, check now and whenever the app
@@ -240,12 +251,12 @@ export function HubProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const c = cfgRef.current;
     if (!c || !routeUrl) return;
-    let source: string | null = null, first = true;
+    let source: string | null = null, first = true, told = false;
     const check = () => {
       if (source !== routeRef.current?.url) return;
       const force = first; first = false;
-      void checkForAppUpdate(force).then(ready => {
-        if (ready) say('A new version of Kova is ready. It starts next time you open the app.');
+      void checkForAppUpdate(force).then(u => {
+        if (u.state === 'ready' && !told) { told = true; say(u.version ? `Kova ${u.version} is ready` : 'A new version of Kova is ready', { action: { label: 'Restart', run: () => void applyAppUpdate() } }); }
       });
     };
     void pointUpdatesAtHub(addressesOf(c), routeUrl).then(s => { source = s; check(); });
@@ -280,29 +291,35 @@ export function HubProvider({ children }: { children: ReactNode }) {
     haptic.select();
     // Show it now; the hub's snapshot replaces this a moment later.
     setSnap(s => s && { ...s, devices: s.devices.map(d => d.id === id ? { ...d, state: { ...d.state, ...cmd } } : d) });
+    mark(id, 'busy');
     try {
       const r = await api<{ undo?: string }>('POST', `/api/devices/${encodeURIComponent(id)}`, cmd);
+      mark(id, null);
       if (done) say(done, { undo: r?.undo });
       return true;
     } catch (e) {
+      mark(id, 'failed');
+      setTimeout(() => setPending(o => { if (o[id] !== 'failed') return o; const n = { ...o }; delete n[id]; return n; }), 900);
       say((e as Error).message, { error: true });
       void api<Snapshot>('GET', '/api/state').then(setSnap).catch(() => {});
       return false;
     }
-  }, [api, say]);
+  }, [api, say, mark]);
 
   const act = useCallback(async (method: 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, body: unknown, done: string) => {
     try {
       const r = await api<{ undo?: string }>(method, path, body);
       haptic.success();
       say(done, { undo: r?.undo });
+      return true;
     } catch (e) {
       say((e as Error).message, { error: true });
+      return false;
     }
   }, [api, say]);
 
   const undo = useCallback(async (id: string) => {
-    try { await api('POST', `/api/undo/${encodeURIComponent(id)}`); say('Undone'); } catch (e) { say((e as Error).message, { error: true }); }
+    try { await api('POST', `/api/undo/${encodeURIComponent(id)}`); haptic.success(); say('Undone'); } catch (e) { say((e as Error).message, { error: true }); }
   }, [api, say]);
 
   const refresh = useCallback(async () => {
@@ -333,8 +350,8 @@ export function HubProvider({ children }: { children: ReactNode }) {
   }, [save, choose]);
 
   const addresses = useMemo(() => (cfg ? addressesOf(cfg) : []), [cfg]);
-  const value = useMemo<HubCtx>(() => ({ cfg, loading, snap, conn, route, addresses, toast, connect, forget, setPerson, setAddresses, api, send, act, say, undo, refresh }),
-    [cfg, loading, snap, conn, route, addresses, toast, connect, forget, setPerson, setAddresses, api, send, act, say, undo, refresh]);
+  const value = useMemo<HubCtx>(() => ({ cfg, loading, snap, conn, route, addresses, toast, pending, connect, forget, setPerson, setAddresses, api, send, act, say, undo, refresh }),
+    [cfg, loading, snap, conn, route, addresses, toast, pending, connect, forget, setPerson, setAddresses, api, send, act, say, undo, refresh]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

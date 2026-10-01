@@ -111,3 +111,24 @@ export function Appear({ index = 0, children, style }: { index?: number; childre
     </Animated.View>
   );
 }
+
+/** A "no": a quick side-to-side shake (something failed). With reduced motion, nothing moves; the error haptic and colour say it. */
+export function shake(v: Animated.Value) {
+  if (reduced) return;
+  v.setValue(0);
+  Animated.sequence([-8, 7, -5, 3, 0].map(x => Animated.timing(v, { toValue: x, duration: 55, easing: EASE_OUT, useNativeDriver: true }))).start();
+}
+
+/** A value looping 0 → 1 for as long as `on` (spinners, shimmer, a pulsing dot). Still with reduced motion unless `essential`. */
+export function useLoop(on: boolean, duration: number, o: { essential?: boolean; native?: boolean } = {}) {
+  const v = useRef(new Animated.Value(0)).current;
+  const rm = useReducedMotion();
+  useEffect(() => {
+    if (!on || (rm && !o.essential)) { v.setValue(0); return; }
+    const loop = Animated.loop(Animated.timing(v, { toValue: 1, duration, easing: Easing.linear, useNativeDriver: o.native ?? true }));
+    loop.start();
+    return () => loop.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [on, rm, duration, v]);
+  return v;
+}

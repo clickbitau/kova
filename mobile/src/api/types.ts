@@ -54,7 +54,11 @@ export interface Device {
 }
 
 export interface Room { id: string; name: string; icon: string }
-export interface Person { id: string; name: string; detail: string; home: boolean; since: number | null; sinceLabel: string }
+export interface Person {
+  id: string; name: string; detail: string; home: boolean; since: number | null; sinceLabel: string;
+  /** What already tells the hub this person is home without their phone's location (e.g. ['Warden']); empty or missing when nothing does. */
+  via?: string[];
+}
 
 export interface ModeView {
   id: string; name: string; color: string; icon: string;

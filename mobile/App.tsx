@@ -11,7 +11,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useLastTap } from './src/native/push';
 import { useQuickActionCallback } from 'expo-quick-actions/hooks';
 import { shareHub, syncExtensions } from './src/native/extensions';
-import { C } from './src/theme';
+import { C, SP } from './src/theme';
 import { HubProvider, useHub } from './src/state/hub';
 import { SheetProvider } from './src/state/sheet';
 import type { Stack as StackParams } from './src/navigation';
@@ -25,17 +25,28 @@ import { WebScreen } from './src/screens/WebScreen';
 import { AutomationsScreen } from './src/screens/AutomationsScreen';
 import { AutomationEditor } from './src/screens/AutomationEditor';
 import { DeviceSheet } from './src/screens/DeviceSheet';
-import { Mark, ToastHost } from './src/ui/kit';
-import { T } from './src/ui/Text';
+import { Button, Empty, Mark, ToastHost } from './src/ui/kit';
+import { NowSkeleton } from './src/screens/NowScreen';
 
 const Stack = createNativeStackNavigator<StackParams>();
 const theme = { ...DarkTheme, colors: { ...DarkTheme.colors, background: C.page, card: C.nav, primary: C.amber, text: C.bone, border: C.hairline } };
 
-function Splash({ text }: { text?: string }) {
+function Splash() {
   return (
-    <View style={{ flex: 1, backgroundColor: C.page, alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+    <View style={{ flex: 1, backgroundColor: C.page, alignItems: 'center', justifyContent: 'center' }}>
       <Mark size={56} />
-      {text ? <T size={13.5} color={C.stone}>{text}</T> : null}
+    </View>
+  );
+}
+
+/** The hub didn't answer at launch: say so plainly, keep trying, and offer the two ways out. */
+function CantReach() {
+  const { refresh, forget, cfg } = useHub();
+  const insets = useSafeAreaInsets();
+  return (
+    <View style={{ flex: 1, backgroundColor: C.page, padding: SP[6], paddingTop: insets.top + SP[6], paddingBottom: insets.bottom + SP[6], justifyContent: 'center', gap: SP[3] }}>
+      <Empty icon="cloud_off" tone={C.red} title="Can’t reach your hub" text={`Kova keeps trying ${cfg?.url ?? ''}. Check this phone is on the home Wi-Fi.`} action="Try again" onAction={() => void refresh()} />
+      <Button kind="ghost" label="Connect to a different hub" onPress={() => forget()} />
     </View>
   );
 }
@@ -71,11 +82,11 @@ function Home() {
 
   if (loading) return <Splash />;
   if (!cfg) return <ConnectScreen />;
-  if (!snap) return <Splash text={conn === 'offline' ? 'Can’t reach your hub. Trying again…' : 'Connecting to your home…'} />;
+  if (!snap) return conn === 'offline' ? <CantReach /> : <NowSkeleton />;
   return (
     <SheetProvider>
       <NavigationContainer ref={nav} theme={theme}>
-        <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.page }, animation: 'slide_from_right' }}>
+        <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.page }, animation: 'slide_from_right', gestureEnabled: true, fullScreenGestureEnabled: true }}>
           <Stack.Screen name="Tabs" component={Tabs} />
           <Stack.Screen name="Modes" component={ModesScreen} />
           <Stack.Screen name="Activity" component={ActivityScreen} />
@@ -86,12 +97,7 @@ function Home() {
         </Stack.Navigator>
         <DeviceSheet />
       </NavigationContainer>
-      {conn === 'offline' ? (
-        <View pointerEvents="none" style={{ position: 'absolute', top: insets.top + 4, alignSelf: 'center', paddingVertical: 5, paddingHorizontal: 12, borderRadius: 999, backgroundColor: 'rgba(255,107,94,0.16)' }}>
-          <T size={12} weight={700} color={C.red}>Reconnecting to your hub…</T>
-        </View>
-      ) : null}
-      <ToastHost toast={toast} onUndo={t => t.undo && void undo(t.undo)} bottom={insets.bottom + 92} />
+      <ToastHost toast={toast} onUndo={t => t.undo && void undo(t.undo)} bottom={insets.bottom + 96} />
     </SheetProvider>
   );
 }
