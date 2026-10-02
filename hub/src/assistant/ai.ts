@@ -624,8 +624,9 @@ export class AiAssistant {
     if (share.rooms) shared.push('device states');
 
     if (share.presence) {
-      const ps = cfg.people.map(p => `${p.name} (${p.id}) ${this.engine.people[p.id]?.home === false ? 'out' : 'home'}`);
+      const ps = cfg.people.map(p => `${p.name} ${this.engine.people[p.id]?.home === false ? 'out' : 'home'}`);
       lines.push(`Who's home: ${ps.length ? ps.join(', ') : 'nobody set up'}.`);
+      lines.push(`People: ${cfg.people.map(p => `${p.id} (${p.name})`).join(', ')}.`);
       shared.push("who's home");
     }
 

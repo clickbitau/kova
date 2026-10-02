@@ -66,7 +66,7 @@ test('Local AI: tool call changes a device through the engine, logged, tagged an
   assert.equal(fake.received.length, 2);
   assert.equal(fake.received[0].url, '/v1/chat/completions');
   assert.equal(fake.received[0].body.model, 'llama3');
-  assert.deepEqual(fake.received[0].body.tools.map((t: any) => t.function.name), ['set_devices', 'start_overlay', 'end_overlay', 'explain_device', 'list_schedule']);
+  assert.deepEqual(fake.received[0].body.tools.map((t: any) => t.function.name), ['set_devices', 'start_overlay', 'end_overlay', 'explain_device', 'list_schedule', 'create_automation']);
   const toolMsg = fake.received[1].body.messages.find((m: any) => m.role === 'tool');
   assert.equal(toolMsg.tool_call_id, 'call_1');
   assert.equal(JSON.parse(toolMsg.content).ok, true);
@@ -175,7 +175,7 @@ test('Cloud AI: Anthropic Messages tool loop against a fake endpoint', async () 
   assert.equal(first.headers['x-api-key'], 'sk-ant-test');
   assert.equal(first.headers.authorization, undefined);
   assert.equal(first.body.model, 'claude-opus-5-5');
-  assert.deepEqual(first.body.tools.map((t: any) => t.name), ['set_devices', 'start_overlay', 'end_overlay', 'explain_device', 'list_schedule']);
+  assert.deepEqual(first.body.tools.map((t: any) => t.name), ['set_devices', 'start_overlay', 'end_overlay', 'explain_device', 'list_schedule', 'create_automation']);
   assert.ok(!('tool_choice' in first.body) || first.body.tool_choice.type === 'auto');
   const sys = JSON.stringify(first.body.system);
   for (const c of CAMERAS) assert.ok(!sys.includes(c), `camera ${c} was sent`);
@@ -291,20 +291,24 @@ test('Greeting is answered by the built-in parser, no AI call', async () => {
 });
 
 test('AI can set any field a device exposes (childLock), even with no named parameter', async () => {
-  const fake = await fakeServer([openAiToolCall('set_devices', { devices: [{ id: 'lounge_purifier', set: { childLock: true } }] }), openAiText('Child lock is on.')]);
+  const fake = await fakeServer([
+    openAiToolCall('set_devices', { devices: [{ id: 'lounge_purifier', set: { childLock: true } }] }),
+    openAiText('Child lock is on.'),
+    openAiToolCall('set_devices', { devices: [{ id: 'lamp', set: { childLock: true } }] }),
+    openAiText('The lamp has no child lock to set.'),
+  ]);
   const { hub, app, put, ask, dev } = await setup();
   await put({ engine: 'local', local: { url: fake.url, model: 'm' } });
 
   const r = await ask('turn on child lock on the lounge purifier');
   assert.equal(r.text, 'Child lock is on.');
   assert.equal(dev('lounge_purifier').childLock, true);
-  // …and a field the device doesn't have is refused.
-  const fake2 = await fakeServer([openAiToolCall('set_devices', { devices: [{ id: 'lamp', set: { childLock: true } }] }), openAiText('Sorry, no.')]);
-  const r2 = await ask('turn on child lock on the lamp');
-  assert.equal(fake2.received.length >= 1, true);
+  // …and a field the device doesn't have is refused — nothing changes, the AI gets ok:false.
+  const r2 = await ask('please enable child lock on the lamp');
+  assert.equal(r2.text, 'The lamp has no child lock to set.');
+  assert.equal(fake.received.length, 4);
   assert.equal(dev('lamp').childLock, undefined);
-  void r2;
-  await app.close(); await hub.stop(); await fake.close(); await fake2.close();
+  await app.close(); await hub.stop(); await fake.close();
 });
 
 test('AI creates a real, validated automation that shows in the engine and can be undone', async () => {
