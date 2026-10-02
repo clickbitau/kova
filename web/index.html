@@ -10,7 +10,10 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" href="./assets/logo/kova-favicon.svg">
 <link rel="apple-touch-icon" href="./assets/logo/kova-app-icon.svg">
-<script>(function(){var t="";try{var u=new URL(location.href);t=u.searchParams.get("token")||localStorage.getItem("kova_token")||"";if(u.searchParams.get("token"))localStorage.setItem("kova_token",t)}catch(e){}document.write('<script src="/api/boot.js'+(t?"?token="+encodeURIComponent(t):"")+'"><\/script>')})();</script>
+<script>(function(){var t="";try{var u=new URL(location.href);t=u.searchParams.get("token")||localStorage.getItem("kova_token")||"";if(u.searchParams.get("token"))localStorage.setItem("kova_token",t)}catch(e){}
+/* Not signed in, or the key stopped working: the sign-in page. A hub with no key set lets everyone in, so try first. */
+window.__kovaSignIn=function(){fetch("/api/state",{headers:t?{authorization:"Bearer "+t}:{}}).then(function(r){if(r.status===401)location.replace("/signin.html"+(t?"?expired=1":""))}).catch(function(){})};
+document.write('<script src="/api/boot.js'+(t?"?token="+encodeURIComponent(t):"")+'" onerror="__kovaSignIn()"><\/script>')})();</script>
 <script src="./support.js"></script>
 <link rel="stylesheet" href="./motion.css">
 <link rel="stylesheet" href="./responsive.css">
@@ -40,6 +43,7 @@
 <div style="font-size:12px;color:#a3a09a;line-height:1.4">{{ hubSub }}</div>
 </div>
 <a href="./connect.html" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;cursor:pointer;text-decoration:none;color:#f1efea" style-hover="background:rgba(255,255,255,0.05)"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#7fd4a0">phone_iphone</span><div style="display:flex;flex-direction:column;flex:1"><span style="font-size:13px;font-weight:600">Kova on your phone</span><span style="font-size:11px;color:#a3a09a">Scan a code with the app</span></div></a>
+<div onClick="{{ bsOpen }}" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;cursor:pointer;color:#f1efea" style-hover="background:rgba(255,255,255,0.05)"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#7cb8f0">devices</span><div style="display:flex;flex-direction:column;flex:1"><span style="font-size:13px;font-weight:600">Signed-in browsers</span><span style="font-size:11px;color:#a3a09a">Sign one in with a code, or sign out</span></div></div>
 <div onClick="{{ toggleAdvanced }}" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;cursor:pointer" style-hover="background:rgba(255,255,255,0.05)">
 <div style="display:flex;flex-direction:column;flex:1"><span style="font-size:13px;font-weight:600">Advanced mode</span><span style="font-size:11px;color:#a3a09a">Code, entity ids, dev tools</span></div>
 <div style="width:34px;height:20px;border-radius:10px;padding:2px;display:flex;justify-content:flex-start;background:{{ advTrack }}"><div style="width:16px;height:16px;border-radius:50%;background:#fff;transform:{{ advKnob }}"></div></div>
@@ -627,6 +631,20 @@
 </sc-if>
 
 </main>
+<sc-if value="{{ bs.open }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ bs.close }}" style="position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:60"></div>
+<div data-kova-sheet role="dialog" aria-label="Signed-in browsers" style="position:fixed;top:0;right:0;bottom:0;width:min(440px,100vw);background:#141517;border-left:1px solid rgba(255,255,255,0.08);padding:24px;display:flex;flex-direction:column;gap:18px;overflow-y:auto;z-index:61;box-sizing:border-box">
+<div style="display:flex;align-items:center;gap:10px"><h2 style="margin:0;font-size:22px;font-weight:700;flex:1">Signed-in browsers</h2><span onClick="{{ bs.close }}" role="button" aria-label="Close" style="font-family:'Material Symbols Rounded';font-size:22px;color:#a3a09a;cursor:pointer">close</span></div>
+<div style="display:flex;flex-direction:column;gap:8px;padding:16px;border-radius:14px;background:#16171a"><span style="font-size:14px;font-weight:700">Sign in a browser</span><span style="font-size:13px;color:#a3a09a;line-height:1.5">Open your Kova address in the other browser. Type the code it shows here.</span>
+<div style="display:flex;gap:8px"><input value="{{ bs.code }}" onInput="{{ bs.setCode }}" placeholder="ABCD-1234" aria-label="Code" autocomplete="off" style="padding:10px 12px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:15px;font-family:'JetBrains Mono',monospace;letter-spacing:.08em;text-transform:uppercase;flex:1;min-width:0"><div onClick="{{ bs.approve }}" style="padding:10px 16px;border-radius:10px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap">Sign it in</div></div>
+<span style="font-size:12.5px;color:{{ bs.msgFg }}">{{ bs.msg }}</span></div>
+<div style="display:flex;flex-direction:column;background:#16171a;border-radius:14px;overflow:hidden">
+<sc-for list="{{ bs.list }}" as="b" hint-placeholder-count="2"><div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid rgba(255,255,255,0.05)"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#a3a09a">{{ b.icon }}</span><div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:13.5px;font-weight:700">{{ b.name }}</span><span style="font-size:12px;color:#a3a09a">{{ b.sub }}</span></div><div onClick="{{ b.out }}" style="padding:6px 10px;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;background:rgba(255,255,255,0.06);color:#ff6b5e;white-space:nowrap">{{ b.outLabel }}</div></div></sc-for>
+<sc-if value="{{ bs.none }}" hint-placeholder-val="{{ false }}"><span style="padding:14px;font-size:13px;color:#a3a09a">No browsers signed in with a code yet. Ones opened with the hub’s access key don’t show here.</span></sc-if>
+</div>
+<div onClick="{{ bs.signOutHere }}" style="align-self:flex-start;padding:9px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:rgba(255,107,94,0.12);color:#ff6b5e">Sign out of this browser</div>
+</div>
+</sc-if>
 
 <sc-if value="{{ drawerOpen }}" hint-placeholder-val="{{ false }}">
 <div onClick="{{ closeDrawer }}" style="position:fixed;inset:0;background:rgba(0,0,0,0.55)"></div>
@@ -1424,6 +1442,9 @@ class Component extends DCLogic {
       save:()=>{const body=JSON.parse(JSON.stringify(A));(E.id?api('PUT','/api/automations/'+E.id,body):api('POST','/api/automations',body)).then(r=>{this.setState({ae:null});done(E.id?`${A.name} saved`:`${A.name} added`)(r)}).catch(x=>this.err(x))},
       tryNow:E.id?()=>api('POST',`/api/automations/${E.id}/run`).then(r=>{this.toast(!r.ran?r.why:r.running?'Running: see History':'Ran it');this.openAuto((this.state.hub.automations||[]).find(x=>x.id===E.id),'history')}).catch(x=>this.err(x)):null,canTry:!!E.id}};
   }
+  loadBrowsers(){api('GET','/api/sessions').then(r=>this.setState(p=>p.bs?{bs:{...p.bs,list:r.sessions||[]}}:null)).catch(()=>{})}
+  // Sign this browser out: its own key stops working (a browser on the hub's access key just forgets it).
+  signOutHere(){api('POST','/api/logout').catch(()=>{}).finally(()=>{try{localStorage.removeItem('kova_token')}catch(e){}location.replace('/signin.html')})}
   openAuto(a,tab){
     const blank={name:'',enabled:true,mode:'single',triggers:[],conditions:[],actions:[]};
     const draft=a?{name:a.name,description:a.description,enabled:a.enabled!==false,mode:a.mode||'single',triggers:a.triggers||[],conditions:a.conditions||[],actions:a.actions||[],...(a.origin?{origin:a.origin}:{})}:blank;
@@ -1502,7 +1523,15 @@ class Component extends DCLogic {
     const combineIdeas=(H.combineIdeas||[]).map(ci=>({name:ci.name,why:ci.why,
       combine:()=>api('POST','/api/combined',{name:ci.name,members:ci.members}).then(r=>this.toast(`${ci.name} is one device now`,this.undoFn(r.undo))).catch(x=>this.err(x)),
       dismiss:()=>api('POST',`/api/findings/${encodeURIComponent('idea:'+ci.key)}/dismiss`).then(r=>this.toast('Kept as two',this.undoFn(r.undo))).catch(x=>this.err(x))}));
-    return {...this.kovaAutoVals(s,H,devs,RN),combineIdeas,nav,isHome:s.screen==='home',isRooms:s.screen==='rooms',isAutos:s.screen==='autos',isImport:s.screen==='import',isDev:s.screen==='dev'&&adv,
+    const B=s.bs||{};
+    const ago=t=>{const m=Math.round((Date.now()-t)/60000);return m<2?'just now':m<60?`${m} min ago`:m<1440?`${Math.round(m/60)} h ago`:`${Math.round(m/1440)} d ago`};
+    const bs={open:!!B.open,close:()=>this.setState({bs:null}),code:B.code||'',setCode:e=>{const v=e.target.value;this.setState(p=>({bs:{...p.bs,code:v,msg:''}}))},
+      msg:B.msg||'',msgFg:B.ok?'#7fd4a0':'#ff6b5e',
+      approve:()=>api('POST','/api/login/approve',{code:B.code||''}).then(r=>{this.setState(p=>({bs:{...p.bs,code:'',msg:`${r.name} is signed in.`,ok:true}}));this.loadBrowsers()}).catch(x=>this.setState(p=>({bs:{...p.bs,msg:x.message,ok:false}}))),
+      list:(B.list||[]).map(b=>({name:b.name+(b.current?' · this one':''),icon:/iPhone|Android/.test(b.name)?'smartphone':/iPad/.test(b.name)?'tablet':'computer',sub:`Signed in ${new Date(b.created).toLocaleDateString('en-AU',{day:'numeric',month:'short'})} · last used ${ago(b.lastSeen)}`,
+        outLabel:b.current?'Sign out':'Sign it out',out:()=>b.current?this.signOutHere():api('DELETE','/api/sessions/'+encodeURIComponent(b.id)).then(()=>{this.toast(`${b.name} signed out`);this.loadBrowsers()}).catch(x=>this.err(x))})),
+      none:!(B.list||[]).length,signOutHere:()=>this.signOutHere()};
+    return {...this.kovaAutoVals(s,H,devs,RN),combineIdeas,bs,bsOpen:()=>{this.setState({bs:{open:true}});this.loadBrowsers()},nav,isHome:s.screen==='home',isRooms:s.screen==='rooms',isAutos:s.screen==='autos',isImport:s.screen==='import',isDev:s.screen==='dev'&&adv,
       homeName:H.home.name,hubTitle:hubOk?(H.demo?'Demo home':'Hub connected'):'Can’t reach the hub',hubSub:hubOk?(H.demo?'Virtual devices · safe to play with':`${list.length} devices · all local`):'Reconnecting…',hubDot:hubOk?'#7fd4a0':'#ff6b5e',
       weatherIcon:w?w.icon:'cloud_off',weatherTemp:w?`${w.temp}°`:'—',weatherText:w?w.text:'No weather',
       avatars:(home.length?home:H.people).slice(0,3).map((p,i)=>({initial:p.name[0],ml:i?'-8px':'0px',op:p.home?1:0.4})),
