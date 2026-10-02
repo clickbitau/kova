@@ -229,6 +229,78 @@ test('Cloud AI: MiniMax provider uses the OpenAI-compatible loop with the preset
   await app.close(); await hub.stop(); await fake.close();
 });
 
+test('Learned: an AI-run phrase replays without the AI; undo forgets it', async () => {
+  const fake = await fakeServer([openAiToolCall('set_devices', { devices: [{ id: 'lamp', bri: 30 }] }), openAiText('Lamp is at 30%.')]);
+  const { hub, app, put, ask, dev } = await setup();
+  await put({ engine: 'local', local: { url: fake.url, model: 'llama3' } });
+
+  const r1 = await ask('make the lounge feel cosy');
+  assert.equal(r1.understood, true);
+  assert.equal(dev('lamp').bri, 30);
+  assert.equal(fake.received.length, 2);
+
+  // Learned phrase was stored.
+  const learned = (await app.inject({ url: '/api/assistant/learned' })).json();
+  assert.deepEqual(learned.map((x: any) => x.phrase), ['make the lounge feel cosy']);
+
+  // Same ask: no AI call, replayed locally.
+  const r2 = await ask('Make the lounge feel cosy!');
+  assert.equal(r2.source, 'Learned · no AI needed');
+  assert.equal(r2.understood, true);
+  assert.equal(fake.received.length, 2, 'no new request to the AI');
+
+  // Undoing the AI's first run forgets the phrase.
+  await app.inject({ method: 'POST', url: `/api/undo/${r1.undo}` });
+  assert.deepEqual((await app.inject({ url: '/api/assistant/learned' })).json(), []);
+  assert.equal((await app.inject({ method: 'DELETE', url: '/api/assistant/learned/nope' })).statusCode, 404);
+  await app.close(); await hub.stop(); await fake.close();
+});
+
+test('Requests log captures what reached the AI, with the tools it ran', async () => {
+  const fake = await fakeServer([openAiToolCall('set_devices', { devices: [{ id: 'lamp', on: true }] }), openAiText('done')]);
+  const { hub, app, put, ask } = await setup();
+  await put({ engine: 'local', local: { url: fake.url, model: 'llama3' } });
+  await ask('gibberish that needs the ai');
+
+  const log = (await app.inject({ url: '/api/assistant/requests' })).json();
+  assert.equal(log[0].text, 'gibberish that needs the ai');
+  assert.equal(log[0].engine, 'Local AI');
+  assert.deepEqual(log[0].tools, ['set_devices']);
+  assert.equal(log[0].ok, true);
+  await app.close(); await hub.stop(); await fake.close();
+});
+
+test('Reasoning models: <think> blocks never reach the reply', async () => {
+  const fake = await fakeServer([openAiText('<think>\nreasoning here\n</think>\nHi there!')]);
+  const { hub, app, put, ask } = await setup();
+  await put({ engine: 'local', local: { url: fake.url, model: 'm2.7' } });
+  const r = await ask('say something kind');
+  assert.equal(r.text, 'Hi there!');
+  await app.close(); await hub.stop(); await fake.close();
+});
+
+test('Greeting is answered by the built-in parser, no AI call', async () => {
+  const fake = await fakeServer([openAiText('should not run')]);
+  const { hub, app, put, ask } = await setup();
+  await put({ engine: 'local', local: { url: fake.url, model: 'm' } });
+  const r = await ask('hi');
+  assert.equal(r.understood, true);
+  assert.match(r.text, /What do you need\?/);
+  assert.equal(fake.received.length, 0);
+  await app.close(); await hub.stop(); await fake.close();
+});
+
+test('Standing instructions reach the AI system prompt', async () => {
+  const fake = await fakeServer([openAiText('ok')]);
+  const { hub, app, put, ask } = await setup();
+  await put({ engine: 'local', local: { url: fake.url, model: 'm' }, instructions: "Baby's room speaker stays quiet." });
+  const r = await ask('gibberish that needs the ai');
+  assert.match(JSON.stringify(fake.received[0].body), /Baby's room speaker stays quiet/);
+  const s = (await app.inject({ url: '/api/assistant/settings' })).json();
+  assert.equal(s.instructions, "Baby's room speaker stays quiet.");
+  await app.close(); await hub.stop(); await fake.close();
+});
+
 test('Cloud AI: unknown provider and bad baseUrl are rejected', async () => {
   const { hub, app, put } = await setup();
   assert.equal((await put({ cloud: { provider: 'nope' } })).statusCode, 400);

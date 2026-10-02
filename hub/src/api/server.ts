@@ -11,7 +11,7 @@ import { MatterAdapter } from '../adapters/matter.ts';
 import { HomeKitControllerAdapter } from '../adapters/homekit-controller.ts';
 import { snapshot } from './snapshot.ts';
 import { registerEditRoutes } from './edit-routes.ts';
-import { AiAssistant, loadSettings, publicSettings, saveSettings, type AiOptions, type SettingsPatch } from '../assistant/ai.ts';
+import { AiAssistant, loadSettings, publicSettings, saveSettings, requestLog, learnedPhrases, forgetPhrase, type AiOptions, type SettingsPatch } from '../assistant/ai.ts';
 import { isLight, isPlayer } from '../util/describe.ts';
 import type { HomeKitBridge } from '../bridges/homekit.ts';
 import type { MatterBridge } from '../bridges/matter-bridge.ts';
@@ -532,12 +532,21 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
     try { return publicSettings(saveSettings(hub.store, req.body ?? {})); } catch (e) { return fail(reply, e); }
   });
 
+  // What the AI has been asked (full text + tools it ran), and the phrases it learned — the raw material for new built-in intents.
+  app.get('/api/assistant/requests', async () => requestLog(hub.store));
+  app.get('/api/assistant/learned', async () => learnedPhrases(hub.store));
+  app.delete<{ Params: { key: string } }>('/api/assistant/learned/:key', async (req, reply) =>
+    forgetPhrase(hub.store, decodeURIComponent(req.params.key)) ? { ok: true } : reply.code(404).send({ error: 'No such phrase' }));
+
   app.post<{ Body: { text: string } }>('/api/ask', async req => {
     const text = String(req.body?.text ?? '');
     const r = await hub.assistant.ask(text);
     const settings = loadSettings(hub.store);
     // Only what the built-in parser couldn't handle goes to an AI engine.
-    if (!r.understood && settings.engine !== 'builtin' && text.trim()) return ai.ask(text, settings);
+    if (!r.understood) {
+      if (settings.engine !== 'builtin' && text.trim()) return ai.ask(text, settings);
+      if (text.trim()) ai.logRequest('builtin', text, r.text, [], false); // parser gap: remember it
+    }
     return r;
   });
   // What Kova understood, as chips, without running anything (for the live preview while typing).

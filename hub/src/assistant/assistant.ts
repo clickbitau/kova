@@ -13,9 +13,12 @@ import { clock } from '../util/time.ts';
 /** Where an answer came from, shown under every reply. */
 export type Source = 'Device control' | 'Helix' | 'From the activity log' | 'From your modes' | 'Built-in · nothing left your home'
   /** Optional AI engines (see ai.ts). The cloud tag says what context was sent. */
-  | 'Local AI on your server' | `${string} · sent ${string}`;
+  | 'Local AI on your server' | `${string} · sent ${string}`
+  /** A phrase the AI handled before, now replayed locally. */
+  | 'Learned · no AI needed';
 
 export type Intent =
+  | { kind: 'greeting' }
   | { kind: 'power'; on: boolean; label: string; devices: string[] }
   | { kind: 'level'; bri: number; label: string; devices: string[] }
   | { kind: 'overlay'; id: string; name: string; end: boolean }
@@ -136,6 +139,8 @@ export class Assistant {
         .map(s => this.rooms().find(r => norm(r.name) === s || norm(r.name).startsWith(s))).filter((r): r is NonNullable<typeof r> => !!r);
       if (rooms.length) return { kind: 'learn', name: learn[1], rooms: rooms.map(r => r.id), roomNames: rooms.map(r => r.name) };
     }
+    // A message that is only a greeting — "hey turn the lights on" still parses as a command.
+    if (/^(hi+|hello+|hey+|yo|hiya|howdy|morning|good (morning|afternoon|evening))( there)?( kova)?$/.test(t)) return { kind: 'greeting' };
     if (/^who(s| is)?\b.*\b(home|in|here|out)\b/.test(t)) return { kind: 'whoHome' };
     if (/^why\b/.test(t)) {
       const m = t.match(/^why (?:is|are|did) (?:the )?(.+?)(?: (?:on|off|playing|turn on|come on))?$/);
@@ -235,6 +240,7 @@ export class Assistant {
       case 'music': return ['Play', `“${i.words}”${i.station ? ' station' : ''}${i.shuffle && !i.station ? ' on shuffle' : ''}`, i.devices.length ? i.label : 'Which speaker?'];
       case 'skip': return [i.delta > 0 ? 'Next song' : 'Previous song', i.label];
       case 'nowPlaying': return ['Now playing'];
+      case 'greeting': return ['Greeting'];
     }
   }
 
@@ -244,6 +250,10 @@ export class Assistant {
     if (!i) return reply('I didn’t catch that. I can switch rooms and devices, set brightness (“lamp to 30%”), start Movie or Away, tell you why something is on, what’s happening tonight, and who’s home.', 'Built-in · nothing left your home', { understood: false });
     const tz = this.config.get().timezone;
     switch (i.kind) {
+      case 'greeting': {
+        const on = this.reg.list().filter(d => isLight(d) && d.state.on).length;
+        return reply(`Hi. ${plural(on, 'light')} ${on === 1 ? 'is' : 'are'} on and the home is in ${this.engine.mode().name}. What do you need?`, 'Built-in · nothing left your home');
+      }
       case 'learn':
         return reply(`Got it. “${i.name}” will mean ${list(i.roomNames)}.`, 'Built-in · nothing left your home', { actions: [{ label: 'Remember that', action: { type: 'learnGroup', name: i.name, rooms: i.rooms } }] });
       case 'unknownLabel':

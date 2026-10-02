@@ -6,7 +6,7 @@ import type { Store } from '../store/db.ts';
 import type { Cause, Command, Device, Targets } from '../model/types.ts';
 import { isPlayer } from '../util/describe.ts';
 import { clock } from '../util/time.ts';
-import type { AskReply } from './assistant.ts';
+import { norm, type AskReply } from './assistant.ts';
 
 // Optional AI engines for Ask Kova. They only ever see requests the built-in
 // parser couldn't handle, only the context the user chose to share, never
@@ -42,6 +42,8 @@ export type CloudProvider = 'anthropic' | 'minimax' | 'openai' | 'openai-compat'
 export interface AssistantSettings {
   engine: EngineKind;
   share: ShareSettings;
+  /** Standing notes for the AI ("baby's room speaker stays quiet"), sent with every request. */
+  instructions: string;
   local: { url: string; model: string; apiKey?: string };
   cloud: { provider: CloudProvider; model: string; apiKey?: string; baseUrl?: string };
 }
@@ -50,6 +52,7 @@ export interface AssistantSettings {
 export interface PublicAssistantSettings {
   engine: EngineKind;
   share: ShareSettings;
+  instructions: string;
   local: { url: string; model: string; hasKey: boolean };
   cloud: { provider: CloudProvider; model: string; hasKey: boolean; baseUrl?: string };
 }
@@ -57,6 +60,7 @@ export interface PublicAssistantSettings {
 export interface SettingsPatch {
   engine?: EngineKind;
   share?: Partial<Record<keyof ShareSettings, boolean>>;
+  instructions?: string;
   local?: { url?: string; model?: string; apiKey?: string | null };
   cloud?: { provider?: CloudProvider; model?: string; apiKey?: string | null; baseUrl?: string | null };
 }
@@ -79,6 +83,7 @@ export function defaultSettings(): AssistantSettings {
   return {
     engine: 'builtin',
     share: { names: true, rooms: true, history: false, presence: false, cameras: false },
+    instructions: '',
     local: { url: '', model: '' },
     cloud: { provider: 'anthropic', model: DEFAULT_CLOUD_MODEL },
   };
@@ -93,6 +98,7 @@ export function loadSettings(store: Store): AssistantSettings {
   return {
     engine: ENGINES.includes(s.engine as EngineKind) ? s.engine as EngineKind : d.engine,
     share: { ...d.share, ...(s.share ?? {}), cameras: false },
+    instructions: typeof s.instructions === 'string' ? s.instructions : d.instructions,
     local: { ...d.local, ...(s.local ?? {}) },
     cloud,
   };
@@ -102,6 +108,7 @@ export function publicSettings(s: AssistantSettings): PublicAssistantSettings {
   return {
     engine: s.engine,
     share: { ...s.share, cameras: false },
+    instructions: s.instructions,
     local: { url: s.local.url, model: s.local.model, hasKey: !!s.local.apiKey },
     cloud: { provider: s.cloud.provider, model: s.cloud.model || CLOUD_PROVIDERS[s.cloud.provider].defaultModel, hasKey: !!s.cloud.apiKey, ...(s.cloud.baseUrl ? { baseUrl: s.cloud.baseUrl } : {}) },
   };
@@ -116,6 +123,7 @@ export function saveSettings(store: Store, patch: SettingsPatch): AssistantSetti
   for (const k of SHARE_KEYS) if (typeof patch.share?.[k] === 'boolean') share[k] = patch.share[k]!;
   share.cameras = false;
   const str = (v: unknown, name: string) => { if (typeof v !== 'string') throw new Error(`${name} must be a string`); return v.trim(); };
+  const instructions = patch.instructions === undefined ? cur.instructions : str(patch.instructions, 'instructions').slice(0, 2000);
   const local = { ...cur.local };
   if (patch.local?.url !== undefined) {
     const url = str(patch.local.url, 'local.url');
@@ -141,7 +149,7 @@ export function saveSettings(store: Store, patch: SettingsPatch): AssistantSetti
   }
   if (patch.cloud?.model !== undefined) cloud.model = str(patch.cloud.model, 'cloud.model') || CLOUD_PROVIDERS[cloud.provider].defaultModel;
   if (patch.cloud && 'apiKey' in patch.cloud) { if (patch.cloud.apiKey) cloud.apiKey = str(patch.cloud.apiKey, 'cloud.apiKey'); else delete cloud.apiKey; }
-  const next: AssistantSettings = { engine, share, local, cloud };
+  const next: AssistantSettings = { engine, share, instructions, local, cloud };
   store.set('assistant', next);
   return next;
 }
@@ -206,6 +214,43 @@ type ToolName = typeof TOOLS[number]['name'];
 const AI_CAUSE: Cause = { kind: 'assistant', label: 'Ask Kova (AI)' };
 const MAX_ROUNDS = 6;
 
+/** MiniMax-style reasoning blocks must never reach the reply text. */
+const stripThink = (s: string) => s.replace(/<think>[\s\S]*?(<\/think>|$)/g, '').trim();
+
+/** A mutating step the AI took, with resolved device ids — replayable without the AI. */
+export type LearnedStep =
+  | { tool: 'set_devices'; targets: Targets }
+  | { tool: 'start_overlay'; id: string }
+  | { tool: 'end_overlay' };
+
+/** One request that reached an AI engine (or fell through the built-in parser). */
+export interface AiRequestLog { ts: number; engine: string; text: string; reply: string; tools: string[]; ok: boolean }
+/** A learned phrase: normalized text → steps to replay locally. */
+export interface LearnedEntry { ts: number; engine: string; uses: number; steps: LearnedStep[] }
+
+const REQUESTS_KEY = 'assistant.requests';
+const LEARNED_KEY = 'assistant.learned';
+const REQUESTS_CAP = 200;
+const LEARNED_CAP = 100;
+
+/** Every request the built-in parser couldn't handle — the raw material for new intents. */
+export function requestLog(store: Store): AiRequestLog[] {
+  return store.get<AiRequestLog[]>(REQUESTS_KEY) ?? [];
+}
+/** Phrases learned from AI runs, oldest uses first shown last. */
+export function learnedPhrases(store: Store): { phrase: string; ts: number; engine: string; uses: number }[] {
+  const all = store.get<Record<string, LearnedEntry>>(LEARNED_KEY) ?? {};
+  return Object.entries(all).map(([phrase, e]) => ({ phrase, ts: e.ts, engine: e.engine, uses: e.uses })).sort((a, b) => b.ts - a.ts);
+}
+/** Forget a learned phrase (by its normalized text). */
+export function forgetPhrase(store: Store, key: string): boolean {
+  const all = store.get<Record<string, LearnedEntry>>(LEARNED_KEY) ?? {};
+  if (!(key in all)) return false;
+  delete all[key];
+  store.set(LEARNED_KEY, all);
+  return true;
+}
+
 /** What was shared with the model, and how to map the ids it uses back to real devices. */
 export interface AiContext {
   text: string;
@@ -216,6 +261,12 @@ export interface AiContext {
 /** Runs tool calls against the engine, collecting undo ids. One per ask. */
 export class Toolbox {
   readonly undos: string[] = [];
+  /** Tool names called, in order (for the request log). */
+  readonly called: string[] = [];
+  /** Mutating steps that succeeded — the learnable part of this ask. */
+  readonly learned: LearnedStep[] = [];
+  /** False once any tool reports ok:false — such sessions aren't learned. */
+  okAll = true;
   constructor(private ai: AiAssistant, private ctx: AiContext) {}
 
   private device(alias: unknown): Device | undefined {
@@ -224,6 +275,13 @@ export class Toolbox {
   }
 
   async run(name: string, input: unknown): Promise<string> {
+    this.called.push(name);
+    const out = await this.dispatch(name, input);
+    try { if (JSON.parse(out).ok === false) this.okAll = false; } catch { /* not json */ }
+    return out;
+  }
+
+  private async dispatch(name: string, input: unknown): Promise<string> {
     try {
       const args = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
       switch (name as ToolName) {
@@ -253,17 +311,20 @@ export class Toolbox {
           if (!Object.keys(targets).length) return JSON.stringify({ ok: false, error: unknown.length ? `Unknown device ids: ${unknown.join(', ')}` : 'Nothing to change' });
           const r = await this.ai.engine.applyMany(targets, AI_CAUSE);
           if (r.changed.length) this.undos.push(r.undo);
+          this.learned.push({ tool: 'set_devices', targets });
           return JSON.stringify({ ok: true, changed: r.changed.length, unchanged: Object.keys(targets).length - r.changed.length, ...(unknown.length ? { unknownIds: unknown } : {}) });
         }
         case 'start_overlay': {
           const o = this.ai.config.get().overlays.find(x => x.id === args.id);
           if (!o) return JSON.stringify({ ok: false, error: `Unknown overlay ${String(args.id)}` });
           this.undos.push(await this.ai.engine.startOverlay(o.id, AI_CAUSE));
+          this.learned.push({ tool: 'start_overlay', id: o.id });
           return JSON.stringify({ ok: true, started: o.name, ends: o.endsLabel });
         }
         case 'end_overlay': {
           if (!this.ai.engine.overlay) return JSON.stringify({ ok: false, error: 'No overlay is on' });
           await this.ai.engine.endOverlay('user');
+          this.learned.push({ tool: 'end_overlay' });
           return JSON.stringify({ ok: true, mode: this.ai.engine.mode().name });
         }
         case 'explain_device': {
@@ -355,7 +416,7 @@ export class LocalAiEngine implements AiEngine {
       const msg = body.choices?.[0]?.message;
       if (!msg) throw new AiError(`${this.cap()} at ${this.opts.url} sent an empty reply.`);
       const calls = (msg.tool_calls ?? []).filter(c => c?.function?.name);
-      if (!calls.length) return { text: (msg.content ?? '').trim() };
+      if (!calls.length) return { text: stripThink(msg.content ?? '') };
       messages.push({ role: 'assistant', content: msg.content ?? null, tool_calls: calls });
       for (const c of calls) {
         let input: unknown = {};
@@ -536,29 +597,94 @@ export class AiAssistant {
     return 'The built-in assistant is selected.';
   }
 
+  // ---------------------------------------------------------------- learn --
+
+  /** A previously-learned phrase for this normalized text, if any. */
+  private learned(key: string): LearnedEntry | undefined {
+    return this.store.get<Record<string, LearnedEntry>>(LEARNED_KEY)?.[key];
+  }
+
+  /** Drop a learned phrase — called when the user undoes what the AI did. */
+  private unlearn(key: string): void { forgetPhrase(this.store, key); }
+
+  /** Save phrase → steps. Only called when the whole tool session succeeded. */
+  private learn(key: string, engineLabel: string, steps: LearnedStep[]): void {
+    const all = this.store.get<Record<string, LearnedEntry>>(LEARNED_KEY) ?? {};
+    all[key] = { ts: Date.now(), engine: engineLabel, uses: 0, steps };
+    const newest = Object.keys(all).sort((a, b) => all[b]!.ts - all[a]!.ts).slice(0, LEARNED_CAP);
+    this.store.set(LEARNED_KEY, Object.fromEntries(newest.map(k => [k, all[k]!])));
+  }
+
+  /** Replay learned steps through the engine. Returns null if a step can't replay (the entry is then dropped). */
+  private async replay(key: string, entry: LearnedEntry): Promise<AskReply | null> {
+    try {
+      const undos: string[] = [];
+      for (const st of entry.steps) {
+        if (st.tool === 'set_devices') {
+          const r = await this.engine.applyMany(st.targets, AI_CAUSE);
+          if (r.changed.length) undos.push(r.undo);
+        } else if (st.tool === 'start_overlay') {
+          if (!this.config.get().overlays.some(o => o.id === st.id)) return (this.unlearn(key), null);
+          undos.push(await this.engine.startOverlay(st.id, AI_CAUSE));
+        } else if (st.tool === 'end_overlay') {
+          if (!this.engine.overlay) continue;
+          await this.engine.endOverlay('user');
+        }
+      }
+      const all = this.store.get<Record<string, LearnedEntry>>(LEARNED_KEY) ?? {};
+      if (all[key]) { all[key]!.uses++; this.store.set(LEARNED_KEY, all); }
+      return { text: 'Done.', source: 'Learned · no AI needed', actions: [], understood: true, undo: this.undoFor(undos) };
+    } catch {
+      this.unlearn(key);
+      return null;
+    }
+  }
+
+  /** Record the request that reached an AI engine (or, engine null, fell through with no AI). */
+  logRequest(engine: string, q: string, reply: string, tools: string[], ok: boolean): void {
+    const all = this.store.get<AiRequestLog[]>(REQUESTS_KEY) ?? [];
+    all.unshift({ ts: Date.now(), engine, text: q.slice(0, 500), reply: reply.slice(0, 300), tools, ok });
+    this.store.set(REQUESTS_KEY, all.slice(0, REQUESTS_CAP));
+  }
+
   /** Ask the configured AI engine. Never throws. */
   async ask(question: string, s: AssistantSettings, engine?: AiEngine): Promise<AskReply> {
     const e = engine ?? this.engineFor(s);
     const q = question.trim();
-    if (typeof e === 'string') return { text: e, source: 'Built-in · nothing left your home', actions: [], understood: false };
+    // A phrase the AI already handled: replay it locally, no AI needed — even if no engine is set up.
+    const hit = this.learned(norm(q));
+    if (hit) {
+      const r = await this.replay(norm(q), hit);
+      if (r) return r;
+    }
+    if (typeof e === 'string') { this.logRequest('unhandled', q, e, [], false); return { text: e, source: 'Built-in · nothing left your home', actions: [], understood: false }; }
     const share = { ...s.share, cameras: false as const };
     const source: AskReply['source'] = e.kind === 'local' ? 'Local AI on your server' : `${e.label} · sent ${sharedLabel(share)}`;
     try {
       this.lastShare = share;
       const ctx = this.buildContext(share);
-      const system = `${SYSTEM}\n\nHome context (shared by the user):\n${ctx.text}`;
+      const notes = s.instructions.trim() ? `\n\nStanding instructions from the user:\n${s.instructions.trim()}` : '';
+      const system = `${SYSTEM}${notes}\n\nHome context (shared by the user):\n${ctx.text}`;
       this.store.append({
         kind: 'system', device: null, feed: 'system', what: `Ask Kova sent a request to ${e.label}`,
         data: { engine: e.kind, chars: system.length + q.length, preview: q.length > 40 ? `${q.slice(0, 40)}…` : q, shared: ctx.shared },
         cause: { kind: 'assistant', label: 'Ask Kova' },
       });
       const tools = new Toolbox(this, ctx);
+      const key = norm(q);
       let text: string;
-      try { text = (await e.run(system, q, tools)).text; } catch (err) {
+      try { text = stripThink((await e.run(system, q, tools)).text); } catch (err) {
+        const out = err instanceof AiError ? err.message : `${e.label} failed: ${err instanceof Error ? err.message : String(err)}`;
+        this.logRequest(e.label, q, out, tools.called, false);
         // Anything already done stays undoable.
-        return { text: err instanceof AiError ? err.message : `${e.label} failed: ${err instanceof Error ? err.message : String(err)}`, source, actions: [], understood: false, undo: this.undoFor(tools.undos) };
+        return { text: out, source, actions: [], understood: false, undo: this.undoFor(tools.undos) };
       }
-      return { text: text || (tools.undos.length ? 'Done.' : 'I don’t have an answer for that.'), source, actions: [], understood: true, undo: this.undoFor(tools.undos) };
+      this.logRequest(e.label, q, text, tools.called, true);
+      // A clean run that changed something becomes a learned phrase: next time it replays without the AI.
+      // Undoing the AI's work drops the phrase — the user said it was wrong.
+      const learnedSomething = tools.okAll && tools.learned.length > 0;
+      if (learnedSomething) this.learn(key, e.label, tools.learned);
+      return { text: text || (tools.undos.length ? 'Done.' : 'I don’t have an answer for that.'), source, actions: [], understood: true, undo: this.undoFor(tools.undos, learnedSomething ? () => this.unlearn(key) : undefined) };
     } catch (err) {
       return { text: `${e.label} failed: ${err instanceof Error ? err.message : String(err)}`, source, actions: [], understood: false };
     } finally {
@@ -566,11 +692,11 @@ export class AiAssistant {
     }
   }
 
-  /** One undo for everything the AI did, undone in reverse order. */
-  private undoFor(ids: string[]): string | undefined {
+  /** One undo for everything the AI did, undone in reverse order. onUndo runs after it (e.g. unlearning). */
+  private undoFor(ids: string[], onUndo?: () => void): string | undefined {
     if (!ids.length) return undefined;
-    if (ids.length === 1) return ids[0];
-    return this.engine.registerUndo(async () => { for (const id of [...ids].reverse()) await this.engine.undo(id); });
+    if (!onUndo) return ids.length === 1 ? ids[0] : this.engine.registerUndo(async () => { for (const id of [...ids].reverse()) await this.engine.undo(id); });
+    return this.engine.registerUndo(async () => { for (const id of [...ids].reverse()) await this.engine.undo(id); onUndo(); });
   }
 }
 
