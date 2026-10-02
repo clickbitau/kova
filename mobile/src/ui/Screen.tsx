@@ -100,6 +100,7 @@ export function Screen({ children, title, over, onBack, right, glow, onRefresh, 
         contentContainerStyle={{ paddingTop: top, paddingHorizontal: SP.gutter, paddingBottom: SP[10], gap }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets
         refreshControl={<RefreshControl refreshing={onRefresh ? !!refreshing : pulling} onRefresh={pull} tintColor={C.stone} progressViewOffset={top} />}
       >
         <View style={{ gap: SP[3], marginBottom: title || head ? -SP[2] : -gap }}>

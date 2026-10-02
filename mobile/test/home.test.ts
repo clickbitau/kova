@@ -187,5 +187,5 @@ test('notification links open the app’s own screens for these pages', () => {
   assert.equal(NATIVE_PAGES.energy, 'Energy');
   assert.equal(NATIVE_PAGES.media, 'Media');
   assert.equal(NATIVE_PAGES.customise, 'Customise');
-  assert.equal(NATIVE_PAGES.integrations, undefined);
+  assert.equal(NATIVE_PAGES.integrations, 'Integrations');
 });

@@ -15,6 +15,12 @@ export type Stack = {
   Customise: undefined;
   Energy: undefined;
   Media: undefined;
+  /** More → Integrations: what's connected, and the hub's own updates. */
+  Integrations: undefined;
+  /** Add integration: the catalog, minus what's set up. */
+  IntegrationAdd: undefined;
+  /** One integration's status and setup (an integrations.json section id). */
+  Integration: { id: string };
   /** A page of the hub's phone web app, for what has no screen of its own yet (Add a device, live camera video, editing a mode). */
   Web: { title: string; path: string };
 };
