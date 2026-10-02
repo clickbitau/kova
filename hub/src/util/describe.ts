@@ -18,7 +18,7 @@ export const FIELD_CAP: Record<string, Capability> = {
   on: 'onoff', bri: 'brightness', k: 'colorTemp', color: 'color', mode: 'fanMode', media: 'media', vol: 'volume', power: 'power',
   activity: 'vacuum', battery: 'battery', paused: 'pause', input: 'input', skip: 'queue', shuffle: 'queue',
   muted: 'mute', sound: 'sound', night: 'sound', volStep: 'volume',
-  hvac: 'climate', target: 'climate', fanSpeed: 'climate',
+  hvac: 'climate', target: 'climate', fanSpeed: 'climate', zoneSet: 'zones', zones: 'zones',
 };
 
 /** Drop fields the device can't do, so a mode can target mixed brands safely. */
@@ -39,6 +39,7 @@ export function targetLabel(d: Device, t: Command): string {
   if (d.type === 'vacuum') return t.on === false || t.activity === 'returning' || t.activity === 'docked' ? `${d.name} docks` : `${d.name} cleans`;
   if (d.type === 'fan') return `${d.name} on ${t.mode ?? (t.on === false ? 'off' : 'Auto')}`;
   if (d.type === 'internet') return `${d.name} internet ${t.on === false ? 'paused' : 'on'}`;
+  if (d.type === 'climate' && t.zoneSet && t.on === undefined && !t.hvac && t.target == null) return `${d.name} ${zoneWords(t.zoneSet)}`;
   if (d.type === 'climate') return t.on === false ? `${d.name} off` : [`${d.name}`, t.hvac ?? 'on', t.target != null ? `${t.target}°` : ''].filter(Boolean).join(' ');
   if (isPlayer(d) && t.skip && t.media === undefined) return `${d.name} ${t.skip > 0 ? 'next song' : 'previous song'}`;
   if (isPlayer(d) && t.volStep && t.media === undefined && t.on === undefined) return `${d.name} volume ${t.volStep > 0 ? 'up' : 'down'}`;
@@ -66,6 +67,12 @@ export function changeSentence(d: Device, prev: Command, next: Command): string 
     if (next.hvac) return `${d.name} ${HV[next.hvac] ?? next.hvac}${next.target != null ? ` to ${next.target}°` : ''}`;
     if (next.target != null) return `${d.name} set to ${next.target}°`;
     if (next.fanSpeed) return `${d.name} fan ${next.fanSpeed}`;
+    if (next.zoneSet) return `${d.name} ${zoneWords(next.zoneSet)}`;
+    if (Array.isArray(next.zones)) {
+      const was = new Map((prev.zones ?? []).map(z => [z.n, z]));
+      const set = Object.fromEntries(next.zones.filter(z => { const p = was.get(z.n); return !p || p.on !== z.on || p.open !== z.open; }).map(z => [String(z.n), { on: z.on, open: z.open ?? undefined }]));
+      if (Object.keys(set).length) return `${d.name} ${zoneWords(set)}`;
+    }
     if (next.on === true) return `${d.name} on`;
   }
   if (d.type === 'internet' && next.on !== undefined) return `${d.name}: internet ${next.on ? 'back on' : 'paused'}`;
@@ -82,4 +89,9 @@ export function changeSentence(d: Device, prev: Command, next: Command): string 
   if (next.k != null) return `${d.name} set to ${next.k}K`;
   if (next.color) return `${d.name} colour changed`;
   return `${d.name} changed`;
+}
+
+/** "zone 2 on at 50%, zone 3 off" */
+export function zoneWords(set: Record<string, { on?: boolean; open?: number }>): string {
+  return Object.entries(set).map(([n, z]) => `zone ${n}${z.on === false ? ' off' : z.on ? ' on' : ''}${z.open != null && z.on !== false ? ` at ${z.open}%` : ''}`).join(', ');
 }

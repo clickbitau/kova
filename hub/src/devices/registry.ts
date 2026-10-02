@@ -151,7 +151,7 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
     const out: Command = {};
     for (const [k, v] of Object.entries(patch)) {
       // A skip or volume step is momentary: always sent, never kept as state.
-      if (k === 'skip' || k === 'volStep' || (d.state as Record<string, unknown>)[k] !== v) (out as Record<string, unknown>)[k] = v;
+      if (k === 'skip' || k === 'volStep' || k === 'zoneSet' || (d.state as Record<string, unknown>)[k] !== v) (out as Record<string, unknown>)[k] = v;
     }
     return out;
   }
@@ -179,7 +179,8 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
       this.store.append({ kind: 'system', device: id, feed: 'system', what: `${d.name} didn't respond`, data: { error: String(err), patch }, cause });
       throw err;
     }
-    const { skip: _skip, volStep: _step, ...kept } = did ? { ...patch, ...did } : patch;
+    // zoneSet is a change to some zones: what's kept is the zones as the adapter reports them after it.
+    const { skip: _skip, volStep: _step, zoneSet: _zones, ...kept } = did ? { ...patch, ...did } : patch;
     // A skip changes the song (which the speaker reports), a step the volume: log it, keep no state for it.
     if ((_skip || _step) && !Object.keys(kept).length) {
       const what = _skip ? (_skip > 0 ? 'next song' : 'previous song') : `volume ${_step! > 0 ? 'up' : 'down'}`;

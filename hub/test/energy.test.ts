@@ -6,7 +6,7 @@ import { Store } from '../src/store/db.ts';
 import { Registry } from '../src/devices/registry.ts';
 import { GoodWeAdapter, DT_MAP, decode, readRegisters } from '../src/adapters/goodwe.ts';
 import { VirtualAdapter, solarWatts } from '../src/adapters/virtual.ts';
-import { Energy } from '../src/services/energy.ts';
+import { Energy, wattsSetting } from '../src/services/energy.ts';
 import { at, TZ } from './helpers.ts';
 
 /** A fake Modbus TCP inverter holding a register block. */
@@ -127,6 +127,10 @@ test('Energy without an inverter: plugs that measure, and about what the TV, sou
   const w = Object.fromEntries(t.devices.map(d => [d.id, [d.w, !!d.estimated]]));
   assert.deepEqual(w, { fridge_plug: [120, false], s90d: [110, true], q930b: [35, true], kam: [25, true], lamp: [5, true] }, 'off, and plugs with no meter, aren’t counted');
   assert.equal(t.now.load, 120 + 110 + 35 + 25 + 5);
+  // What the Energy page offers to set: devices with no meter, with Kova's typical figure (as if on).
+  assert.equal(wattsSetting(reg.get('fridge_plug')!, undefined), null, 'it measures its own power');
+  assert.deepEqual(wattsSetting(reg.get('bed_tv')!, undefined), { watts: null, typicalWatts: 110 });
+  assert.deepEqual(wattsSetting(reg.get('heater_plug')!, 1800), { watts: 1800, typicalWatts: null });
   // The owner's own figure for the TV wins.
   settings.s90d = { watts: 140 };
   assert.equal(e.today().devices.find(d => d.id === 's90d')!.w, 140);

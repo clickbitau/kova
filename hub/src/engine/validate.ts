@@ -21,6 +21,15 @@ export function cleanTarget(d: Device, cmd: Command): Command {
   const c = fitCommand(d, cmd);
   if (c.bri != null) c.bri = Math.max(1, Math.min(100, Math.round(Number(c.bri))));
   if (c.vol != null) c.vol = Math.max(0, Math.min(100, Math.round(Number(c.vol))));
+  if (c.zoneSet != null) {
+    if (typeof c.zoneSet !== 'object') throw new Error('Zones must be { "1": { on, open } }');
+    const z: NonNullable<Command['zoneSet']> = {};
+    for (const [n, v] of Object.entries(c.zoneSet)) {
+      if (!/^[1-9]\d?$/.test(n) || !v || typeof v !== 'object') throw new Error(`Zone ${n} isn’t valid`);
+      z[n] = { ...(typeof v.on === 'boolean' ? { on: v.on } : {}), ...(v.open != null ? { open: Math.max(0, Math.min(100, Math.round(Number(v.open)))) } : {}) };
+    }
+    c.zoneSet = z;
+  }
   if (c.k != null) c.k = Math.max(1500, Math.min(9000, Math.round(Number(c.k))));
   if (c.color != null && !/^#[0-9a-f]{6}$/i.test(String(c.color))) throw new Error('Colour must be #rrggbb');
   if (!Object.keys(c).length) throw new Error(`${d.name} can't do that`);

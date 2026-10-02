@@ -27,13 +27,17 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
   });
 
   // ---------------------------------------------------------------- devices --
-  app.patch<{ Params: { id: string }; Body: { name?: string | null; room?: string | null; hidden?: boolean; favourite?: boolean; watts?: number | null } }>('/api/devices/:id/settings', async (req, reply) => {
+  app.patch<{ Params: { id: string }; Body: { name?: string | null; room?: string | null; hidden?: boolean; favourite?: boolean; watts?: number | null; zoneNames?: Record<string, string | null> } }>('/api/devices/:id/settings', async (req, reply) => {
     const d = hub.reg.get(req.params.id);
     if (!d) return bad(reply, 'Unknown device', 404);
     const b = req.body ?? {};
     if (b.room != null && !hub.config.get().rooms.some(r => r.id === b.room)) return bad(reply, 'Unknown room');
     if (b.name !== undefined && b.name !== null && !text(b.name)) return bad(reply, 'Give it a name');
     if (b.watts != null && !(typeof b.watts === 'number' && b.watts >= 0 && b.watts <= 10_000)) return bad(reply, 'watts must be 0–10000');
+    if (b.zoneNames !== undefined) {
+      if (!d.capabilities.includes('zones')) return bad(reply, `${d.name} has no zones`);
+      if (!b.zoneNames || typeof b.zoneNames !== 'object' || Object.keys(b.zoneNames).some(n => !/^[1-9]\d?$/.test(n))) return bad(reply, 'zoneNames is { "1": "Living", … }');
+    }
     return edit(c => {
       const s = { ...(c.devices?.[d.id] ?? {}) };
       const orig = d.original ?? { name: d.name, room: d.room };
@@ -41,6 +45,12 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
       if (b.room !== undefined) { if (!b.room || b.room === orig.room) delete s.room; else s.room = b.room; }
       if (b.hidden !== undefined) { if (b.hidden) s.hidden = true; else delete s.hidden; }
       if (b.watts !== undefined) { if (b.watts == null) delete s.watts; else s.watts = Math.round(b.watts); }
+      // Zone names merge: a name sets it, null or "" clears it.
+      if (b.zoneNames) {
+        const z = { ...(s.zoneNames ?? {}) };
+        for (const [n, v] of Object.entries(b.zoneNames)) { const t = v ? text(v, 30) : ''; if (t) z[n] = t; else delete z[n]; }
+        if (Object.keys(z).length) s.zoneNames = z; else delete s.zoneNames;
+      }
       c.devices = { ...(c.devices ?? {}) };
       if (Object.keys(s).length) c.devices[d.id] = s; else delete c.devices[d.id];
       if (b.favourite !== undefined) {

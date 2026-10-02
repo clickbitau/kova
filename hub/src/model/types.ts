@@ -60,6 +60,8 @@ export interface DeviceState {
   target?: number | null;
   temp?: number | null;
   fanSpeed?: FanSpeed | null;
+  /** Ducted air conditioners (the `zones` capability): each zone's damper, on or off and how far open (0–100). */
+  zones?: Zone[] | null;
   online?: boolean;
 }
 
@@ -68,7 +70,7 @@ export interface Track { title: string; artist?: string; album?: string; art?: s
 
 export type VacuumActivity = 'cleaning' | 'returning' | 'docked' | 'paused' | 'idle' | 'error';
 
-export type Capability = 'onoff' | 'brightness' | 'colorTemp' | 'color' | 'fanMode' | 'media' | 'volume' | 'power' | 'energy' | 'events' | 'vacuum' | 'battery' | 'pause' | 'library' | 'input' | 'queue' | 'mute' | 'sound' | 'climate';
+export type Capability = 'onoff' | 'brightness' | 'colorTemp' | 'color' | 'fanMode' | 'media' | 'volume' | 'power' | 'energy' | 'events' | 'vacuum' | 'battery' | 'pause' | 'library' | 'input' | 'queue' | 'mute' | 'sound' | 'climate' | 'zones';
 
 export interface Device {
   id: string;
@@ -90,13 +92,26 @@ export interface Device {
 }
 
 /** What the owner changed about a device: a better name, the right room, or hidden from lists. */
-export interface DeviceSettings { name?: string; room?: string; hidden?: boolean; /** What it draws while on, in W, for the Energy page (devices with no meter). */ watts?: number }
+export interface DeviceSettings {
+  name?: string; room?: string; hidden?: boolean;
+  /** What it draws while on, in W, for the Energy page (devices with no meter). */
+  watts?: number;
+  /** Ducted air conditioners: what the owner calls each zone, by zone number ("1": "Living"). */
+  zoneNames?: Record<string, string>;
+}
 
 /**
  * A partial state change requested of a device. Momentary, never kept as state: `skip` 1 = next track, -1 = previous
  * (players with `queue`); `volStep` +1 = volume up a step, -1 = down (devices with `volume`).
  */
-export type Command = Partial<DeviceState> & { skip?: number; volStep?: number };
+export type Command = Partial<DeviceState> & {
+  skip?: number; volStep?: number;
+  /** Change some zones of a ducted air conditioner, by zone number: on or off, and how far open. */
+  zoneSet?: Record<string, { on?: boolean; open?: number }>;
+};
+
+/** One zone of a ducted air conditioner, numbered as the unit numbers them. */
+export interface Zone { n: number; on: boolean; open: number | null }
 
 /** Why something happened. Attached to every state change and log entry. */
 export interface Cause {

@@ -14,3 +14,8 @@ export function routeFor(url: string | undefined): { cam?: string; lightsOff?: b
     return {};
   }
 }
+
+/** Web-app pages (`?page=`) the app has its own screen for, and that screen. */
+export const NATIVE_PAGES: Record<string, 'Modes' | 'Activity' | 'Automations' | 'Energy' | 'Media' | 'Customise'> = {
+  modes: 'Modes', activity: 'Activity', autos: 'Automations', automations: 'Automations', energy: 'Energy', media: 'Media', customise: 'Customise',
+};

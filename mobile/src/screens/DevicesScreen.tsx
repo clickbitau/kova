@@ -6,11 +6,12 @@ import { useSheet } from '../state/sheet';
 import { useNav } from '../navigation';
 import { combineIdeasOf, devs, groupDevices, isLight, plural, toggleCommand, TYPES, type Dev } from '../logic/devices';
 import { Icon } from '../ui/Icon';
-import { Button, Card, Empty, HScroll, IconButton, Pill, Press } from '../ui/kit';
+import { Button, Empty, HScroll, IconButton, Pill, Press } from '../ui/kit';
 import { Screen } from '../ui/Screen';
 import { T } from '../ui/Text';
 import { TileGrid } from '../ui/Tile';
 import { animateLayout } from '../ui/motion';
+import { CombineIdeaCard } from './CustomiseScreen';
 
 /** A search box: icon, field, a clear button when there's something to clear. */
 export function SearchField({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
@@ -49,26 +50,11 @@ export function DevicesScreen() {
   return (
     <Screen title="Devices" over={`${plural(visible.length, 'device')} · ${plural(lightsOn, 'light')} on`} right={
       <View style={{ flexDirection: 'row', gap: SP[2], paddingBottom: 4 }}>
-        <IconButton icon="tune" label="Customise home" onPress={() => nav.navigate('Web', { title: 'Customise home', path: '/phone.html?embed=1&page=customise' })} />
+        <IconButton icon="tune" label="Customise home" onPress={() => nav.navigate('Customise')} />
         <IconButton icon="add" label="Add a device" tone="amber" onPress={add} />
       </View>
     }>
-      {combineIdeasOf(s).map(ci => (
-        <Card key={ci.key} tint={C.amber} style={{ gap: SP[2], backgroundColor: alpha(C.amber, 0.07) }}>
-          <View style={{ flexDirection: 'row', gap: SP[2], alignItems: 'flex-start' }}>
-            <Icon name="join" size={20} color={C.amber} />
-            <View style={{ flex: 1, gap: 2 }}>
-              <T v="eyebrow" color={C.amber}>Same device twice?</T>
-              <T v="headline">{ci.name}</T>
-              <T v="footnote" color={C.stone}>{ci.why}</T>
-            </View>
-          </View>
-          <View style={{ flexDirection: 'row', gap: SP[2], justifyContent: 'flex-end' }}>
-            <Button size="sm" kind="ghost" label="Not the same" onPress={() => act('POST', `/api/findings/${encodeURIComponent(`idea:${ci.key}`)}/dismiss`, {}, 'Kept as two')} />
-            <Button size="sm" label="Combine into one" onPress={() => act('POST', '/api/combined', { name: ci.name, members: ci.members }, `${ci.name} is one device now`)} />
-          </View>
-        </Card>
-      ))}
+      {combineIdeasOf(s).map(ci => <CombineIdeaCard key={ci.key} ci={ci} />)}
       <View style={{ gap: SP[3] }}>
         <SearchField value={q} onChange={setQ} placeholder="Search devices" />
         <HScroll>{pills.map(p => <Pill key={p.id} label={p.name} on={room === p.id} onPress={() => { animateLayout(); setRoom(p.id); }} />)}</HScroll>

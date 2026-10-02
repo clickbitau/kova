@@ -669,6 +669,10 @@
 <div onClick="{{ f.pick }}" style="padding:8px 12px;border-radius:999px;cursor:pointer;font-size:12px;font-weight:600;background:{{ f.bg }};color:{{ f.fg }};border:1px solid {{ f.border }}">{{ f.label }}</div>
 </sc-for>
 </div></div>
+<sc-if value="{{ dr.hasZones }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:8px"><div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:13px;font-weight:600">Zones</span><sc-if value="{{ dr.zonesMore }}" hint-placeholder-val="{{ false }}"><span onClick="{{ dr.toggleZonesAll }}" style="font-size:12px;font-weight:700;color:#f2b14c;cursor:pointer">{{ dr.zonesMoreLabel }}</span></sc-if></div>
+<sc-if value="{{ dr.noZonesInUse }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;color:#a3a09a">No zones open.</span></sc-if>
+<sc-for list="{{ dr.zones }}" as="z" hint-placeholder-count="2"><div style="display:flex;flex-direction:column;gap:8px;padding:12px 14px;border-radius:12px;background:#1c1d20"><div style="display:flex;align-items:center;gap:10px"><span onClick="{{ z.rename }}" title="Rename" style="font-size:14px;font-weight:700;flex:1;cursor:pointer">{{ z.name }}</span><span style="font-size:12px;color:#a3a09a">{{ z.openLabel }}</span><div onClick="{{ z.toggle }}" role="switch" aria-label="Zone on" style="flex:none;width:36px;height:22px;border-radius:11px;padding:3px;background:{{ z.track }};cursor:pointer;box-sizing:border-box"><div style="width:16px;height:16px;border-radius:8px;background:#fff;transform:{{ z.knob }};transition:transform .2s"></div></div></div><input type="range" min="0" max="100" step="5" value="{{ z.open }}" onChange="{{ z.setOpen }}" aria-label="How far open" style="width:100%;opacity:{{ z.op }}"></div></sc-for>
+</div></sc-if>
 </sc-if>
 </sc-if>
 <sc-if value="{{ tabDetails }}" hint-placeholder-val="{{ false }}">
@@ -805,7 +809,8 @@ const HVAC=[['cool','Cool','ac_unit','#7cb8f0'],['heat','Heat','local_fire_depar
 const FANSPEEDS=[['auto','Auto'],['quiet','Quiet'],['low','Low'],['medium','Medium'],['high','High'],['turbo','Turbo']];
 // What a mode, moment or automation can set a device to: [command as JSON, words].
 const actionOptions=(AD,sources)=>!AD?[]:AD.type==='fan'?[['{"mode":"Auto"}','Auto'],['{"mode":"Sleep"}','Sleep'],['{"on":false}','Off']]
-  :AD.type==='climate'?[['{"on":true,"hvac":"cool","target":24}','Cool to 24°'],['{"on":true,"hvac":"heat","target":21}','Heat to 21°'],['{"on":true,"hvac":"auto","target":23}','Auto at 23°'],['{"on":false}','Off']]
+  :AD.type==='climate'?[['{"on":true,"hvac":"cool","target":24}','Cool to 24°'],['{"on":true,"hvac":"heat","target":21}','Heat to 21°'],['{"on":true,"hvac":"auto","target":23}','Auto at 23°'],['{"on":false}','Off'],
+    ...(Array.isArray(AD.zones)?AD.zones:[]).flatMap(z=>{const nm=(AD.zoneNames||{})[z.n]||`Zone ${z.n}`;return[[JSON.stringify({zoneSet:{[z.n]:{on:true}}}),`${nm} open`],[JSON.stringify({zoneSet:{[z.n]:{on:false}}}),`${nm} closed`]]})]
   :AD.type==='internet'?[['{"on":false}','Pause internet'],['{"on":true}','Internet on']]
   :(AD.capabilities||[]).includes('library')?[['{"paused":true}','Pause'],['{"on":false,"media":null}','Stop']]
   :isPlayer(AD)&&!(AD.capabilities||[]).includes('media')?[['{"on":false}','Off'],['{"on":true}','On']]
@@ -1045,7 +1050,17 @@ class Component extends DCLogic {
   climateView(D){if(D.type!=='climate')return{isClimate:false};const on=!!D.on,t=D.target??24,step=v=>{const n=Math.max(16,Math.min(32,t+v));this.optimistic(D.id,{target:n});this.send(D.id,{target:n})};
     return{isClimate:true,climTarget:`${t}°`,climRoom:D.temp!=null?`Room ${D.temp}°`:'',climOp:on?1:0.45,down:()=>step(-1),up:()=>step(1),
       climModes:HVAC.map(([id,label,icon,col])=>{const sel=on&&D.hvac===id;return{label,icon,pick:()=>{this.optimistic(D.id,{on:true,hvac:id});this.send(D.id,{on:true,hvac:id})},bg:sel?col+'26':'#1c1d20',border:sel?col+'66':'rgba(255,255,255,0.06)',fg:sel?'#f1efea':'#a3a09a',iconFg:sel?col:'#8a8781'}}),
-      climFans:FANSPEEDS.map(([id,label])=>{const sel=D.fanSpeed===id;return{label,pick:()=>{this.optimistic(D.id,{fanSpeed:id});this.send(D.id,{fanSpeed:id})},bg:sel?'#2a2b2f':'transparent',fg:sel?'#f1efea':'#a3a09a',border:sel?'rgba(255,255,255,0.18)':'rgba(255,255,255,0.06)'}})}}
+      climFans:FANSPEEDS.map(([id,label])=>{const sel=D.fanSpeed===id;return{label,pick:()=>{this.optimistic(D.id,{fanSpeed:id});this.send(D.id,{fanSpeed:id})},bg:sel?'#2a2b2f':'transparent',fg:sel?'#f1efea':'#a3a09a',border:sel?'rgba(255,255,255,0.18)':'rgba(255,255,255,0.06)'}}),...this.zoneView(D)}}
+  // Ducted zones: each with its name, on/off and how far open; the ones in use first, the rest behind "Show all".
+  zoneView(D){const zs=Array.isArray(D.zones)?D.zones:[];if(!zs.length)return{hasZones:false};const names=D.zoneNames||{},all=!!(this.state.zonesAll||{})[D.id];
+    const used=z=>z.on||(z.open||0)>0||names[z.n];const shown=all?zs:zs.filter(used);
+    const set=(n,c)=>{const next=zs.map(z=>z.n===n?{...z,...c}:z);this.optimistic(D.id,{zones:next});this.send(D.id,{zoneSet:{[n]:c}})};
+    return{hasZones:true,zones:shown.map(z=>({n:z.n,name:names[z.n]||`Zone ${z.n}`,openLabel:z.open!=null?`${z.open}% open`:'',open:z.open??0,op:z.on?1:0.5,
+      track:z.on?'#7cb8f0':'#35363a',knob:z.on?'translateX(14px)':'none',toggle:()=>set(z.n,{on:!z.on}),
+      setOpen:e=>{const v=Math.round(Number(e.target.value)/5)*5;set(z.n,{on:true,open:v})},
+      rename:()=>{const v=window.prompt(`Name for zone ${z.n}`,names[z.n]||'');if(v===null)return;api('PATCH',`/api/devices/${encodeURIComponent(D.id)}/settings`,{zoneNames:{[z.n]:v.trim()||null}}).then(r=>this.toast(v.trim()?`Zone ${z.n} is “${v.trim()}”`:`Zone ${z.n} unnamed`,this.undoFn(r.undo))).catch(x=>this.err(x))}})),
+      zonesMore:zs.length>shown.length||all,zonesMoreLabel:all?'Show only zones in use':`Show all ${zs.length} zones`,
+      toggleZonesAll:()=>this.setState(p=>({zonesAll:{...(p.zonesAll||{}),[D.id]:!all}})),noZonesInUse:!shown.length}}
   devs(){const o={};this.state.hub.devices.forEach(d=>{o[d.id]=flat(d)});return o}
   modeById(id){const H=this.state.hub;return H.modes.find(m=>m.id===id)||H.modes[0]}
   stateOf(d){if(d.id==='warden_internet')return d.online===false?['Warden not answering','#ff6b5e']:d.on?['Internet up','#7fd4a0']:['Internet down','#ff6b5e'];if(d.type==='camera'||d.type==='sensor')return d.online===false?['Offline','#ff6b5e']:['Live','#7fd4a0'];if(d.online===false)return['Not responding','#ff6b5e'];if(d.type==='vacuum'){const a=d.activity||(d.on?'cleaning':'idle');return[`${VAC[a]||'Idle'}${d.battery!=null?' · '+d.battery+'%':''}`,a==='error'?'#ff6b5e':a==='cleaning'?'#f2b14c':'#a3a09a']}if(d.type==='fan')return[d.mode||'Auto','#7cb8f0'];if(d.type==='climate')return climateLine(d);if(isPlayer(d)&&!(d.capabilities||[]).includes('media'))return d.on?[`On${inputName(d)?' · '+inputName(d):''}`,'#7cb8f0']:['Off','#a3a09a'];if(isPlayer(d))return d.on?[d.track&&!d.paused?`Playing ${d.track.title}${d.track.artist?' · '+d.track.artist:''}`:`${d.paused?'Paused':'Playing'} · ${d.media||'Audio'}${d.vol!=null?' · '+d.vol+'%':''}`,d.paused?'#a3a09a':'#7cb8f0']:['Idle','#a3a09a'];if(d.type==='internet')return d.on?['Internet on','#7fd4a0']:['Internet paused','#f2b14c'];if(d.type==='plug')return d.on?[`On${d.power!=null?' · '+d.power+' W':''}`,'#f2b14c']:['Off','#a3a09a'];if(!d.on)return['Off','#a3a09a'];if(d.type==='dimmer')return[`On · ${d.bri}%${d.k?' · '+d.k+'K':d.color?' · colour':''}`,'#f2b14c'];return['On','#f2b14c']}
