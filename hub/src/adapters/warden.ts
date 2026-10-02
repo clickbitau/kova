@@ -28,6 +28,8 @@ export interface WardenOptions {
   token?: string;
   /** Warden's certificate fingerprint, pinned when linked. */
   fingerprint?: string;
+  /** Warden's public key (SHA-256 of its SubjectPublicKeyInfo): trusted even when Warden reissues its certificate. */
+  publicKeySha256?: string;
   /** Devices whose internet Kova can pause: by Warden device id, or by a MAC it has used. */
   devices?: { deviceId?: string; mac?: string; name: string; room: string; id?: string }[];
   /** Room for the Internet device. Default: none. */
@@ -85,14 +87,14 @@ const notFound = (e: unknown) => e instanceof LanHttpError && e.status === 404;
 /** Talks to one Warden. Shared by the adapter, presence and the setup routes. */
 export class Warden {
   readonly url: string;
-  constructor(private o: Pick<WardenOptions, 'url' | 'token' | 'fingerprint'>) { this.url = trimUrl(o.url); }
+  constructor(private o: Pick<WardenOptions, 'url' | 'token' | 'fingerprint' | 'publicKeySha256'>) { this.url = trimUrl(o.url); }
 
   async get<T>(path: string): Promise<T> {
-    return (await lanJson<T>(this.url + path, { token: this.o.token, fingerprint: this.o.fingerprint })).json;
+    return (await lanJson<T>(this.url + path, { token: this.o.token, fingerprint: this.o.fingerprint, publicKeySha256: this.o.publicKeySha256 })).json;
   }
 
   private async send<T>(method: 'POST' | 'DELETE', path: string, body?: unknown): Promise<T> {
-    return (await lanJson<T>(this.url + path, { method, body, token: this.o.token, fingerprint: this.o.fingerprint })).json;
+    return (await lanJson<T>(this.url + path, { method, body, token: this.o.token, fingerprint: this.o.fingerprint, publicKeySha256: this.o.publicKeySha256 })).json;
   }
 
   dashboard(): Promise<Dashboard> { return this.get('/api/v1/dashboard'); }
@@ -118,7 +120,7 @@ export class Warden {
   }
   /** Follow the feed live from `after` (or from now). */
   follow(after: string | undefined, onEvent: (e: SseEvent) => void) {
-    return lanStream(`${this.url}/api/v1/feed`, { token: this.o.token, fingerprint: this.o.fingerprint, lastEventId: after }, onEvent);
+    return lanStream(`${this.url}/api/v1/feed`, { token: this.o.token, fingerprint: this.o.fingerprint, publicKeySha256: this.o.publicKeySha256, lastEventId: after }, onEvent);
   }
 
   // Before device records (older Warden): clients by MAC, incidents, and the paused list in the site document.

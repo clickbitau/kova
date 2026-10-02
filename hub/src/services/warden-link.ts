@@ -132,7 +132,7 @@ export class WardenLink {
   }
 
   private call<T = unknown>(c: WardenLinkConfig, method: 'PUT' | 'POST' | 'GET', path: string, body?: unknown): Promise<T> {
-    return lanJson<T>(`${trimUrl(c.url)}/api/v1${path}`, { method, body, token: c.token, fingerprint: c.fingerprint }).then(r => r.json);
+    return lanJson<T>(`${trimUrl(c.url)}/api/v1${path}`, { method, body, token: c.token, fingerprint: c.fingerprint, publicKeySha256: c.publicKeySha256 }).then(r => r.json);
   }
 
   /** PUT a document when it changed since it was last accepted. */

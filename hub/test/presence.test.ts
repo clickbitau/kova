@@ -122,10 +122,13 @@ test('Presence: a phone automation "left" beats the router for 15 minutes; "arri
     assert.equal(hub.engine.people.methel.home, true, 'back home after the window');
     assert.equal(lastPresence()?.cause.label, ROUTER);
 
-    // A stale ARP entry right after "left" never flips someone back home, even past 15 min.
+    // A stale ARP entry right after "left" doesn't flip someone back home at 15 min…
     await presence.report('methel', false);
     clock.t += 16 * MIN; await presence.poll();
-    assert.equal(hub.engine.people.methel.home, false, 'continuous sighting since "left" does not count');
+    assert.equal(hub.engine.people.methel.home, false, 'a continuous ARP sighting since "left" may be stale');
+    // …but still listed well past any stale entry, the phone is really here: the "left" was wrong.
+    clock.t += 30 * MIN; await presence.poll();
+    assert.equal(hub.engine.people.methel.home, true, 'still listed 45 min after "left"');
 
     // "Arrived" from the phone wins immediately, even while the router hasn't seen anything.
     await presence.report('brishti', false);
