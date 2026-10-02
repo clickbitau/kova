@@ -7,6 +7,7 @@ import { rhythmLabel } from '../rhythms/rhythms.ts';
 import { automationIdeas } from '../engine/automation-ideas.ts';
 import { combineIdeas, combinedDeviceId } from '../adapters/combined.ts';
 import { actionWords, condWords, triggerWords } from '../engine/automations.ts';
+import { wattsSetting } from '../services/energy.ts';
 import SunCalc from 'suncalc';
 
 const FEED_ICON: Record<string, string> = { mode: 'routine', run: 'bolt', presence: 'person_pin_circle', state: 'lightbulb', system: 'info', skip: 'event_busy' };
@@ -132,8 +133,9 @@ export function snapshot(hub: Hub) {
     groups: cfg.groups,
     // `via`: what already knows whether they're home without their phone's location (the app then doesn't need it).
     people: cfg.people.map(p => ({ ...p, via: hub.presenceVia(p.id), home: engine.people[p.id]?.home ?? true, since: engine.people[p.id]?.since ?? null, sinceLabel: engine.people[p.id] ? clock(engine.people[p.id].since, tz) : '' })),
-    // zoneNames: what the owner calls a ducted air conditioner's zones.
-    devices: reg.list().map(d => ({ ...d, why: engine.why(d.id), usedIn: engine.usedIn(d.id), ...(cfg.devices?.[d.id]?.zoneNames ? { zoneNames: cfg.devices[d.id].zoneNames } : {}) })),
+    // zoneNames: what the owner calls a ducted air conditioner's zones. `watts` / `typicalWatts`: what a device with no
+    // meter draws while on, the owner's figure and Kova's (Energy page).
+    devices: reg.list().map(d => ({ ...d, why: engine.why(d.id), usedIn: engine.usedIn(d.id), ...wattsSetting(d, cfg.devices?.[d.id]?.watts), ...(cfg.devices?.[d.id]?.zoneNames ? { zoneNames: cfg.devices[d.id].zoneNames } : {}) })),
     modes,
     current: {
       modeId: mn.mode.id, since: mn.since, until: mn.until, untilLabel: clock(mn.until, tz), nextId: mn.next.id,

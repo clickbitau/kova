@@ -21,3 +21,4 @@ settings_input_hdmi bluetooth surround_sound sports_esports nightlight equalizer
 local_fire_department autorenew remove
 expand_more battery_full thermostat light_off sync_problem timer arrow_outward
 join
+repeat repeat_one radio_button_unchecked person_add tips_and_updates call_split swap_vert

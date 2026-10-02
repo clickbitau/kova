@@ -85,12 +85,12 @@ export function MoreScreen() {
         <Row first icon="routine" iconFg={C.amber} title="Modes" sub={`${s.modes.length} modes · now ${mode?.name ?? ''}${s.findings.length ? ` · ${s.findings.length} to look at` : ''}`} subColor={s.findings.length ? C.amber : C.stone} badge={s.findings.length > 0} onPress={() => nav.navigate('Modes')} />
         <Row icon="account_tree" iconFg={C.amber} title="Automations" sub={autos.length ? `${autos.length} · ${autos.filter(a => a.enabled).length} on` : 'When something happens, do something'} onPress={() => nav.navigate('Automations')} />
         <Row icon="history" iconFg={C.blue} title="Activity" sub="Everything that happened, and why" onPress={() => nav.navigate('Activity')} />
-        <Row icon="solar_power" iconFg={C.amber} title="Energy" sub="Solar, use and the grid today" onPress={web('Energy', 'energy')} />
-        <Row icon="speaker_group" iconFg={C.blue} title="Media" sub={players ? `${players} playing` : 'Speakers, TVs and speaker groups'} onPress={web('Media', 'media')} />
+        <Row icon="solar_power" iconFg={C.amber} title="Energy" sub="Solar, use and the grid today" onPress={() => nav.navigate('Energy')} />
+        <Row icon="speaker_group" iconFg={C.blue} title="Media" sub={players ? `${players} playing` : 'Speakers, TVs and speaker groups'} onPress={() => nav.navigate('Media')} />
       </Group>
 
       <Group title="Set up">
-        <Row first icon="home" title="Customise home" sub="Rooms, people, names and favourites" onPress={web('Customise home', 'customise')} />
+        <Row first icon="home" title="Customise home" sub="Rooms, people, names and favourites" onPress={() => nav.navigate('Customise')} />
         <Row icon="hub" title="Integrations" sub={bad.length ? `${bad.length} need${bad.length === 1 ? 's' : ''} attention` : `${s.integrations.length} connected`} subColor={bad.length ? C.amber : C.stone} badge={bad.length > 0} onPress={web('Integrations', 'integrations')} />
       </Group>
 

@@ -15,7 +15,7 @@ import { C, SP } from './src/theme';
 import { HubProvider, useHub } from './src/state/hub';
 import { SheetProvider } from './src/state/sheet';
 import type { Stack as StackParams } from './src/navigation';
-import { routeFor } from './src/logic/links';
+import { NATIVE_PAGES, routeFor } from './src/logic/links';
 import { Tabs } from './src/Tabs';
 import { ConnectScreen } from './src/screens/ConnectScreen';
 import { ModesScreen } from './src/screens/ModesScreen';
@@ -24,6 +24,9 @@ import { ThisPhoneScreen } from './src/screens/ThisPhoneScreen';
 import { WebScreen } from './src/screens/WebScreen';
 import { AutomationsScreen } from './src/screens/AutomationsScreen';
 import { AutomationEditor } from './src/screens/AutomationEditor';
+import { CustomiseScreen } from './src/screens/CustomiseScreen';
+import { EnergyScreen } from './src/screens/EnergyScreen';
+import { MediaScreen } from './src/screens/MediaScreen';
 import { DeviceSheet } from './src/screens/DeviceSheet';
 import { Button, Empty, Mark, ToastHost } from './src/ui/kit';
 import { NowSkeleton } from './src/screens/NowScreen';
@@ -73,9 +76,7 @@ function Home() {
     const r = routeFor(last.actionIdentifier === 'lights-off' ? '/phone.html?do=lights-off' : data?.url);
     if (r.cam) nav.current?.navigate('Web', { title: snap.devices.find(d => d.id === r.cam)?.name ?? 'Camera', path: `/phone.html?embed=1&cam=${encodeURIComponent(r.cam)}` });
     else if (r.lightsOff) void api<{ changed: string[]; undo: string }>('POST', '/api/lights/off').then(x => say(`${x.changed.length} lights off`, { undo: x.undo })).catch(() => {});
-    else if (r.page === 'modes') nav.current?.navigate('Modes');
-    else if (r.page === 'activity') nav.current?.navigate('Activity');
-    else if (r.page === 'autos' || r.page === 'automations') nav.current?.navigate('Automations');
+    else if (r.page && NATIVE_PAGES[r.page]) nav.current?.navigate(NATIVE_PAGES[r.page]);
     else if (r.page) nav.current?.navigate('Web', { title: r.page[0].toUpperCase() + r.page.slice(1), path: `/phone.html?embed=1&page=${r.page}` });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [last, !!snap]);
@@ -94,6 +95,9 @@ function Home() {
           <Stack.Screen name="Web" component={WebScreen} />
           <Stack.Screen name="Automations" component={AutomationsScreen} />
           <Stack.Screen name="AutomationEditor" component={AutomationEditor} />
+          <Stack.Screen name="Customise" component={CustomiseScreen} />
+          <Stack.Screen name="Energy" component={EnergyScreen} />
+          <Stack.Screen name="Media" component={MediaScreen} />
         </Stack.Navigator>
         <DeviceSheet />
       </NavigationContainer>

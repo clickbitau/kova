@@ -1,7 +1,7 @@
 {
   "name": "Kova",
   "slug": "kova",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "runtimeVersion": "kova-mobile-0.2",
   "updates": {
     "enabled": true,
@@ -164,6 +164,10 @@
     },
     "kovaHistory": [
       {
+        "version": "0.2.9",
+        "title": "Customise home, Energy and Media are the app's own screens; with zones for ducted air conditioners"
+      },
+      {
         "version": "0.2.8",
         "title": "Ducted air conditioners: zones in the AC panel (name them, open or close, how far open)"
       },
@@ -178,10 +182,6 @@
       {
         "version": "0.2.5",
         "title": "Automations: the full list, editor and history, with suggestions and Home Assistant ones to convert"
-      },
-      {
-        "version": "0.2.4",
-        "title": "Home and away: the app uses the hub's home-network address at home and its remote address away, switching by itself; addresses under This phone"
       }
     ]
   },

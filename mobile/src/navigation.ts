@@ -12,7 +12,10 @@ export type Stack = {
   Automations: undefined;
   /** An automation by id, or a new one (optionally starting from a draft, such as a suggestion). */
   AutomationEditor: { id?: string; draft?: Draft; tab?: 'edit' | 'history' } | undefined;
-  /** A page of the hub's phone web app, for setup screens (Integrations, Customise, Energy, Media, Add, a camera). */
+  Customise: undefined;
+  Energy: undefined;
+  Media: undefined;
+  /** A page of the hub's phone web app, for what has no screen of its own yet (Add a device, live camera video, editing a mode). */
   Web: { title: string; path: string };
 };
 

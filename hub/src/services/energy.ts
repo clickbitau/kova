@@ -24,6 +24,16 @@ export function typicalWatts(d: Device): number | null {
   }
 }
 
+/**
+ * What the Energy page lets the owner set for a device: their figure for what it draws while on (null: not set) and
+ * Kova's typical one (null: no idea). Null for devices it can't apply to: ones that measure their own power or make
+ * it, demo devices, the internet and sensors.
+ */
+export function wattsSetting(d: Device, own: number | undefined): { watts: number | null; typicalWatts: number | null } | null {
+  if (d.adapter === 'virtual' || d.type === 'internet' || d.type === 'sensor' || d.state.power != null || d.capabilities.includes('power') || d.capabilities.includes('energy')) return null;
+  return { watts: own ?? null, typicalWatts: typicalWatts({ ...d, state: { ...d.state, on: true } }) };
+}
+
 export interface EnergyToday {
   /** False until something that produces or meters energy is connected. */
   available: boolean;

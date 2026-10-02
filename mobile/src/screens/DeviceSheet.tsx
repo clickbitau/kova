@@ -25,7 +25,7 @@ const COLOURS: [string, string][] = [['#ff5a4e', 'Red'], ['#ff9f43', 'Orange'], 
 const MUSIC = '#c79bf2';
 
 /** One choice of a few (an input, a sound mode): a tile with an icon, two to a row, the chosen one lit. */
-function Choice({ label, icon, on, onPress, color = C.blue }: { label: string; icon: string; on: boolean; onPress: () => void; color?: string }) {
+export function Choice({ label, icon, on, onPress, color = C.blue }: { label: string; icon: string; on: boolean; onPress: () => void; color?: string }) {
   return (
     <Press label={label} selected={on} onPress={onPress} style={{ flexBasis: '47%', flexGrow: 1, flexDirection: 'row', alignItems: 'center', gap: SP[3], height: 52, paddingHorizontal: SP[3], borderRadius: R.md,
       backgroundColor: on ? alpha(color, 0.16) : C.inset, borderWidth: 1, borderColor: on ? alpha(color, 0.45) : C.edge }}>
@@ -37,7 +37,7 @@ function Choice({ label, icon, on, onPress, color = C.blue }: { label: string; i
 }
 
 /** A text field with its button: "Play", "Save". */
-function FieldWithButton({ value, onChange, placeholder, button, color = C.amber, onColor = C.onAmber, onSubmit, label, show }: { value: string; onChange: (v: string) => void; placeholder?: string; button: string; color?: string; onColor?: string; onSubmit: () => void; label: string; show?: boolean }) {
+export function FieldWithButton({ value, onChange, placeholder, button, color = C.amber, onColor = C.onAmber, onSubmit, label, show }: { value: string; onChange: (v: string) => void; placeholder?: string; button: string; color?: string; onColor?: string; onSubmit: () => void; label: string; show?: boolean }) {
   return (
     <View style={{ flexDirection: 'row', gap: SP[2] }}>
       <TextInput value={value} onChangeText={onChange} placeholder={placeholder} placeholderTextColor={C.stone2} returnKeyType="go" onSubmitEditing={onSubmit} accessibilityLabel={label} autoCorrect={false}
