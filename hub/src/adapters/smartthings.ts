@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import type { Adapter, AdapterContext, AdapterStatus } from './sdk.ts';
@@ -125,7 +125,10 @@ export class SmartThingsAuth {
 
   /** The refresh token to use: the one Kova kept, unless the settings carry a newer link. */
   private stored(): { refreshToken?: string; seed?: string } {
-    try { return existsSync(this.file) ? JSON.parse(readFileSync(this.file, 'utf8')) : {}; } catch { return {}; }
+    for (const f of [this.file, this.file + '.bak']) {
+      try { if (existsSync(f)) return JSON.parse(readFileSync(f, 'utf8')); } catch { /* torn write: try the backup */ }
+    }
+    return {};
   }
   private refreshTokenNow(): string | undefined {
     const s = this.stored();
@@ -135,8 +138,12 @@ export class SmartThingsAuth {
   }
   private keep(refreshToken: string): void {
     mkdirSync(this.o.storageDir, { recursive: true });
-    writeFileSync(this.file, JSON.stringify({ refreshToken, seed: this.o.refreshToken }, null, 2) + '\n', { mode: 0o600 });
+    const data = JSON.stringify({ refreshToken, seed: this.o.refreshToken }, null, 2) + '\n';
+    const tmp = this.file + '.tmp';
+    writeFileSync(tmp, data, { mode: 0o600 });
+    renameSync(tmp, this.file);
     chmodSync(this.file, 0o600);
+    try { writeFileSync(this.file + '.bak', data, { mode: 0o600 }); } catch { /* backup is best-effort */ }
   }
 
   get linked(): boolean { return !!this.o.token || !!(this.o.clientId && this.o.clientSecret && this.refreshTokenNow()); }
@@ -216,11 +223,11 @@ export async function exchangeSmartThingsCode(o: { code: string; clientId: strin
   return { refreshToken: j.refresh_token };
 }
 
-interface Bar { id: string; st: string; name: string; sound: string | null; night: boolean | null }
+interface Bar { id: string; st: string; name: string; model?: string; sound: string | null; night: boolean | null }
 /** A Samsung TV on the account. Announced as its own device (it can be combined with the same TV on another adapter). */
 interface StTv { id: string; st: string; label: string; model: string; caps: Set<string> }
 /** A sensor the account exposes: the TV's light and sound (baby crying, dog barking) sensors and the like. */
-interface StSensor { id: string; st: string; detected: string | null }
+interface StSensor { id: string; st: string; label?: string; model?: string; detected: string | null }
 
 /** Is this SmartThings device a TV? */
 export function isTv(d: StDevice): boolean {
@@ -296,13 +303,17 @@ export class SmartThingsAdapter implements Adapter {
     return (text ? JSON.parse(text) : {}) as T;
   }
 
+  private get devicesFile(): string { return join(this.o.storageDir, 'devices.json'); }
+
   async start(ctx: AdapterContext): Promise<void> {
     this.ctx = ctx;
-    if (!this.auth.linked) { this.error = 'Not linked yet: use Link SmartThings'; return; }
-    try {
-      await this.discover();
-      await this.poll();
-    } catch (e) { this.error = (e as Error).message; }
+    if (!this.auth.linked) this.error = 'Not linked yet: use Link SmartThings';
+    else {
+      try { await this.discover(); }
+      catch (e) { this.error = (e as Error).message; }
+    }
+    if (!this.tvs.length && !this.bars.size && !this.sensors.size) this.restore();
+    await this.poll();
     // Each poll is one API call per device — stretch the interval with the device count so a
     // day stays at ~5,700 calls whether there are 4 devices or 100.
     const n = Math.max(1, this.bars.size + this.tvs.length + this.sensors.size);
@@ -321,27 +332,27 @@ export class SmartThingsAdapter implements Adapter {
       caps: new Set((d.components ?? []).find(c => c.id === 'main')?.capabilities?.map(c => c.id) ?? []),
     }));
     const found = items.filter(d => want ? want.has(d.deviceId) : isSoundbar(d));
-    const fresh = found.filter(d => !this.bars.has(this.kovaId(d)));
     for (const d of found) {
       const id = this.kovaId(d);
-      if (!this.bars.has(id)) this.bars.set(id, { id, st: d.deviceId, name: d.label || d.name || 'Soundbar', sound: null, night: null });
+      if (!this.bars.has(id)) this.bars.set(id, { id, st: d.deviceId, name: d.label || d.name || 'Soundbar', model: d.ocf?.modelNumber?.split('|')[0], sound: null, night: null });
     }
-    const newSensors = items.filter(isSensor).filter(d => !this.sensors.has(d.deviceId));
     for (const d of items.filter(isSensor)) {
       if (!this.sensors.has(d.deviceId)) {
-        this.sensors.set(d.deviceId, { id: `stsensor_${d.deviceId.replace(/-/g, '').slice(0, 12).toLowerCase()}`, st: d.deviceId, detected: null });
+        this.sensors.set(d.deviceId, { id: `stsensor_${d.deviceId.replace(/-/g, '').slice(0, 12).toLowerCase()}`, st: d.deviceId, label: d.label || d.name || 'Sensor', model: d.ocf?.modelNumber?.split('|')[0], detected: null });
       }
     }
-    if (fresh.length) {
-      this.ctx!.announce(fresh.map(d => {
-        const name = d.label || d.name || 'Soundbar';
-        return {
-          id: this.kovaId(d), name, type: 'media' as const, room: this.o.rooms?.[name] ?? 'unassigned', // not a room made up from its name: the owner puts it in one
-          integration: `Samsung soundbar${d.ocf?.modelNumber ? ` · ${d.ocf.modelNumber.split('|')[0]}` : ''}`, address: d.deviceId,
-          capabilities: ['onoff', 'volume', 'mute', 'input', 'sound'],
-        };
-      }));
-    }
+    this.announceAll();
+    this.saveDevices();
+    this.error = found.length || this.tvs.length || this.sensors.size ? null : 'No soundbar or TV on this SmartThings account';
+  }
+
+  /** Announce every known device. Announce upserts by id, so repeat calls are safe. */
+  private announceAll(): void {
+    this.ctx!.announce([...this.bars.values()].map(b => ({
+      id: b.id, name: b.name, type: 'media' as const, room: this.o.rooms?.[b.name] ?? 'unassigned', // not a room made up from its name: the owner puts it in one
+      integration: `Samsung soundbar${b.model ? ` · ${b.model}` : ''}`, address: b.st,
+      capabilities: ['onoff', 'volume', 'mute', 'input', 'sound'],
+    })));
     // TVs are full devices too: their modes and power readings don't fit anywhere else. The same TV on another
     // adapter (cast, the Samsung TV remote) can be combined with it.
     this.ctx!.announce(this.tvs.map(t => ({
@@ -349,13 +360,37 @@ export class SmartThingsAdapter implements Adapter {
       integration: `Samsung SmartThings${t.model ? ` · ${t.model}` : ''}`, address: t.st,
       capabilities: ['onoff', 'volume', 'mute', 'input', 'power', 'extras'],
     })));
-    this.ctx!.announce(newSensors.map(d => ({
-      id: this.sensors.get(d.deviceId)!.id, name: d.label || d.name || 'Sensor', type: 'sensor' as const,
-      room: this.o.rooms?.[d.label ?? ''] ?? 'unassigned',
-      integration: `Samsung SmartThings${d.ocf?.modelNumber ? ` · ${d.ocf.modelNumber.split('|')[0]}` : ''}`, address: d.deviceId,
+    this.ctx!.announce([...this.sensors.values()].map(s => ({
+      id: s.id, name: s.label || 'Sensor', type: 'sensor' as const,
+      room: this.o.rooms?.[s.label ?? ''] ?? 'unassigned',
+      integration: `Samsung SmartThings${s.model ? ` · ${s.model}` : ''}`, address: s.st,
       capabilities: ['events', 'onoff', 'extras'],
     })));
-    this.error = found.length || this.tvs.length || this.sensors.size ? null : 'No soundbar or TV on this SmartThings account';
+  }
+
+  /** Keep the discovered list on disk so a failed discover (dead grant, cloud down) doesn't make devices vanish. */
+  private saveDevices(): void {
+    try {
+      mkdirSync(this.o.storageDir, { recursive: true });
+      const data = JSON.stringify({
+        tvs: this.tvs.map(t => ({ ...t, caps: [...t.caps] })),
+        bars: [...this.bars.values()],
+        sensors: [...this.sensors.values()],
+      });
+      const tmp = this.devicesFile + '.tmp';
+      writeFileSync(tmp, data, { mode: 0o600 });
+      renameSync(tmp, this.devicesFile);
+    } catch { /* a cache only */ }
+  }
+
+  /** Announce the last-discovered devices again; the poll marks them offline until the link works. */
+  private restore(): void {
+    let c: { tvs?: (Omit<StTv, 'caps'> & { caps: string[] })[]; bars?: Bar[]; sensors?: StSensor[] };
+    try { c = JSON.parse(readFileSync(this.devicesFile, 'utf8')); } catch { return; }
+    for (const b of c.bars ?? []) this.bars.set(b.id, b);
+    this.tvs = (c.tvs ?? []).map(t => ({ ...t, caps: new Set(t.caps ?? []) }));
+    for (const s of c.sensors ?? []) this.sensors.set(s.st, s);
+    if (this.tvs.length || this.bars.size || this.sensors.size) this.announceAll();
   }
 
   private kovaId(d: StDevice): string {
