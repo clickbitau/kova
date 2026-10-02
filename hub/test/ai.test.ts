@@ -290,6 +290,17 @@ test('Greeting is answered by the built-in parser, no AI call', async () => {
   await app.close(); await hub.stop(); await fake.close();
 });
 
+test("Device questions don't match the generic 'what's on' intent", async () => {
+  const fake = await fakeServer([openAiText('The Helix box is idle.')]);
+  const { hub, app, put, ask } = await setup();
+  await put({ engine: 'local', local: { url: fake.url, model: 'm' } });
+  // Before the fix this parsed as 'whatsOn' and listed the lights.
+  const r = await ask('what mode is the helix box on');
+  assert.equal(r.source, 'Local AI on your server');
+  assert.equal(fake.received.length, 1, 'reached the AI instead of the lights list');
+  await app.close(); await hub.stop(); await fake.close();
+});
+
 test('Standing instructions reach the AI system prompt', async () => {
   const fake = await fakeServer([openAiText('ok')]);
   const { hub, app, put, ask } = await setup();

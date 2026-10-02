@@ -216,8 +216,15 @@ export class Assistant {
     if (ARRIVED.test(t) && this.engine.overlay?.id === 'away') return { kind: 'overlay', id: 'away', name: 'Away', end: true };
     const ov = c.overlays.find(o => new RegExp(`\\b${norm(o.name)}\\b`).test(t)) ?? c.overlays.find(o => OVERLAY_PHRASES[o.id]?.test(t));
     if (ov) return { kind: 'overlay', id: ov.id, name: ov.name, end: /\b(end|stop|finish|cancel|over)\b/.test(t) };
-    if (/what.*\b(on|running)\b|which lights/.test(t)) return { kind: 'whatsOn' };
-    if (/\b(mode|status|whats going on)\b/.test(t)) return { kind: 'status' };
+    // "what's on", "which lights are on", "what lights are on in the kitchen" — only a generic
+    // listing question, not "what mode is the helix box on" (that's about a specific device).
+    if (/^whats? (is )?(on|running)|^what is (on|running)|anything (is )?(on|running)|which lights|what.*\b(lights?|devices?|speakers?)\b.*\b(on|running)\b/.test(t)) return { kind: 'whatsOn' };
+    if (/\b(mode|status|whats going on)\b/.test(t)) {
+      // "what's the status" / "what's going on" → home status. But "what mode is the
+      // helix box on" names something specific — fall through so the AI can answer it.
+      const extra = t.replace(/\b(whats|what|is|are|the|a|an|of|mode|status|going|on|in|now|current|right|home|house|kova|does|do|it|we)\b/g, ' ').trim();
+      if (!extra) return { kind: 'status' };
+    }
     return null;
   }
 
