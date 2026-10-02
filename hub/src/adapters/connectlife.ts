@@ -289,7 +289,7 @@ export class ConnectLifeAdapter implements Adapter {
   async start(ctx: AdapterContext): Promise<void> {
     this.ctx = ctx;
     await this.poll();
-    const every = this.o.pollMs ?? 60_000;
+    const every = this.o.pollMs ?? 120_000;
     if (every > 0) this.poller = setInterval(() => void this.poll(), every);
   }
 
