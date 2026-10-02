@@ -212,6 +212,16 @@ export const TOOLS = [
     parameters: { type: 'object', properties: {} },
   },
   {
+    name: 'remember',
+    description: 'Remember a fact the user asked you to keep — a note about the home, a preference, something coming later. The ONLY way you recall anything next time; saying "I\'ll remember" without this tool loses it.',
+    parameters: { type: 'object', properties: { fact: { type: 'string' } }, required: ['fact'] },
+  },
+  {
+    name: 'forget',
+    description: 'Forget a fact previously remembered — the exact text, or enough of it to match.',
+    parameters: { type: 'object', properties: { fact: { type: 'string' } }, required: ['fact'] },
+  },
+  {
     name: 'create_automation',
     description: `Create a home automation: "when" (triggers) starts it, every "if" (condition) must hold, then "then" (actions) run in order. It is saved and runs on its own from then on — only use it when the user asks for something ongoing or scheduled, not for a one-off change (use set_devices). Shapes:
 when: {kind:'time', at:{kind:'time', at:'HH:MM'}, days?:[0-6, 0=Sunday, empty=every day]} | {kind:'time', at:{kind:'sun', event:'sunrise'|'sunset'|'dawn'|'dusk', offsetMin?:n}} | {kind:'device', device:id, to?:{on?, online?, mode?, hvac?, input?, playing?, muted?}, from?:{...}, forSec?:n} | {kind:'numeric', device:id, field:'temp|target|power|energy|battery|bri|vol|grid|load', above?:n, below?:n} | {kind:'event', device:id, event:string} | {kind:'every', minutes:n} | {kind:'presence', event:'arrives|leaves|first-arrives|last-leaves', person?:id} | {kind:'mode', mode:id} | {kind:'overlay', overlay:id, event:'starts|ends'} | {kind:'hub', event:'start'}
@@ -291,8 +301,24 @@ export interface LearnedEntry { ts: number; engine: string; uses: number; steps:
 
 const REQUESTS_KEY = 'assistant.requests';
 const LEARNED_KEY = 'assistant.learned';
+const MEMORY_KEY = 'assistant.memory';
 const REQUESTS_CAP = 200;
 const LEARNED_CAP = 100;
+const MEMORY_CAP = 50;
+
+/** Facts the user asked the AI to keep ("note it down"): {ts, text} list, newest last. */
+export function memoryList(store: Store): { ts: number; text: string }[] {
+  return store.get<{ ts: number; text: string }[]>(MEMORY_KEY) ?? [];
+}
+/** Drop a remembered fact by index (or exact/normalized text). */
+export function forgetMemory(store: Store, key: string | number): boolean {
+  const all = memoryList(store);
+  const i = typeof key === 'number' ? key : all.findIndex(m => norm(m.text) === norm(key) || norm(m.text).includes(norm(key)));
+  if (i < 0 || i >= all.length) return false;
+  all.splice(i, 1);
+  store.set(MEMORY_KEY, all);
+  return true;
+}
 
 /** Every request the built-in parser couldn't handle — the raw material for new intents. */
 export function requestLog(store: Store): AiRequestLog[] {
@@ -417,6 +443,23 @@ export class Toolbox {
           await this.ai.engine.endOverlay('user');
           this.learned.push({ tool: 'end_overlay' });
           return JSON.stringify({ ok: true, mode: this.ai.engine.mode().name });
+        }
+        case 'remember': {
+          const fact = typeof args.fact === 'string' ? args.fact.trim().slice(0, 300) : '';
+          if (!fact) return JSON.stringify({ ok: false, error: 'Nothing to remember' });
+          const all = memoryList(this.ai.store);
+          if (all.some(m => norm(m.text) === norm(fact))) return JSON.stringify({ ok: true, already: true, fact });
+          const ts = Date.now();
+          this.ai.store.set(MEMORY_KEY, [...all, { ts, text: fact }].slice(-MEMORY_CAP));
+          this.undos.push(this.ai.engine.registerUndo(() => { forgetMemory(this.ai.store, fact); }));
+          return JSON.stringify({ ok: true, fact });
+        }
+        case 'forget': {
+          const fact = typeof args.fact === 'string' ? args.fact.trim() : '';
+          if (!fact) return JSON.stringify({ ok: false, error: 'Nothing to forget' });
+          return forgetMemory(this.ai.store, fact)
+            ? JSON.stringify({ ok: true, forgot: fact })
+            : JSON.stringify({ ok: false, error: `Nothing remembered matching "${fact}"` });
         }
         case 'explain_device': {
           const d = this.device(args.id);
@@ -602,7 +645,7 @@ export class CloudAiEngine implements AiEngine {
 // -------------------------------------------------------------- assistant --
 
 const SYSTEM = `You are Ask Kova, the assistant for a smart home hub. The hub's built-in parser couldn't handle this request, so it was passed to you.
-Use the tools to act: set_devices, start_overlay, end_overlay, explain_device, list_schedule, create_automation. Only use device, overlay, mode and person ids from the home context below; never invent ids.
+Use the tools to act: set_devices, start_overlay, end_overlay, explain_device, list_schedule, create_automation, remember, forget. Only use device, overlay, mode and person ids from the home context below; never invent ids.
 Anything asked to happen regularly, at a time, or when something else happens is an automation — build it with create_automation, then tell the user what it will do in the words the tool returns.
 Ducted air conditioner zones are numbered; a zone only has a name when the state lists one. If a request names rooms for a zoned AC and the zones are unnamed, ask which zone number is which room instead of guessing.
 If the request can't be done with these tools or the shared context, say so plainly instead of guessing. Reply in one or two short, friendly sentences of plain text, no markdown.`;
@@ -641,6 +684,8 @@ export class AiAssistant {
     lines.push(`Overlay on: ${ov ? `${ov.name} (${ov.id})` : 'none'}.`);
     lines.push(`Overlays you can start: ${cfg.overlays.map(o => `${o.id} (${o.name}, ${o.endsLabel.toLowerCase()})`).join('; ')}.`);
     lines.push(`Modes: ${cfg.modes.map(m => `${m.id} (${m.name})`).join(', ')}.`);
+    const memory = memoryList(this.store);
+    if (memory.length) lines.push(`Things the user asked you to remember: ${memory.map(m => `"${m.text}"`).join('; ')}.`);
     const autos = this.engine.automations.list();
     if (autos.length) lines.push(`Automations: ${autos.map(a => `${a.id} (${a.name}${a.enabled ? '' : ', off'})`).join('; ')}.`);
 

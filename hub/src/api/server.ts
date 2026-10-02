@@ -11,7 +11,7 @@ import { MatterAdapter } from '../adapters/matter.ts';
 import { HomeKitControllerAdapter } from '../adapters/homekit-controller.ts';
 import { snapshot } from './snapshot.ts';
 import { registerEditRoutes } from './edit-routes.ts';
-import { AiAssistant, loadSettings, publicSettings, saveSettings, requestLog, learnedPhrases, forgetPhrase, type AiOptions, type SettingsPatch } from '../assistant/ai.ts';
+import { AiAssistant, loadSettings, publicSettings, saveSettings, requestLog, learnedPhrases, forgetPhrase, memoryList, forgetMemory, type AiOptions, type SettingsPatch } from '../assistant/ai.ts';
 import { isLight, isPlayer } from '../util/describe.ts';
 import type { HomeKitBridge } from '../bridges/homekit.ts';
 import type { MatterBridge } from '../bridges/matter-bridge.ts';
@@ -537,6 +537,10 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
   app.get('/api/assistant/learned', async () => learnedPhrases(hub.store));
   app.delete<{ Params: { key: string } }>('/api/assistant/learned/:key', async (req, reply) =>
     forgetPhrase(hub.store, decodeURIComponent(req.params.key)) ? { ok: true } : reply.code(404).send({ error: 'No such phrase' }));
+  // Facts the user asked the AI to remember.
+  app.get('/api/assistant/memory', async () => ({ memory: memoryList(hub.store) }));
+  app.delete<{ Params: { i: string } }>('/api/assistant/memory/:i', async (req, reply) =>
+    forgetMemory(hub.store, Number(req.params.i)) ? { ok: true } : reply.code(404).send({ error: 'No such memory' }));
 
   app.post<{ Body: { text: string } }>('/api/ask', async req => {
     const text = String(req.body?.text ?? '');

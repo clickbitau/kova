@@ -66,7 +66,7 @@ test('Local AI: tool call changes a device through the engine, logged, tagged an
   assert.equal(fake.received.length, 2);
   assert.equal(fake.received[0].url, '/v1/chat/completions');
   assert.equal(fake.received[0].body.model, 'llama3');
-  assert.deepEqual(fake.received[0].body.tools.map((t: any) => t.function.name), ['set_devices', 'start_overlay', 'end_overlay', 'explain_device', 'list_schedule', 'create_automation']);
+  assert.deepEqual(fake.received[0].body.tools.map((t: any) => t.function.name), ['set_devices', 'start_overlay', 'end_overlay', 'explain_device', 'list_schedule', 'remember', 'forget', 'create_automation']);
   const toolMsg = fake.received[1].body.messages.find((m: any) => m.role === 'tool');
   assert.equal(toolMsg.tool_call_id, 'call_1');
   assert.equal(JSON.parse(toolMsg.content).ok, true);
@@ -175,7 +175,7 @@ test('Cloud AI: Anthropic Messages tool loop against a fake endpoint', async () 
   assert.equal(first.headers['x-api-key'], 'sk-ant-test');
   assert.equal(first.headers.authorization, undefined);
   assert.equal(first.body.model, 'claude-opus-5-5');
-  assert.deepEqual(first.body.tools.map((t: any) => t.name), ['set_devices', 'start_overlay', 'end_overlay', 'explain_device', 'list_schedule', 'create_automation']);
+  assert.deepEqual(first.body.tools.map((t: any) => t.name), ['set_devices', 'start_overlay', 'end_overlay', 'explain_device', 'list_schedule', 'remember', 'forget', 'create_automation']);
   assert.ok(!('tool_choice' in first.body) || first.body.tool_choice.type === 'auto');
   const sys = JSON.stringify(first.body.system);
   for (const c of CAMERAS) assert.ok(!sys.includes(c), `camera ${c} was sent`);
@@ -374,4 +374,29 @@ test('Cloud AI: unknown provider and bad baseUrl are rejected', async () => {
   const ask = async (text: string) => (await app.inject({ method: 'POST', url: '/api/ask', payload: { text } })).json();
   assert.match((await ask('make the lounge feel cosy')).text, /needs a server address/);
   await app.close(); await hub.stop();
+});
+
+test('remember + forget: a fact persists into the next request\'s context', async () => {
+  const fake = await fakeServer([
+    openAiToolCall('remember', { fact: 'The warden API will report power usage soon' }),
+    openAiText('Noted.'),
+    openAiText('Still no power reading yet — but noted it will come.'),
+  ]);
+  const { hub, app, put, ask } = await setup();
+  await put({ engine: 'local', local: { url: fake.url, model: 'm' } });
+
+  await ask('note it down, the warden api will report power soon');
+  // The fact was stored and is visible through the API.
+  const mem = (await app.inject({ url: '/api/assistant/memory' })).json();
+  assert.equal(mem.memory.length, 1);
+  assert.match(mem.memory[0].text, /warden/i);
+
+  // Next request carries it in context.
+  await ask('how much power is warden using now');
+  assert.match(JSON.stringify(fake.received[1].body), /warden API will report power/i);
+
+  // forget removes it; the DELETE route drops it by index.
+  assert.equal((await app.inject({ method: 'DELETE', url: '/api/assistant/memory/0' })).statusCode, 200);
+  assert.equal((await app.inject({ url: '/api/assistant/memory' })).json().memory.length, 0);
+  await app.close(); await hub.stop(); await fake.close();
 });
