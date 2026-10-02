@@ -5,7 +5,7 @@ import type { Registry } from '../devices/registry.ts';
 import type { ConfigStore } from '../engine/config.ts';
 import type { Store } from '../store/db.ts';
 import type { Automation, Cause, Command, Device, Targets } from '../model/types.ts';
-import { FIELD_CAP, isPlayer, targetLabel } from '../util/describe.ts';
+import { FIELD_CAP, isPlayer, pseudoLabel, targetLabel } from '../util/describe.ts';
 import { checkAutomation } from '../engine/automation-check.ts';
 import { actionWords, condWords, triggerWords } from '../engine/automations.ts';
 import { clock } from '../util/time.ts';
@@ -226,7 +226,7 @@ export const TOOLS = [
     description: `Create a home automation: "when" (triggers) starts it, every "if" (condition) must hold, then "then" (actions) run in order. It is saved and runs on its own from then on — only use it when the user asks for something ongoing or scheduled, not for a one-off change (use set_devices). Shapes:
 when: {kind:'time', at:'HH:MM' or {kind:'time', at:'HH:MM'} or {kind:'sun', event:'sunrise|sunset|dawn|dusk', offsetMin?:n} or {kind:'prayer', prayer:'fajr|sunrise|dhuhr|asr|maghrib|isha'}, days?:[0-6, 0=Sunday, empty=every day]} | {kind:'device', device:id, to?:{on?, online?, mode?, hvac?, input?, playing?, muted?}, from?:{...}, forSec?:n} | {kind:'numeric', device:id, field:'temp|target|power|energy|battery|bri|vol|grid|load|humidity|lux', above?:n, below?:n} | {kind:'event', device:id, event:string} | {kind:'every', minutes:n} | {kind:'presence', event:'arrives|leaves|first-arrives|last-leaves', person?:id} | {kind:'mode', mode:id} | {kind:'overlay', overlay:id, event:'starts|ends'} | {kind:'hub', event:'start'}
 if: {kind:'device', device:id, is:{on?...}} | {kind:'numeric', device:id, field, above?, below?} | {kind:'time', after?/before?:'HH:MM' or a sun/prayer object as above, days?} | {kind:'presence', who:'anyone|no-one|person id', home:boolean} | {kind:'mode', modes:[id]} | {kind:'overlay', overlay?:id, active:boolean} | {kind:'all|any|not', conditions:[...]}
-then: {kind:'set', targets:{deviceId:{on:false, bri:50, ...same fields as set_devices + set}}} | {kind:'delay', seconds:n} | {kind:'wait', until:condition, timeoutSec?:n, stopOnTimeout?:bool} | {kind:'notify', message:string, title?:string, people?:[ids]} | {kind:'overlay', overlay:id, op:'start|end'} | {kind:'if', conditions:[...], then:[...], else?:[...]} | {kind:'repeat', times:n, actions:[...]} | {kind:'run', automation:id} | {kind:'stop'}
+then: {kind:'set', targets:{deviceId:{on:false, bri:50, ...same fields as set_devices + set}, or 'type:light'|'type:media'|'type:<device type>'|'room:<room id>' to reach EVERY matching device — including devices added later (use "type:light" for "all lights")}} | {kind:'delay', seconds:n} | {kind:'wait', until:condition, timeoutSec?:n, stopOnTimeout?:bool} | {kind:'notify', message:string, title?:string, people?:[ids]} | {kind:'overlay', overlay:id, op:'start|end'} | {kind:'if', conditions:[...], then:[...], else?:[...]} | {kind:'repeat', times:n, actions:[...]} | {kind:'run', automation:id} | {kind:'stop'}
 runMode: what a second start does while it's still running — single (ignore), restart (start over), queued (run after), parallel (alongside). Default single.
 Prefer ONE automation per intent: several triggers plus if/else branches beat overlapping automations. Check the Automations list first — update_automation an existing one rather than adding another.
 Only use device, person, mode and overlay ids from the home context; never invent them.`,
@@ -541,7 +541,7 @@ export class Toolbox {
               data: { automation: id }, cause: AI_CAUSE,
             });
             const w = { reg: this.ai.reg, cfg };
-            const tgt = (tid: string, cmd: object) => { const d = this.ai.reg.get(tid); return d ? targetLabel(d, cmd as Command) : tid; };
+            const tgt = (tid: string, cmd: object) => { const d = this.ai.reg.get(tid); return d ? targetLabel(d, cmd as Command) : (pseudoLabel(tid, this.ai.config.get().rooms) ?? tid); };
             return JSON.stringify({ ok: true, id, name: a.name, when: a.triggers.map(t => triggerWords(t, w)), if: a.conditions.map(c => condWords(c, w)), then: a.actions.map(x => actionWords(x, w, tgt)) });
           } catch (e) { return JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e) }); }
         }
@@ -568,7 +568,7 @@ export class Toolbox {
               data: { automation: id }, cause: AI_CAUSE,
             });
             const w = { reg: this.ai.reg, cfg };
-            const tgt = (tid: string, cmd: object) => { const d = this.ai.reg.get(tid); return d ? targetLabel(d, cmd as Command) : tid; };
+            const tgt = (tid: string, cmd: object) => { const d = this.ai.reg.get(tid); return d ? targetLabel(d, cmd as Command) : (pseudoLabel(tid, this.ai.config.get().rooms) ?? tid); };
             return JSON.stringify({ ok: true, id, name: a.name, when: a.triggers.map(t => triggerWords(t, w)), if: a.conditions.map(c => condWords(c, w)), then: a.actions.map(x => actionWords(x, w, tgt)) });
           } catch (e) { return JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e) }); }
         }
@@ -784,7 +784,7 @@ export class AiAssistant {
     const autos = this.engine.automations.list();
     if (autos.length) {
       const w = { reg: this.reg, cfg };
-      const tgt = (tid: string, cmd: object) => { const d = this.reg.get(tid); return d ? targetLabel(d, cmd as Command) : tid; };
+      const tgt = (tid: string, cmd: object) => { const d = this.reg.get(tid); return d ? targetLabel(d, cmd as Command) : (pseudoLabel(tid, cfg.rooms) ?? tid); };
       lines.push('Automations — change these with update_automation or delete_automation instead of adding overlapping ones:', ...autos.map(a => `- ${a.id} "${a.name}"${a.enabled ? '' : ' (off)'}: when ${a.triggers.map(t => triggerWords(t, w)).join(' or ') || 'nothing'}${a.conditions.length ? ` | if ${a.conditions.map(c => condWords(c, w)).join(' and ')}` : ''} | ${a.actions.map(x => actionWords(x, w, tgt)).join('; ') || 'nothing'}`));
     }
 

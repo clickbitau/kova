@@ -1,17 +1,19 @@
 import type { Action, Automation, Command, Condition, Device, HomeConfig, NumericField, RunMode, StateMatch, Trigger } from '../model/types.ts';
 import { cleanTarget, rhythm } from './validate.ts';
+import { FIELD_CAP, PSEUDO_TARGET } from '../util/describe.ts';
 
 // Checks an automation someone made or edited, against the home it's for, and cleans it: only known fields,
 // numbers in range, devices that exist and can do what's asked. Throws with a message a person can act on.
 
 export interface CheckCtx {
   device(id: string): Device | undefined;
-  cfg: Pick<HomeConfig, 'modes' | 'overlays' | 'people'> & { automations?: { id: string }[] };
+  cfg: Pick<HomeConfig, 'modes' | 'overlays' | 'people' | 'rooms'> & { automations?: { id: string }[] };
   /** The automation being edited (it can't run itself). */
   self?: string;
 }
 
 const FIELDS: NumericField[] = ['temp', 'target', 'power', 'energy', 'battery', 'bri', 'vol', 'grid', 'load', 'humidity', 'lux'];
+const DEVICE_TYPES = ['light', 'dimmer', 'fan', 'media', 'tv', 'plug', 'camera', 'sensor', 'vacuum', 'internet', 'climate'];
 const MODES: RunMode[] = ['single', 'restart', 'queued', 'parallel'];
 const HVAC = ['cool', 'heat', 'dry', 'fan', 'auto'];
 const ACTIVITY = ['cleaning', 'returning', 'docked', 'paused', 'idle', 'error'];
@@ -146,8 +148,23 @@ export function checkAction(v: unknown, x: CheckCtx, depth = 0): Action {
       const t = obj(a.targets, 'Devices to set');
       const out: Record<string, Command> = {};
       for (const [id, cmd] of Object.entries(t)) {
+        let c = obj(cmd, `What ${id} should do`);
+        // The assistant tool spells extra fields as { set: {...} } — unwrap it here too.
+        if (c.set && typeof c.set === 'object' && !Array.isArray(c.set)) { const { set, ...rest } = c; c = { ...rest, ...(set as Record<string, unknown>) }; }
+        // "type:light" / "room:lounge" — every matching device, now and later; each device keeps only what it can do at run time.
+        const pm = PSEUDO_TARGET.exec(id);
+        if (pm) {
+          if (pm[1] === 'room' ? !x.cfg.rooms.some(r => r.id === pm[2]) : !DEVICE_TYPES.includes(pm[2]!)) fail(`Unknown ${pm[1]} target ${id}`);
+          const cleaned: Record<string, unknown> = {};
+          for (const [k, v] of Object.entries(c)) {
+            if (!FIELD_CAP[k]) fail(`${k} isn’t something devices can do`);
+            cleaned[k] = v;
+          }
+          out[id] = cleaned as Command;
+          continue;
+        }
         const d = x.device(id) ?? fail(`Unknown device ${id}`);
-        out[id] = cleanTarget(d, obj(cmd, `What ${d.name} should do`) as Command);
+        out[id] = cleanTarget(d, c as Command);
       }
       if (!Object.keys(out).length) fail('Choose at least one device to set');
       return { kind: 'set', targets: out };

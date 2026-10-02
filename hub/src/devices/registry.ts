@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 import type { Adapter, AdapterContext, DeviceInfo, Queue } from '../adapters/sdk.ts';
 import type { Cause, Command, Device, DeviceSettings, DeviceState, Targets } from '../model/types.ts';
 import type { Store } from '../store/db.ts';
-import { CAPS, changeSentence, fitCommand } from '../util/describe.ts';
+import { CAPS, changeSentence, fitCommand, PSEUDO_TARGET, typeMatch } from '../util/describe.ts';
 
 /**
  * Readings that update silently: they're not "changes" anyone made. A vacuum's
@@ -192,9 +192,21 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
 
   /** Apply many targets at once. Failures on one device don't stop the rest. The caller logs one summary entry. */
   async applyTargets(targets: Targets, cause: Cause): Promise<{ changed: string[]; prev: Targets }> {
+    // "type:light" / "room:lounge" targets resolve here, at run time — devices added later join in.
+    const expanded: Record<string, Command> = {};
+    for (const [id, cmd] of Object.entries(targets)) {
+      const m = PSEUDO_TARGET.exec(id);
+      if (!m) { expanded[id] = cmd; continue; }
+      for (const d of this.devices.values()) {
+        if (m[1] === 'type' ? typeMatch(d, m[2]!) : d.room === m[2]) {
+          const c = fitCommand(d, cmd);
+          if (Object.keys(c).length) expanded[d.id] = c;
+        }
+      }
+    }
     const changed: string[] = [];
     const prev: Targets = {};
-    await Promise.all(Object.entries(targets).map(async ([id, cmd]) => {
+    await Promise.all(Object.entries(expanded).map(async ([id, cmd]) => {
       try {
         const p = await this.command(id, cmd, cause, { quiet: true });
         if (Object.keys(p).length) { changed.push(id); prev[id] = p; }

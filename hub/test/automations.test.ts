@@ -66,6 +66,27 @@ test('device trigger, condition and set: the TV and speaker go off when the play
   } finally { await h.close(); }
 });
 
+test('type: and room: targets reach every matching device at run time', async () => {
+  const h = await setup();
+  try {
+    const lights = h.hub.reg.list().filter(d => d.type === 'light' || d.type === 'dimmer');
+    assert.ok(lights.length >= 3, 'demo home has several lights');
+    for (const d of lights) h.virtual.physical(d.id, { on: true });
+    await settle();
+
+    const id = await h.add({
+      name: 'All lights off at one',
+      triggers: [{ kind: 'time', at: { kind: 'time', at: '13:00' } }],
+      conditions: [],
+      actions: [{ kind: 'set', targets: { 'type:light': { on: false }, 'room:office': { vol: 20 } } }],
+    });
+    await h.later(3700);
+    for (const d of lights) assert.equal(h.dev(d.id).on, false, `${d.id} should be off`);
+    assert.equal(h.runs(id)[0]!.result, 'done');
+    assert.match(h.runs(id)[0]!.steps[0]!.text, /all lights|everything in Office/);
+  } finally { await h.close(); }
+});
+
 test('“for” a while: only once it has stayed so; turned back before then, nothing', async () => {
   const h = await setup();
   try {

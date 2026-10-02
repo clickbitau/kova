@@ -6,6 +6,7 @@ import type { ConfigStore } from './config.ts';
 import type { Notification } from '../services/notify.ts';
 import { resolveRhythm } from '../rhythms/rhythms.ts';
 import { localDate, localHour } from '../util/time.ts';
+import { pseudoLabel } from '../util/describe.ts';
 
 // Automations: when (any trigger), if (all conditions), then (actions in order), with a run mode for when one
 // starts while still running, and a step-by-step history of each run.
@@ -357,7 +358,7 @@ export class Automations {
       switch (x.kind) {
         case 'set': {
           const { changed } = await this.reg.applyTargets(x.targets, cause);
-          const names = Object.keys(x.targets).map(id => this.reg.get(id)?.name ?? id);
+          const names = Object.keys(x.targets).map(id => pseudoLabel(id, this.config.get().rooms) ?? this.reg.get(id)?.name ?? id);
           step(`Set ${names.join(', ')}`, true, changed.length ? `${changed.length} changed` : 'already so');
           if (changed.length) this.store.append({ kind: 'run', device: null, feed: 'auto', what: `${a.name}: ${changed.map(id => this.reg.get(id)?.name ?? id).join(', ')} · ${live.run.why}`, data: { automation: a.id, changed }, cause });
           break;

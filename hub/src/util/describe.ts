@@ -100,3 +100,20 @@ export function changeSentence(d: Device, prev: Command, next: Command): string 
 export function zoneWords(set: Record<string, { on?: boolean; open?: number }>): string {
   return Object.entries(set).map(([n, z]) => `zone ${n}${z.on === false ? ' off' : z.on ? ' on' : ''}${z.open != null && z.on !== false ? ` at ${z.open}%` : ''}`).join(', ');
 }
+
+/** A target that isn't one device: "type:light" or "room:lounge" — resolved when the action runs, so devices added later join in. */
+export const PSEUDO_TARGET = /^(type|room):(.+)$/;
+
+/** Does this device match a "type:" word? "light" includes dimmers, "media" includes TVs. */
+export function typeMatch(d: Pick<Device, 'type'>, t: string): boolean {
+  return d.type === t || (t === 'light' && isLight(d)) || (t === 'media' && isPlayer(d));
+}
+
+/** A pseudo-target in words: "all lights", "everything in the Lounge". */
+export function pseudoLabel(id: string, rooms: { id: string; name: string }[]): string | null {
+  const m = PSEUDO_TARGET.exec(id);
+  if (!m) return null;
+  if (m[1] === 'room') return `everything in ${rooms.find(r => r.id === m[2])?.name ?? m[2]}`;
+  const t = m[2]!;
+  return t === 'light' ? 'all lights' : t === 'media' ? 'all media players' : `all ${t}s`;
+}

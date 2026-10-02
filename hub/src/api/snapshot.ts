@@ -2,7 +2,7 @@ import type { Hub } from '../hub.ts';
 import type { Device, Mode, Targets } from '../model/types.ts';
 import type { LogEntry } from '../store/db.ts';
 import { clock, localDate, localHour, atLocal } from '../util/time.ts';
-import { isLight, targetLabel } from '../util/describe.ts';
+import { isLight, pseudoLabel, targetLabel } from '../util/describe.ts';
 import { rhythmLabel } from '../rhythms/rhythms.ts';
 import { automationIdeas } from '../engine/automation-ideas.ts';
 import { combineIdeas, combinedDeviceId } from '../adapters/combined.ts';
@@ -57,7 +57,7 @@ export function snapshot(hub: Hub) {
   const findings = checker.findings();
   // Each part of an automation in words, for lists and the editor's summary.
   const words = { reg, cfg };
-  const tgt = (id: string, cmd: object) => { const d = reg.get(id); return d ? targetLabel(d, cmd) : id; };
+  const tgt = (id: string, cmd: object) => { const d = reg.get(id); return d ? targetLabel(d, cmd) : pseudoLabel(id, cfg.rooms) ?? id; };
   const autoWords = (a: Pick<import('../model/types.ts').Automation, 'triggers' | 'conditions' | 'actions'>) => ({
     triggerLabels: a.triggers.map(t => triggerWords(t, words)),
     conditionLabels: a.conditions.map(c => condWords(c, words)),
