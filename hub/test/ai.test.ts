@@ -144,7 +144,7 @@ test('Settings: keys are write-only and never returned', async () => {
   assert.ok(!g.body.includes('secret'));
   const s = g.json();
   assert.equal(s.engine, 'cloud');
-  assert.deepEqual(s.cloud, { model: 'claude-opus-5-5', hasKey: true });
+  assert.deepEqual(s.cloud, { provider: 'anthropic', model: 'claude-opus-5-5', hasKey: true });
   assert.deepEqual(s.local, { url: 'http://192.168.1.5:11434', model: 'qwen', hasKey: true });
   assert.equal(s.share.cameras, false);
   // Changing other settings keeps the key; an empty key clears it.
@@ -203,5 +203,39 @@ test('Errors come back as replies, never thrown', async () => {
   await put({ engine: 'cloud', cloud: { apiKey: '' } });
   const c = await ask('make the lounge feel cosy');
   assert.match(c.text, /needs your API key/);
+  await app.close(); await hub.stop();
+});
+
+test('Cloud AI: MiniMax provider uses the OpenAI-compatible loop with the preset defaults', async () => {
+  const fake = await fakeServer([openAiToolCall('set_devices', { devices: [{ id: 'lamp', bri: 40 }] }), openAiText('Lamp set to 40%.')]);
+  const { hub, app, put, ask, dev } = await setup();
+  const r = await put({ engine: 'cloud', cloud: { provider: 'minimax', apiKey: 'sk-cp-test', baseUrl: fake.url } });
+  assert.equal(r.statusCode, 200);
+  const s = (await app.inject({ url: '/api/assistant/settings' })).json();
+  assert.equal(s.cloud.provider, 'minimax');
+  assert.equal(s.cloud.model, 'MiniMax-M2.7-highspeed'); // provider default
+  assert.equal(s.cloud.hasKey, true);
+
+  const a = await ask('make the lounge feel cosy');
+  assert.equal(a.text, 'Lamp set to 40%.');
+  assert.equal(a.source, 'MiniMax · sent names and device states');
+  assert.equal(dev('lamp').bri, 40);
+
+  // OpenAI-compatible request: bearer key, /v1/chat/completions, tools.
+  assert.equal(fake.received[0].url, '/v1/chat/completions');
+  assert.equal(fake.received[0].headers.authorization, 'Bearer sk-cp-test');
+  assert.equal(fake.received[0].body.model, 'MiniMax-M2.7-highspeed');
+  assert.ok(hub.store.feed(20).some(e => e.what === 'Ask Kova sent a request to MiniMax' && e.data.engine === 'cloud'));
+  await app.close(); await hub.stop(); await fake.close();
+});
+
+test('Cloud AI: unknown provider and bad baseUrl are rejected', async () => {
+  const { hub, app, put } = await setup();
+  assert.equal((await put({ cloud: { provider: 'nope' } })).statusCode, 400);
+  assert.equal((await put({ cloud: { baseUrl: 'not a url' } })).statusCode, 400);
+  // openai-compat needs a baseUrl and model; with neither it explains itself.
+  await put({ engine: 'cloud', cloud: { provider: 'openai-compat', apiKey: 'k' } });
+  const ask = async (text: string) => (await app.inject({ method: 'POST', url: '/api/ask', payload: { text } })).json();
+  assert.match((await ask('make the lounge feel cosy')).text, /needs a server address/);
   await app.close(); await hub.stop();
 });

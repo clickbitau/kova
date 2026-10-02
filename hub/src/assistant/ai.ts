@@ -32,11 +32,18 @@ export interface ShareSettings {
   cameras: false;
 }
 
+/**
+ * Cloud AI providers. 'anthropic' uses the Messages API; the rest are
+ * OpenAI-compatible chat-completions endpoints (MiniMax, OpenAI, or any
+ * custom server via 'openai-compat' + baseUrl).
+ */
+export type CloudProvider = 'anthropic' | 'minimax' | 'openai' | 'openai-compat';
+
 export interface AssistantSettings {
   engine: EngineKind;
   share: ShareSettings;
   local: { url: string; model: string; apiKey?: string };
-  cloud: { model: string; apiKey?: string };
+  cloud: { provider: CloudProvider; model: string; apiKey?: string; baseUrl?: string };
 }
 
 /** What GET /api/assistant/settings returns: never any key. */
@@ -44,17 +51,27 @@ export interface PublicAssistantSettings {
   engine: EngineKind;
   share: ShareSettings;
   local: { url: string; model: string; hasKey: boolean };
-  cloud: { model: string; hasKey: boolean };
+  cloud: { provider: CloudProvider; model: string; hasKey: boolean; baseUrl?: string };
 }
 
 export interface SettingsPatch {
   engine?: EngineKind;
   share?: Partial<Record<keyof ShareSettings, boolean>>;
   local?: { url?: string; model?: string; apiKey?: string | null };
-  cloud?: { model?: string; apiKey?: string | null };
+  cloud?: { provider?: CloudProvider; model?: string; apiKey?: string | null; baseUrl?: string | null };
 }
 
 export const DEFAULT_CLOUD_MODEL = 'claude-opus-5-5';
+
+/** Preset cloud providers. baseUrl is used unless the user overrides it. */
+export const CLOUD_PROVIDERS: Record<CloudProvider, { label: string; baseUrl?: string; defaultModel: string }> = {
+  anthropic: { label: 'Cloud AI', defaultModel: DEFAULT_CLOUD_MODEL },
+  minimax: { label: 'MiniMax', baseUrl: 'https://api.minimax.io', defaultModel: 'MiniMax-M2.7-highspeed' },
+  openai: { label: 'OpenAI', baseUrl: 'https://api.openai.com', defaultModel: 'gpt-5-mini' },
+  'openai-compat': { label: 'OpenAI-compatible AI', defaultModel: '' },
+};
+const PROVIDER_KEYS = Object.keys(CLOUD_PROVIDERS) as CloudProvider[];
+
 const ENGINES: EngineKind[] = ['builtin', 'local', 'cloud'];
 const SHARE_KEYS = ['names', 'rooms', 'history', 'presence'] as const;
 
@@ -63,7 +80,7 @@ export function defaultSettings(): AssistantSettings {
     engine: 'builtin',
     share: { names: true, rooms: true, history: false, presence: false, cameras: false },
     local: { url: '', model: '' },
-    cloud: { model: DEFAULT_CLOUD_MODEL },
+    cloud: { provider: 'anthropic', model: DEFAULT_CLOUD_MODEL },
   };
 }
 
@@ -71,11 +88,13 @@ export function defaultSettings(): AssistantSettings {
 export function loadSettings(store: Store): AssistantSettings {
   const d = defaultSettings();
   const s = store.get<Partial<AssistantSettings>>('assistant') ?? {};
+  const cloud = { ...d.cloud, ...(s.cloud ?? {}) };
+  if (!PROVIDER_KEYS.includes(cloud.provider)) cloud.provider = 'anthropic';
   return {
     engine: ENGINES.includes(s.engine as EngineKind) ? s.engine as EngineKind : d.engine,
     share: { ...d.share, ...(s.share ?? {}), cameras: false },
     local: { ...d.local, ...(s.local ?? {}) },
-    cloud: { ...d.cloud, ...(s.cloud ?? {}) },
+    cloud,
   };
 }
 
@@ -84,7 +103,7 @@ export function publicSettings(s: AssistantSettings): PublicAssistantSettings {
     engine: s.engine,
     share: { ...s.share, cameras: false },
     local: { url: s.local.url, model: s.local.model, hasKey: !!s.local.apiKey },
-    cloud: { model: s.cloud.model || DEFAULT_CLOUD_MODEL, hasKey: !!s.cloud.apiKey },
+    cloud: { provider: s.cloud.provider, model: s.cloud.model || CLOUD_PROVIDERS[s.cloud.provider].defaultModel, hasKey: !!s.cloud.apiKey, ...(s.cloud.baseUrl ? { baseUrl: s.cloud.baseUrl } : {}) },
   };
 }
 
@@ -106,7 +125,21 @@ export function saveSettings(store: Store, patch: SettingsPatch): AssistantSetti
   if (patch.local?.model !== undefined) local.model = str(patch.local.model, 'local.model');
   if (patch.local && 'apiKey' in patch.local) { if (patch.local.apiKey) local.apiKey = str(patch.local.apiKey, 'local.apiKey'); else delete local.apiKey; }
   const cloud = { ...cur.cloud };
-  if (patch.cloud?.model !== undefined) cloud.model = str(patch.cloud.model, 'cloud.model') || DEFAULT_CLOUD_MODEL;
+  if (patch.cloud?.provider !== undefined) {
+    const provider = str(patch.cloud.provider, 'cloud.provider') as CloudProvider;
+    if (!PROVIDER_KEYS.includes(provider)) throw new Error('unknown provider');
+    // Switching providers resets the model to the provider's default unless the patch names one.
+    if (provider !== cloud.provider && patch.cloud.model === undefined) cloud.model = CLOUD_PROVIDERS[provider].defaultModel;
+    cloud.provider = provider;
+  }
+  if (patch.cloud && 'baseUrl' in patch.cloud) {
+    if (patch.cloud.baseUrl) {
+      const url = str(patch.cloud.baseUrl, 'cloud.baseUrl');
+      if (!/^https?:\/\/[^\s]+$/i.test(url)) throw new Error('cloud.baseUrl must be an http(s) URL');
+      cloud.baseUrl = url;
+    } else delete cloud.baseUrl;
+  }
+  if (patch.cloud?.model !== undefined) cloud.model = str(patch.cloud.model, 'cloud.model') || CLOUD_PROVIDERS[cloud.provider].defaultModel;
   if (patch.cloud && 'apiKey' in patch.cloud) { if (patch.cloud.apiKey) cloud.apiKey = str(patch.cloud.apiKey, 'cloud.apiKey'); else delete cloud.apiKey; }
   const next: AssistantSettings = { engine, share, local, cloud };
   store.set('assistant', next);
@@ -268,11 +301,19 @@ export interface AiEngine {
 /** Friendly reason a request failed, safe to show the user. */
 export class AiError extends Error {}
 
-/** Any OpenAI-compatible chat-completions server: Ollama, LM Studio, llama.cpp, vLLM. */
+/** Any OpenAI-compatible chat-completions server: Ollama, LM Studio, llama.cpp, vLLM, MiniMax, OpenAI. */
 export class LocalAiEngine implements AiEngine {
-  readonly kind = 'local' as const;
-  readonly label = 'Local AI';
-  constructor(private opts: { url: string; model: string; apiKey?: string; timeoutMs: number }) {}
+  readonly kind: 'local' | 'cloud';
+  readonly label: string;
+  /** Lowercase name for inside error sentences, e.g. 'your local AI' or 'MiniMax'. */
+  private name: string;
+  constructor(private opts: { url: string; model: string; apiKey?: string; timeoutMs: number; label?: string; kind?: 'local' | 'cloud'; name?: string }) {
+    this.label = opts.label ?? 'Local AI';
+    this.kind = opts.kind ?? 'local';
+    this.name = opts.name ?? 'your local AI';
+  }
+
+  private cap(): string { return this.name ? this.name[0]!.toUpperCase() + this.name.slice(1) : this.name; }
 
   /** http://host:11434 → http://host:11434/v1/chat/completions; full endpoints are used as given. */
   get endpoint(): string {
@@ -303,16 +344,16 @@ export class LocalAiEngine implements AiEngine {
         });
       } catch (err) {
         const timedOut = err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError');
-        throw new AiError(timedOut ? `Your local AI at ${this.opts.url} took too long to answer.` : `Couldn’t reach your local AI at ${this.opts.url}.`);
+        throw new AiError(timedOut ? `${this.cap()} at ${this.opts.url} took too long to answer.` : `Couldn’t reach ${this.name} at ${this.opts.url}.`);
       }
       if (!res.ok) {
         const detail = (await res.text().catch(() => '')).slice(0, 120).replace(/\s+/g, ' ').trim();
-        throw new AiError(`Your local AI at ${this.opts.url} returned an error (${res.status}${detail ? `: ${detail}` : ''}).`);
+        throw new AiError(`${this.cap()} at ${this.opts.url} returned an error (${res.status}${detail ? `: ${detail}` : ''}).`);
       }
       let body: { choices?: { message?: { content?: string | null; tool_calls?: ToolCall[] } }[] };
-      try { body = await res.json() as typeof body; } catch { throw new AiError(`Your local AI at ${this.opts.url} sent a reply Kova couldn’t read.`); }
+      try { body = await res.json() as typeof body; } catch { throw new AiError(`${this.cap()} at ${this.opts.url} sent a reply Kova couldn’t read.`); }
       const msg = body.choices?.[0]?.message;
-      if (!msg) throw new AiError(`Your local AI at ${this.opts.url} sent an empty reply.`);
+      if (!msg) throw new AiError(`${this.cap()} at ${this.opts.url} sent an empty reply.`);
       const calls = (msg.tool_calls ?? []).filter(c => c?.function?.name);
       if (!calls.length) return { text: (msg.content ?? '').trim() };
       messages.push({ role: 'assistant', content: msg.content ?? null, tool_calls: calls });
@@ -323,7 +364,7 @@ export class LocalAiEngine implements AiEngine {
         messages.push({ role: 'tool', tool_call_id: c.id, content: result });
       }
     }
-    throw new AiError('Your local AI kept calling tools without finishing. Try asking more simply.');
+    throw new AiError(`${this.cap()} kept calling tools without finishing. Try asking more simply.`);
   }
 }
 
@@ -480,8 +521,17 @@ export class AiAssistant {
       return new LocalAiEngine({ url: s.local.url, model: s.local.model, apiKey: s.local.apiKey, timeoutMs });
     }
     if (s.engine === 'cloud') {
-      if (!s.cloud.apiKey) return 'Cloud AI needs your API key. Add it in Assistant settings.';
-      return new CloudAiEngine({ apiKey: s.cloud.apiKey, model: s.cloud.model || DEFAULT_CLOUD_MODEL, baseURL: this.opts.anthropicBaseUrl, timeoutMs });
+      const provider = CLOUD_PROVIDERS[s.cloud.provider] ?? CLOUD_PROVIDERS.anthropic;
+      if (s.cloud.provider === 'anthropic') {
+        if (!s.cloud.apiKey) return 'Cloud AI needs your API key. Add it in Assistant settings.';
+        return new CloudAiEngine({ apiKey: s.cloud.apiKey, model: s.cloud.model || DEFAULT_CLOUD_MODEL, baseURL: this.opts.anthropicBaseUrl, timeoutMs });
+      }
+      if (!s.cloud.apiKey) return `${provider.label} needs your API key. Add it in Assistant settings.`;
+      const baseUrl = s.cloud.baseUrl || provider.baseUrl;
+      const model = s.cloud.model || provider.defaultModel;
+      if (!baseUrl) return `${provider.label} needs a server address. Add it in Assistant settings.`;
+      if (!model) return `${provider.label} needs a model. Add it in Assistant settings.`;
+      return new LocalAiEngine({ url: baseUrl, model, apiKey: s.cloud.apiKey, timeoutMs, kind: 'cloud', label: provider.label, name: provider.label });
     }
     return 'The built-in assistant is selected.';
   }
@@ -492,7 +542,7 @@ export class AiAssistant {
     const q = question.trim();
     if (typeof e === 'string') return { text: e, source: 'Built-in · nothing left your home', actions: [], understood: false };
     const share = { ...s.share, cameras: false as const };
-    const source: AskReply['source'] = e.kind === 'local' ? 'Local AI on your server' : `Cloud AI · sent ${sharedLabel(share)}`;
+    const source: AskReply['source'] = e.kind === 'local' ? 'Local AI on your server' : `${e.label} · sent ${sharedLabel(share)}`;
     try {
       this.lastShare = share;
       const ctx = this.buildContext(share);

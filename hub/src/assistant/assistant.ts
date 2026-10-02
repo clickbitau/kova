@@ -13,7 +13,7 @@ import { clock } from '../util/time.ts';
 /** Where an answer came from, shown under every reply. */
 export type Source = 'Device control' | 'Helix' | 'From the activity log' | 'From your modes' | 'Built-in · nothing left your home'
   /** Optional AI engines (see ai.ts). The cloud tag says what context was sent. */
-  | 'Local AI on your server' | `Cloud AI · sent ${string}`;
+  | 'Local AI on your server' | `${string} · sent ${string}`;
 
 export type Intent =
   | { kind: 'power'; on: boolean; label: string; devices: string[] }
