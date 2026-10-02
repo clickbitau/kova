@@ -1,6 +1,9 @@
 import http from 'node:http';
 import https from 'node:https';
-import type { TLSSocket } from 'node:tls';
+import type { PeerCertificate, TLSSocket } from 'node:tls';
+import { X509Certificate, createHash } from 'node:crypto';
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 
 /** How to reach an app on the home network (Warden, Helix). */
 export interface LanOptions {
@@ -14,6 +17,11 @@ export interface LanOptions {
    * self-signed certificates, so this, not a CA, is what makes HTTPS trustworthy. Without it any certificate is accepted.
    */
   fingerprint?: string;
+  /**
+   * The server's public key (SHA-256 of its SubjectPublicKeyInfo, "AA:BB:…"). A certificate with this key is trusted
+   * even when the certificate itself was reissued, as appliances do when their addresses change.
+   */
+  publicKeySha256?: string;
   timeoutMs?: number;
 }
 
@@ -24,6 +32,58 @@ export class LanHttpError extends Error {
 }
 
 const norm = (f: string) => f.toUpperCase().replace(/[^0-9A-F]/g, '');
+
+/** SHA-256 of a certificate's public key (its SubjectPublicKeyInfo): stays the same when the certificate is reissued. */
+export function spkiSha256(cert: Pick<PeerCertificate, 'raw'>): string | undefined {
+  try {
+    const der = new X509Certificate(cert.raw).publicKey.export({ type: 'spki', format: 'der' });
+    return createHash('sha256').update(der).digest('hex').toUpperCase().match(/../g)!.join(':');
+  } catch { return undefined; }
+}
+
+/**
+ * The key behind each pinned certificate, learned the first time it's seen: pinned certificate fingerprint → key.
+ * Kept in <KOVA_DATA>/tls-keys.json (owner-only), so a reissued certificate with the same key is still trusted.
+ */
+const keyFile = () => join(resolve(process.env.KOVA_DATA ?? 'data'), 'tls-keys.json');
+let learned: Record<string, string> | null = null;
+const keys = (): Record<string, string> => {
+  if (learned) return learned;
+  try { learned = existsSync(keyFile()) ? JSON.parse(readFileSync(keyFile(), 'utf8')) : {}; } catch { learned = {}; }
+  return learned!;
+};
+function learn(fingerprint: string, key: string): void {
+  const k = keys();
+  if (k[norm(fingerprint)] === key) return;
+  k[norm(fingerprint)] = key;
+  try {
+    mkdirSync(dirname(keyFile()), { recursive: true });
+    writeFileSync(keyFile(), JSON.stringify(k, null, 2) + '\n', { mode: 0o600 });
+    chmodSync(keyFile(), 0o600);
+  } catch { /* read-only data folder: keep it in memory */ }
+}
+/** For tests: forget what was learned (and read the file again next time). */
+export function resetLearnedKeys(): void { learned = null; }
+
+/**
+ * Is this the server that was linked? Its certificate is the pinned one (and its key is learned then), or its key is
+ * the pinned key, or the key learned for the pinned certificate. Nothing pinned: anything is accepted.
+ */
+export function trusted(cert: PeerCertificate | undefined, o: Pick<LanOptions, 'fingerprint' | 'publicKeySha256'>): boolean {
+  if (!o.fingerprint && !o.publicKeySha256) return true;
+  if (!cert?.fingerprint256) return false;
+  const key = cert.raw ? spkiSha256(cert) : undefined;
+  if (o.fingerprint && norm(cert.fingerprint256) === norm(o.fingerprint)) {
+    if (key) learn(o.fingerprint, key);
+    return true;
+  }
+  if (!key) return false;
+  if (o.publicKeySha256 && norm(key) === norm(o.publicKeySha256)) return true;
+  const known = o.fingerprint ? keys()[norm(o.fingerprint)] : undefined;
+  return !!known && norm(known) === norm(key);
+}
+
+const MISMATCH = (host: string) => `${host} presented a different certificate and key than when it was linked. Link it again if you replaced it.`;
 
 /** A JSON request to a LAN app. Rejects on HTTP errors with the app's own message when it gives one. */
 export function lanJson<T = unknown>(url: string, o: LanOptions = {}): Promise<LanResponse<T>> {
@@ -46,10 +106,11 @@ export function lanJson<T = unknown>(url: string, o: LanOptions = {}): Promise<L
     }, res => {
       let fingerprint: string | undefined;
       if (tls) {
-        fingerprint = (res.socket as TLSSocket).getPeerCertificate?.()?.fingerprint256;
-        if (o.fingerprint && (!fingerprint || norm(fingerprint) !== norm(o.fingerprint))) {
+        const cert = (res.socket as TLSSocket).getPeerCertificate?.();
+        fingerprint = cert?.fingerprint256;
+        if (!trusted(cert, o)) {
           res.destroy();
-          return reject(new LanHttpError(`${u.host} presented a different certificate than when it was linked. Link it again if you replaced it.`, 0));
+          return reject(new LanHttpError(MISMATCH(u.host), 0));
         }
       }
       const chunks: Buffer[] = [];
@@ -101,10 +162,9 @@ export function lanStream(url: string, o: Omit<LanOptions, 'method' | 'body' | '
       ...(tls ? { rejectUnauthorized: false, agent: false } : {}),
     }, res => {
       if (tls) {
-        const fp = (res.socket as TLSSocket).getPeerCertificate?.()?.fingerprint256;
-        if (o.fingerprint && (!fp || norm(fp) !== norm(o.fingerprint))) {
+        if (!trusted((res.socket as TLSSocket).getPeerCertificate?.(), o)) {
           res.destroy();
-          return reject(new LanHttpError(`${u.host} presented a different certificate than when it was linked. Link it again if you replaced it.`, 0));
+          return reject(new LanHttpError(MISMATCH(u.host), 0));
         }
       }
       const status = res.statusCode ?? 0;
