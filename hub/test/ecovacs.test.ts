@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { constants, createHash, generateKeyPairSync, privateDecrypt } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Store } from '../src/store/db.ts';
 import { Registry } from '../src/devices/registry.ts';
 import { EcovacsAdapter, activityToState, commandFor, continentFor, ecovacsUrls, isJsonVacuum, signParams, toActivity } from '../src/adapters/ecovacs.ts';
@@ -239,6 +242,40 @@ test('Ecovacs: a new device is verified with the code Ecovacs emails, asked for 
     assert.doesNotMatch(second.status().note!, /code|login failed/, 'signed in');
     assert.ok(reg2.list().length > 0, 'vacuums listed after verifying');
   } finally { await reg2.stop(); fake.server.close(); }
+});
+
+test('Ecovacs: the session survives a restart, and the email ask is rate-limited', async () => {
+  const fake = fakeCloud('me@example.com', 'hunter2');
+  fake.state.needsVerify = true;
+  await new Promise<void>(r => fake.server.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${(fake.server.address() as AddressInfo).port}`;
+  const urls = { login: `${base}/login`, auth: `${base}/auth`, portal: `${base}/api` };
+  const dir = mkdtempSync(join(tmpdir(), 'kova-eco-'));
+  try {
+    // First boot asks once; a "restart" before the code arrives does not email again.
+    const reg = new Registry(new Store(':memory:'));
+    await reg.addAdapter(new EcovacsAdapter({ email: 'me@example.com', password: 'hunter2', country: 'au', urls, pollMs: 0, storageDir: dir }));
+    assert.equal(fake.state.codesSent, 1);
+    await reg.stop();
+    const reg2 = new Registry(new Store(':memory:'));
+    const second = new EcovacsAdapter({ email: 'me@example.com', password: 'hunter2', country: 'au', urls, pollMs: 0, storageDir: dir });
+    await reg2.addAdapter(second);
+    assert.equal(fake.state.codesSent, 1, 'rate limited across restarts');
+    assert.match(second.status().note!, /minutes ago/);
+    await reg2.stop();
+    // The code verifies the device; the session is saved, so the next restart needs no login at all.
+    const reg3 = new Registry(new Store(':memory:'));
+    await reg3.addAdapter(new EcovacsAdapter({ email: 'me@example.com', password: 'hunter2', country: 'au', urls, pollMs: 0, verifyCode: '123456', storageDir: dir }));
+    assert.equal(fake.state.verified, 1);
+    await reg3.stop();
+    const { logins, portalLogins } = fake.state;
+    const reg4 = new Registry(new Store(':memory:'));
+    await reg4.addAdapter(new EcovacsAdapter({ email: 'me@example.com', password: 'hunter2', country: 'au', urls, pollMs: 0, storageDir: dir }));
+    assert.equal(fake.state.logins, logins, 'no account login: session restored');
+    assert.equal(fake.state.portalLogins, portalLogins);
+    assert.ok(reg4.list().length > 0);
+    await reg4.stop();
+  } finally { fake.server.close(); rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('Ecovacs: a wrong password is reported, not thrown, and not retried', async () => {

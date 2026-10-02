@@ -1,4 +1,6 @@
 import { constants, createHash, createPublicKey, publicEncrypt } from 'node:crypto';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import type { Adapter, AdapterContext, AdapterStatus } from './sdk.ts';
 import type { Command, Device, DeviceState, VacuumActivity } from '../model/types.ts';
 
@@ -147,8 +149,29 @@ export class EcovacsClient {
   readonly deviceId: string;
   /** The one-time code Ecovacs emailed to verify this device id (from the setup), if any. */
   verifyCode?: string;
-  constructor(private urls: { login: string; auth: string; portal: string }, private email: string, private password: string, private country: string, private timeoutMs = 15_000) {
+  private codeSentAt = 0;
+  constructor(private urls: { login: string; auth: string; portal: string }, private email: string, private password: string, private country: string, private timeoutMs = 15_000, private storageDir?: string) {
     this.deviceId = md5(`kova:${email}`);
+    this.load();
+  }
+
+  /** The file the session and the "code sent" time live in (<dataDir>/ecovacs/session.json). */
+  private get file() { return this.storageDir ? join(this.storageDir, 'session.json') : undefined; }
+
+  /** A session that still has time left is reused, so restarts don't log in again (or trigger another email). */
+  private load() {
+    if (!this.file) return;
+    try {
+      const j = JSON.parse(readFileSync(this.file, 'utf8')) as { session?: Session; codeSentAt?: number };
+      this.codeSentAt = j.codeSentAt ?? 0;
+      if (j.session && (j.session.expiresAt ?? Infinity) - 60_000 > Date.now()) this.session = { ...j.session, expiresAt: j.session.expiresAt ?? Infinity };
+    } catch { /* first run, or the file is gone */ }
+  }
+
+  private save() {
+    if (!this.file) return;
+    try { mkdirSync(dirname(this.file), { recursive: true }); writeFileSync(this.file, JSON.stringify({ session: this.session, codeSentAt: this.codeSentAt })); }
+    catch { /* best effort */ }
   }
 
   get loggedIn() { return !!this.session; }
@@ -203,10 +226,14 @@ export class EcovacsClient {
     return publicEncrypt({ key, padding: constants.RSA_PKCS1_PADDING }, Buffer.from(this.email)).toString('base64');
   }
 
-  /** Ask Ecovacs to email the one-time code that verifies this device id. */
+  /** Ask Ecovacs to email the one-time code that verifies this device id. At most once per 15 min: each
+   * send voids the last code, so every restart asking again floods the inbox and nothing is ever usable. */
   async requestVerifyCode(): Promise<void> {
+    if (Date.now() - this.codeSentAt < 15 * 60_000) throw new EcovacsError('Ecovacs was asked for a code minutes ago — use the newest email and enter it in the Ecovacs setup', 'verify');
     const r = await this.privateCall('user/sendEmailVerifyCode', { encryptEmail: await this.encryptAccount(), verifyType: 'EMAIL_VERIFY_DEVICE', supportChar: 'N', isForce: 'N' });
     if (r.code !== '0000') throw new EcovacsError(`Ecovacs couldn’t send the email code: ${r.msg ?? `code ${r.code}`}`);
+    this.codeSentAt = Date.now();
+    this.save();
   }
 
   /** Step 1, for a device id Ecovacs hasn't seen: the emailed code → uid + accessToken. */
@@ -265,6 +292,7 @@ export class EcovacsClient {
     const { authCode, ecovacsUid } = await this.getAuthCode(uid, accessToken);
     const { userId, token } = await this.loginByItToken(authCode, ecovacsUid);
     this.session = { uid, accessToken, userId, token, expiresAt: tokenExpiry(token) ?? Infinity };
+    this.save();
   }
 
   private auth() {
@@ -358,6 +386,8 @@ export interface EcovacsOptions {
   timeoutMs?: number;
   /** The one-time code Ecovacs emails the first time Kova signs in (it verifies Kova as a device). */
   verifyCode?: string;
+  /** Where the session survives restarts (integrations.ts gives <dataDir>/ecovacs). */
+  storageDir?: string;
 }
 
 interface Bot { id: string; dev: EcovacsDevice; activity?: VacuumActivity; offline: boolean }
@@ -381,7 +411,7 @@ export class EcovacsAdapter implements Adapter {
 
   constructor(private opts: EcovacsOptions) {
     const urls = { ...ecovacsUrls(opts.country, opts.continent), ...opts.urls };
-    this.client = new EcovacsClient(urls, opts.email, opts.password, opts.country, opts.timeoutMs);
+    this.client = new EcovacsClient(urls, opts.email, opts.password, opts.country, opts.timeoutMs, opts.storageDir);
     if (opts.verifyCode?.trim()) this.client.verifyCode = opts.verifyCode.trim();
   }
 

@@ -53,7 +53,7 @@ export interface Integrations {
   /** HomeKit accessories Kova controls. Pairing happens in the app; keys live in `<KOVA_DATA>/homekit-controller/`. */
   homekit?: { accessories?: HomeKitAccessoryConfig[] };
   /** DEEBOT robot vacuums through the Ecovacs cloud (needs the Ecovacs account). */
-  ecovacs?: EcovacsOptions;
+  ecovacs?: Omit<EcovacsOptions, 'storageDir'>;
   /** Nest cameras and doorbells through Google's SDM cloud API. Starts once projectId and refreshToken are set. */
   nest?: NestOptions;
   /** Warden OS, the router: internet status and alerts, per-device internet pause, and who's home from phones on the network. */
@@ -100,7 +100,7 @@ export const ADAPTER_FACTORIES: Factories = {
   matter: (_c, dataDir) => new MatterAdapter({ storageDir: join(dataDir, 'matter') }),
   vesync: c => c.email && c.password ? new VeSyncAdapter(c) : null,
   samsungtv: (c, dataDir) => c.tvs?.length ? new SamsungTvAdapter({ ...c, storageDir: c.storageDir ?? join(dataDir, 'samsungtv') }) : null,
-  ecovacs: c => c.email && c.password ? new EcovacsAdapter(c) : null,
+  ecovacs: (c, dataDir) => c.email && c.password ? new EcovacsAdapter({ ...c, storageDir: join(dataDir, 'ecovacs') }) : null,
   homekit: (c, dataDir) => new HomeKitControllerAdapter({ storageDir: join(dataDir, 'homekit-controller'), accessories: c.accessories }),
   nest: c => c.projectId && c.refreshToken ? new NestAdapter(c) : null,
   warden: c => c.url && c.token ? new WardenAdapter(c) : null,
