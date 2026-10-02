@@ -172,6 +172,7 @@ hub.services.push({ id: 'warden-link', name: 'Kova in Warden', icon: 'router', k
 
 const presence = new Presence(hub, integrations?.presence ?? {}, { warden: () => setup.raw('warden'), onReport: (id, home, source) => void wardenLink.presence(id, home, source) });
 presence.start();
+hub.presenceVia = id => presence.coveredBy(id);
 hub.services.push({ id: 'presence', name: 'Presence', icon: 'person_pin_circle', kind: 'Local', status: () => presence.status() });
 
 // Notifications: Web Push to the phone app needs no config (VAPID keys are made on first run); ntfy when configured.

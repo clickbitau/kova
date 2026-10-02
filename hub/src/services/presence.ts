@@ -288,6 +288,19 @@ export class Presence {
     return new Map(res);
   }
 
+  /**
+   * What already tells Kova whether this person is home, without their phone's location: Warden (which knows whose
+   * devices are whose), the OPNsense router seeing their phone, or a network check. Empty when only the phone can.
+   */
+  coveredBy(personId: string): string[] {
+    const out: string[] = [];
+    const w = this.sources.warden?.();
+    if (w?.url && w.token) out.push('Warden');
+    else if (this.opts.opnsense && this.opts.people?.[personId]?.phones?.length) out.push('your router');
+    if (this.opts.pingHosts?.[personId]) out.push('a network check');
+    return out;
+  }
+
   /** Row on the Integrations screen. */
   status(): { ok: boolean; note?: string } {
     const parts: string[] = [];
