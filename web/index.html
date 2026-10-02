@@ -268,6 +268,7 @@ document.write('<script src="/api/boot.js'+(t?"?token="+encodeURIComponent(t):""
 <sc-if value="{{ aeClosed }}" hint-placeholder-val="{{ true }}">
 <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:12px"><div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;color:#a3a09a">{{ al.count }}</span><h1 style="margin:0;font-size:30px;font-weight:700;letter-spacing:-0.02em">Automations</h1></div><div onClick="{{ al.add }}" style="padding:8px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;padding:9px 16px;background:#f2b14c;color:#1a1408;display:flex;align-items:center;gap:6px"><span style="font-family:'Material Symbols Rounded';font-size:18px">add</span>New automation</div></div>
 <input value="{{ al.q }}" onInput="{{ al.setQ }}" placeholder="Search automations" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px;padding:10px 12px">
+<div style="display:flex;align-items:center;gap:10px;padding:6px 6px 6px 14px;border-radius:14px;background:#16171a;border:1px solid rgba(255,255,255,0.06)"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#f2b14c">auto_awesome</span><input value="{{ al.d }}" onInput="{{ al.setD }}" onKeyDown="{{ al.dKey }}" placeholder="Tell Kova what should happen — “all lights off at sunrise”" style="flex:1;background:transparent;border:none;outline:none;color:#f1efea;font:inherit;font-size:14px;padding:8px 0"><div onClick="{{ al.dSend }}" style="padding:8px 14px;border-radius:10px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;cursor:pointer">Make it</div></div>
 <sc-if value="{{ al.hasIdeas }}" hint-placeholder-val="{{ false }}"><sc-for list="{{ al.ideas }}" as="i" hint-placeholder-count="1">
 <div style="display:flex;flex-direction:column;gap:10px;padding:16px;border-radius:16px;background:rgba(242,177,76,0.07);border:1px solid rgba(242,177,76,0.25)">
 <div style="display:flex;gap:10px;align-items:flex-start"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#f2b14c">lightbulb</span><div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:0"><span style="font-size:12px;font-weight:700;color:#f2b14c">Suggested</span><span style="font-size:14px;font-weight:700">{{ i.name }}</span><span style="font-size:13px;color:#d8d5cf;line-height:1.5">{{ i.text }}</span><span style="font-size:12px;color:#a3a09a;line-height:1.5">{{ i.why }}</span></div></div>
@@ -1371,6 +1372,7 @@ class Component extends DCLogic {
     const list={has:autos.length>0,none:!autos.length&&!(H.automations||[]).length,items:autos,ideas,hasIdeas:ideas.length>0,q:s.aq||'',setQ:e=>this.setState({aq:e.target.value}),
       count:`${(H.automations||[]).length} automation${(H.automations||[]).length===1?'':'s'} · ${(H.automations||[]).filter(a=>a.enabled!==false).length} on`,
       add:()=>this.openAuto(null),
+      d:s.adesc||'',setD:e=>this.setState({adesc:e.target.value}),dKey:e=>{if(e.key==='Enter'&&(s.adesc||'').trim())this.askAuto(s.adesc.trim())},dSend:()=>{if((s.adesc||'').trim())this.askAuto(s.adesc.trim())},
       haHas:HA.length>0,ha:haList,haLeft,haCanAll:haLeft>0,haAllLabel:`Convert ${haLeft}`,haAll:()=>this.convertHa(null)};
     if(!E)return{ae:{open:false},al:list,aeClosed:true};
     // --------------------------------------------------------------- editor
@@ -1540,6 +1542,14 @@ class Component extends DCLogic {
   loadBrowsers(){api('GET','/api/sessions').then(r=>this.setState(p=>p.bs?{bs:{...p.bs,list:r.sessions||[]}}:null)).catch(()=>{})}
   // Sign this browser out: its own key stops working (a browser on the hub's access key just forgets it).
   signOutHere(){api('POST','/api/logout').catch(()=>{}).finally(()=>{try{localStorage.removeItem('kova_token')}catch(e){}location.replace('/signin.html')})}
+  askAuto(q){
+    this.setState({adesc:''});
+    api('POST','/api/ask',{text:q}).then(r=>{
+      if(r.text)this.toast(r.text,this.undoFn(r.undo));
+      const scr=(r.actions||[]).find(a=>a.action&&a.action.type==='screen');
+      if(scr)this.setState({screen:scr.action.screen});
+    }).catch(x=>this.err(x));
+  }
   openAuto(a,tab){
     const blank={name:'',enabled:true,mode:'single',triggers:[],conditions:[],actions:[]};
     const draft=a?{name:a.name,description:a.description,enabled:a.enabled!==false,mode:a.mode||'single',triggers:a.triggers||[],conditions:a.conditions||[],actions:a.actions||[],...(a.origin?{origin:a.origin}:{})}:blank;
