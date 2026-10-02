@@ -45,8 +45,8 @@ export const DEMO_SOLAR = { id: 'solar_inverter', lat: -31.95, lon: 115.86, peak
 export function demoDevices(): DeviceInfo[] {
   return ROWS.map(([id, name, room, type, integration]) => ({
     id, name, room, type, integration, address: `demo.${id}`,
-    capabilities: id === 'solar_inverter' ? ['power', 'energy'] : type === 'dimmer' ? (id === 'lamp' ? ['onoff', 'brightness', 'colorTemp', 'color'] : ['onoff', 'brightness']) : [],
-    state: type === 'fan' ? { on: true, mode: 'Auto' }
+    capabilities: id === 'solar_inverter' ? ['power', 'energy'] : type === 'dimmer' ? (id === 'lamp' ? ['onoff', 'brightness', 'colorTemp', 'color'] : ['onoff', 'brightness']) : type === 'fan' ? ['onoff', 'fanMode', 'purifier'] : [],
+    state: type === 'fan' ? { on: true, mode: 'Auto', fanLevel: 2, fanLevelMax: 3, display: true, childLock: false }
       : type === 'media' || type === 'tv' ? { on: false, media: null, vol: 30 }
       : type === 'dimmer' ? { on: false, bri: 100, k: id === 'lamp' ? 3000 : null, color: null }
       : type === 'plug' ? { on: true, power: 14 }

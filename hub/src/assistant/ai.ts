@@ -1,10 +1,13 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { randomUUID } from 'node:crypto';
 import type { Engine } from '../engine/engine.ts';
 import type { Registry } from '../devices/registry.ts';
 import type { ConfigStore } from '../engine/config.ts';
 import type { Store } from '../store/db.ts';
-import type { Cause, Command, Device, Targets } from '../model/types.ts';
-import { isPlayer } from '../util/describe.ts';
+import type { Automation, Cause, Command, Device, Targets } from '../model/types.ts';
+import { FIELD_CAP, isPlayer, targetLabel } from '../util/describe.ts';
+import { checkAutomation } from '../engine/automation-check.ts';
+import { actionWords, condWords, triggerWords } from '../engine/automations.ts';
 import { clock } from '../util/time.ts';
 import { norm, type AskReply } from './assistant.ts';
 
@@ -160,7 +163,7 @@ export function saveSettings(store: Store, patch: SettingsPatch): AssistantSetti
 export const TOOLS = [
   {
     name: 'set_devices',
-    description: 'Change one or more devices. Only use device ids from the home context. bri is brightness 1-100, k is colour temperature in Kelvin, color is #rrggbb, vol is volume 0-100. Turning a speaker or TV off also stops what it plays. paused pauses or carries on (devices with the pause capability). media on a device with the library capability is a film or show title to find and play there (a Helix box). On a speaker with the queue capability, media can also be Helix music: "Shuffle all", "Loved", a playlist title, or "Station: <artist, album or song>"; shuffle true plays it in a shuffled order; skip 1 is the next song, -1 the previous.',
+    description: 'Change one or more devices. Only use device ids from the home context. bri is brightness 1-100, k is colour temperature in Kelvin, color is #rrggbb, vol is volume 0-100. Turning a speaker or TV off also stops what it plays. paused pauses or carries on (devices with the pause capability). media on a device with the library capability is a film or show title to find and play there (a Helix box). On a speaker with the queue capability, media can also be Helix music: "Shuffle all", "Loved", a playlist title, or "Station: <artist, album or song>"; shuffle true plays it in a shuffled order; skip 1 is the next song, -1 the previous. Any other field a device shows in its state is set through "set" — e.g. {"childLock": true}, {"display": false} or {"mode": "Sleep"} on a purifier, {"hvac": "cool", "target": 23, "fanSpeed": "low"} on an air conditioner, {"input": "hdmi1"}, {"muted": true} or {"night": true} on a TV or soundbar. Only fields the device actually lists in its state can be set.',
     parameters: {
       type: 'object',
       properties: {
@@ -179,6 +182,7 @@ export const TOOLS = [
               media: { type: 'string' },
               shuffle: { type: 'boolean' },
               skip: { type: 'integer', enum: [-1, 1] },
+              set: { type: 'object', description: 'Any other fields from the device state to change, e.g. childLock, display, mode, hvac, target, fanSpeed, input, muted, night, fanLevel.' },
             },
             required: ['id'],
           },
@@ -207,12 +211,46 @@ export const TOOLS = [
     description: 'List what the home has planned for the rest of tonight (mode changes and timed moments).',
     parameters: { type: 'object', properties: {} },
   },
+  {
+    name: 'create_automation',
+    description: `Create a home automation: "when" (triggers) starts it, every "if" (condition) must hold, then "then" (actions) run in order. It is saved and runs on its own from then on — only use it when the user asks for something ongoing or scheduled, not for a one-off change (use set_devices). Shapes:
+when: {kind:'time', at:{kind:'time', at:'HH:MM'}, days?:[0-6, 0=Sunday, empty=every day]} | {kind:'time', at:{kind:'sun', event:'sunrise'|'sunset'|'dawn'|'dusk', offsetMin?:n}} | {kind:'device', device:id, to?:{on?, online?, mode?, hvac?, input?, playing?, muted?}, from?:{...}, forSec?:n} | {kind:'numeric', device:id, field:'temp|target|power|energy|battery|bri|vol|grid|load', above?:n, below?:n} | {kind:'event', device:id, event:string} | {kind:'every', minutes:n} | {kind:'presence', event:'arrives|leaves|first-arrives|last-leaves', person?:id} | {kind:'mode', mode:id} | {kind:'overlay', overlay:id, event:'starts|ends'} | {kind:'hub', event:'start'}
+if: {kind:'device', device:id, is:{on?...}} | {kind:'numeric', device:id, field, above?, below?} | {kind:'time', after?:rhythm, before?:rhythm, days?} | {kind:'presence', who:'anyone|no-one|person id', home:boolean} | {kind:'mode', modes:[id]} | {kind:'overlay', overlay?:id, active:boolean} | {kind:'all|any|not', conditions:[...]}
+then: {kind:'set', targets:{deviceId:{on:false, bri:50, ...same fields as set_devices + set}}} | {kind:'delay', seconds:n} | {kind:'wait', until:condition, timeoutSec?:n, stopOnTimeout?:bool} | {kind:'notify', message:string, title?:string, people?:[ids]} | {kind:'overlay', overlay:id, op:'start|end'} | {kind:'if', conditions:[...], then:[...], else?:[...]} | {kind:'repeat', times:n, actions:[...]} | {kind:'run', automation:id} | {kind:'stop'}
+runMode: what a second start does while it's still running — single (ignore), restart (start over), queued (run after), parallel (alongside). Default single.
+Only use device, person, mode and overlay ids from the home context; never invent them.`,
+    parameters: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        description: { type: 'string' },
+        when: { type: 'array', items: { type: 'object' } },
+        if: { type: 'array', items: { type: 'object' } },
+        then: { type: 'array', items: { type: 'object' } },
+        runMode: { type: 'string', enum: ['single', 'restart', 'queued', 'parallel'] },
+        enabled: { type: 'boolean' },
+      },
+      required: ['name', 'when', 'then'],
+    },
+  },
 ] as const;
 
 type ToolName = typeof TOOLS[number]['name'];
 
 const AI_CAUSE: Cause = { kind: 'assistant', label: 'Ask Kova (AI)' };
 const MAX_ROUNDS = 6;
+
+/** Fields that are readings, not commands — never settable through `set`. */
+const READONLY = new Set(['power', 'energy', 'grid', 'load', 'temp', 'pm25', 'airQuality', 'filterLife', 'battery', 'online', 'track', 'fanLevelMax', 'zones', 'zoneSet']);
+/** Closed lists for string fields. */
+const ENUMS: Record<string, readonly string[]> = {
+  hvac: ['cool', 'heat', 'dry', 'fan', 'auto'],
+  fanSpeed: ['auto', 'quiet', 'low', 'medium', 'high', 'turbo'],
+  activity: ['cleaning', 'returning', 'docked', 'paused', 'idle', 'error'],
+};
+
+/** Automation ids look like the editor's: name_slug + 4 random chars. */
+const autoSlug = (name: string) => `${name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 40) || 'automation'}_${randomUUID().slice(0, 4)}`;
 
 /** MiniMax-style reasoning blocks must never reach the reply text. */
 const stripThink = (s: string) => s.replace(/<think>[\s\S]*?(<\/think>|$)/g, '').trim();
@@ -221,7 +259,8 @@ const stripThink = (s: string) => s.replace(/<think>[\s\S]*?(<\/think>|$)/g, '')
 export type LearnedStep =
   | { tool: 'set_devices'; targets: Targets }
   | { tool: 'start_overlay'; id: string }
-  | { tool: 'end_overlay' };
+  | { tool: 'end_overlay' }
+  | { tool: 'create_automation'; automation: Omit<Automation, 'id'> };
 
 /** One request that reached an AI engine (or fell through the built-in parser). */
 export interface AiRequestLog { ts: number; engine: string; text: string; reply: string; tools: string[]; ok: boolean }
@@ -304,6 +343,17 @@ export class Toolbox {
               || (d.capabilities.includes('queue') && (this.ai.reg.isMusic?.(x.media.trim()) || /^station: /i.test(x.media.trim()))))) c.media = x.media.trim().slice(0, 120);
             if (typeof x.shuffle === 'boolean' && d.capabilities.includes('queue')) c.shuffle = x.shuffle;
             if ((x.skip === 1 || x.skip === -1) && d.capabilities.includes('queue')) c.skip = x.skip;
+            // Any other field the device exposes: FIELD_CAP knows which capability each needs, so
+            // features work even where no screen or named parameter exists for them yet. Readings
+            // (power, battery, …) are never commands.
+            if (x.set && typeof x.set === 'object' && !Array.isArray(x.set)) {
+              for (const [key, v] of Object.entries(x.set as Record<string, unknown>)) {
+                const cap = FIELD_CAP[key];
+                if (!cap || READONLY.has(key) || !d.capabilities.includes(cap)) continue;
+                if (ENUMS[key] && !(typeof v === 'string' && ENUMS[key]!.includes(v))) continue;
+                if (typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v)) || (typeof v === 'string' && v)) (c as Record<string, unknown>)[key] = v;
+              }
+            }
             if ((c.bri != null || c.k != null || c.color != null) && c.on === undefined) c.on = true;
             if (c.on === false && isPlayer(d)) c.media = null;
             if (Object.keys(c).length) targets[d.id] = c;
@@ -338,6 +388,25 @@ export class Toolbox {
           const items = e.planner.itemsBetween(now, e.planner.kovaDayAt(now).end).filter(x => !e.skips.has(x.id)).slice(0, 10)
             .map(x => ({ at: clock(x.at, tz), label: x.label, ...(this.ai.lastShare?.names ? { what: x.what } : {}) }));
           return JSON.stringify({ ok: true, items });
+        }
+        case 'create_automation': {
+          try {
+            const cfg = this.ai.config.get();
+            const a = checkAutomation(
+              { name: args.name, description: args.description, triggers: args.when, conditions: args.if, actions: args.then, mode: args.runMode, enabled: args.enabled },
+              { device: id => this.ai.reg.get(id), cfg });
+            const id = autoSlug(a.name);
+            const undo = this.ai.config.update(c => { (c.automations ??= []).push({ id, ...a }); });
+            this.undos.push(this.ai.engine.registerUndo(undo));
+            this.learned.push({ tool: 'create_automation', automation: a });
+            this.ai.store.append({
+              kind: 'system', device: null, feed: 'system', what: `Ask Kova made the automation “${a.name}”`,
+              data: { automation: id }, cause: AI_CAUSE,
+            });
+            const w = { reg: this.ai.reg, cfg };
+            const tgt = (tid: string, cmd: object) => { const d = this.ai.reg.get(tid); return d ? targetLabel(d, cmd as Command) : tid; };
+            return JSON.stringify({ ok: true, id, name: a.name, when: a.triggers.map(t => triggerWords(t, w)), if: a.conditions.map(c => condWords(c, w)), then: a.actions.map(x => actionWords(x, w, tgt)) });
+          } catch (e) { return JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e) }); }
         }
         default:
           return JSON.stringify({ ok: false, error: `Unknown tool ${name}` });
@@ -492,7 +561,8 @@ export class CloudAiEngine implements AiEngine {
 // -------------------------------------------------------------- assistant --
 
 const SYSTEM = `You are Ask Kova, the assistant for a smart home hub. The hub's built-in parser couldn't handle this request, so it was passed to you.
-Use the tools to act: set_devices, start_overlay, end_overlay, explain_device, list_schedule. Only use device and overlay ids from the home context below; never invent ids.
+Use the tools to act: set_devices, start_overlay, end_overlay, explain_device, list_schedule, create_automation. Only use device, overlay, mode and person ids from the home context below; never invent ids.
+Anything asked to happen regularly, at a time, or when something else happens is an automation — build it with create_automation, then tell the user what it will do in the words the tool returns.
 If the request can't be done with these tools or the shared context, say so plainly instead of guessing. Reply in one or two short, friendly sentences of plain text, no markdown.`;
 
 export interface AiOptions {
@@ -509,7 +579,7 @@ export class AiAssistant {
   /** Helix music names for the home context (hub.music). */
   music: (() => { name: string; kind: string }[]) | null = null;
 
-  constructor(readonly engine: Engine, readonly reg: Registry, readonly config: ConfigStore, private store: Store, private opts: AiOptions = {}) {}
+  constructor(readonly engine: Engine, readonly reg: Registry, readonly config: ConfigStore, readonly store: Store, private opts: AiOptions = {}) {}
 
   /** Build the home context the user chose to share. Cameras are never included. */
   buildContext(share: ShareSettings): AiContext {
@@ -528,6 +598,9 @@ export class AiAssistant {
     const ov = this.engine.overlay && cfg.overlays.find(o => o.id === this.engine.overlay!.id);
     lines.push(`Overlay on: ${ov ? `${ov.name} (${ov.id})` : 'none'}.`);
     lines.push(`Overlays you can start: ${cfg.overlays.map(o => `${o.id} (${o.name}, ${o.endsLabel.toLowerCase()})`).join('; ')}.`);
+    lines.push(`Modes: ${cfg.modes.map(m => `${m.id} (${m.name})`).join(', ')}.`);
+    const autos = this.engine.automations.list();
+    if (autos.length) lines.push(`Automations: ${autos.map(a => `${a.id} (${a.name}${a.enabled ? '' : ', off'})`).join('; ')}.`);
 
     if (share.names) lines.push(`Rooms: ${cfg.rooms.map(r => `${r.id} (${r.name})`).join(', ')}.`);
     const devLines = devices.map((d, i) => {
@@ -539,7 +612,7 @@ export class AiAssistant {
       parts.can = d.capabilities.filter(c => c !== 'events' && c !== 'power');
       if (share.rooms) {
         const s = d.state;
-        parts.state = Object.fromEntries(Object.entries({ on: s.on, bri: s.bri, k: s.k, color: s.color, mode: s.mode, media: s.media, song: s.track ? `${s.track.title}${s.track.artist ? ` by ${s.track.artist}` : ''}` : undefined, shuffle: s.shuffle || undefined, paused: s.paused || undefined, vol: s.vol, online: s.online }).filter(([, v]) => v !== undefined && v !== null));
+        parts.state = Object.fromEntries(Object.entries({ on: s.on, bri: s.bri, k: s.k, color: s.color, mode: s.mode, media: s.media, song: s.track ? `${s.track.title}${s.track.artist ? ` by ${s.track.artist}` : ''}` : undefined, shuffle: s.shuffle || undefined, paused: s.paused || undefined, vol: s.vol, hvac: s.hvac, target: s.target, temp: s.temp, fanSpeed: s.fanSpeed, fanLevel: s.fanLevel, fanLevelMax: s.fanLevelMax, airQuality: s.airQuality, pm25: s.pm25, filterLife: s.filterLife, display: s.display, childLock: s.childLock, battery: s.battery, activity: s.activity, online: s.online }).filter(([, v]) => v !== undefined && v !== null));
       }
       return JSON.stringify(parts);
     });
@@ -551,7 +624,7 @@ export class AiAssistant {
     if (share.rooms) shared.push('device states');
 
     if (share.presence) {
-      const ps = cfg.people.map(p => `${p.name} ${this.engine.people[p.id]?.home === false ? 'out' : 'home'}`);
+      const ps = cfg.people.map(p => `${p.name} (${p.id}) ${this.engine.people[p.id]?.home === false ? 'out' : 'home'}`);
       lines.push(`Who's home: ${ps.length ? ps.join(', ') : 'nobody set up'}.`);
       shared.push("who's home");
     }
@@ -629,6 +702,13 @@ export class AiAssistant {
         } else if (st.tool === 'end_overlay') {
           if (!this.engine.overlay) continue;
           await this.engine.endOverlay('user');
+        } else if (st.tool === 'create_automation') {
+          // Re-create the same automation only if it isn't there (by name) — and still
+          // re-validate, since a device it uses may have gone away since it was learned.
+          if ((this.config.get().automations ?? []).some(a => a.name === st.automation.name)) continue;
+          const a = checkAutomation(st.automation, { device: id => this.reg.get(id), cfg: this.config.get() });
+          const undo = this.config.update(c => { (c.automations ??= []).push({ id: autoSlug(a.name), ...a }); });
+          undos.push(this.engine.registerUndo(undo));
         }
       }
       const all = this.store.get<Record<string, LearnedEntry>>(LEARNED_KEY) ?? {};

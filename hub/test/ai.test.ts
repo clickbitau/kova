@@ -290,6 +290,55 @@ test('Greeting is answered by the built-in parser, no AI call', async () => {
   await app.close(); await hub.stop(); await fake.close();
 });
 
+test('AI can set any field a device exposes (childLock), even with no named parameter', async () => {
+  const fake = await fakeServer([openAiToolCall('set_devices', { devices: [{ id: 'lounge_purifier', set: { childLock: true } }] }), openAiText('Child lock is on.')]);
+  const { hub, app, put, ask, dev } = await setup();
+  await put({ engine: 'local', local: { url: fake.url, model: 'm' } });
+
+  const r = await ask('turn on child lock on the lounge purifier');
+  assert.equal(r.text, 'Child lock is on.');
+  assert.equal(dev('lounge_purifier').childLock, true);
+  // …and a field the device doesn't have is refused.
+  const fake2 = await fakeServer([openAiToolCall('set_devices', { devices: [{ id: 'lamp', set: { childLock: true } }] }), openAiText('Sorry, no.')]);
+  const r2 = await ask('turn on child lock on the lamp');
+  assert.equal(fake2.received.length >= 1, true);
+  assert.equal(dev('lamp').childLock, undefined);
+  void r2;
+  await app.close(); await hub.stop(); await fake.close(); await fake2.close();
+});
+
+test('AI creates a real, validated automation that shows in the engine and can be undone', async () => {
+  const fake = await fakeServer([
+    openAiToolCall('create_automation', { name: 'Porch off at eight', when: [{ kind: 'time', at: { kind: 'time', at: '08:00' } }], then: [{ kind: 'set', targets: { front_1: { on: false } } }] }),
+    openAiText('Done — the porch light goes off at 8 every morning.'),
+  ]);
+  const { hub, app, put, ask } = await setup();
+  await put({ engine: 'local', local: { url: fake.url, model: 'm' } });
+
+  const r = await ask('can you make sure the porch light is off by 8 am every morning');
+  assert.match(r.text, /porch light/i);
+  const autos = hub.engine.automations.list();
+  const made = autos.find(a => a.name === 'Porch off at eight');
+  assert.ok(made, 'automation was saved');
+  assert.equal(made.enabled, true);
+  assert.ok(r.undo, 'an undo was offered');
+  await app.inject({ method: 'POST', url: `/api/undo/${r.undo}` });
+  assert.equal(hub.engine.automations.list().find(a => a.name === 'Porch off at eight'), undefined, 'undo removed it');
+  await app.close(); await hub.stop(); await fake.close();
+});
+
+test('A bad automation is refused by validation, not saved', async () => {
+  const fake = await fakeServer([
+    openAiToolCall('create_automation', { name: 'Bad', when: [{ kind: 'device', device: 'no_such_thing', to: { on: true } }], then: [{ kind: 'stop' }] }),
+    openAiText('I couldn’t set that up.'),
+  ]);
+  const { hub, app, put, ask } = await setup();
+  await put({ engine: 'local', local: { url: fake.url, model: 'm' } });
+  await ask('do something with a device that does not exist');
+  assert.equal(hub.engine.automations.list().length, 0);
+  await app.close(); await hub.stop(); await fake.close();
+});
+
 test("Device questions don't match the generic 'what's on' intent", async () => {
   const fake = await fakeServer([openAiText('The Helix box is idle.')]);
   const { hub, app, put, ask } = await setup();
