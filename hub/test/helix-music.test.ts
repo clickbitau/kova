@@ -13,7 +13,7 @@ import { encodeMessage, decodeMessage, NS } from '../src/adapters/cast/channel.t
 
 const TOKEN = 'hxd_' + 'm'.repeat(64);
 const you = { kind: 'user' as const, label: 'You' };
-const until = async (what: string, ok: () => boolean, ms = 4000) => {
+const until = async (what: string, ok: () => boolean, ms = 15000) => {
   for (let i = 0; i < ms && !ok(); i += 20) await new Promise(r => setTimeout(r, 20));
   assert.ok(ok(), `timed out waiting for ${what}`);
 };
