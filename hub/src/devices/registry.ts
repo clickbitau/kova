@@ -10,6 +10,16 @@ import { CAPS, changeSentence, fitCommand, PSEUDO_TARGET, typeMatch } from '../u
  */
 const MEASUREMENTS = new Set(['online', 'power', 'energy', 'grid', 'load', 'battery', 'activity']);
 
+/** Value equality for state fields: objects (extras, zones, track) compare by content, not reference. */
+function same(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || !a || !b) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const ka = Object.keys(a as object), kb = Object.keys(b as object);
+  if (ka.length !== kb.length) return false;
+  return ka.every(k => same((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
+}
+
 export interface ChangeEvent { device: Device; prev: DeviceState; patch: Command; cause: Cause }
 export interface DeviceEvent { device: Device; type: string; data: Record<string, unknown> }
 /** A command on its way to a device, and who asked. */
@@ -151,7 +161,7 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
     const out: Command = {};
     for (const [k, v] of Object.entries(patch)) {
       // A skip or volume step is momentary: always sent, never kept as state.
-      if (k === 'skip' || k === 'volStep' || k === 'zoneSet' || (d.state as Record<string, unknown>)[k] !== v) (out as Record<string, unknown>)[k] = v;
+      if (k === 'skip' || k === 'volStep' || k === 'zoneSet' || !same((d.state as Record<string, unknown>)[k], v)) (out as Record<string, unknown>)[k] = v;
     }
     return out;
   }
