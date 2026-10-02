@@ -11,7 +11,7 @@ export interface CheckCtx {
   self?: string;
 }
 
-const FIELDS: NumericField[] = ['temp', 'target', 'power', 'energy', 'battery', 'bri', 'vol', 'grid', 'load'];
+const FIELDS: NumericField[] = ['temp', 'target', 'power', 'energy', 'battery', 'bri', 'vol', 'grid', 'load', 'humidity'];
 const MODES: RunMode[] = ['single', 'restart', 'queued', 'parallel'];
 const HVAC = ['cool', 'heat', 'dry', 'fan', 'auto'];
 const ACTIVITY = ['cleaning', 'returning', 'docked', 'paused', 'idle', 'error'];

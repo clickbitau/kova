@@ -82,6 +82,18 @@ export function connectLifeHeaders(method: string, path: string, body: string, o
 /** Online, as ConnectLife says it: `offlineState` 1 is online (Hisense's plugin: `is_online = offline_state == 1`). Unknown: online. */
 export const isOnline = (d: Pick<HisenseDevice, 'offlineState'>) => d.offlineState === undefined || d.offlineState === null || String(d.offlineState) === '1';
 
+/** Switches Hisense units report that Kova has no named field for — kept by name so they still show and set. */
+const EXTRAS: Record<string, string> = {
+  eco: 't_eco', sleep: 't_sleep', turbo: 't_super', purify: 't_purify', fanMute: 't_fan_mute', frostProtect: 't_8heat', dimmer: 't_dimmer',
+};
+
+/** The extra switches a unit reports (a subset of EXTRAS — models differ). */
+export function extrasOf(s: Record<string, string | number>): Record<string, boolean> {
+  const out: Record<string, boolean> = {};
+  for (const [k, p] of Object.entries(EXTRAS)) if (s[p] !== undefined) out[k] = String(s[p]) === '1';
+  return out;
+}
+
 /** A Hisense air conditioner's status → Kova's climate state. Temperatures in °C (Fahrenheit units converted). */
 export function acState(d: HisenseDevice): DeviceState {
   const s = d.statusList ?? {};
@@ -91,6 +103,8 @@ export function acState(d: HisenseDevice): DeviceState {
     if (v === undefined || v === null || v === '' || !Number.isFinite(n)) return null;
     return f ? Math.round(((n - 32) * 5) / 9 * 2) / 2 : n;
   };
+  const hum = Number(s.f_humidity);
+  const extras = extrasOf(s);
   return {
     online: isOnline(d),
     on: String(s.t_power ?? '0') === '1',
@@ -98,6 +112,8 @@ export function acState(d: HisenseDevice): DeviceState {
     fanSpeed: FANS[String(s.t_fan_speed)] ?? null,
     target: c(s.t_temp),
     temp: c(s.f_temp_in),
+    ...(Number.isFinite(hum) && hum >= 0 && hum <= 100 ? { humidity: hum } : {}),
+    ...(Object.keys(extras).length ? { extras } : {}),
     ...(hasZones(d) ? { zones: zonesOf(s) } : {}),
   };
 }
@@ -125,6 +141,10 @@ export function acProperties(cmd: Command, fahrenheit = false): Record<string, s
     if (!/^[1-9]\d?$/.test(n)) continue;
     if (z.on !== undefined) p[`aus_zone${n}_power`] = z.on ? '1' : '0';
     if (z.open != null) p[`aus_zone${n}_opencontrol`] = String(Math.max(0, Math.min(100, Math.round(z.open))));
+  }
+  for (const [k, v] of Object.entries(cmd.extras ?? {})) {
+    const prop = EXTRAS[k];
+    if (prop) p[prop] = v === true || v === '1' || v === 1 || v === 'on' ? '1' : '0';
   }
   if (cmd.target != null) {
     const t = Math.max(16, Math.min(32, Math.round(cmd.target)));
@@ -287,7 +307,7 @@ export class ConnectLifeAdapter implements Adapter {
       if (fresh.length) {
         ctx.announce(fresh.map(d => ({
           id: this.kovaId(d), name: d.deviceNickName || 'Air conditioner', room: this.o.rooms?.[d.deviceId] ?? 'unassigned', type: 'climate' as const,
-          capabilities: hasZones(d) ? ['onoff', 'climate', 'zones'] : ['onoff', 'climate'], integration: 'Hisense ConnectLife', address: d.puid,
+          capabilities: ['onoff', 'climate', ...(hasZones(d) ? (['zones'] as const) : []), ...(Object.keys(extrasOf(d.statusList ?? {})).length ? (['extras'] as const) : [])], integration: 'Hisense ConnectLife', address: d.puid,
         })));
       }
       for (const d of list) ctx.report(this.kovaId(d), acState(d));

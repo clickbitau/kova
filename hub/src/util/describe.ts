@@ -18,7 +18,7 @@ export const FIELD_CAP: Record<string, Capability> = {
   on: 'onoff', bri: 'brightness', k: 'colorTemp', color: 'color', mode: 'fanMode', media: 'media', vol: 'volume', power: 'power',
   activity: 'vacuum', battery: 'battery', paused: 'pause', input: 'input', skip: 'queue', shuffle: 'queue',
   muted: 'mute', sound: 'sound', night: 'sound', volStep: 'volume',
-  hvac: 'climate', target: 'climate', fanSpeed: 'climate', zoneSet: 'zones', zones: 'zones',
+  hvac: 'climate', target: 'climate', fanSpeed: 'climate', zoneSet: 'zones', zones: 'zones', extras: 'extras',
   fanLevel: 'purifier', display: 'purifier', childLock: 'purifier',
 };
 

@@ -59,6 +59,8 @@ export interface DeviceState {
   hvac?: HvacMode | null;
   target?: number | null;
   temp?: number | null;
+  /** Room humidity % where the device senses it. */
+  humidity?: number | null;
   fanSpeed?: FanSpeed | null;
   /** Air purifiers (the `purifier` capability): fan speed 1…fanLevelMax (setting one switches to manual), the air as the
    * purifier rates it (1 good … 4 very poor) and its PM2.5 reading, filter life left in %, and its display and child lock. */
@@ -71,6 +73,9 @@ export interface DeviceState {
   childLock?: boolean;
   /** Ducted air conditioners (the `zones` capability): each zone's damper, on or off and how far open (0–100). */
   zones?: Zone[] | null;
+  /** Switches and readings the integration reports that Kova has no named field for yet — AC eco/sleep/turbo
+   * modes and the like — kept and settable by name (the `extras` capability). */
+  extras?: Record<string, boolean | number | string | null>;
   online?: boolean;
 }
 
@@ -79,7 +84,7 @@ export interface Track { title: string; artist?: string; album?: string; art?: s
 
 export type VacuumActivity = 'cleaning' | 'returning' | 'docked' | 'paused' | 'idle' | 'error';
 
-export type Capability = 'onoff' | 'brightness' | 'colorTemp' | 'color' | 'fanMode' | 'media' | 'volume' | 'power' | 'energy' | 'events' | 'vacuum' | 'battery' | 'pause' | 'library' | 'input' | 'queue' | 'mute' | 'sound' | 'climate' | 'zones' | 'purifier';
+export type Capability = 'onoff' | 'brightness' | 'colorTemp' | 'color' | 'fanMode' | 'media' | 'volume' | 'power' | 'energy' | 'events' | 'vacuum' | 'battery' | 'pause' | 'library' | 'input' | 'queue' | 'mute' | 'sound' | 'climate' | 'zones' | 'purifier' | 'extras';
 
 export interface Device {
   id: string;
@@ -237,7 +242,7 @@ export interface StateMatch {
 }
 
 /** A device reading a number can be compared on. */
-export type NumericField = 'temp' | 'target' | 'power' | 'energy' | 'battery' | 'bri' | 'vol' | 'grid' | 'load';
+export type NumericField = 'temp' | 'target' | 'power' | 'energy' | 'battery' | 'bri' | 'vol' | 'grid' | 'load' | 'humidity';
 
 /** What starts an automation. Any one of an automation's triggers starts it. */
 export type Trigger =
@@ -338,6 +343,8 @@ export interface MediaSource {
 
 export interface HomeConfig {
   name: string;
+  /** The home's street address, as the owner chose it in Settings (the location comes from it). */
+  address?: string;
   timezone: string;
   latitude: number;
   longitude: number;

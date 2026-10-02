@@ -30,6 +30,14 @@ export function cleanTarget(d: Device, cmd: Command): Command {
     }
     c.zoneSet = z;
   }
+  if (c.extras != null) {
+    if (typeof c.extras !== 'object' || Array.isArray(c.extras)) throw new Error('Extras must be { name: value }');
+    const ex: NonNullable<Command['extras']> = {};
+    for (const [k, v] of Object.entries(c.extras)) {
+      if (typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v)) || (typeof v === 'string' && v)) ex[k] = v;
+    }
+    if (Object.keys(ex).length) c.extras = ex; else delete c.extras;
+  }
   if (c.k != null) c.k = Math.max(1500, Math.min(9000, Math.round(Number(c.k))));
   if (c.color != null && !/^#[0-9a-f]{6}$/i.test(String(c.color))) throw new Error('Colour must be #rrggbb');
   if (!Object.keys(c).length) throw new Error(`${d.name} can't do that`);

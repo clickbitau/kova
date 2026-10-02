@@ -163,7 +163,7 @@ export function saveSettings(store: Store, patch: SettingsPatch): AssistantSetti
 export const TOOLS = [
   {
     name: 'set_devices',
-    description: 'Change one or more devices. Only use device ids from the home context. bri is brightness 1-100, k is colour temperature in Kelvin, color is #rrggbb, vol is volume 0-100. Turning a speaker or TV off also stops what it plays. paused pauses or carries on (devices with the pause capability). media on a device with the library capability is a film or show title to find and play there (a Helix box). On a speaker with the queue capability, media can also be Helix music: "Shuffle all", "Loved", a playlist title, or "Station: <artist, album or song>"; shuffle true plays it in a shuffled order; skip 1 is the next song, -1 the previous. Any other field a device shows in its state is set through "set" — e.g. {"childLock": true}, {"display": false} or {"mode": "Sleep"} on a purifier, {"hvac": "cool", "target": 23, "fanSpeed": "low"} on an air conditioner, {"input": "hdmi1"}, {"muted": true} or {"night": true} on a TV or soundbar, {"zoneSet": {"1": {"on": true, "open": 50}, "2": {"on": false}}} for the named zones of a ducted air conditioner. Only fields the device actually lists in its state can be set.',
+    description: 'Change one or more devices. Only use device ids from the home context. bri is brightness 1-100, k is colour temperature in Kelvin, color is #rrggbb, vol is volume 0-100. Turning a speaker or TV off also stops what it plays. paused pauses or carries on (devices with the pause capability). media on a device with the library capability is a film or show title to find and play there (a Helix box). On a speaker with the queue capability, media can also be Helix music: "Shuffle all", "Loved", a playlist title, or "Station: <artist, album or song>"; shuffle true plays it in a shuffled order; skip 1 is the next song, -1 the previous. Any other field a device shows in its state is set through "set" — e.g. {"childLock": true}, {"display": false} or {"mode": "Sleep"} on a purifier, {"hvac": "cool", "target": 23, "fanSpeed": "low"} on an air conditioner, {"input": "hdmi1"}, {"muted": true} or {"night": true} on a TV or soundbar, {"zoneSet": {"1": {"on": true, "open": 50}, "2": {"on": false}}} for the named zones of a ducted air conditioner, {"extras": {"eco": true}} for the extra switches a device lists under "extras". Only fields the device actually lists in its state can be set.',
     parameters: {
       type: 'object',
       properties: {
@@ -251,7 +251,7 @@ const AI_CAUSE: Cause = { kind: 'assistant', label: 'Ask Kova (AI)' };
 const MAX_ROUNDS = 6;
 
 /** Fields that are readings, not commands — never settable through `set`. */
-const READONLY = new Set(['power', 'energy', 'grid', 'load', 'temp', 'pm25', 'airQuality', 'filterLife', 'battery', 'online', 'track', 'fanLevelMax', 'zones']);
+const READONLY = new Set(['power', 'energy', 'grid', 'load', 'temp', 'humidity', 'pm25', 'airQuality', 'filterLife', 'battery', 'online', 'track', 'fanLevelMax', 'zones']);
 
 /** { "1": {on, open} } for ducted AC zones — the same shape cleanTarget accepts. */
 function cleanZoneSet(v: unknown): Command['zoneSet'] | undefined {
@@ -416,6 +416,17 @@ export class Toolbox {
                 if (key === 'zoneSet') {
                   const zs = cleanZoneSet(v);
                   if (zs) c.zoneSet = zs;
+                  continue;
+                }
+                // extras is { name: value } — adapter-specific switches the state lists, set by name.
+                if (key === 'extras') {
+                  const ex: Record<string, boolean | number | string> = {};
+                  if (v && typeof v === 'object' && !Array.isArray(v)) {
+                    for (const [ek, ev] of Object.entries(v as Record<string, unknown>)) {
+                      if (typeof ev === 'boolean' || (typeof ev === 'number' && Number.isFinite(ev)) || (typeof ev === 'string' && ev)) ex[ek.slice(0, 40)] = ev;
+                    }
+                  }
+                  if (Object.keys(ex).length) c.extras = ex;
                   continue;
                 }
                 if (typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v)) || (typeof v === 'string' && v)) (c as Record<string, unknown>)[key] = v;
@@ -700,7 +711,7 @@ export class AiAssistant {
       if (share.rooms) {
         const s = d.state;
         const zoneNames = cfg.devices?.[d.id]?.zoneNames;
-        parts.state = Object.fromEntries(Object.entries({ on: s.on, bri: s.bri, k: s.k, color: s.color, mode: s.mode, media: s.media, song: s.track ? `${s.track.title}${s.track.artist ? ` by ${s.track.artist}` : ''}` : undefined, shuffle: s.shuffle || undefined, paused: s.paused || undefined, vol: s.vol, hvac: s.hvac, target: s.target, temp: s.temp, fanSpeed: s.fanSpeed, fanLevel: s.fanLevel, fanLevelMax: s.fanLevelMax, airQuality: s.airQuality, pm25: s.pm25, filterLife: s.filterLife, display: s.display, childLock: s.childLock, battery: s.battery, activity: s.activity, zones: s.zones?.map(z => ({ zone: z.n, ...(zoneNames?.[String(z.n)] ? { name: zoneNames[String(z.n)] } : {}), on: z.on, open: z.open })), online: s.online }).filter(([, v]) => v !== undefined && v !== null));
+        parts.state = Object.fromEntries(Object.entries({ on: s.on, bri: s.bri, k: s.k, color: s.color, mode: s.mode, media: s.media, song: s.track ? `${s.track.title}${s.track.artist ? ` by ${s.track.artist}` : ''}` : undefined, shuffle: s.shuffle || undefined, paused: s.paused || undefined, vol: s.vol, hvac: s.hvac, target: s.target, temp: s.temp, humidity: s.humidity, fanSpeed: s.fanSpeed, extras: s.extras, fanLevel: s.fanLevel, fanLevelMax: s.fanLevelMax, airQuality: s.airQuality, pm25: s.pm25, filterLife: s.filterLife, display: s.display, childLock: s.childLock, battery: s.battery, activity: s.activity, zones: s.zones?.map(z => ({ zone: z.n, ...(zoneNames?.[String(z.n)] ? { name: zoneNames[String(z.n)] } : {}), on: z.on, open: z.open })), online: s.online }).filter(([, v]) => v !== undefined && v !== null));
       }
       return JSON.stringify(parts);
     });
