@@ -32,6 +32,8 @@ export const PING = 'Network (ping)';
 export const PHONE = 'Phone automation';
 /** An explicit "left" from a phone beats the router this long: a phone stays on Wi-Fi while you drive off. */
 export const LEFT_WINS_MS = 15 * 60_000;
+/** Longer than any stale ARP entry (FreeBSD keeps them 20 min): still listed after this, the phone is really here. */
+export const ARP_STALE_MS = 45 * 60_000;
 
 interface PersonNet {
   /** What the network sources last concluded (after the away debounce). */
@@ -146,7 +148,7 @@ export class Presence {
 
   // -------------------------------------------------------------- reports --
 
-  /** An explicit report from a phone automation (or the app). "Arrived" wins at once; "left" beats the router for 15 minutes. */
+  /** An explicit report from a phone automation (or the app). "Arrived" wins at once; "left" beats the router for 15 minutes, then the router has the say. */
   async report(personId: string, home: boolean, source = PHONE): Promise<void> {
     const n = this.net.get(personId);
     if (n) {
@@ -182,8 +184,15 @@ export class Presence {
         if (seen) n.lastSeen = t;
         if (n.left) {
           if (!seen) n.left.sawAbsent = true;
-          // The phone dropped off and came back after the "left" window: that's a real return.
-          else if (n.left.sawAbsent && t - n.left.at >= LEFT_WINS_MS) n.left = null;
+          // Still seen once the "left" window is over. A live source (Warden, the network check) means the "left" was
+          // wrong: a location glitch overnight; nobody is on the home network 15 minutes after really leaving. The
+          // OPNsense ARP table keeps a phone listed for a while after it has gone, so there it takes the phone dropping
+          // off and coming back, or still being listed well past any stale entry.
+          else {
+            const live = (byRouter && this.last.routerName === 'Warden') || byPing;
+            const after = t - n.left.at;
+            if ((live && after >= LEFT_WINS_MS) || (n.left.sawAbsent && after >= LEFT_WINS_MS) || after >= ARP_STALE_MS) n.left = null;
+          }
           if (n.left) continue;
         }
         const routerLabel = this.last.routerName === 'Warden' ? WARDEN : ROUTER;

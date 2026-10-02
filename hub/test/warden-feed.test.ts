@@ -204,3 +204,28 @@ test('Warden presence: a phone is found by any MAC its device record has used', 
     await w.close();
   }
 });
+
+test('Warden presence: a wrong "left" from the phone (a location glitch) is overruled when Warden still sees them home', { timeout: 15_000 }, async () => {
+  const w = await fakeWarden();
+  const t = await testHub(3);
+  try {
+    const cfg = { url: w.url, token: w.TOKEN };
+    const person = t.hub.config.get().people[0];
+    w.s.people = [];
+    const presence = new Presence(t.hub, { pollSec: 0, people: { [person.id]: { phones: [w.phone.macs[0]] } } }, { warden: () => cfg });
+    presence.start();
+    await presence.poll();
+    assert.equal(t.hub.engine.people[person.id]?.home, true);
+    // 04:00, asleep at home: the phone's location says "left"; Warden still sees the phone online.
+    await presence.report(person.id, false, 'Kova app (location)');
+    assert.equal(t.hub.engine.people[person.id]?.home, false, '"left" wins at first: they may be driving off');
+    t.clock.t += 5 * 60_000; await presence.poll();
+    assert.equal(t.hub.engine.people[person.id]?.home, false, 'within 15 minutes');
+    t.clock.t += 11 * 60_000; await presence.poll();
+    assert.equal(t.hub.engine.people[person.id]?.home, true, 'still on the home network after 15 minutes: home');
+    presence.stop();
+  } finally {
+    await t.hub.stop();
+    await w.close();
+  }
+});
