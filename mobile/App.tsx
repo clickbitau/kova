@@ -22,6 +22,8 @@ import { ModesScreen } from './src/screens/ModesScreen';
 import { ActivityScreen } from './src/screens/ActivityScreen';
 import { ThisPhoneScreen } from './src/screens/ThisPhoneScreen';
 import { WebScreen } from './src/screens/WebScreen';
+import { IntegrationAddScreen, IntegrationsScreen } from './src/screens/IntegrationsScreen';
+import { IntegrationScreen } from './src/screens/IntegrationScreen';
 import { AutomationsScreen } from './src/screens/AutomationsScreen';
 import { AutomationEditor } from './src/screens/AutomationEditor';
 import { CustomiseScreen } from './src/screens/CustomiseScreen';
@@ -77,6 +79,7 @@ function Home() {
     if (r.cam) nav.current?.navigate('Web', { title: snap.devices.find(d => d.id === r.cam)?.name ?? 'Camera', path: `/phone.html?embed=1&cam=${encodeURIComponent(r.cam)}` });
     else if (r.lightsOff) void api<{ changed: string[]; undo: string }>('POST', '/api/lights/off').then(x => say(`${x.changed.length} lights off`, { undo: x.undo })).catch(() => {});
     else if (r.page && NATIVE_PAGES[r.page]) nav.current?.navigate(NATIVE_PAGES[r.page]);
+    else if (r.setup) nav.current?.navigate('Integration', { id: r.setup });
     else if (r.page) nav.current?.navigate('Web', { title: r.page[0].toUpperCase() + r.page.slice(1), path: `/phone.html?embed=1&page=${r.page}` });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [last, !!snap]);
@@ -92,6 +95,9 @@ function Home() {
           <Stack.Screen name="Modes" component={ModesScreen} />
           <Stack.Screen name="Activity" component={ActivityScreen} />
           <Stack.Screen name="ThisPhone" component={ThisPhoneScreen} />
+          <Stack.Screen name="Integrations" component={IntegrationsScreen} />
+          <Stack.Screen name="IntegrationAdd" component={IntegrationAddScreen} />
+          <Stack.Screen name="Integration" component={IntegrationScreen} />
           <Stack.Screen name="Web" component={WebScreen} />
           <Stack.Screen name="Automations" component={AutomationsScreen} />
           <Stack.Screen name="AutomationEditor" component={AutomationEditor} />

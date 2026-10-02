@@ -1,3 +1,4 @@
+import type { HubUpdate } from '../logic/integrations';
 // The hub's live snapshot (GET /api/state, and every /api/ws message), as far as the app uses it.
 // Source of truth: hub/src/api/snapshot.ts.
 
@@ -117,6 +118,8 @@ export interface Snapshot {
   findings: Finding[];
   activity: ActivityRow[];
   integrations: Integration[];
+  /** The hub's own software updates (null when the hub has no updater). */
+  update?: HubUpdate | null;
   weather: { temp: number; text: string; icon: string } | null;
   energy: EnergyToday | null;
   demo?: boolean;

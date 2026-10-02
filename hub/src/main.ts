@@ -101,6 +101,12 @@ if (env.KOVA_HOMEKIT === '1' || integrations?.homekitBridge) {
   homekit = new HomeKitBridge(hub, { storageDir: resolve(dataDir, 'homekit'), port: Number(env.KOVA_HOMEKIT_PORT ?? hk.port ?? 51826), pincode: hk.pincode, exclude: hk.exclude });
   await homekit.start();
   console.log(`Apple Home bridge published · setup code ${homekit.setupInfo().pincode}`);
+  // Listed with the integrations, like the Matter bridge, so the app can say it's running and whether it's paired.
+  const hb = homekit;
+  hub.services.push({
+    id: 'homekit-bridge', name: 'Apple Home bridge', icon: 'home', kind: 'Local',
+    status: () => ({ ok: true, note: hb.paired ? 'Paired with the Home app' : `Not paired yet · code ${hb.setupInfo().pincode}` }),
+  });
 }
 
 // Google Home, Alexa, SmartThings, Apple Home: Kova as a Matter bridge.

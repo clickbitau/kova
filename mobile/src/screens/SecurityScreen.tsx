@@ -83,7 +83,7 @@ export function SecurityScreen() {
           ))}
         </View>
       ) : (
-        <Empty compact icon="videocam" title="No cameras yet" text="Link Google Nest to see your doorbell and cameras here." action="Set up" onAction={() => nav.navigate('Web', { title: 'Google Nest', path: '/phone.html?embed=1&setup=nest' })} />
+        <Empty compact icon="videocam" title="No cameras yet" text="Link Google Nest to see your doorbell and cameras here." action="Set up" onAction={() => nav.navigate('Integration', { id: 'nest' })} />
       )}
 
       <Section title="Who’s home">

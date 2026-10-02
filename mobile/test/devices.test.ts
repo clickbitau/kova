@@ -75,5 +75,6 @@ test('notification taps go to the right place', () => {
   assert.deepEqual(routeFor('/phone.html?cam=doorbell'), { cam: 'doorbell' });
   assert.deepEqual(routeFor('/phone.html?do=lights-off'), { lightsOff: true });
   assert.deepEqual(routeFor('/phone.html?page=integrations'), { page: 'integrations' });
+  assert.deepEqual(routeFor('/phone.html?embed=1&setup=nest'), { setup: 'nest' });
   assert.deepEqual(routeFor(undefined), {});
 });

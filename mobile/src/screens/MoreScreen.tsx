@@ -65,7 +65,6 @@ export function MoreScreen() {
   const bad = s.integrations.filter(i => !i.ok);
   const players = s.devices.filter(d => (d.type === 'media' || d.type === 'tv') && d.state.on).length;
   const me = s.people.find(p => p.id === cfg?.personId);
-  const web = (title: string, page: string) => () => nav.navigate('Web', { title, path: `/phone.html?embed=1&page=${page}` });
   const live = conn === 'live';
   return (
     <Screen title="More" over={s.home.name} gap={SP[6]}>
@@ -91,7 +90,7 @@ export function MoreScreen() {
 
       <Group title="Set up">
         <Row first icon="home" title="Customise home" sub="Rooms, people, names and favourites" onPress={() => nav.navigate('Customise')} />
-        <Row icon="hub" title="Integrations" sub={bad.length ? `${bad.length} need${bad.length === 1 ? 's' : ''} attention` : `${s.integrations.length} connected`} subColor={bad.length ? C.amber : C.stone} badge={bad.length > 0} onPress={web('Integrations', 'integrations')} />
+        <Row icon="hub" title="Integrations" sub={bad.length ? `${bad.length} need${bad.length === 1 ? 's' : ''} attention` : `${s.integrations.length} connected`} subColor={bad.length ? C.amber : C.stone} badge={bad.length > 0} onPress={() => nav.navigate('Integrations')} />
       </Group>
 
       <Group title="This phone">
