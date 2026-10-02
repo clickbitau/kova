@@ -1337,6 +1337,11 @@ class Component extends DCLogic {
     const ALL=Object.values(devs).sort((a,b)=>(RN[a.room]||'').localeCompare(RN[b.room]||'')||a.name.localeCompare(b.name));
     const ACT=ALL.filter(d=>d.type!=='camera'&&d.type!=='sensor');
     const devOpts=l=>l.map(d=>({v:d.id,label:`${RN[d.room]?RN[d.room]+' · ':''}${d.name}`}));
+    const PLURAL={light:'lights',media:'media players',switch:'switches',outlet:'outlets',blind:'blinds',fan:'fans',ac:'AC units',tv:'TVs',speaker:'speakers',vacuum:'vacuums',lock:'locks',purifier:'purifiers',heater:'heaters'};
+    const PSEUDO=[...new Set(ACT.map(d=>d.type))].map(t=>({v:'type:'+t,label:'All '+(PLURAL[t]||t+'s')})).concat((H.rooms||[]).map(r=>({v:'room:'+r.id,label:'Every device in '+(r.name||r.id)})));
+    const targetOpts=devOpts(ACT).concat(PSEUDO);
+    const pseudoDevs=id=>{const[k,v]=(id||'').split(':');return k==='type'?ACT.filter(d=>d.type===v):k==='room'?ACT.filter(d=>d.room===v):null};
+    const targetActions=id=>{const m=pseudoDevs(id);if(!m)return actionOptions(devs[id],H.sources);const seen=new Set(),out=[];m.forEach(d=>actionOptions(d,H.sources).forEach(x=>{if(!seen.has(x[0])){seen.add(x[0]);out.push(x)}}));return out};
     const opts=l=>l.map(([v,label])=>({v,label}));
     const done=msg=>r=>this.toast(msg,this.undoFn(r&&r.undo));
     const E=s.ae; // the automation being edited: {a, id, runs, tab}
@@ -1447,10 +1452,10 @@ class Component extends DCLogic {
     condRows(A.conditions||[],['conditions'],0);
     add(0,'+ Add a condition',()=>pushAt(['conditions'],NEW_C.device()));
     // Steps (nested)
-    const targetRows=(a,p,depth)=>{Object.entries(a.targets||{}).forEach(([id,cmd])=>{const o=actionOptions(devs[id],H.sources);const cur=JSON.stringify(cmd);const os=o.some(x=>x[0]===cur)?o:[[cur,'(as set)'],...o];
-      rows.push({isTarget:true,pad:((depth+1)*22)+'px',device:id,devOptions:devOpts(ACT),setDevice:e=>{const v=e.target.value;edit(x=>{const t=get(x,[...p,'targets']);const n={};for(const [k,c] of Object.entries(t))n[k===id?v:k]=k===id?JSON.parse((actionOptions(devs[v],H.sources)[0]||['{"on":true}'])[0]):c;get(x,p).targets=n})},
+    const targetRows=(a,p,depth)=>{Object.entries(a.targets||{}).forEach(([id,cmd])=>{const o=targetActions(id);const cur=JSON.stringify(cmd);const os=o.some(x=>x[0]===cur)?o:[[cur,'(as set)'],...o];
+      rows.push({isTarget:true,pad:((depth+1)*22)+'px',device:id,devOptions:targetOpts,setDevice:e=>{const v=e.target.value;edit(x=>{const t=get(x,[...p,'targets']);const n={};for(const [k,c] of Object.entries(t))n[k===id?v:k]=k===id?JSON.parse((targetActions(v)[0]||['{"on":true}'])[0]):c;get(x,p).targets=n})},
         act:cur,actOptions:opts(os),setAct:e=>setAt([...p,'targets',id],JSON.parse(e.target.value)),remove:()=>delAt([...p,'targets',id])})});
-      add(depth+1,'+ Add a device',()=>{const free=ACT.find(d=>!(d.id in (a.targets||{})));if(free)setAt([...p,'targets',free.id],JSON.parse((actionOptions(free,H.sources)[0]||['{"on":true}'])[0]))})};
+      add(depth+1,'+ Add a target',()=>{const free=[...ACT.map(d=>d.id),...PSEUDO.map(x=>x.v)].find(id=>!(id in (a.targets||{})));if(free)setAt([...p,'targets',free],JSON.parse((targetActions(free)[0]||['{"on":true}'])[0]))})};
     const actFields=(a,p)=>{const set=(k,v)=>setAt([...p,k],v);switch(a.kind){
       case 'delay':{const u=a.seconds%3600===0&&a.seconds>=3600?'h':a.seconds%60===0&&a.seconds>=60?'min':'s';const n=u==='h'?a.seconds/3600:u==='min'?a.seconds/60:a.seconds;
         return[F.num('For',n,v=>set('seconds',Math.round((v||0)*(u==='h'?3600:u==='min'?60:1)))),F.sel('',u,opts([['s','seconds'],['min','minutes'],['h','hours']]),v=>set('seconds',Math.round(n*(v==='h'?3600:v==='min'?60:1))))]}
