@@ -13,7 +13,7 @@ function fakeCloud(email: string, password: string) {
   let n = 0;
   const purifier = { enabled: false, mode: 'auto', level: 2, display: true, filter_life: 90, air_quality: 1 };
   const calls: { path: string; body: Record<string, any>; headers: http.IncomingHttpHeaders }[] = [];
-  const state = { logins: 0, crossRegion: false, expire: () => { token = 'expired-' + token; } };
+  const state = { logins: 0, crossRegion: false, quota: false, expire: () => { token = 'expired-' + token; } };
   let code = '';
   const list = [
     { deviceName: 'Bedroom Purifier', deviceType: 'Core300S', cid: 'vsaqABCDEF0123456789', configModule: 'VeSyncAirBypass', connectionStatus: 'online', deviceStatus: 'off', deviceRegion: 'US' },
@@ -44,8 +44,9 @@ function fakeCloud(email: string, password: string) {
         return send({ code: 0, msg: 'request success', result: { token, accountID: '4242', acceptLanguage: 'en', countryCode: 'AU' } });
       }
       if (req.headers.tk !== token || body.token !== token || body.accountID !== '4242') return send({ code: -11012022, msg: 'token expired' });
-      if (req.url === '/cloud/v1/deviceManaged/devices') return send({ code: 0, result: { list, total: list.length } });
+      if (req.url === '/cloud/v1/deviceManaged/devices') return send(state.quota ? { code: -11999999, msg: 'Current user\'s daily request quota has been used up' } : { code: 0, result: { list, total: list.length } });
       if (req.url === '/cloud/v2/deviceManaged/bypassV2') {
+        if (state.quota) return send({ traceId: body.traceId, code: -11999999, msg: 'Current user\'s daily request quota has been used up' });
         assert.equal(body.method, 'bypassV2');
         assert.equal(body.payload.source, 'APP');
         if (body.cid !== list[0].cid) return send({ code: -11300030, msg: 'device offline' });
@@ -174,6 +175,30 @@ test('VeSync: follows the cross-region redirect at login', async () => {
     assert.equal(steps.length, 2);
     assert.equal(steps[1].body.bizToken, 'biz-1');
     assert.equal(fake.calls.some(c => c.path === '/cloud/v1/user/login'), false, 'never the old login');
+  } finally { await reg.stop(); fake.server.close(); }
+});
+
+test('VeSync: a spent daily quota pauses polling instead of failing the purifiers', async () => {
+  const fake = fakeCloud('me@example.com', 'hunter2');
+  await new Promise<void>(r => fake.server.listen(0, '127.0.0.1', r));
+  const baseUrl = `http://127.0.0.1:${(fake.server.address() as AddressInfo).port}`;
+  const reg = new Registry(new Store(':memory:'));
+  const vs = new VeSyncAdapter({ email: 'me@example.com', password: 'hunter2', baseUrl, pollMs: 0 });
+  await reg.addAdapter(vs);
+  try {
+    const d = reg.list().find(x => x.state.online)!;
+    assert.ok(d, 'a purifier came up');
+
+    // Quota spent: the poll logs once and backs off, and the purifier is NOT marked offline —
+    // a rate limit isn't a device failure.
+    fake.state.quota = true;
+    await vs.poll();
+    assert.equal(reg.get(d.id)!.state.online, true);
+
+    // While paused, poll() makes no HTTP calls at all.
+    fake.calls.length = 0;
+    await vs.poll();
+    assert.equal(fake.calls.length, 0);
   } finally { await reg.stop(); fake.server.close(); }
 });
 

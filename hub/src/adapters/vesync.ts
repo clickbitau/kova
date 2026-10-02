@@ -233,6 +233,12 @@ export class VeSyncAdapter implements Adapter {
   private poller: NodeJS.Timeout | null = null;
   private error: string | null = null;
   private offline = new Set<string>();
+  /** The device list changes rarely — fetched every few polls, not every poll (the daily quota is per call). */
+  private nextListAt = 0;
+  /** When VeSync says the daily quota is spent, polls pause until this time (doubling, up to 6 h). */
+  private backoffUntil = 0;
+  private backoffMs = 0;
+  private quotaLogged = false;
 
   constructor(private opts: VeSyncOptions) {
     const base = opts.baseUrl ?? VESYNC_HOSTS[opts.region ?? 'us'];
@@ -242,34 +248,50 @@ export class VeSyncAdapter implements Adapter {
   async start(ctx: AdapterContext): Promise<void> {
     this.ctx = ctx;
     await this.poll();
-    const every = this.opts.pollMs ?? 30_000;
+    // VeSync's daily quota is ~3200 + 1500/device API calls — every poll is one call per purifier.
+    const every = this.opts.pollMs ?? 60_000;
     if (every > 0) this.poller = setInterval(() => void this.poll(), every);
   }
 
   async stop(): Promise<void> { if (this.poller) clearInterval(this.poller); }
 
-  /** Refresh the device list (for online/offline and new purifiers), then each purifier's status. */
+  /** VeSync answers "daily request quota used up" — pause polling (doubling, to 6 h) instead of hammering a spent quota. Devices keep their last state: a rate limit isn't a device failure. */
+  private quotaPause(what: string): boolean {
+    if (!/quota/i.test(what)) return false;
+    this.backoffMs = Math.min(this.backoffMs * 2 || 30 * 60_000, 6 * 3600_000);
+    this.backoffUntil = Date.now() + this.backoffMs;
+    if (!this.quotaLogged) { this.ctx?.log(`${what} — pausing VeSync polls for ${Math.round(this.backoffMs / 60000)} min`); this.quotaLogged = true; }
+    return true;
+  }
+
+  /** Refresh the device list (for online/offline and new purifiers) occasionally, then each purifier's status. */
   async poll(): Promise<void> {
     const ctx = this.ctx!;
-    let list: VeSyncDevice[];
-    try {
-      list = await this.client.devices();
-      this.error = null;
-    } catch (err) {
-      this.error = (err as Error).message;
-      ctx.log(this.error);
-      for (const p of this.purifiers.values()) ctx.report(p.id, { online: false });
-      return;
-    }
-    for (const dev of list.filter(d => isCorePurifier(d.deviceType))) {
-      let p = this.purifiers.get(dev.cid);
-      if (!p) {
-        const cfg = this.opts.devices?.[dev.deviceName];
-        const id = cfg?.id ?? `vesync_${dev.cid.slice(-12).toLowerCase().replace(/[^a-z0-9]/g, '')}`;
-        p = { id, dev, level: 1 };
-        this.purifiers.set(dev.cid, p);
-        ctx.announce([{ id, name: dev.deviceName, room: cfg?.room ?? 'unassigned', type: 'fan', integration: `Levoit ${dev.deviceType}`, address: dev.cid, capabilities: ['onoff', 'fanMode', 'purifier', 'extras'] }]);
-      } else p.dev = dev;
+    if (Date.now() < this.backoffUntil) return;
+    if (Date.now() >= this.nextListAt) {
+      let list: VeSyncDevice[];
+      try {
+        list = await this.client.devices();
+        this.error = null;
+        this.backoffMs = 0; this.quotaLogged = false;
+      } catch (err) {
+        this.error = (err as Error).message;
+        if (this.quotaPause(this.error)) return;
+        ctx.log(this.error);
+        for (const p of this.purifiers.values()) ctx.report(p.id, { online: false });
+        return;
+      }
+      this.nextListAt = Date.now() + 10 * 60_000;
+      for (const dev of list.filter(d => isCorePurifier(d.deviceType))) {
+        let p = this.purifiers.get(dev.cid);
+        if (!p) {
+          const cfg = this.opts.devices?.[dev.deviceName];
+          const id = cfg?.id ?? `vesync_${dev.cid.slice(-12).toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+          p = { id, dev, level: 1 };
+          this.purifiers.set(dev.cid, p);
+          ctx.announce([{ id, name: dev.deviceName, room: cfg?.room ?? 'unassigned', type: 'fan', integration: `Levoit ${dev.deviceType}`, address: dev.cid, capabilities: ['onoff', 'fanMode', 'purifier', 'extras'] }]);
+        } else p.dev = dev;
+      }
     }
     await Promise.all([...this.purifiers.values()].map(async p => {
       if (p.dev.connectionStatus && p.dev.connectionStatus !== 'online') {
@@ -281,11 +303,14 @@ export class VeSyncAdapter implements Adapter {
         const s = await this.client.getPurifierStatus(p.dev);
         if (s.level) p.level = s.level;
         this.offline.delete(p.id);
+        this.backoffMs = 0; this.quotaLogged = false;
         ctx.report(p.id, statusToState(s, p.dev.deviceType));
       } catch (err) {
+        const msg = (err as Error).message;
+        if (this.quotaPause(msg)) return;
         this.offline.add(p.id);
         ctx.report(p.id, { online: false });
-        if (!(err instanceof VeSyncError && isOfflineError(err.code, err.message))) ctx.log(`${p.dev.deviceName}: ${(err as Error).message}`);
+        if (!(err instanceof VeSyncError && isOfflineError(err.code, err.message))) ctx.log(`${p.dev.deviceName}: ${msg}`);
       }
     }));
   }
