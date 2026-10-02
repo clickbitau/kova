@@ -52,6 +52,7 @@ export interface ConnectLifeOptions {
 
 interface HisenseDevice {
   deviceId: string; puid: string; deviceNickName?: string; deviceTypeCode?: string; deviceFeatureCode?: string;
+  /** Despite the name, 1 means online (as Hisense's own plugin reads it); 0 offline. */
   offlineState?: number | string; statusList?: Record<string, string | number>;
 }
 
@@ -78,6 +79,9 @@ export function connectLifeHeaders(method: string, path: string, body: string, o
   };
 }
 
+/** Online, as ConnectLife says it: `offlineState` 1 is online (Hisense's plugin: `is_online = offline_state == 1`). Unknown: online. */
+export const isOnline = (d: Pick<HisenseDevice, 'offlineState'>) => d.offlineState === undefined || d.offlineState === null || String(d.offlineState) === '1';
+
 /** A Hisense air conditioner's status → Kova's climate state. Temperatures in °C (Fahrenheit units converted). */
 export function acState(d: HisenseDevice): DeviceState {
   const s = d.statusList ?? {};
@@ -88,7 +92,7 @@ export function acState(d: HisenseDevice): DeviceState {
     return f ? Math.round(((n - 32) * 5) / 9 * 2) / 2 : n;
   };
   return {
-    online: String(d.offlineState ?? '0') !== '1',
+    online: isOnline(d),
     on: String(s.t_power ?? '0') === '1',
     hvac: MODES[String(s.t_work_mode)] ?? null,
     fanSpeed: FANS[String(s.t_fan_speed)] ?? null,
@@ -288,7 +292,7 @@ export class ConnectLifeAdapter implements Adapter {
 
   status(): AdapterStatus {
     if (this.error) return { ok: false, note: this.error };
-    const n = this.units.size, off = [...this.units.values()].filter(d => String(d.offlineState ?? '0') === '1').length;
+    const n = this.units.size, off = [...this.units.values()].filter(d => !isOnline(d)).length;
     if (!n) return { ok: false, note: 'No air conditioners on this ConnectLife account' };
     return off ? { ok: false, note: `${off} of ${n} offline (cloud)` } : { ok: true, note: `${n} air conditioner${n === 1 ? '' : 's'} · cloud` };
   }
