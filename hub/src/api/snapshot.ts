@@ -5,6 +5,7 @@ import { clock, localDate, localHour, atLocal } from '../util/time.ts';
 import { isLight, targetLabel } from '../util/describe.ts';
 import { rhythmLabel } from '../rhythms/rhythms.ts';
 import { automationIdeas } from '../engine/automation-ideas.ts';
+import { combineIdeas, combinedDeviceId } from '../adapters/combined.ts';
 import { actionWords, condWords, triggerWords } from '../engine/automations.ts';
 import SunCalc from 'suncalc';
 
@@ -143,6 +144,9 @@ export function snapshot(hub: Hub) {
     lightTheWay: cfg.lightTheWay.triggers.map(t => ({ id: t.id, label: t.label, minutes: t.minutes, lights: t.lights })),
     // When / if / then, with each part in words; and ones Kova suggests from how devices are connected.
     automations: engine.automations.list().map(a => ({ ...a, ...autoWords(a), lastRun: runSummary(engine.automations.lastRun(a.id)), running: engine.automations.running(a.id) })),
+    // Devices that look like one thing reached through two integrations, and the ones already combined.
+    combineIdeas: combineIdeas(reg.list(), cfg.combined ?? [], cfg.dismissedFindings, id => !!cfg.devices?.[id]?.hidden, a => reg.adapters.get(a)?.name ?? a),
+    combined: (cfg.combined ?? []).map(c => ({ ...c, deviceId: combinedDeviceId(c), memberNames: c.members.map(m => reg.get(m)?.name ?? m) })),
     automationIdeas: automationIdeas(cfg, reg.devices, hub.screens()).map(i => ({ ...i, ...autoWords(i) })),
     overlays: cfg.overlays.map(o => ({ id: o.id, name: o.name, icon: o.icon, endsLabel: o.endsLabel, targets: targetList(o.targets) })),
     moments: cfg.moments.map(mo => ({ id: mo.id, label: mo.label, what: mo.what, at: mo.at, atLabel: rhythmLabel(mo.at), targets: targetList(mo.targets) })),

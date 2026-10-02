@@ -7,7 +7,7 @@ import { useHub } from '../state/hub';
 import { useSheet } from '../state/sheet';
 import { useNav } from '../navigation';
 import { hubUrl } from '../logic/connect';
-import { devs, FAN_SPEEDS, has, HVAC, ICON, isPlayer, stateOf, tint, type Dev } from '../logic/devices';
+import { combinedOf, devs, FAN_SPEEDS, has, HVAC, ICON, isPlayer, stateOf, tint, type Dev } from '../logic/devices';
 import { arcPath, clampTarget, TARGET_MAX, TARGET_MIN } from '../logic/climate';
 import { Icon } from '../ui/Icon';
 import { Button, Card, Group, IconButton, IconWell, Pill, HScroll, Press, Row, Section, Segmented, Sheet, Slider, Stat, Switch, SwitchRow, Tag } from '../ui/kit';
@@ -93,6 +93,7 @@ export function DeviceSheet() {
   const [st, sf] = stateOf(D);
   const fav = (snap.favourites ?? []).includes(D.id);
   const draft = name ?? D.name;
+  const combo = combinedOf(snap).find(c => c.deviceId === D.id);
   const settings = (body: object, done: string) => act('PATCH', `/api/devices/${encodeURIComponent(D.id)}/settings`, body, done);
   const group = snap.speakerGroups.find(g => g.deviceId === D.id);
   const readings = ([D.power != null && ['Using now', Math.abs(D.power) >= 1000 ? `${(D.power / 1000).toFixed(1)} kW` : `${Math.round(D.power)} W`, 'bolt'], D.energy != null && ['Today', `${D.energy} kWh`, 'electric_meter'], D.battery != null && D.type !== 'vacuum' && ['Battery', `${D.battery}%`, 'battery_full']] as const)
@@ -328,6 +329,10 @@ export function DeviceSheet() {
           <SwitchRow first icon="star" iconFg={C.amber} title="Favourite" sub="Keep it on Now" on={fav} onChange={() => void settings({ favourite: !fav }, fav ? 'Removed from favourites' : 'Added to favourites')} />
           <SwitchRow icon="visibility_off" iconFg={C.stone} title="Hide from lists" sub="It keeps working in modes" on={!!D.hidden} onChange={() => void settings({ hidden: !D.hidden }, D.hidden ? 'Shown in lists again' : 'Hidden from lists')} />
           <Row icon="routine" iconFg={C.bone} title="Used in" sub={D.usedIn?.length ? D.usedIn.map(u => u.name).join(' · ') : 'Not in any mode or overlay yet'} />
+          {combo ? (
+            <Row icon="join" iconFg={C.amber} title="One device, through two integrations" sub={`${combo.memberNames.join(' and ')}. Tap to separate them again.`}
+              onPress={() => { void act('DELETE', `/api/combined/${encodeURIComponent(combo.id)}`, {}, `${combo.name} is two devices again`).then(ok => { if (ok) close(); }); }} />
+          ) : null}
         </Group>
         <T mono size={11} color={C.stone2} center>{`${D.integration} · ${D.address}`}</T>
       </View>

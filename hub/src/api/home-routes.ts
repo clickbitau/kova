@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { Hub } from '../hub.ts';
 import type { HomeConfig } from '../model/types.ts';
 import { groupDeviceId } from '../adapters/groups.ts';
+import { combinedDeviceId } from '../adapters/combined.ts';
 import { isPlayer } from '../util/describe.ts';
 import { slug } from '../tools/import-ha.ts';
 
@@ -146,6 +147,61 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
   app.delete<{ Params: { id: string } }>('/api/speaker-groups/:id', async (req, reply) => {
     if (!(hub.config.get().speakerGroups ?? []).some(g => g.id === req.params.id)) return bad(reply, 'Unknown group', 404);
     return edit(c => { c.speakerGroups = (c.speakerGroups ?? []).filter(g => g.id !== req.params.id); });
+  });
+
+  // --------------------------------------------------------------- combined --
+  // One physical device reached through several integrations, shown as one. Its members are hidden while it is,
+  // and shown again when it's separated (unless the owner had hidden them before).
+  const checkCombined = (members: unknown, self?: string): string | null => {
+    if (!Array.isArray(members)) return 'Pick the devices';
+    const ids = [...new Set(members.map(String))];
+    if (ids.length < 2) return 'Pick at least two devices';
+    const others = (hub.config.get().combined ?? []).filter(c => c.id !== self).flatMap(c => c.members);
+    for (const id of ids) {
+      const d = hub.reg.get(id);
+      if (!d) return `Unknown device ${id}`;
+      if (d.adapter === 'combined' || d.adapter === 'groups') return `${d.name} is already more than one device`;
+      if (others.includes(id)) return `${d.name} is already part of another combined device`;
+    }
+    return null;
+  };
+  app.post<{ Body: { name?: string; members?: string[]; room?: string } }>('/api/combined', async (req, reply) => {
+    const err = checkCombined(req.body?.members);
+    if (err) return bad(reply, err);
+    const members = [...new Set(req.body!.members!.map(String))];
+    const name = text(req.body?.name, 60) || hub.reg.get(members[0])!.name;
+    const room = req.body?.room && hub.config.get().rooms.some(r => r.id === req.body!.room) ? req.body.room : undefined;
+    const list = hub.config.get().combined ?? [];
+    let id = slug(name) || 'device', n = 2;
+    while (list.some(c => c.id === id)) id = `${slug(name) || 'device'}_${n++}`;
+    const r = edit(c => {
+      const hid = members.filter(m => !c.devices?.[m]?.hidden);
+      c.devices ??= {};
+      for (const m of hid) c.devices[m] = { ...c.devices[m], hidden: true };
+      c.combined = [...(c.combined ?? []), { id, name, members, hid, ...(room ? { room } : {}) }];
+    });
+    return { id, deviceId: combinedDeviceId({ id }), ...r };
+  });
+  app.put<{ Params: { id: string }; Body: { name?: string; members?: string[]; room?: string | null } }>('/api/combined/:id', async (req, reply) => {
+    if (!(hub.config.get().combined ?? []).some(c => c.id === req.params.id)) return bad(reply, 'Unknown combined device', 404);
+    const name = req.body?.name === undefined ? undefined : text(req.body.name, 60);
+    if (name === '') return bad(reply, 'Give it a name');
+    if (req.body?.members !== undefined) { const err = checkCombined(req.body.members, req.params.id); if (err) return bad(reply, err); }
+    if (req.body?.room && !hub.config.get().rooms.some(r => r.id === req.body!.room)) return bad(reply, 'Unknown room');
+    return edit(c => {
+      const x = c.combined!.find(y => y.id === req.params.id)!;
+      if (name) x.name = name;
+      if (req.body?.members) x.members = [...new Set(req.body.members.map(String))];
+      if (req.body?.room !== undefined) { if (req.body.room) x.room = req.body.room; else delete x.room; }
+    });
+  });
+  app.delete<{ Params: { id: string } }>('/api/combined/:id', async (req, reply) => {
+    const x = (hub.config.get().combined ?? []).find(c => c.id === req.params.id);
+    if (!x) return bad(reply, 'Unknown combined device', 404);
+    return edit(c => {
+      for (const m of x.hid ?? []) if (c.devices?.[m]) { delete c.devices[m].hidden; }
+      c.combined = (c.combined ?? []).filter(y => y.id !== req.params.id);
+    });
   });
 
   // ----------------------------------------------------------------- people --

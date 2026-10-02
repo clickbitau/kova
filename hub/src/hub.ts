@@ -9,6 +9,7 @@ import { Checker } from './engine/findings.ts';
 import { Assistant } from './assistant/assistant.ts';
 import type { Adapter } from './adapters/sdk.ts';
 import { SpeakerGroupsAdapter } from './adapters/groups.ts';
+import { CombinedAdapter } from './adapters/combined.ts';
 import type { HomeConfig } from './model/types.ts';
 import type { Weather } from './services/weather.ts';
 import { Energy } from './services/energy.ts';
@@ -47,6 +48,8 @@ export class Hub extends EventEmitter<{ changed: [] }> {
   readonly energy: Energy;
   /** Speaker groups made in Kova (they're devices of their own). */
   readonly groups: SpeakerGroupsAdapter;
+  /** Devices reached through several integrations, shown as one (adapters/combined.ts). */
+  readonly combined: CombinedAdapter;
   /** Helix music on any speaker (services/helix-music.ts), once Helix is set up. */
   music: HelixMusic | null = null;
   /** Updating the hub itself (services/updates.ts); null without an updater set up (tests, Docker). */
@@ -78,6 +81,8 @@ export class Hub extends EventEmitter<{ changed: [] }> {
     this.config.on('changed', () => this.reg.reapplySettings());
     this.groups = new SpeakerGroupsAdapter(this.reg, () => this.config.get().speakerGroups ?? []);
     this.config.on('changed', () => this.groups.sync());
+    this.combined = new CombinedAdapter(this.reg, () => this.config.get().combined ?? []);
+    this.config.on('changed', () => this.combined.sync());
     this.engine = new Engine(this.store, this.reg, this.config, opts.now);
     this.checker = new Checker(this.engine, this.store, this.config, () => this.reg.devices);
     this.assistant = new Assistant(this.engine, this.reg, this.config);
@@ -93,6 +98,8 @@ export class Hub extends EventEmitter<{ changed: [] }> {
     for (const a of this.opts.adapters) await this.reg.addAdapter(a);
     // Speaker groups come after the speakers they group.
     await this.reg.addAdapter(this.groups);
+    // Combined devices too: they're made of devices other integrations announce.
+    await this.reg.addAdapter(this.combined);
     this.engine.start(this.opts.tickMs ?? 1000);
     this.energy.start(this.opts.energyMs ?? (this.opts.tickMs === 0 ? 0 : 60_000));
     this.weather?.start(this.config.get());

@@ -76,6 +76,7 @@ export const ICON_CODES: Record<string, string> = {
   home_work: '\uf030',
   hub: '\ue9f4',
   info: '\ue88e',
+  join: '\uf84f',
   key: '\ue73c',
   kitchen: '\ueb47',
   layers: '\ue53b',
