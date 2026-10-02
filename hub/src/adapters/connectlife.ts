@@ -2,7 +2,7 @@ import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Adapter, AdapterContext, AdapterStatus } from './sdk.ts';
-import type { Command, Device, DeviceState, FanSpeed, HvacMode } from '../model/types.ts';
+import type { Command, Device, DeviceState, FanSpeed, HvacMode, Zone } from '../model/types.ts';
 
 // Hisense air conditioners (and other ConnectLife appliances) through the ConnectLife cloud. They have no
 // local API: the ConnectLife app, Hisense's official Home Assistant plugin (MIT, Connectlife-LLC/HomeAssistantPlugin)
@@ -98,7 +98,18 @@ export function acState(d: HisenseDevice): DeviceState {
     fanSpeed: FANS[String(s.t_fan_speed)] ?? null,
     target: c(s.t_temp),
     temp: c(s.f_temp_in),
+    ...(hasZones(d) ? { zones: zonesOf(s) } : {}),
   };
+}
+
+/** Ducted units with zones (Australian models): aus_zone1_power … aus_zone8_power, and how far each is open. */
+export const hasZones = (d: Pick<HisenseDevice, 'statusList'>) => Object.keys(d.statusList ?? {}).some(k => /^aus_zone\d+_power$/.test(k));
+export function zonesOf(s: Record<string, string | number>): Zone[] {
+  const ns = Object.keys(s).map(k => /^aus_zone(\d+)_power$/.exec(k)?.[1]).filter((n): n is string => !!n).map(Number).sort((a, b) => a - b);
+  return ns.map(n => {
+    const open = Number(s[`aus_zone${n}_opencontrol`]);
+    return { n, on: String(s[`aus_zone${n}_power`]) === '1', open: Number.isFinite(open) ? open : null };
+  });
 }
 
 /** A Kova command → the properties to set (strings, as the API takes them). Fahrenheit units get °F. */
@@ -107,6 +118,14 @@ export function acProperties(cmd: Command, fahrenheit = false): Record<string, s
   if (cmd.on !== undefined) p.t_power = cmd.on ? '1' : '0';
   if (cmd.hvac && MODE_CODE[cmd.hvac] !== undefined) { p.t_work_mode = MODE_CODE[cmd.hvac]; p.t_power ??= '1'; }
   if (cmd.fanSpeed && FAN_CODE[cmd.fanSpeed] !== undefined) p.t_fan_speed = FAN_CODE[cmd.fanSpeed];
+  // Zones: some (zoneSet, by number) or all of them (zones, as undo sends them back).
+  const zs: Record<string, { on?: boolean; open?: number | null }> = { ...(cmd.zoneSet ?? {}) };
+  for (const z of cmd.zones ?? []) zs[String(z.n)] = { on: z.on, open: z.open };
+  for (const [n, z] of Object.entries(zs)) {
+    if (!/^[1-9]\d?$/.test(n)) continue;
+    if (z.on !== undefined) p[`aus_zone${n}_power`] = z.on ? '1' : '0';
+    if (z.open != null) p[`aus_zone${n}_opencontrol`] = String(Math.max(0, Math.min(100, Math.round(z.open))));
+  }
   if (cmd.target != null) {
     const t = Math.max(16, Math.min(32, Math.round(cmd.target)));
     p.t_temp = String(fahrenheit ? Math.round(t * 9 / 5 + 32) : t);
@@ -268,7 +287,7 @@ export class ConnectLifeAdapter implements Adapter {
       if (fresh.length) {
         ctx.announce(fresh.map(d => ({
           id: this.kovaId(d), name: d.deviceNickName || 'Air conditioner', room: this.o.rooms?.[d.deviceId] ?? 'unassigned', type: 'climate' as const,
-          capabilities: ['onoff', 'climate'], integration: 'Hisense ConnectLife', address: d.puid,
+          capabilities: hasZones(d) ? ['onoff', 'climate', 'zones'] : ['onoff', 'climate'], integration: 'Hisense ConnectLife', address: d.puid,
         })));
       }
       for (const d of list) ctx.report(this.kovaId(d), acState(d));

@@ -16,7 +16,8 @@ const APP = { clientId: 'app1', clientSecret: 's3cret' };
 
 /** The ConnectLife cloud: a split AC, a dehumidifier, signed requests, and OAuth that replaces the refresh token on refresh. */
 async function fakeConnectLife() {
-  const ac: Record<string, string> = { t_power: '0', t_work_mode: '2', t_temp: '24', t_fan_speed: '0', f_temp_in: '27', t_temp_type: '0' };
+  const ac: Record<string, string> = { t_power: '0', t_work_mode: '2', t_temp: '24', t_fan_speed: '0', f_temp_in: '27', t_temp_type: '0',
+    aus_zone1_power: '1', aus_zone1_opencontrol: '35', aus_zone2_power: '0', aus_zone2_opencontrol: '0' };
   const sets: Record<string, string>[] = [];
   const tokens: Record<string, string>[] = [];
   const bad: string[] = [];
@@ -80,7 +81,8 @@ test('Hisense ConnectLife: air conditioners found, read, and switched, set and f
     assert.deepEqual(ids, ['connectlife_0a1b2c3d4e5f']);
     const id = ids[0];
     const d = reg.get(id)!;
-    assert.deepEqual({ room: d.room, type: d.type, caps: d.capabilities, name: d.name }, { room: 'bedroom', type: 'climate', caps: ['onoff', 'climate'], name: 'Bedroom AC' });
+    assert.deepEqual({ room: d.room, type: d.type, caps: d.capabilities, name: d.name }, { room: 'bedroom', type: 'climate', caps: ['onoff', 'climate', 'zones'], name: 'Bedroom AC' });
+    assert.deepEqual(d.state.zones, [{ n: 1, on: true, open: 35 }, { n: 2, on: false, open: 0 }], 'a ducted unit: its zones');
     assert.deepEqual({ on: d.state.on, hvac: d.state.hvac, target: d.state.target, temp: d.state.temp, fan: d.state.fanSpeed, online: d.state.online },
       { on: false, hvac: 'cool', target: 24, temp: 27, fan: 'auto', online: true });
     assert.deepEqual(adapter.status(), { ok: true, note: '1 air conditioner · cloud' });
@@ -96,6 +98,14 @@ test('Hisense ConnectLife: air conditioners found, read, and switched, set and f
     assert.deepEqual(cl.sets.splice(0), [{ t_work_mode: '1', t_power: '1', t_temp: '22' }, { t_fan_speed: '8' }, { t_power: '0' }]);
     assert.deepEqual({ on: reg.get(id)!.state.on, hvac: reg.get(id)!.state.hvac, target: reg.get(id)!.state.target, fan: reg.get(id)!.state.fanSpeed }, { on: false, hvac: 'heat', target: 22, fan: 'high' });
     assert.deepEqual(cl.bad, []);
+
+    // Zones: zone 2 on at 60%, then undone.
+    const r = await reg.command(id, { zoneSet: { 2: { on: true, open: 60 } } }, you);
+    assert.deepEqual(cl.sets.splice(0), [{ aus_zone2_power: '1', aus_zone2_opencontrol: '60' }]);
+    assert.deepEqual(reg.get(id)!.state.zones, [{ n: 1, on: true, open: 35 }, { n: 2, on: true, open: 60 }]);
+    assert.equal('zoneSet' in reg.get(id)!.state, false, 'the change is not kept as state, the zones are');
+    await reg.command(id, r as never, you);
+    assert.deepEqual(cl.sets.splice(0), [{ aus_zone1_power: '1', aus_zone1_opencontrol: '35', aus_zone2_power: '0', aus_zone2_opencontrol: '0' }]);
 
     // The access token ran out: Kova signs in again with the kept refresh token, then the command goes through.
     cl.expire();
@@ -134,4 +144,6 @@ test('ConnectLife linking, units, and what Activity says', async () => {
   assert.equal(changeSentence(ac as never, {}, { hvac: 'cool', target: 23 }), 'Bedroom AC cooling to 23°');
   assert.equal(changeSentence(ac as never, {}, { target: 21 }), 'Bedroom AC set to 21°');
   assert.equal(changeSentence(ac as never, { on: true }, { on: false }), 'Bedroom AC off');
+  assert.equal(changeSentence(ac as never, { zones: [{ n: 1, on: true, open: 35 }, { n: 2, on: false, open: 0 }] }, { zones: [{ n: 1, on: true, open: 35 }, { n: 2, on: true, open: 60 }] }), 'Bedroom AC zone 2 on at 60%');
+  assert.deepEqual(acProperties({ zoneSet: { 3: { on: false }, x: { on: true } } }), { aus_zone3_power: '0' }, 'only real zone numbers');
 });

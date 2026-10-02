@@ -9,6 +9,7 @@ import { useNav } from '../navigation';
 import { hubUrl } from '../logic/connect';
 import { combinedOf, devs, FAN_SPEEDS, has, HVAC, ICON, isPlayer, stateOf, tint, type Dev } from '../logic/devices';
 import { arcPath, clampTarget, TARGET_MAX, TARGET_MIN } from '../logic/climate';
+import { snapOpen, visibleZones } from '../logic/zones';
 import { Icon } from '../ui/Icon';
 import { Button, Card, Group, IconButton, IconWell, Pill, HScroll, Press, Row, Section, Segmented, Sheet, Slider, Stat, Switch, SwitchRow, Tag } from '../ui/kit';
 import { T } from '../ui/Text';
@@ -169,6 +170,7 @@ export function DeviceSheet() {
           </Card>
           {block('hvac', 'Mode', <Segmented label="Mode" value={D.on ? D.hvac ?? null : null} options={HVAC.map(([id, label, icon, color]) => ({ id, label, icon, color }))} onChange={id => void send(D.id, { on: true, hvac: id as Dev['hvac'] })} />)}
           {block('fan', 'Fan', <Segmented compact label="Fan speed" value={D.fanSpeed ?? null} color={C.blue} options={FAN_SPEEDS.map(([id, label]) => ({ id, label }))} onChange={id => void send(D.id, { fanSpeed: id as Dev['fanSpeed'] })} />)}
+          {D.zones?.length ? <Zones D={D} /> : null}
         </View>
       ) : null}
 
@@ -337,5 +339,42 @@ export function DeviceSheet() {
         <T mono size={11} color={C.stone2} center>{`${D.integration} · ${D.address}`}</T>
       </View>
     </Sheet>
+  );
+}
+
+/** A ducted air conditioner's zones: name (tap to rename), on or off, and how far open. The ones in use first. */
+function Zones({ D }: { D: Dev }) {
+  const { send, act } = useHub();
+  const [all, setAll] = useState(false);
+  const [editing, setEditing] = useState<number | null>(null);
+  const [draft, setDraft] = useState('');
+  const zones = visibleZones(D.zones, D.zoneNames ?? {}, all);
+  const total = D.zones?.length ?? 0;
+  const set = (n: number, c: { on?: boolean; open?: number }) => void send(D.id, { zoneSet: { [n]: c } });
+  const rename = (n: number) => {
+    setEditing(null);
+    void act('PATCH', `/api/devices/${encodeURIComponent(D.id)}/settings`, { zoneNames: { [n]: draft.trim() || null } }, draft.trim() ? `Zone ${n} is “${draft.trim()}”` : `Zone ${n} unnamed`);
+  };
+  return (
+    <Section title="Zones" caption gap={SP[2]} right={total > zones.length || all ? <Press onPress={() => setAll(!all)} label={all ? 'Show only zones in use' : `Show all ${total} zones`}><T v="footnote" weight={700} color={C.amber}>{all ? 'In use' : `All ${total}`}</T></Press> : undefined}>
+      {!zones.length ? <T v="footnote" color={C.stone}>No zones open.</T> : null}
+      {zones.map(z => (
+        <Card key={z.n} style={{ gap: SP[2], opacity: z.on ? 1 : 0.7 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2] }}>
+            {editing === z.n ? (
+              <TextInput autoFocus value={draft} onChangeText={setDraft} onSubmitEditing={() => rename(z.n)} onBlur={() => rename(z.n)} placeholder={`Zone ${z.n}`} placeholderTextColor={C.stone3}
+                accessibilityLabel={`Name for zone ${z.n}`} returnKeyType="done" style={{ flex: 1, color: C.bone, fontFamily: F[700], fontSize: 15, paddingVertical: 2 }} />
+            ) : (
+              <Press onPress={() => { setDraft(D.zoneNames?.[String(z.n)] ?? ''); setEditing(z.n); }} label={`${z.name}, rename`} style={{ flex: 1 }}>
+                <T v="headline">{z.name}</T>
+              </Press>
+            )}
+            <T v="footnote" color={C.stone}>{z.on ? `${z.open}% open` : 'Closed'}</T>
+            <Switch on={z.on} color={C.blue} label={`${z.name} on`} onChange={v => set(z.n, { on: v })} />
+          </View>
+          <Slider value={z.open} color={C.blue} label={`${z.name} opening`} onRelease={v => set(z.n, { on: true, open: snapOpen(v) })} />
+        </Card>
+      ))}
+    </Section>
   );
 }

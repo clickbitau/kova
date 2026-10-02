@@ -96,3 +96,23 @@ test('media sources: repeat on and off without touching the address; a bad addre
     assert.equal(r.statusCode, 400);
   } finally { await app.close(); await hub.stop(); }
 });
+
+test('zone names: set, cleared, shown in the snapshot; refused for a device without zones', async () => {
+  const { hub } = await testHub(12);
+  const app = await buildServer(hub, { webRoot });
+  try {
+    await hub.reg.addAdapter({
+      id: 'ducted', name: 'Ducted', icon: 'ac_unit', kind: 'Cloud', async stop() {}, status: () => ({ ok: true }), async command() {},
+      async start(ctx) { ctx.announce([{ id: 'ac', name: 'AC', room: 'lounge', type: 'climate', capabilities: ['onoff', 'climate', 'zones'], integration: 'Ducted', address: 'ac', state: { zones: [{ n: 1, on: true, open: 35 }] } }]); },
+    });
+    let r = await app.inject({ method: 'PATCH', url: '/api/devices/ac/settings', payload: { zoneNames: { 1: 'Living', 2: 'Bedrooms' } } });
+    assert.equal(r.statusCode, 200);
+    r = await app.inject({ method: 'PATCH', url: '/api/devices/ac/settings', payload: { zoneNames: { 2: null } } });
+    const s = (await app.inject({ url: '/api/state' })).json();
+    assert.deepEqual(s.devices.find((d: { id: string }) => d.id === 'ac').zoneNames, { 1: 'Living' });
+    r = await app.inject({ method: 'PATCH', url: '/api/devices/lamp/settings', payload: { zoneNames: { 1: 'x' } } });
+    assert.match(r.json().error, /has no zones/);
+    r = await app.inject({ method: 'PATCH', url: '/api/devices/ac/settings', payload: { zoneNames: { abc: 'x' } } });
+    assert.equal(r.statusCode, 400);
+  } finally { await app.close(); await hub.stop(); }
+});

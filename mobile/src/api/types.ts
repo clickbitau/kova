@@ -31,11 +31,13 @@ export interface DeviceState {
   target?: number | null;
   temp?: number | null;
   fanSpeed?: 'auto' | 'quiet' | 'low' | 'medium' | 'high' | 'turbo' | null;
+  /** Ducted air conditioners (`zones`): each zone's damper, on or off and how far open (0–100). */
+  zones?: { n: number; on: boolean; open: number | null }[] | null;
   online?: boolean;
 }
 
 /** `skip`: 1 = next song, -1 = previous (speakers with `queue`). `volStep`: 1 = volume up a step, -1 = down. */
-export type Command = Partial<DeviceState> & { skip?: number; volStep?: number };
+export type Command = Partial<DeviceState> & { skip?: number; volStep?: number; /** Some zones of a ducted air conditioner, by number. */ zoneSet?: Record<string, { on?: boolean; open?: number }> };
 
 export interface Device {
   id: string;
@@ -47,6 +49,8 @@ export interface Device {
   integration: string;
   address: string;
   state: DeviceState;
+  /** What the owner calls a ducted air conditioner's zones, by number. */
+  zoneNames?: Record<string, string>;
   hidden?: boolean;
   original?: { name: string; room: string };
   why?: { now: string; next: string };
