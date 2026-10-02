@@ -303,7 +303,10 @@ export class SmartThingsAdapter implements Adapter {
       await this.discover();
       await this.poll();
     } catch (e) { this.error = (e as Error).message; }
-    const every = (this.o.pollSec ?? 15) * 1000;
+    // Each poll is one API call per device — stretch the interval with the device count so a
+    // day stays at ~5,700 calls whether there are 4 devices or 100.
+    const n = Math.max(1, this.bars.size + this.tvs.length + this.sensors.size);
+    const every = Math.max((this.o.pollSec ?? 30) * 1000, n * 15_000);
     if (every > 0) this.poller = setInterval(() => void this.poll(), every);
   }
 
