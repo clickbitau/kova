@@ -103,6 +103,7 @@ export const ICON_CODES: Record<string, string> = {
   mic: '\ue31d',
   mode_fan: '\uf168',
   more_horiz: '\ue5d3',
+  mosque: '\ueab2',
   movie: '\ue404',
   music_note: '\ue405',
   nightlight: '\uf03d',

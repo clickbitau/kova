@@ -24,3 +24,4 @@ join
 repeat repeat_one radio_button_unchecked person_add tips_and_updates call_split swap_vert
 auto_fix_high travel_explore content_paste open_in_new warning extension lan science content_copy pending
 login computer smartphone tablet
+mosque

@@ -116,3 +116,24 @@ test('zone names: set, cleared, shown in the snapshot; refused for a device with
     assert.equal(r.statusCode, 400);
   } finally { await app.close(); await hub.stop(); }
 });
+
+test('home settings: name, location, timezone, prayer method and the doorbell pause; only what is sent changes', async () => {
+  const { hub } = await testHub(12);
+  const app = await buildServer(hub, { webRoot });
+  try {
+    const put = (payload: object) => app.inject({ method: 'PUT', url: '/api/home', payload });
+    let r = await put({ latitude: -33.8688, longitude: 151.2093, timezone: 'Australia/Sydney', prayerMethod: 'Karachi', pauseForDoorbell: false });
+    assert.equal(r.statusCode, 200, r.body);
+    const c = hub.config.get();
+    assert.deepEqual([c.latitude, c.longitude, c.timezone, c.prayerMethod, c.pauseForDoorbell, c.name], [-33.8688, 151.2093, 'Australia/Sydney', 'Karachi', false, 'The Ahmeds']);
+    const s = (await app.inject({ url: '/api/state' })).json();
+    assert.deepEqual([s.home.prayerMethod, s.home.pauseForDoorbell, s.home.timezone], ['Karachi', false, 'Australia/Sydney']);
+    await app.inject({ method: 'POST', url: `/api/undo/${r.json().undo}` });
+    assert.equal(hub.config.get().timezone, 'Australia/Perth');
+    for (const [bad, msg] of [[{ timezone: 'Mars/Base' }, /isn’t a timezone/], [{ latitude: 10 }, /together/], [{ latitude: 100, longitude: 0 }, /−90 to 90/], [{ prayerMethod: 'Lunar' }, /one of/], [{ name: '  ' }, /name/]] as const) {
+      r = await put(bad);
+      assert.equal(r.statusCode, 400);
+      assert.match(r.json().error, msg);
+    }
+  } finally { await app.close(); await hub.stop(); }
+});

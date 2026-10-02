@@ -11,6 +11,8 @@ import { slug } from '../tools/import-ha.ts';
 // returns an undo id.
 
 type Reply = { code: (n: number) => { send: (b: { error: string }) => unknown } };
+/** How prayer times can be worked out (adhan's calculation methods). */
+export const PRAYER_METHODS = ['MuslimWorldLeague', 'Egyptian', 'Karachi', 'UmmAlQura', 'Dubai', 'MoonsightingCommittee', 'NorthAmerica', 'Kuwait', 'Qatar', 'Singapore', 'Tehran', 'Turkey'];
 const ROOM_ICONS = ['weekend', 'kitchen', 'desk', 'bed', 'single_bed', 'crib', 'music_note', 'local_laundry_service', 'garage_home', 'door_front', 'yard', 'bathtub', 'stairs', 'meeting_room', 'chair', 'tv', 'deck', 'balcony', 'fitness_center', 'checkroom'];
 
 export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
@@ -20,10 +22,26 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
 
   app.get('/api/home/room-icons', async () => ({ icons: ROOM_ICONS }));
 
-  app.put<{ Body: { name?: string } }>('/api/home', async (req, reply) => {
-    const name = text(req.body?.name);
-    if (!name) return bad(reply, 'Give the home a name');
-    return edit(c => { c.name = name; });
+  // The home's details: only what's sent changes. Location and timezone move sun and prayer times; the prayer
+  // method decides how prayer times are worked out.
+  app.put<{ Body: { name?: string; timezone?: string; latitude?: number; longitude?: number; prayerMethod?: string; pauseForDoorbell?: boolean } }>('/api/home', async (req, reply) => {
+    const b = req.body ?? {};
+    const name = b.name === undefined ? undefined : text(b.name);
+    if (name === '') return bad(reply, 'Give the home a name');
+    if (b.timezone !== undefined) {
+      try { new Intl.DateTimeFormat('en', { timeZone: b.timezone }); } catch { return bad(reply, `${b.timezone} isn’t a timezone (e.g. Australia/Perth)`); }
+    }
+    if ((b.latitude === undefined) !== (b.longitude === undefined)) return bad(reply, 'Send latitude and longitude together');
+    if (b.latitude !== undefined && !(typeof b.latitude === 'number' && Math.abs(b.latitude) <= 90 && typeof b.longitude === 'number' && Math.abs(b.longitude) <= 180)) return bad(reply, 'Latitude is −90 to 90, longitude −180 to 180');
+    if (b.prayerMethod !== undefined && !PRAYER_METHODS.includes(b.prayerMethod)) return bad(reply, `Prayer method is one of ${PRAYER_METHODS.join(', ')}`);
+    if (b.pauseForDoorbell !== undefined && typeof b.pauseForDoorbell !== 'boolean') return bad(reply, 'pauseForDoorbell must be true or false');
+    return edit(c => {
+      if (name) c.name = name;
+      if (b.timezone) c.timezone = b.timezone;
+      if (b.latitude !== undefined) { c.latitude = Math.round(b.latitude * 1e5) / 1e5; c.longitude = Math.round(b.longitude! * 1e5) / 1e5; }
+      if (b.prayerMethod) c.prayerMethod = b.prayerMethod;
+      if (b.pauseForDoorbell !== undefined) c.pauseForDoorbell = b.pauseForDoorbell;
+    });
   });
 
   // ---------------------------------------------------------------- devices --
