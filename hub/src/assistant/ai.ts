@@ -163,7 +163,7 @@ export function saveSettings(store: Store, patch: SettingsPatch): AssistantSetti
 export const TOOLS = [
   {
     name: 'set_devices',
-    description: 'Change one or more devices. Only use device ids from the home context. bri is brightness 1-100, k is colour temperature in Kelvin, color is #rrggbb, vol is volume 0-100. Turning a speaker or TV off also stops what it plays. paused pauses or carries on (devices with the pause capability). media on a device with the library capability is a film or show title to find and play there (a Helix box). On a speaker with the queue capability, media can also be Helix music: "Shuffle all", "Loved", a playlist title, or "Station: <artist, album or song>"; shuffle true plays it in a shuffled order; skip 1 is the next song, -1 the previous. Any other field a device shows in its state is set through "set" — e.g. {"childLock": true}, {"display": false} or {"mode": "Sleep"} on a purifier, {"hvac": "cool", "target": 23, "fanSpeed": "low"} on an air conditioner, {"input": "hdmi1"}, {"muted": true} or {"night": true} on a TV or soundbar. Only fields the device actually lists in its state can be set.',
+    description: 'Change one or more devices. Only use device ids from the home context. bri is brightness 1-100, k is colour temperature in Kelvin, color is #rrggbb, vol is volume 0-100. Turning a speaker or TV off also stops what it plays. paused pauses or carries on (devices with the pause capability). media on a device with the library capability is a film or show title to find and play there (a Helix box). On a speaker with the queue capability, media can also be Helix music: "Shuffle all", "Loved", a playlist title, or "Station: <artist, album or song>"; shuffle true plays it in a shuffled order; skip 1 is the next song, -1 the previous. Any other field a device shows in its state is set through "set" — e.g. {"childLock": true}, {"display": false} or {"mode": "Sleep"} on a purifier, {"hvac": "cool", "target": 23, "fanSpeed": "low"} on an air conditioner, {"input": "hdmi1"}, {"muted": true} or {"night": true} on a TV or soundbar, {"zoneSet": {"1": {"on": true, "open": 50}, "2": {"on": false}}} for the named zones of a ducted air conditioner. Only fields the device actually lists in its state can be set.',
     parameters: {
       type: 'object',
       properties: {
@@ -241,7 +241,23 @@ const AI_CAUSE: Cause = { kind: 'assistant', label: 'Ask Kova (AI)' };
 const MAX_ROUNDS = 6;
 
 /** Fields that are readings, not commands — never settable through `set`. */
-const READONLY = new Set(['power', 'energy', 'grid', 'load', 'temp', 'pm25', 'airQuality', 'filterLife', 'battery', 'online', 'track', 'fanLevelMax', 'zones', 'zoneSet']);
+const READONLY = new Set(['power', 'energy', 'grid', 'load', 'temp', 'pm25', 'airQuality', 'filterLife', 'battery', 'online', 'track', 'fanLevelMax', 'zones']);
+
+/** { "1": {on, open} } for ducted AC zones — the same shape cleanTarget accepts. */
+function cleanZoneSet(v: unknown): Command['zoneSet'] | undefined {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined;
+  const out: NonNullable<Command['zoneSet']> = {};
+  for (const [n, z] of Object.entries(v as Record<string, unknown>)) {
+    if (!/^[1-9]\d?$/.test(n) || !z || typeof z !== 'object') return undefined;
+    const zz = z as Record<string, unknown>;
+    const entry: { on?: boolean; open?: number } = {};
+    if (typeof zz.on === 'boolean') entry.on = zz.on;
+    if (typeof zz.open === 'number' && Number.isFinite(zz.open)) entry.open = Math.max(0, Math.min(100, Math.round(zz.open)));
+    if (!Object.keys(entry).length) return undefined;
+    out[n] = entry;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
 /** Closed lists for string fields. */
 const ENUMS: Record<string, readonly string[]> = {
   hvac: ['cool', 'heat', 'dry', 'fan', 'auto'],
@@ -263,7 +279,13 @@ export type LearnedStep =
   | { tool: 'create_automation'; automation: Omit<Automation, 'id'> };
 
 /** One request that reached an AI engine (or fell through the built-in parser). */
-export interface AiRequestLog { ts: number; engine: string; text: string; reply: string; tools: string[]; ok: boolean }
+export interface AiRequestLog {
+  ts: number; engine: string; text: string; reply: string; ok: boolean;
+  /** Tool names in order (kept for old entries). */
+  tools: string[];
+  /** Each call with its args and outcome — the detail needed to see why the AI struggled. */
+  calls?: { tool: string; args: unknown; ok: boolean; error?: string }[];
+}
 /** A learned phrase: normalized text → steps to replay locally. */
 export interface LearnedEntry { ts: number; engine: string; uses: number; steps: LearnedStep[] }
 
@@ -302,6 +324,8 @@ export class Toolbox {
   readonly undos: string[] = [];
   /** Tool names called, in order (for the request log). */
   readonly called: string[] = [];
+  /** Each call with args and outcome — enough to see why the AI struggled. */
+  readonly calls: { tool: string; args: unknown; ok: boolean; error?: string }[] = [];
   /** Mutating steps that succeeded — the learnable part of this ask. */
   readonly learned: LearnedStep[] = [];
   /** False once any tool reports ok:false — such sessions aren't learned. */
@@ -315,8 +339,20 @@ export class Toolbox {
 
   async run(name: string, input: unknown): Promise<string> {
     this.called.push(name);
+    // The same call failing again means the model is guessing — tell it to stop and explain.
+    const fails = this.calls.filter(c => c.tool === name && !c.ok).length;
+    if (fails >= 2) {
+      this.calls.push({ tool: name, args: input, ok: false, error: 'already failed twice' });
+      this.okAll = false;
+      return JSON.stringify({ ok: false, error: `This has failed ${fails} times. Don't try the same call again — tell the user what you can't do or what's missing instead.` });
+    }
     const out = await this.dispatch(name, input);
-    try { if (JSON.parse(out).ok === false) this.okAll = false; } catch { /* not json */ }
+    let ok = true, error: string | undefined;
+    try {
+      const r = JSON.parse(out) as { ok?: boolean; error?: string };
+      if (r.ok === false) { ok = false; error = r.error; this.okAll = false; }
+    } catch { /* not json */ }
+    this.calls.push({ tool: name, args: input, ok, ...(error ? { error: error.slice(0, 300) } : {}) });
     return out;
   }
 
@@ -345,12 +381,17 @@ export class Toolbox {
             if ((x.skip === 1 || x.skip === -1) && d.capabilities.includes('queue')) c.skip = x.skip;
             // Any other field the device exposes: FIELD_CAP knows which capability each needs, so
             // features work even where no screen or named parameter exists for them yet. Readings
-            // (power, battery, …) are never commands.
+            // (power, battery, …) are never commands. zoneSet is { "1": {on, open} } on ducted ACs.
             if (x.set && typeof x.set === 'object' && !Array.isArray(x.set)) {
               for (const [key, v] of Object.entries(x.set as Record<string, unknown>)) {
                 const cap = FIELD_CAP[key];
                 if (!cap || READONLY.has(key) || !d.capabilities.includes(cap)) continue;
                 if (ENUMS[key] && !(typeof v === 'string' && ENUMS[key]!.includes(v))) continue;
+                if (key === 'zoneSet') {
+                  const zs = cleanZoneSet(v);
+                  if (zs) c.zoneSet = zs;
+                  continue;
+                }
                 if (typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v)) || (typeof v === 'string' && v)) (c as Record<string, unknown>)[key] = v;
               }
             }
@@ -563,6 +604,7 @@ export class CloudAiEngine implements AiEngine {
 const SYSTEM = `You are Ask Kova, the assistant for a smart home hub. The hub's built-in parser couldn't handle this request, so it was passed to you.
 Use the tools to act: set_devices, start_overlay, end_overlay, explain_device, list_schedule, create_automation. Only use device, overlay, mode and person ids from the home context below; never invent ids.
 Anything asked to happen regularly, at a time, or when something else happens is an automation — build it with create_automation, then tell the user what it will do in the words the tool returns.
+Ducted air conditioner zones are numbered; a zone only has a name when the state lists one. If a request names rooms for a zoned AC and the zones are unnamed, ask which zone number is which room instead of guessing.
 If the request can't be done with these tools or the shared context, say so plainly instead of guessing. Reply in one or two short, friendly sentences of plain text, no markdown.`;
 
 export interface AiOptions {
@@ -612,7 +654,8 @@ export class AiAssistant {
       parts.can = d.capabilities.filter(c => c !== 'events' && c !== 'power');
       if (share.rooms) {
         const s = d.state;
-        parts.state = Object.fromEntries(Object.entries({ on: s.on, bri: s.bri, k: s.k, color: s.color, mode: s.mode, media: s.media, song: s.track ? `${s.track.title}${s.track.artist ? ` by ${s.track.artist}` : ''}` : undefined, shuffle: s.shuffle || undefined, paused: s.paused || undefined, vol: s.vol, hvac: s.hvac, target: s.target, temp: s.temp, fanSpeed: s.fanSpeed, fanLevel: s.fanLevel, fanLevelMax: s.fanLevelMax, airQuality: s.airQuality, pm25: s.pm25, filterLife: s.filterLife, display: s.display, childLock: s.childLock, battery: s.battery, activity: s.activity, online: s.online }).filter(([, v]) => v !== undefined && v !== null));
+        const zoneNames = cfg.devices?.[d.id]?.zoneNames;
+        parts.state = Object.fromEntries(Object.entries({ on: s.on, bri: s.bri, k: s.k, color: s.color, mode: s.mode, media: s.media, song: s.track ? `${s.track.title}${s.track.artist ? ` by ${s.track.artist}` : ''}` : undefined, shuffle: s.shuffle || undefined, paused: s.paused || undefined, vol: s.vol, hvac: s.hvac, target: s.target, temp: s.temp, fanSpeed: s.fanSpeed, fanLevel: s.fanLevel, fanLevelMax: s.fanLevelMax, airQuality: s.airQuality, pm25: s.pm25, filterLife: s.filterLife, display: s.display, childLock: s.childLock, battery: s.battery, activity: s.activity, zones: s.zones?.map(z => ({ zone: z.n, ...(zoneNames?.[String(z.n)] ? { name: zoneNames[String(z.n)] } : {}), on: z.on, open: z.open })), online: s.online }).filter(([, v]) => v !== undefined && v !== null));
       }
       return JSON.stringify(parts);
     });
@@ -650,7 +693,7 @@ export class AiAssistant {
 
   /** The engine for the current settings, or a reason it can't run. */
   engineFor(s: AssistantSettings): AiEngine | string {
-    const timeoutMs = this.opts.timeoutMs ?? 30_000;
+    const timeoutMs = this.opts.timeoutMs ?? 90_000;
     if (s.engine === 'local') {
       if (!s.local.url || !s.local.model) return 'Local AI isn’t set up yet. Add its address and model in Assistant settings.';
       return new LocalAiEngine({ url: s.local.url, model: s.local.model, apiKey: s.local.apiKey, timeoutMs });
@@ -722,9 +765,9 @@ export class AiAssistant {
   }
 
   /** Record the request that reached an AI engine (or, engine null, fell through with no AI). */
-  logRequest(engine: string, q: string, reply: string, tools: string[], ok: boolean): void {
+  logRequest(engine: string, q: string, reply: string, tools: string[], ok: boolean, calls?: Toolbox['calls']): void {
     const all = this.store.get<AiRequestLog[]>(REQUESTS_KEY) ?? [];
-    all.unshift({ ts: Date.now(), engine, text: q.slice(0, 500), reply: reply.slice(0, 300), tools, ok });
+    all.unshift({ ts: Date.now(), engine, text: q.slice(0, 500), reply: reply.slice(0, 300), tools, ok, ...(calls?.length ? { calls } : {}) });
     this.store.set(REQUESTS_KEY, all.slice(0, REQUESTS_CAP));
   }
 
@@ -756,11 +799,11 @@ export class AiAssistant {
       let text: string;
       try { text = stripThink((await e.run(system, q, tools)).text); } catch (err) {
         const out = err instanceof AiError ? err.message : `${e.label} failed: ${err instanceof Error ? err.message : String(err)}`;
-        this.logRequest(e.label, q, out, tools.called, false);
+        this.logRequest(e.label, q, out, tools.called, false, tools.calls);
         // Anything already done stays undoable.
         return { text: out, source, actions: [], understood: false, undo: this.undoFor(tools.undos) };
       }
-      this.logRequest(e.label, q, text, tools.called, true);
+      this.logRequest(e.label, q, text, tools.called, true, tools.calls);
       // A clean run that changed something becomes a learned phrase: next time it replays without the AI.
       // Undoing the AI's work drops the phrase — the user said it was wrong.
       const learnedSomething = tools.okAll && tools.learned.length > 0;
