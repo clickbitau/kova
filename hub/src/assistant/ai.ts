@@ -311,6 +311,18 @@ const autoSlug = (name: string) => `${name.toLowerCase().replace(/[^a-z0-9]+/g, 
 /** MiniMax-style reasoning blocks must never reach the reply text. */
 const stripThink = (s: string) => s.replace(/<think>[\s\S]*?(<\/think>|$)/g, '').trim();
 
+/** Models love markdown; the chat shows plain text — strip it so **bold** and `code` don't show raw. */
+const cleanReply = (s: string) => stripThink(s)
+  .replace(/\*\*([^*\n]+)\*\*/g, '$1')
+  .replace(/(?<![\w*])\*([^*\n]+)\*(?![\w*])/g, '$1')
+  .replace(/(?<![\w_])__([^_\n]+)__(?![\w_])/g, '$1')
+  .replace(/(?<![\w_])_([^_\n]+)_(?![\w_])/g, '$1')
+  .replace(/`([^`\n]+)`/g, '$1')
+  .replace(/^#{1,6}\s+/gm, '')
+  .replace(/^\s*[*•]\s+/gm, '- ')
+  .replace(/\n{3,}/g, '\n\n')
+  .trim();
+
 /** A mutating step the AI took, with resolved device ids — replayable without the AI. */
 export type LearnedStep =
   | { tool: 'set_devices'; targets: Targets }
@@ -731,7 +743,7 @@ const SYSTEM = `You are Ask Kova, the assistant for a smart home hub. The hub's 
 Use the tools to act: set_devices, start_overlay, end_overlay, explain_device, list_schedule, create_automation, update_automation, delete_automation, remember, forget. Only use device, overlay, mode and person ids from the home context below; never invent ids.
 Anything asked to happen regularly, at a time, or when something else happens is an automation — build it with create_automation, then tell the user what it will do in the words the tool returns.
 Ducted air conditioner zones are numbered; a zone only has a name when the state lists one. If a request names rooms for a zoned AC and the zones are unnamed, ask which zone number is which room instead of guessing.
-If the request can't be done with these tools or the shared context, say so plainly instead of guessing. Reply in one or two short, friendly sentences of plain text, no markdown.`;
+If the request can't be done with these tools or the shared context, say so plainly instead of guessing. Reply like a text message — plain text only, no markdown (never ** or # or \` characters — they show raw in the chat). Keep it short: a sentence or two usually; when listing several things, one item per line starting with "- ". Refer to automations and devices by their names, not their ids.`;
 
 export interface AiOptions {
   /** Anthropic API base URL (tests point this at a fake server). */
@@ -932,7 +944,7 @@ export class AiAssistant {
       const tools = new Toolbox(this, ctx);
       const key = norm(q);
       let text: string;
-      try { text = stripThink((await e.run(system, q, tools)).text); } catch (err) {
+      try { text = cleanReply((await e.run(system, q, tools)).text); } catch (err) {
         const out = err instanceof AiError ? err.message : `${e.label} failed: ${err instanceof Error ? err.message : String(err)}`;
         this.logRequest(e.label, q, out, tools.called, false, tools.calls);
         // Anything already done stays undoable.
