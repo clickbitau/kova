@@ -66,7 +66,7 @@ test('Local AI: tool call changes a device through the engine, logged, tagged an
   assert.equal(fake.received.length, 2);
   assert.equal(fake.received[0].url, '/v1/chat/completions');
   assert.equal(fake.received[0].body.model, 'llama3');
-  assert.deepEqual(fake.received[0].body.tools.map((t: any) => t.function.name), ['set_devices', 'start_overlay', 'end_overlay', 'explain_device', 'list_schedule', 'remember', 'forget', 'create_automation']);
+  assert.deepEqual(fake.received[0].body.tools.map((t: any) => t.function.name), ['set_devices', 'start_overlay', 'end_overlay', 'explain_device', 'list_schedule', 'remember', 'forget', 'create_automation', 'update_automation', 'delete_automation']);
   const toolMsg = fake.received[1].body.messages.find((m: any) => m.role === 'tool');
   assert.equal(toolMsg.tool_call_id, 'call_1');
   assert.equal(JSON.parse(toolMsg.content).ok, true);
@@ -175,7 +175,7 @@ test('Cloud AI: Anthropic Messages tool loop against a fake endpoint', async () 
   assert.equal(first.headers['x-api-key'], 'sk-ant-test');
   assert.equal(first.headers.authorization, undefined);
   assert.equal(first.body.model, 'claude-opus-5-5');
-  assert.deepEqual(first.body.tools.map((t: any) => t.name), ['set_devices', 'start_overlay', 'end_overlay', 'explain_device', 'list_schedule', 'remember', 'forget', 'create_automation']);
+  assert.deepEqual(first.body.tools.map((t: any) => t.name), ['set_devices', 'start_overlay', 'end_overlay', 'explain_device', 'list_schedule', 'remember', 'forget', 'create_automation', 'update_automation', 'delete_automation']);
   assert.ok(!('tool_choice' in first.body) || first.body.tool_choice.type === 'auto');
   const sys = JSON.stringify(first.body.system);
   for (const c of CAMERAS) assert.ok(!sys.includes(c), `camera ${c} was sent`);
@@ -328,6 +328,49 @@ test('AI creates a real, validated automation that shows in the engine and can b
   assert.ok(r.undo, 'an undo was offered');
   await app.inject({ method: 'POST', url: `/api/undo/${r.undo}` });
   assert.equal(hub.engine.automations.list().find(a => a.name === 'Porch off at eight'), undefined, 'undo removed it');
+  await app.close(); await hub.stop(); await fake.close();
+});
+
+test('AI updates and deletes an existing automation, both undoable', async () => {
+  const fake = await fakeServer([
+    openAiToolCall('update_automation', { id: 'a1', when: [{ kind: 'time', at: { kind: 'time', at: '07:00' } }] }),
+    openAiText('Moved it to 7.'),
+    openAiToolCall('delete_automation', { id: 'a1' }),
+    openAiText('Gone.'),
+  ]);
+  const { hub, app, put, ask } = await setup();
+  await put({ engine: 'local', local: { url: fake.url, model: 'm' } });
+  hub.config.update(c => {
+    c.automations = [{ id: 'a1', name: 'Porch off', enabled: true, triggers: [{ kind: 'time', at: { kind: 'time', at: '08:00' } }], conditions: [], actions: [{ kind: 'set', targets: { front_1: { on: false } } }], mode: 'single' }];
+  });
+
+  const r = await ask('change the porch off automation to 7am');
+  assert.match(r.text, /7/);
+  const a = hub.engine.automations.list().find(x => x.id === 'a1');
+  assert.equal((a!.triggers[0] as any).at.at, '07:00');
+  assert.ok(r.undo, 'update was undoable');
+
+  const r2 = await ask('delete the porch off automation');
+  assert.equal(hub.engine.automations.list().find(x => x.id === 'a1'), undefined);
+  assert.ok(r2.undo, 'delete was undoable');
+  await app.inject({ method: 'POST', url: `/api/undo/${r2.undo}` });
+  assert.ok(hub.engine.automations.list().find(x => x.id === 'a1'), 'undo restored it');
+  await app.close(); await hub.stop(); await fake.close();
+});
+
+test('Automation tools accept loose shapes — "HH:MM" rhythms, JSON-string lists', async () => {
+  const fake = await fakeServer([
+    openAiToolCall('create_automation', { name: 'Quiet hour', when: [{ kind: 'time', at: '21:00' }], if: [{ kind: 'time', after: 'sunset' }], then: JSON.stringify([{ kind: 'set', targets: { lamp: { on: false } } }]) }),
+    openAiText('Done.'),
+  ]);
+  const { hub, app, put, ask } = await setup();
+  await put({ engine: 'local', local: { url: fake.url, model: 'm' } });
+  await ask('turn the lamp off at 9pm');
+  const made = hub.engine.automations.list().find(a => a.name === 'Quiet hour');
+  assert.ok(made, 'automation saved');
+  assert.deepEqual(made.triggers[0], { kind: 'time', at: { kind: 'time', at: '21:00' } });
+  assert.deepEqual(made.conditions[0], { kind: 'time', after: { kind: 'sun', event: 'sunset' } });
+  assert.equal(made.actions[0]!.kind, 'set');
   await app.close(); await hub.stop(); await fake.close();
 });
 

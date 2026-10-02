@@ -16,6 +16,18 @@ export function validRhythm(r: unknown): r is Rhythm {
   return false;
 }
 
+/** A Rhythm given loosely — "21:00", "sunset", "isha", or the full object. */
+export function rhythm(r: unknown): Rhythm | undefined {
+  if (typeof r === 'string') {
+    const s = r.trim().toLowerCase();
+    if (/^([01]\d|2[0-3]):[0-5]\d$/.test(s)) return { kind: 'time', at: s };
+    if (SUN.includes(s)) return { kind: 'sun', event: s as 'sunrise' };
+    if (PRAYERS.includes(s)) return { kind: 'prayer', prayer: s as 'fajr' };
+    return undefined;
+  }
+  return validRhythm(r) ? r : undefined;
+}
+
 /** Clean a target so it only sets things the device can do, in range. Throws on nonsense. */
 export function cleanTarget(d: Device, cmd: Command): Command {
   const c = fitCommand(d, cmd);

@@ -224,10 +224,11 @@ export const TOOLS = [
   {
     name: 'create_automation',
     description: `Create a home automation: "when" (triggers) starts it, every "if" (condition) must hold, then "then" (actions) run in order. It is saved and runs on its own from then on — only use it when the user asks for something ongoing or scheduled, not for a one-off change (use set_devices). Shapes:
-when: {kind:'time', at:{kind:'time', at:'HH:MM'}, days?:[0-6, 0=Sunday, empty=every day]} | {kind:'time', at:{kind:'sun', event:'sunrise'|'sunset'|'dawn'|'dusk', offsetMin?:n}} | {kind:'device', device:id, to?:{on?, online?, mode?, hvac?, input?, playing?, muted?}, from?:{...}, forSec?:n} | {kind:'numeric', device:id, field:'temp|target|power|energy|battery|bri|vol|grid|load', above?:n, below?:n} | {kind:'event', device:id, event:string} | {kind:'every', minutes:n} | {kind:'presence', event:'arrives|leaves|first-arrives|last-leaves', person?:id} | {kind:'mode', mode:id} | {kind:'overlay', overlay:id, event:'starts|ends'} | {kind:'hub', event:'start'}
-if: {kind:'device', device:id, is:{on?...}} | {kind:'numeric', device:id, field, above?, below?} | {kind:'time', after?:rhythm, before?:rhythm, days?} | {kind:'presence', who:'anyone|no-one|person id', home:boolean} | {kind:'mode', modes:[id]} | {kind:'overlay', overlay?:id, active:boolean} | {kind:'all|any|not', conditions:[...]}
+when: {kind:'time', at:'HH:MM' or {kind:'time', at:'HH:MM'} or {kind:'sun', event:'sunrise|sunset|dawn|dusk', offsetMin?:n} or {kind:'prayer', prayer:'fajr|sunrise|dhuhr|asr|maghrib|isha'}, days?:[0-6, 0=Sunday, empty=every day]} | {kind:'device', device:id, to?:{on?, online?, mode?, hvac?, input?, playing?, muted?}, from?:{...}, forSec?:n} | {kind:'numeric', device:id, field:'temp|target|power|energy|battery|bri|vol|grid|load|humidity|lux', above?:n, below?:n} | {kind:'event', device:id, event:string} | {kind:'every', minutes:n} | {kind:'presence', event:'arrives|leaves|first-arrives|last-leaves', person?:id} | {kind:'mode', mode:id} | {kind:'overlay', overlay:id, event:'starts|ends'} | {kind:'hub', event:'start'}
+if: {kind:'device', device:id, is:{on?...}} | {kind:'numeric', device:id, field, above?, below?} | {kind:'time', after?/before?:'HH:MM' or a sun/prayer object as above, days?} | {kind:'presence', who:'anyone|no-one|person id', home:boolean} | {kind:'mode', modes:[id]} | {kind:'overlay', overlay?:id, active:boolean} | {kind:'all|any|not', conditions:[...]}
 then: {kind:'set', targets:{deviceId:{on:false, bri:50, ...same fields as set_devices + set}}} | {kind:'delay', seconds:n} | {kind:'wait', until:condition, timeoutSec?:n, stopOnTimeout?:bool} | {kind:'notify', message:string, title?:string, people?:[ids]} | {kind:'overlay', overlay:id, op:'start|end'} | {kind:'if', conditions:[...], then:[...], else?:[...]} | {kind:'repeat', times:n, actions:[...]} | {kind:'run', automation:id} | {kind:'stop'}
 runMode: what a second start does while it's still running — single (ignore), restart (start over), queued (run after), parallel (alongside). Default single.
+Prefer ONE automation per intent: several triggers plus if/else branches beat overlapping automations. Check the Automations list first — update_automation an existing one rather than adding another.
 Only use device, person, mode and overlay ids from the home context; never invent them.`,
     parameters: {
       type: 'object',
@@ -243,6 +244,29 @@ Only use device, person, mode and overlay ids from the home context; never inven
       required: ['name', 'when', 'then'],
     },
   },
+  {
+    name: 'update_automation',
+    description: `Change an existing automation (ids in the Automations list): rename, enable/disable, or replace its when/if/then — given parts replace those lists wholesale, omitted parts stay. Same shapes as create_automation. Prefer this over creating a second automation that overlaps an existing one.`,
+    parameters: {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+        name: { type: 'string' },
+        description: { type: 'string' },
+        when: { type: 'array', items: { type: 'object' } },
+        if: { type: 'array', items: { type: 'object' } },
+        then: { type: 'array', items: { type: 'object' } },
+        runMode: { type: 'string', enum: ['single', 'restart', 'queued', 'parallel'] },
+        enabled: { type: 'boolean' },
+      },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'delete_automation',
+    description: 'Delete an automation by id (from the Automations list). Only when the user asks, or it is a duplicate of one being created. When merging automations, create or update the surviving one FIRST and delete the other only after that returns ok.',
+    parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+  },
 ] as const;
 
 type ToolName = typeof TOOLS[number]['name'];
@@ -252,6 +276,12 @@ const MAX_ROUNDS = 6;
 
 /** Fields that are readings, not commands — never settable through `set`. */
 const READONLY = new Set(['power', 'energy', 'grid', 'load', 'temp', 'humidity', 'lux', 'pm25', 'airQuality', 'filterLife', 'battery', 'online', 'track', 'fanLevelMax', 'zones']);
+
+/** Models sometimes send a list argument as a JSON string — accept it. */
+const listArg = (v: unknown): unknown => {
+  if (typeof v !== 'string') return v;
+  try { return JSON.parse(v) as unknown; } catch { return v; }
+};
 
 /** { "1": {on, open} } for ducted AC zones — the same shape cleanTarget accepts. */
 function cleanZoneSet(v: unknown): Command['zoneSet'] | undefined {
@@ -488,7 +518,7 @@ export class Toolbox {
           try {
             const cfg = this.ai.config.get();
             const a = checkAutomation(
-              { name: args.name, description: args.description, triggers: args.when, conditions: args.if, actions: args.then, mode: args.runMode, enabled: args.enabled },
+              { name: args.name, description: args.description, triggers: listArg(args.when), conditions: listArg(args.if), actions: listArg(args.then), mode: args.runMode, enabled: args.enabled },
               { device: id => this.ai.reg.get(id), cfg });
             const id = autoSlug(a.name);
             const undo = this.ai.config.update(c => { (c.automations ??= []).push({ id, ...a }); });
@@ -501,6 +531,48 @@ export class Toolbox {
             const w = { reg: this.ai.reg, cfg };
             const tgt = (tid: string, cmd: object) => { const d = this.ai.reg.get(tid); return d ? targetLabel(d, cmd as Command) : tid; };
             return JSON.stringify({ ok: true, id, name: a.name, when: a.triggers.map(t => triggerWords(t, w)), if: a.conditions.map(c => condWords(c, w)), then: a.actions.map(x => actionWords(x, w, tgt)) });
+          } catch (e) { return JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e) }); }
+        }
+        case 'update_automation': {
+          try {
+            const cfg = this.ai.config.get();
+            const id = String(args.id ?? '');
+            const cur = (cfg.automations ?? []).find(a => a.id === id);
+            if (!cur) return JSON.stringify({ ok: false, error: `No automation ${id} — use an id from the Automations list` });
+            const a = checkAutomation(
+              {
+                name: args.name ?? cur.name, description: args.description ?? cur.description,
+                triggers: listArg(args.when) ?? cur.triggers, conditions: listArg(args.if) ?? cur.conditions,
+                actions: listArg(args.then) ?? cur.actions, mode: args.runMode ?? cur.mode, enabled: args.enabled ?? cur.enabled,
+              },
+              { device: did => this.ai.reg.get(did), cfg });
+            const undo = this.ai.config.update(c => {
+              const i = (c.automations ?? []).findIndex(x => x.id === id);
+              if (i >= 0) c.automations![i] = { ...c.automations![i]!, ...a };
+            });
+            this.undos.push(this.ai.engine.registerUndo(undo));
+            this.ai.store.append({
+              kind: 'system', device: null, feed: 'system', what: `Ask Kova changed the automation “${a.name}”`,
+              data: { automation: id }, cause: AI_CAUSE,
+            });
+            const w = { reg: this.ai.reg, cfg };
+            const tgt = (tid: string, cmd: object) => { const d = this.ai.reg.get(tid); return d ? targetLabel(d, cmd as Command) : tid; };
+            return JSON.stringify({ ok: true, id, name: a.name, when: a.triggers.map(t => triggerWords(t, w)), if: a.conditions.map(c => condWords(c, w)), then: a.actions.map(x => actionWords(x, w, tgt)) });
+          } catch (e) { return JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e) }); }
+        }
+        case 'delete_automation': {
+          try {
+            const cfg = this.ai.config.get();
+            const id = String(args.id ?? '');
+            const cur = (cfg.automations ?? []).find(a => a.id === id);
+            if (!cur) return JSON.stringify({ ok: false, error: `No automation ${id} — use an id from the Automations list` });
+            const undo = this.ai.config.update(c => { c.automations = (c.automations ?? []).filter(a => a.id !== id); });
+            this.undos.push(this.ai.engine.registerUndo(undo));
+            this.ai.store.append({
+              kind: 'system', device: null, feed: 'system', what: `Ask Kova removed the automation “${cur.name}”`,
+              data: { automation: id }, cause: AI_CAUSE,
+            });
+            return JSON.stringify({ ok: true, id, name: cur.name });
           } catch (e) { return JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e) }); }
         }
         default:
@@ -656,7 +728,7 @@ export class CloudAiEngine implements AiEngine {
 // -------------------------------------------------------------- assistant --
 
 const SYSTEM = `You are Ask Kova, the assistant for a smart home hub. The hub's built-in parser couldn't handle this request, so it was passed to you.
-Use the tools to act: set_devices, start_overlay, end_overlay, explain_device, list_schedule, create_automation, remember, forget. Only use device, overlay, mode and person ids from the home context below; never invent ids.
+Use the tools to act: set_devices, start_overlay, end_overlay, explain_device, list_schedule, create_automation, update_automation, delete_automation, remember, forget. Only use device, overlay, mode and person ids from the home context below; never invent ids.
 Anything asked to happen regularly, at a time, or when something else happens is an automation — build it with create_automation, then tell the user what it will do in the words the tool returns.
 Ducted air conditioner zones are numbered; a zone only has a name when the state lists one. If a request names rooms for a zoned AC and the zones are unnamed, ask which zone number is which room instead of guessing.
 If the request can't be done with these tools or the shared context, say so plainly instead of guessing. Reply in one or two short, friendly sentences of plain text, no markdown.`;
@@ -698,7 +770,11 @@ export class AiAssistant {
     const memory = memoryList(this.store);
     if (memory.length) lines.push(`Things the user asked you to remember: ${memory.map(m => `"${m.text}"`).join('; ')}.`);
     const autos = this.engine.automations.list();
-    if (autos.length) lines.push(`Automations: ${autos.map(a => `${a.id} (${a.name}${a.enabled ? '' : ', off'})`).join('; ')}.`);
+    if (autos.length) {
+      const w = { reg: this.reg, cfg };
+      const tgt = (tid: string, cmd: object) => { const d = this.reg.get(tid); return d ? targetLabel(d, cmd as Command) : tid; };
+      lines.push('Automations — change these with update_automation or delete_automation instead of adding overlapping ones:', ...autos.map(a => `- ${a.id} "${a.name}"${a.enabled ? '' : ' (off)'}: when ${a.triggers.map(t => triggerWords(t, w)).join(' or ') || 'nothing'}${a.conditions.length ? ` | if ${a.conditions.map(c => condWords(c, w)).join(' and ')}` : ''} | ${a.actions.map(x => actionWords(x, w, tgt)).join('; ') || 'nothing'}`));
+    }
 
     if (share.names) lines.push(`Rooms: ${cfg.rooms.map(r => `${r.id} (${r.name})`).join(', ')}.`);
     const devLines = devices.map((d, i) => {

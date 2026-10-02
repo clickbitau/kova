@@ -1,5 +1,5 @@
 import type { Action, Automation, Command, Condition, Device, HomeConfig, NumericField, RunMode, StateMatch, Trigger } from '../model/types.ts';
-import { cleanTarget, validRhythm } from './validate.ts';
+import { cleanTarget, rhythm } from './validate.ts';
 
 // Checks an automation someone made or edited, against the home it's for, and cleans it: only known fields,
 // numbers in range, devices that exist and can do what's asked. Throws with a message a person can act on.
@@ -71,9 +71,9 @@ export function checkTrigger(v: unknown, x: CheckCtx): Trigger {
       return { kind: 'event', device: device(x, t.device, 'the trigger'), event: (t.event as string).trim() };
     }
     case 'time': {
-      if (!validRhythm(t.at)) fail('That time isn’t valid');
+      const at = rhythm(t.at) ?? fail('That time isn’t valid — use "HH:MM", a sun event like "sunset", or a prayer like "isha"');
       const d = days(t.days);
-      return { kind: 'time', at: t.at as Trigger & { kind: 'time' } extends { at: infer R } ? R : never, ...(d ? { days: d } : {}) };
+      return { kind: 'time', at, ...(d ? { days: d } : {}) };
     }
     case 'every': {
       const m = numOrUndef(t.minutes, 'Every … minutes', 1, 1440);
@@ -107,11 +107,11 @@ export function checkCondition(v: unknown, x: CheckCtx, depth = 0): Condition {
     case 'device': return { kind: 'device', device: device(x, c.device, 'a condition'), is: stateMatch(c.is, 'A condition') };
     case 'numeric': return { kind: 'numeric', device: device(x, c.device, 'a condition'), field: field(c.field), ...range(c, 'A condition') };
     case 'time': {
-      if (c.after !== undefined && !validRhythm(c.after)) fail('The “after” time isn’t valid');
-      if (c.before !== undefined && !validRhythm(c.before)) fail('The “before” time isn’t valid');
+      const after = c.after === undefined ? undefined : (rhythm(c.after) ?? fail('The “after” time isn’t valid — use "HH:MM", a sun event like "sunset", or a prayer like "isha"'));
+      const before = c.before === undefined ? undefined : (rhythm(c.before) ?? fail('The “before” time isn’t valid — use "HH:MM", a sun event like "sunset", or a prayer like "isha"'));
       const d = days(c.days);
-      if (!c.after && !c.before && !d) fail('A time condition needs times or days');
-      return { kind: 'time', ...(c.after ? { after: c.after as never } : {}), ...(c.before ? { before: c.before as never } : {}), ...(d ? { days: d } : {}) };
+      if (!after && !before && !d) fail('A time condition needs times or days');
+      return { kind: 'time', ...(after ? { after } : {}), ...(before ? { before } : {}), ...(d ? { days: d } : {}) };
     }
     case 'presence': {
       const who = String(c.who ?? 'anyone');
