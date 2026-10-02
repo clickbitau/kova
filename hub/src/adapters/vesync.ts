@@ -64,6 +64,8 @@ export interface PurifierStatus {
   air_quality?: number;
   air_quality_value?: number;
   child_lock?: boolean;
+  device_error_code?: number;
+  configuration?: { display?: boolean; display_forever?: boolean; auto_preference?: { type?: string; room_size?: number } };
 }
 
 /** Fan speeds: Core 200S and 300S have 3, Core 400S and 600S have 4. */
@@ -80,6 +82,12 @@ export function statusToState(s: PurifierStatus, deviceType = ''): DeviceState {
   st.filterLife = n(s.filter_life);
   if (typeof s.display === 'boolean') st.display = s.display;
   if (typeof s.child_lock === 'boolean') st.childLock = s.child_lock;
+  const extras: Record<string, boolean | number | string> = {};
+  if (typeof s.device_error_code === 'number') extras.errorCode = s.device_error_code;
+  if (typeof s.configuration?.display_forever === 'boolean') extras.displayForever = s.configuration.display_forever;
+  const roomSize = s.configuration?.auto_preference?.room_size;
+  if (typeof roomSize === 'number' && roomSize > 0) extras.autoRoomSize = roomSize;
+  if (Object.keys(extras).length) st.extras = extras;
   return st;
 }
 
@@ -260,7 +268,7 @@ export class VeSyncAdapter implements Adapter {
         const id = cfg?.id ?? `vesync_${dev.cid.slice(-12).toLowerCase().replace(/[^a-z0-9]/g, '')}`;
         p = { id, dev, level: 1 };
         this.purifiers.set(dev.cid, p);
-        ctx.announce([{ id, name: dev.deviceName, room: cfg?.room ?? 'unassigned', type: 'fan', integration: `Levoit ${dev.deviceType}`, address: dev.cid, capabilities: ['onoff', 'fanMode', 'purifier'] }]);
+        ctx.announce([{ id, name: dev.deviceName, room: cfg?.room ?? 'unassigned', type: 'fan', integration: `Levoit ${dev.deviceType}`, address: dev.cid, capabilities: ['onoff', 'fanMode', 'purifier', 'extras'] }]);
       } else p.dev = dev;
     }
     await Promise.all([...this.purifiers.values()].map(async p => {

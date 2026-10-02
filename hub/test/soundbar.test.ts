@@ -82,7 +82,7 @@ test('Samsung soundbar through SmartThings: found on the account, read, and powe
     await reg.addAdapter(adapter);
     // Only the soundbar, in its room, with what it can do; its state read back (eARC/optical is "tv").
     const ids = reg.list().map(d => d.id);
-    assert.deepEqual(ids, ['soundbar_6f1c2d3eaaaa']);
+    assert.deepEqual(ids, ['soundbar_6f1c2d3eaaaa', 'smarttv_tvs90d']);
     const id = ids[0];
     const d = reg.get(id)!;
     assert.equal(d.room, 'lounge');
@@ -150,8 +150,8 @@ test('SmartThings sets and reads a Samsung TV’s source, for the Samsung TV ada
   try {
     await reg.addAdapter(adapter);
     // The TV isn't a Kova device of its own (the Samsung TV adapter has it): only the soundbar is.
-    assert.deepEqual(reg.list().map(d => d.id), ['soundbar_6f1c2d3eaaaa']);
-    assert.match(adapter.status().note!, /the source of 1 TV/);
+    assert.deepEqual(reg.list().map(d => d.id), ['soundbar_6f1c2d3eaaaa', 'smarttv_tvs90d']);
+    assert.match(adapter.status().note!, /1 soundbar, 1 TV/);
     // Found by its model (the Samsung network API says QA65S90DAWXXY), else by name, else the only TV.
     const s90d = { name: 'Samsung S90D', model: 'QA65S90DAWXXY' };
     assert.equal(adapter.hasTv(s90d), true);

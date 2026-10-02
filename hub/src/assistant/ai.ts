@@ -163,7 +163,7 @@ export function saveSettings(store: Store, patch: SettingsPatch): AssistantSetti
 export const TOOLS = [
   {
     name: 'set_devices',
-    description: 'Change one or more devices. Only use device ids from the home context. bri is brightness 1-100, k is colour temperature in Kelvin, color is #rrggbb, vol is volume 0-100. Turning a speaker or TV off also stops what it plays. paused pauses or carries on (devices with the pause capability). media on a device with the library capability is a film or show title to find and play there (a Helix box). On a speaker with the queue capability, media can also be Helix music: "Shuffle all", "Loved", a playlist title, or "Station: <artist, album or song>"; shuffle true plays it in a shuffled order; skip 1 is the next song, -1 the previous. Any other field a device shows in its state is set through "set" — e.g. {"childLock": true}, {"display": false} or {"mode": "Sleep"} on a purifier, {"hvac": "cool", "target": 23, "fanSpeed": "low"} on an air conditioner, {"input": "hdmi1"}, {"muted": true} or {"night": true} on a TV or soundbar, {"zoneSet": {"1": {"on": true, "open": 50}, "2": {"on": false}}} for the named zones of a ducted air conditioner, {"extras": {"eco": true}} for the extra switches a device lists under "extras". Only fields the device actually lists in its state can be set.',
+    description: 'Change one or more devices. Only use device ids from the home context. bri is brightness 1-100, k is colour temperature in Kelvin, color is #rrggbb, vol is volume 0-100. Turning a speaker or TV off also stops what it plays. paused pauses or carries on (devices with the pause capability). media on a device with the library capability is a film or show title to find and play there (a Helix box). On a speaker with the queue capability, media can also be Helix music: "Shuffle all", "Loved", a playlist title, or "Station: <artist, album or song>"; shuffle true plays it in a shuffled order; skip 1 is the next song, -1 the previous. media can also be a named playable source from the context (ambient loops, radio streams) — prefer those over a station when the name matches. Any other field a device shows in its state is set through "set" — e.g. {"childLock": true}, {"display": false} or {"mode": "Sleep"} on a purifier, {"hvac": "cool", "target": 23, "fanSpeed": "low"} on an air conditioner, {"input": "hdmi1"}, {"muted": true} or {"night": true} on a TV or soundbar, {"zoneSet": {"1": {"on": true, "open": 50}, "2": {"on": false}}} for the named zones of a ducted air conditioner, {"extras": {"eco": true}} for the extra switches a device lists under "extras". Only fields the device actually lists in its state can be set.',
     parameters: {
       type: 'object',
       properties: {
@@ -251,7 +251,7 @@ const AI_CAUSE: Cause = { kind: 'assistant', label: 'Ask Kova (AI)' };
 const MAX_ROUNDS = 6;
 
 /** Fields that are readings, not commands — never settable through `set`. */
-const READONLY = new Set(['power', 'energy', 'grid', 'load', 'temp', 'humidity', 'pm25', 'airQuality', 'filterLife', 'battery', 'online', 'track', 'fanLevelMax', 'zones']);
+const READONLY = new Set(['power', 'energy', 'grid', 'load', 'temp', 'humidity', 'lux', 'pm25', 'airQuality', 'filterLife', 'battery', 'online', 'track', 'fanLevelMax', 'zones']);
 
 /** { "1": {on, open} } for ducted AC zones — the same shape cleanTarget accepts. */
 function cleanZoneSet(v: unknown): Command['zoneSet'] | undefined {
@@ -711,7 +711,7 @@ export class AiAssistant {
       if (share.rooms) {
         const s = d.state;
         const zoneNames = cfg.devices?.[d.id]?.zoneNames;
-        parts.state = Object.fromEntries(Object.entries({ on: s.on, bri: s.bri, k: s.k, color: s.color, mode: s.mode, media: s.media, song: s.track ? `${s.track.title}${s.track.artist ? ` by ${s.track.artist}` : ''}` : undefined, shuffle: s.shuffle || undefined, paused: s.paused || undefined, vol: s.vol, hvac: s.hvac, target: s.target, temp: s.temp, humidity: s.humidity, fanSpeed: s.fanSpeed, extras: s.extras, fanLevel: s.fanLevel, fanLevelMax: s.fanLevelMax, airQuality: s.airQuality, pm25: s.pm25, filterLife: s.filterLife, display: s.display, childLock: s.childLock, battery: s.battery, activity: s.activity, zones: s.zones?.map(z => ({ zone: z.n, ...(zoneNames?.[String(z.n)] ? { name: zoneNames[String(z.n)] } : {}), on: z.on, open: z.open })), online: s.online }).filter(([, v]) => v !== undefined && v !== null));
+        parts.state = Object.fromEntries(Object.entries({ on: s.on, bri: s.bri, k: s.k, color: s.color, mode: s.mode, media: s.media, song: s.track ? `${s.track.title}${s.track.artist ? ` by ${s.track.artist}` : ''}` : undefined, shuffle: s.shuffle || undefined, paused: s.paused || undefined, vol: s.vol, hvac: s.hvac, target: s.target, temp: s.temp, humidity: s.humidity, lux: s.lux, fanSpeed: s.fanSpeed, extras: s.extras, fanLevel: s.fanLevel, fanLevelMax: s.fanLevelMax, airQuality: s.airQuality, pm25: s.pm25, filterLife: s.filterLife, display: s.display, childLock: s.childLock, battery: s.battery, activity: s.activity, zones: s.zones?.map(z => ({ zone: z.n, ...(zoneNames?.[String(z.n)] ? { name: zoneNames[String(z.n)] } : {}), on: z.on, open: z.open })), online: s.online }).filter(([, v]) => v !== undefined && v !== null));
       }
       return JSON.stringify(parts);
     });
@@ -719,6 +719,9 @@ export class AiAssistant {
     // Helix music speakers can play (playlist titles are names, so only when names are shared).
     const music = devices.some(d => d.capabilities.includes('queue')) ? (this.music?.() ?? []) : [];
     if (music.length) lines.push(`Helix music for speakers with the queue capability: ${(share.names ? music : music.filter(m => m.kind !== 'playlist')).map(m => `"${m.name}"`).join(', ')}, or "Station: <artist, album or song>".`);
+    // Named sources (ambient loops, radio streams): "play thunderstorm" means the source, not a music station.
+    const sources = cfg.sources ?? [];
+    if (share.names && sources.length) lines.push(`Playable sources — set media to the source name exactly (never "Station:" or Helix music for these): ${sources.map(s => `"${s.name}"${s.loop ? ' (loops)' : ''}`).join(', ')}.`);
     if (share.names) shared.push('device and room names');
     if (share.rooms) shared.push('device states');
 

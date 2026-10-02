@@ -61,6 +61,8 @@ export interface DeviceState {
   temp?: number | null;
   /** Room humidity % where the device senses it. */
   humidity?: number | null;
+  /** Light level in lux where a device senses it. */
+  lux?: number | null;
   fanSpeed?: FanSpeed | null;
   /** Air purifiers (the `purifier` capability): fan speed 1…fanLevelMax (setting one switches to manual), the air as the
    * purifier rates it (1 good … 4 very poor) and its PM2.5 reading, filter life left in %, and its display and child lock. */
@@ -242,7 +244,7 @@ export interface StateMatch {
 }
 
 /** A device reading a number can be compared on. */
-export type NumericField = 'temp' | 'target' | 'power' | 'energy' | 'battery' | 'bri' | 'vol' | 'grid' | 'load' | 'humidity';
+export type NumericField = 'temp' | 'target' | 'power' | 'energy' | 'battery' | 'bri' | 'vol' | 'grid' | 'load' | 'humidity' | 'lux';
 
 /** What starts an automation. Any one of an automation's triggers starts it. */
 export type Trigger =

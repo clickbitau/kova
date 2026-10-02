@@ -73,6 +73,40 @@ export function soundbarState(st: Status | undefined): DeviceState {
   if (mute === 'muted' || mute === 'unmuted') out.muted = mute === 'muted';
   const input = v('mediaInputSource', 'inputSource') ?? v('samsungvd.audioInputSource', 'inputSource');
   if (typeof input === 'string' && input) out.input = fromStInput(input);
+  const play = v('mediaPlayback', 'playbackStatus');
+  if (play === 'playing' || play === 'paused') out.paused = play === 'paused';
+  const td = v('audioTrackData', 'audioTrackData');
+  if (td && typeof td === 'object' && (td as { title?: unknown }).title) {
+    const t = td as { title?: string; artist?: string; album?: string };
+    out.track = { title: t.title!, ...(t.artist ? { artist: t.artist } : {}), ...(t.album ? { album: t.album } : {}) };
+  }
+  return out;
+}
+
+/** The state a Samsung TV's SmartThings status describes: switch, volume, mute, input and its extra modes. */
+export function tvState(st: Status | undefined, inputCap: string): DeviceState {
+  const v = (cap: string, attr: string) => st?.[cap]?.[attr]?.value;
+  const out: DeviceState = { online: true };
+  const sw = v('switch', 'switch');
+  if (sw === 'on' || sw === 'off') out.on = sw === 'on';
+  const vol = Number(v('audioVolume', 'volume'));
+  if (Number.isFinite(vol)) out.vol = vol;
+  const mute = v('audioMute', 'mute');
+  if (mute === 'muted' || mute === 'unmuted') out.muted = mute === 'muted';
+  const input = v(inputCap, 'inputSource');
+  if (typeof input === 'string' && input) out.input = fromTvSource(input);
+  const play = v('mediaPlayback', 'playbackStatus');
+  if (play === 'playing' || play === 'paused') out.paused = play === 'paused';
+  const watts = (v('powerConsumptionReport', 'powerConsumption') as { power?: unknown } | undefined)?.power;
+  if (typeof watts === 'number' && Number.isFinite(watts) && watts > 0) out.power = watts;
+  const extras: Record<string, string | number | boolean> = {};
+  const pic = v('samsungvd.pictureMode', 'pictureMode');
+  if (typeof pic === 'string' && pic) extras.pictureMode = pic;
+  const snd = v('samsungvd.soundMode', 'soundMode');
+  if (typeof snd === 'string' && snd) extras.soundMode = snd;
+  const ch = v('tvChannel', 'tvChannelName');
+  if (typeof ch === 'string' && ch) extras.channel = ch;
+  if (Object.keys(extras).length) out.extras = extras;
   return out;
 }
 
@@ -183,13 +217,40 @@ export async function exchangeSmartThingsCode(o: { code: string; clientId: strin
 }
 
 interface Bar { id: string; st: string; name: string; sound: string | null; night: boolean | null }
-/** A Samsung TV on the account. Kova's Samsung TV adapter owns the TV; SmartThings sets and reads its source. */
-interface StTv { st: string; label: string; model: string; caps: Set<string> }
+/** A Samsung TV on the account. Announced as its own device (it can be combined with the same TV on another adapter). */
+interface StTv { id: string; st: string; label: string; model: string; caps: Set<string> }
+/** A sensor the account exposes: the TV's light and sound (baby crying, dog barking) sensors and the like. */
+interface StSensor { id: string; st: string; detected: string | null }
 
 /** Is this SmartThings device a TV? */
 export function isTv(d: StDevice): boolean {
   const caps = new Set((d.components ?? []).find(c => c.id === 'main')?.capabilities?.map(c => c.id) ?? []);
   return d.ocf?.deviceType === 'oic.d.tv' || caps.has('samsungvd.mediaInputSource') || (caps.has('tvChannel') && caps.has('mediaInputSource'));
+}
+
+/** Is this a standalone sensor (a TV's light or sound sensor shows up as its own device)? */
+export function isSensor(d: StDevice): boolean {
+  const caps = new Set((d.components ?? []).find(c => c.id === 'main')?.capabilities?.map(c => c.id) ?? []);
+  return (caps.has('illuminanceMeasurement') || caps.has('soundDetection') || caps.has('samsungvd.soundDetection')) && !isTv(d) && !isSoundbar(d);
+}
+
+/** A soundbar's state from its SmartThings status: playback and the track it reports too. */
+function sensorState(st: Status | undefined): DeviceState {
+  const v = (cap: string, attr: string) => st?.[cap]?.[attr]?.value;
+  const out: DeviceState = { online: true };
+  const sw = v('switch', 'switch');
+  if (sw === 'on' || sw === 'off') out.on = sw === 'on';
+  const lux = Number(v('illuminanceMeasurement', 'illuminance'));
+  if (Number.isFinite(lux)) out.lux = lux;
+  const extras: Record<string, string | number | boolean> = {};
+  const bright = v('relativeBrightness', 'brightnessIntensity');
+  if (typeof bright === 'number' || typeof bright === 'string') extras.brightness = String(bright);
+  const detected = v('soundDetection', 'soundDetected') ?? v('samsungvd.soundDetection', 'soundDetected');
+  if (typeof detected === 'string') extras.detected = detected;
+  const det = v('soundDetection', 'soundDetectionState');
+  if (det === 'enabled' || det === 'disabled') extras.detection = det === 'enabled';
+  if (Object.keys(extras).length) out.extras = extras;
+  return out;
 }
 
 /** A TV source by Kova's name (hdmi1..hdmi4, tv) as the TV's own id, from the ids it lists. */
@@ -213,6 +274,7 @@ export class SmartThingsAdapter implements Adapter {
   private auth: SmartThingsAuth;
   private bars = new Map<string, Bar>();
   private tvs: StTv[] = [];
+  private sensors = new Map<string, StSensor>();
   private poller: NodeJS.Timeout | null = null;
   private error: string | null = null;
 
@@ -251,6 +313,7 @@ export class SmartThingsAdapter implements Adapter {
     const { items = [] } = await this.api<{ items?: StDevice[] }>('GET', '/devices');
     const want = this.o.devices?.length ? new Set(this.o.devices) : null;
     this.tvs = items.filter(isTv).map(d => ({
+      id: `smarttv_${d.deviceId.replace(/-/g, '').slice(0, 12).toLowerCase()}`,
       st: d.deviceId, label: d.label || d.name || '', model: (d.ocf?.modelNumber ?? '').split('|')[0],
       caps: new Set((d.components ?? []).find(c => c.id === 'main')?.capabilities?.map(c => c.id) ?? []),
     }));
@@ -259,6 +322,12 @@ export class SmartThingsAdapter implements Adapter {
     for (const d of found) {
       const id = this.kovaId(d);
       if (!this.bars.has(id)) this.bars.set(id, { id, st: d.deviceId, name: d.label || d.name || 'Soundbar', sound: null, night: null });
+    }
+    const newSensors = items.filter(isSensor).filter(d => !this.sensors.has(d.deviceId));
+    for (const d of items.filter(isSensor)) {
+      if (!this.sensors.has(d.deviceId)) {
+        this.sensors.set(d.deviceId, { id: `stsensor_${d.deviceId.replace(/-/g, '').slice(0, 12).toLowerCase()}`, st: d.deviceId, detected: null });
+      }
     }
     if (fresh.length) {
       this.ctx!.announce(fresh.map(d => {
@@ -270,7 +339,20 @@ export class SmartThingsAdapter implements Adapter {
         };
       }));
     }
-    this.error = found.length || this.tvs.length ? null : 'No soundbar or TV on this SmartThings account';
+    // TVs are full devices too: their modes and power readings don't fit anywhere else. The same TV on another
+    // adapter (cast, the Samsung TV remote) can be combined with it.
+    this.ctx!.announce(this.tvs.map(t => ({
+      id: t.id, name: t.label || 'Samsung TV', type: 'tv' as const, room: this.o.rooms?.[t.label] ?? 'unassigned',
+      integration: `Samsung SmartThings${t.model ? ` · ${t.model}` : ''}`, address: t.st,
+      capabilities: ['onoff', 'volume', 'mute', 'input', 'power', 'extras'],
+    })));
+    this.ctx!.announce(newSensors.map(d => ({
+      id: this.sensors.get(d.deviceId)!.id, name: d.label || d.name || 'Sensor', type: 'sensor' as const,
+      room: this.o.rooms?.[d.label ?? ''] ?? 'unassigned',
+      integration: `Samsung SmartThings${d.ocf?.modelNumber ? ` · ${d.ocf.modelNumber.split('|')[0]}` : ''}`, address: d.deviceId,
+      capabilities: ['events', 'onoff', 'extras'],
+    })));
+    this.error = found.length || this.tvs.length || this.sensors.size ? null : 'No soundbar or TV on this SmartThings account';
   }
 
   private kovaId(d: StDevice): string {
@@ -286,16 +368,46 @@ export class SmartThingsAdapter implements Adapter {
     return s;
   }
 
+  private async mainStatus(d: { st: string }): Promise<Status | undefined> {
+    const st = await this.api<{ components?: Record<string, Status> }>('GET', `/devices/${encodeURIComponent(d.st)}/status`);
+    return st.components?.main;
+  }
+
   private async poll(): Promise<void> {
     let failed = 0;
-    await Promise.all([...this.bars.values()].map(async b => {
-      try { this.ctx!.report(b.id, await this.read(b)); }
-      catch (e) { failed++; if ((e as SmartThingsError).status === 401) this.error = (e as Error).message; else this.ctx!.report(b.id, { online: false }); }
-    }));
-    if (!failed && this.bars.size) this.error = null;
+    await Promise.all([
+      ...[...this.bars.values()].map(async b => {
+        try { this.ctx!.report(b.id, await this.read(b)); }
+        catch (e) { failed++; if ((e as SmartThingsError).status === 401) this.error = (e as Error).message; else this.ctx!.report(b.id, { online: false }); }
+      }),
+      ...this.tvs.map(async t => {
+        try { this.ctx!.report(t.id, tvState(await this.mainStatus(t), this.tvCap(t))); }
+        catch (e) { failed++; if ((e as SmartThingsError).status === 401) this.error = (e as Error).message; else this.ctx!.report(t.id, { online: false }); }
+      }),
+      ...[...this.sensors.values()].map(async s => {
+        try {
+          const st = sensorState(await this.mainStatus(s));
+          const detected = typeof st.extras?.detected === 'string' ? st.extras.detected : null;
+          // A real sound (not "noSound") is a device event automations can trigger on.
+          if (detected && detected !== 'noSound' && detected !== s.detected) {
+            this.ctx!.event(s.id, detected, { title: detected === 'babyCrying' ? 'Baby crying heard' : detected === 'dogBarking' ? 'Dog barking heard' : `${detected} heard` });
+          }
+          if (detected) s.detected = detected;
+          this.ctx!.report(s.id, st);
+        } catch (e) { failed++; if ((e as SmartThingsError).status === 401) this.error = (e as Error).message; else this.ctx!.report(s.id, { online: false }); }
+      }),
+    ]);
+    if (!failed && (this.bars.size || this.tvs.length || this.sensors.size)) this.error = null;
   }
 
   async command(d: Device, cmd: Command): Promise<void | DeviceState> {
+    const tv = this.tvs.find(t => t.id === d.id);
+    if (tv) return this.tvCommand(tv, cmd);
+    const sensor = this.sensors.get(d.address);
+    if (sensor) {
+      if (cmd.on !== undefined) await this.api('POST', `/devices/${encodeURIComponent(sensor.st)}/commands`, { commands: [{ component: 'main', capability: 'switch', command: cmd.on ? 'on' : 'off' }] });
+      return;
+    }
     const b = this.bars.get(d.id);
     if (!b) throw new Error(`Unknown soundbar ${d.name}`);
     const commands: { component: 'main'; capability: string; command: string; arguments?: unknown[] }[] = [];
@@ -368,10 +480,27 @@ export class SmartThingsAdapter implements Adapter {
     return true;
   }
 
+  /** Command a Samsung TV directly: switch, source, volume, mute, and its picture/sound modes as extras. */
+  private async tvCommand(t: StTv, cmd: Command): Promise<void | DeviceState> {
+    const commands: { component: 'main'; capability: string; command: string; arguments?: unknown[] }[] = [];
+    const c = (capability: string, command: string, args?: unknown[]) => commands.push({ component: 'main', capability, command, ...(args ? { arguments: args } : {}) });
+    if (cmd.on === true) c('switch', 'on');
+    if (cmd.input) c(this.tvCap(t), 'setInputSource', [toTvSource(cmd.input, (await this.tvStatus(t).catch(() => ({ supported: [] as string[] }))).supported)]);
+    if (cmd.vol != null) c('audioVolume', 'setVolume', [Math.max(0, Math.min(100, Math.round(cmd.vol)))]);
+    if (cmd.muted !== undefined) c('audioMute', cmd.muted ? 'mute' : 'unmute');
+    const pic = cmd.extras?.pictureMode;
+    if (typeof pic === 'string' && pic && t.caps.has('samsungvd.pictureMode')) c('samsungvd.pictureMode', 'setPictureMode', [pic]);
+    const snd = cmd.extras?.soundMode;
+    if (typeof snd === 'string' && snd && t.caps.has('samsungvd.soundMode')) c('samsungvd.soundMode', 'setSoundMode', [snd]);
+    if (cmd.on === false) c('switch', 'off');
+    if (!commands.length) return;
+    await this.api('POST', `/devices/${encodeURIComponent(t.st)}/commands`, { commands });
+  }
+
   status(): AdapterStatus {
     if (this.error) return { ok: false, note: this.error };
     const n = this.bars.size;
-    const parts = [n && `${n} soundbar${n === 1 ? '' : 's'}`, this.tvs.length && `the source of ${this.tvs.length} TV${this.tvs.length === 1 ? '' : 's'}`].filter(Boolean);
-    return { ok: n > 0 || this.tvs.length > 0, note: parts.length ? parts.join(', ') : 'Looking for soundbars and TVs…' };
+    const parts = [n && `${n} soundbar${n === 1 ? '' : 's'}`, this.tvs.length && `${this.tvs.length} TV${this.tvs.length === 1 ? '' : 's'}`, this.sensors.size && `${this.sensors.size} sensor${this.sensors.size === 1 ? '' : 's'}`].filter(Boolean);
+    return { ok: n > 0 || this.tvs.length > 0 || this.sensors.size > 0, note: parts.length ? parts.join(', ') : 'Looking for soundbars and TVs…' };
   }
 }

@@ -82,7 +82,7 @@ test('VeSync: logs in, lists purifiers, reports status, and sends power and mode
     assert.equal(d.integration, 'Levoit Core300S');
     const pick = (st: { on?: boolean; mode?: string | null; online?: boolean }) => ({ on: st.on, mode: st.mode, online: st.online });
     assert.deepEqual(pick(d.state), { on: false, mode: 'Auto', online: true });
-    assert.deepEqual(d.capabilities, ['onoff', 'fanMode', 'purifier']);
+    assert.deepEqual(d.capabilities, ['onoff', 'fanMode', 'purifier', 'extras']);
     assert.equal(d.state.fanLevelMax, 3, 'a Core 300S has three speeds');
     const off = list.find(x => x.id !== 'bedroom_purifier')!;
     assert.equal(off.state.online, false);

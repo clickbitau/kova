@@ -319,6 +319,24 @@ export class EcovacsClient {
   getCleanInfo(dev: EcovacsDevice) { return this.command<CleanInfo>(dev, 'getCleanInfo_V2'); }
   getChargeState(dev: EcovacsDevice) { return this.command<{ isCharging?: number }>(dev, 'getChargeState'); }
   getBattery(dev: EcovacsDevice) { return this.command<{ value?: number; isLow?: number }>(dev, 'getBattery'); }
+  /** Consumable wear: main/side brush, filter, mop — percent life left per part. */
+  getLifeSpan(dev: EcovacsDevice) { return this.command<{ type?: string; left?: number; total?: number }[]>(dev, 'getLifeSpan', { type: ['brush', 'sideBrush', 'heap', 'unitCare', 'roundMop'] }); }
+  getSpeed(dev: EcovacsDevice) { return this.command<{ speed?: number | string }>(dev, 'getSpeed'); }
+  getWaterInfo(dev: EcovacsDevice) { return this.command<{ amount?: number; enable?: number; sweepType?: number }>(dev, 'getWaterInfo'); }
+}
+
+/** Extra readings a bot reports → the extras dict (best effort: models differ in what they answer). */
+export function botExtras(life: { type?: string; left?: number; total?: number }[] | null, speed: { speed?: number | string } | null, water: { amount?: number; enable?: number } | null): Record<string, string | number | boolean> | undefined {
+  const out: Record<string, string | number | boolean> = {};
+  const names: Record<string, string> = { brush: 'brushLife', sideBrush: 'sideBrushLife', heap: 'filterLife', dust_case_heap: 'filterLife', unitCare: 'unitCareLife', roundMop: 'mopLife' };
+  for (const p of Array.isArray(life) ? life : []) {
+    const k = names[p.type ?? ''] ?? p.type;
+    if (k && typeof p.left === 'number') out[k] = p.left;
+  }
+  if (speed?.speed != null) out.suction = String(speed.speed);
+  if (water?.amount != null) out.waterFlow = water.amount;
+  if (water?.enable != null) out.mopping = !!water.enable;
+  return Object.keys(out).length ? out : undefined;
 }
 
 export interface EcovacsOptions {
@@ -410,7 +428,7 @@ export class EcovacsAdapter implements Adapter {
         const id = this.opts.ids?.[name] ?? `ecovacs_${dev.did.slice(-12).toLowerCase().replace(/[^a-z0-9]/g, '')}`;
         b = { id, dev, offline: false };
         this.bots.set(dev.did, b);
-        ctx.announce([{ id, name, room: this.opts.rooms?.[name] ?? 'unassigned', type: 'vacuum', integration: `Ecovacs ${dev.deviceName ?? 'DEEBOT'}`, address: dev.did, capabilities: ['onoff', 'vacuum', 'battery'] }]);
+        ctx.announce([{ id, name, room: this.opts.rooms?.[name] ?? 'unassigned', type: 'vacuum', integration: `Ecovacs ${dev.deviceName ?? 'DEEBOT'}`, address: dev.did, capabilities: ['onoff', 'vacuum', 'battery', 'extras'] }]);
       } else b.dev = dev;
     }
     await Promise.all([...this.bots.values()].map(b => this.refresh(b)));
@@ -420,14 +438,20 @@ export class EcovacsAdapter implements Adapter {
     const ctx = this.ctx!;
     if (b.dev.status === 0) { b.offline = true; ctx.report(b.id, { online: false }); return; }
     try {
-      const [clean, charge, battery] = await Promise.all([
+      const [clean, charge, battery, life, speed, water] = await Promise.all([
         this.client.getCleanInfo(b.dev),
         this.client.getChargeState(b.dev).catch(() => null),
         this.client.getBattery(b.dev).catch(() => null),
+        this.client.getLifeSpan(b.dev).catch(() => null),
+        this.client.getSpeed(b.dev).catch(() => null),
+        this.client.getWaterInfo(b.dev).catch(() => null),
       ]);
       b.activity = toActivity(clean, charge ? !!charge.isCharging : null);
       b.offline = false;
-      ctx.report(b.id, activityToState(b.activity, battery?.value));
+      const st = activityToState(b.activity, battery?.value);
+      const extras = botExtras(life, speed, water);
+      if (extras) st.extras = extras;
+      ctx.report(b.id, st);
     } catch (err) {
       b.offline = true;
       ctx.report(b.id, { online: false });

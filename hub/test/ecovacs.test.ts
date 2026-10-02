@@ -139,7 +139,7 @@ test('Ecovacs: logs in, lists vacuums, and reports activity and battery', async 
     assert.equal(d.name, 'Deebot');
     assert.equal(d.room, 'living_room');
     assert.equal(d.integration, 'Ecovacs DEEBOT T50 OMNI');
-    assert.deepEqual(d.capabilities, ['onoff', 'vacuum', 'battery']);
+    assert.deepEqual(d.capabilities, ['onoff', 'vacuum', 'battery', 'extras']);
     assert.deepEqual(d.state, { on: false, activity: 'docked', battery: 100, online: true });
     const up = reg.get('ecovacs_ne0000000002')!;
     assert.equal(up.state.online, false, 'status 0 in the device list = offline');
