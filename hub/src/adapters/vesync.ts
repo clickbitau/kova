@@ -249,7 +249,8 @@ export class VeSyncAdapter implements Adapter {
     this.ctx = ctx;
     await this.poll();
     // VeSync's daily quota is ~3200 + 1500/device API calls — every poll is one call per purifier.
-    const every = this.opts.pollMs ?? 60_000;
+    // Because the quota scales with devices, a flat 2 min stays inside half the quota at any count.
+    const every = this.opts.pollMs ?? 120_000;
     if (every > 0) this.poller = setInterval(() => void this.poll(), every);
   }
 

@@ -371,6 +371,7 @@ export class EcovacsAdapter implements Adapter {
   private client: EcovacsClient;
   private bots = new Map<string, Bot>();
   private poller: NodeJS.Timeout | null = null;
+  private pollCount = 0;
   private timers = new Set<NodeJS.Timeout>();
   private error: string | null = null;
   /** Wrong email/password: stop retrying (repeated failures can lock the account) until restart. */
@@ -387,7 +388,9 @@ export class EcovacsAdapter implements Adapter {
   async start(ctx: AdapterContext): Promise<void> {
     this.ctx = ctx;
     await this.poll();
-    const every = this.opts.pollMs ?? 60_000;
+    // Three API calls per bot per poll (more for wear stats, see refresh) — stretch the interval with
+    // the bot count so a day stays in the low thousands at any fleet size.
+    const every = Math.max(this.opts.pollMs ?? 120_000, this.bots.size * 60_000);
     if (every > 0) this.poller = setInterval(() => void this.poll(), every);
   }
 
@@ -438,13 +441,15 @@ export class EcovacsAdapter implements Adapter {
     const ctx = this.ctx!;
     if (b.dev.status === 0) { b.offline = true; ctx.report(b.id, { online: false }); return; }
     try {
+      // Brush/filter/mop life and suction change over days — ask for them every 20th poll, not every one.
+      const slow = this.pollCount++ % 20 === 0;
       const [clean, charge, battery, life, speed, water] = await Promise.all([
         this.client.getCleanInfo(b.dev),
         this.client.getChargeState(b.dev).catch(() => null),
         this.client.getBattery(b.dev).catch(() => null),
-        this.client.getLifeSpan(b.dev).catch(() => null),
-        this.client.getSpeed(b.dev).catch(() => null),
-        this.client.getWaterInfo(b.dev).catch(() => null),
+        slow ? this.client.getLifeSpan(b.dev).catch(() => null) : null,
+        slow ? this.client.getSpeed(b.dev).catch(() => null) : null,
+        slow ? this.client.getWaterInfo(b.dev).catch(() => null) : null,
       ]);
       b.activity = toActivity(clean, charge ? !!charge.isCharging : null);
       b.offline = false;
