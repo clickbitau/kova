@@ -1412,9 +1412,10 @@ class Component extends DCLogic {
       presence:()=>({kind:'presence',who:'anyone',home:true}),mode:()=>({kind:'mode',modes:[(modes[0]||{}).id]}),overlay:()=>({kind:'overlay',active:true}),any:()=>({kind:'any',conditions:[NEW_C.device()]}),all:()=>({kind:'all',conditions:[NEW_C.device()]}),not:()=>({kind:'not',conditions:[NEW_C.device()]})};
     const C_KINDS=[['device','A device is'],['numeric','A reading is above or below'],['time','The time or day'],['presence','Who’s home'],['mode','The mode'],['overlay','An overlay'],['any','Any of these'],['all','All of these'],['not','None of these']];
     const NEW_A={set:()=>({kind:'set',targets:firstAct?{[firstAct]:JSON.parse((actionOptions(devs[firstAct],H.sources)[0]||['{"on":true}'])[0])}:{}}),delay:()=>({kind:'delay',seconds:300}),
+      ramp:()=>({kind:'ramp',targets:firstAct?{[firstAct]:{}}:{},field:'bri',to:100,overSec:3600}),
       wait:()=>({kind:'wait',until:NEW_C.device(),timeoutSec:600}),notify:()=>({kind:'notify',message:''}),overlay:()=>({kind:'overlay',overlay:(overlays[0]||{}).id,op:'start'}),
       if:()=>({kind:'if',conditions:[NEW_C.device()],then:[],else:[]}),repeat:()=>({kind:'repeat',times:2,actions:[]}),run:()=>({kind:'run',automation:((H.automations||[]).find(x=>x.id!==E.id)||{}).id}),stop:()=>({kind:'stop'})};
-    const A_KINDS=[['set','Set devices'],['delay','Wait a while'],['wait','Wait until something is true'],['notify','Send a notification'],['overlay','Start or end an overlay'],['if','If … otherwise …'],['repeat','Repeat'],['run','Run another automation'],['stop','Stop here']];
+    const A_KINDS=[['set','Set devices'],['delay','Wait a while'],['wait','Wait until something is true'],['notify','Send a notification'],['overlay','Start or end an overlay'],['if','If … otherwise …'],['repeat','Repeat'],['ramp','Ease a value over time'],['run','Run another automation'],['stop','Stop here']];
     const rows=[];
     const row=(depth,tag,kinds,kind,path,fields,newOf,extra={})=>rows.push({isRow:true,pad:(depth*22)+'px',tag,kindOptions:opts(kinds),kind,setKind:e=>setAt(path,newOf[e.target.value]()),fields,
       remove:()=>delAt(path),up:()=>moveAt(path,-1),down:()=>moveAt(path,1),...extra});
@@ -1463,11 +1464,15 @@ class Component extends DCLogic {
       case 'notify':return[F.text('Title',a.title,v=>set('title',v||undefined),'Optional'),F.text('Message',a.message,v=>set('message',v),'What it says'),
         F.chips('To',[{label:'Everyone',bg:!(a.people||[]).length?'#f2b14c':'#2a2b2f',fg:!(a.people||[]).length?'#1a1408':'#f1efea',toggle:()=>set('people',undefined)},...people.map(pp=>{const on=(a.people||[]).includes(pp.id);return{label:pp.name,bg:on?'#f2b14c':'#2a2b2f',fg:on?'#1a1408':'#f1efea',toggle:()=>set('people',on?a.people.filter(x=>x!==pp.id):[...(a.people||[]),pp.id])}})])];
       case 'overlay':return[F.sel('',a.op,opts([['start','Start'],['end','End']]),v=>set('op',v)),F.sel('Overlay',a.overlay,overlays.map(o=>({v:o.id,label:o.name})),v=>set('overlay',v),1)];
+      case 'ramp':{const u=a.overSec%3600===0&&a.overSec>=3600?'h':a.overSec%60===0&&a.overSec>=60?'min':'s';const n=u==='h'?a.overSec/3600:u==='min'?a.overSec/60:a.overSec;
+        return[F.sel('Ease',a.field,opts([['bri','brightness'],['vol','volume'],['target','set temperature']]),v=>set('field',v)),
+          F.num('From',a.from,v=>set('from',v||undefined)),F.num('To',a.to,v=>set('to',v)),
+          F.num('Over',n,v=>set('overSec',Math.round((v||0)*(u==='h'?3600:u==='min'?60:1)))),F.sel('',u,opts([['s','seconds'],['min','minutes'],['h','hours']]),v=>set('overSec',Math.round(n*(v==='h'?3600:v==='min'?60:1))))]}
       case 'repeat':return[F.num('Times',a.times,v=>set('times',v))];
       case 'run':return[F.sel('Automation',a.automation,(H.automations||[]).filter(x=>x.id!==E.id).map(x=>({v:x.id,label:x.name})),v=>set('automation',v),1)];
       default:return[]}};
     const actRows=(list,p,depth)=>{list.forEach((a,i)=>{const pp=[...p,i];row(depth,'',A_KINDS,a.kind,pp,actFields(a,pp),NEW_A);
-      if(a.kind==='set')targetRows(a,pp,depth);
+      if(a.kind==='set'||a.kind==='ramp')targetRows(a,pp,depth);
       if(a.kind==='wait'&&a.until){head(depth+1,'Until');condRow(a.until,[...pp,'until'],depth+1,'',{canRemove:false})}
       if(a.kind==='if'){head(depth+1,'If');condRows(a.conditions||[],[...pp,'conditions'],depth+1);add(depth+1,'+ Add a condition',()=>pushAt([...pp,'conditions'],NEW_C.device()));
         head(depth+1,'Then');actRows(a.then||[],[...pp,'then'],depth+1);add(depth+1,'+ Add a step',()=>pushAt([...pp,'then'],NEW_A.set()));

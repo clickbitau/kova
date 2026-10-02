@@ -167,6 +167,38 @@ test('people, modes and overlays start automations; “last one out” and “fi
   } finally { await h.close(); }
 });
 
+test('steps: ramp eases a value toward a target over time', async () => {
+  const h = await setup();
+  try {
+    h.virtual.physical('lamp', { on: true, bri: 10 });
+    await settle();
+    const id = await h.add({
+      name: 'Evening rise',
+      triggers: [{ kind: 'event', device: 'doorbell', event: 'ring' }],
+      actions: [{ kind: 'ramp', targets: { lamp: {} }, field: 'bri', from: 10, to: 100, overSec: 300, stepSec: 60 }],
+    });
+    h.hub.reg.deviceEvent('doorbell', 'ring');
+    await settle();
+    assert.equal(h.dev('lamp').bri, 28, 'first of five steps');
+    await h.later(60);
+    assert.equal(h.dev('lamp').bri, 46);
+    for (let i = 0; i < 3; i++) await h.later(60);
+    assert.equal(h.dev('lamp').bri, 100, 'fully ramped');
+    assert.match(h.runs(id)[0]!.steps[0]!.text, /Ramp brightness to 100 over 5 min/);
+
+    // No "from": starts at the light's current value.
+    h.virtual.physical('lamp', { bri: 20 });
+    await settle();
+    await h.add({ name: 'Dip', triggers: [{ kind: 'event', device: 'doorbell', event: 'ring' }], actions: [{ kind: 'ramp', targets: { lamp: {} }, field: 'bri', to: 50, overSec: 120, stepSec: 60 }] });
+    h.hub.reg.deviceEvent('doorbell', 'ring');
+    await settle();
+    assert.equal(h.dev('lamp').bri, 35, 'starts from current when from is absent');
+    await h.later(60);
+    assert.equal(h.dev('lamp').bri, 50);
+    for (let i = 0; i < 6; i++) await h.later(60); // let the re-triggered ramp finish
+  } finally { await h.close(); }
+});
+
 test('steps: wait, wait until (or give up), if / otherwise, repeat, run another, stop', async () => {
   const h = await setup();
   try {

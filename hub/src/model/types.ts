@@ -291,6 +291,9 @@ export type Action =
   | { kind: 'overlay'; overlay: string; op: 'start' | 'end' }
   | { kind: 'if'; conditions: Condition[]; then: Action[]; else?: Action[] }
   | { kind: 'repeat'; times: number; actions: Action[] }
+  /** Ease a numeric field (brightness, volume, set temperature) toward `to` over `overSec` seconds,
+   *  stepping every `stepSec` (default 60). `from` defaults to the first target's current value. */
+  | { kind: 'ramp'; targets: Targets; field: NumericField; to: number; from?: number; overSec: number; stepSec?: number }
   /** Run another automation's actions (its triggers and conditions are skipped). */
   | { kind: 'run'; automation: string }
   /** Stop here. */

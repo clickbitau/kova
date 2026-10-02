@@ -13,6 +13,8 @@ export interface CheckCtx {
 }
 
 const FIELDS: NumericField[] = ['temp', 'target', 'power', 'energy', 'battery', 'bri', 'vol', 'grid', 'load', 'humidity', 'lux'];
+/** Readings a ramp can ease between values. */
+const RAMPABLE: NumericField[] = ['bri', 'vol', 'target'];
 const DEVICE_TYPES = ['light', 'dimmer', 'fan', 'media', 'tv', 'plug', 'camera', 'sensor', 'vacuum', 'internet', 'climate'];
 const MODES: RunMode[] = ['single', 'restart', 'queued', 'parallel'];
 const HVAC = ['cool', 'heat', 'dry', 'fan', 'auto'];
@@ -139,35 +141,47 @@ export function checkCondition(v: unknown, x: CheckCtx, depth = 0): Condition {
   }
 }
 
+function checkTargets(t: Record<string, unknown>, x: CheckCtx, extra?: Record<string, unknown>): Record<string, Command> {
+  const out: Record<string, Command> = {};
+  for (const [id, cmd] of Object.entries(t)) {
+    let c = obj(cmd, `What ${id} should do`);
+    // The assistant tool spells extra fields as { set: {...} } — unwrap it here too.
+    if (c.set && typeof c.set === 'object' && !Array.isArray(c.set)) { const { set, ...rest } = c; c = { ...rest, ...(set as Record<string, unknown>) }; }
+    if (extra) c = { ...c, ...extra };
+    // "type:light" / "room:lounge" — every matching device, now and later; each device keeps only what it can do at run time.
+    const pm = PSEUDO_TARGET.exec(id);
+    if (pm) {
+      if (pm[1] === 'room' ? !x.cfg.rooms.some(r => r.id === pm[2]) : !DEVICE_TYPES.includes(pm[2]!)) fail(`Unknown ${pm[1]} target ${id}`);
+      const cleaned: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(c)) {
+        if (!FIELD_CAP[k]) fail(`${k} isn’t something devices can do`);
+        cleaned[k] = v;
+      }
+      out[id] = cleaned as Command;
+      continue;
+    }
+    const d = x.device(id) ?? fail(`Unknown device ${id}`);
+    out[id] = cleanTarget(d, c as Command);
+  }
+  if (!Object.keys(out).length) fail('Choose at least one device to set');
+  return out;
+}
+
 export function checkAction(v: unknown, x: CheckCtx, depth = 0): Action {
   if (depth > MAX_DEPTH) fail('Steps are nested too deep');
   const a = obj(v, 'A step');
   const steps = (w: unknown, what: string) => list(w, what).map(k => checkAction(k, x, depth + 1));
   switch (a.kind) {
-    case 'set': {
-      const t = obj(a.targets, 'Devices to set');
-      const out: Record<string, Command> = {};
-      for (const [id, cmd] of Object.entries(t)) {
-        let c = obj(cmd, `What ${id} should do`);
-        // The assistant tool spells extra fields as { set: {...} } — unwrap it here too.
-        if (c.set && typeof c.set === 'object' && !Array.isArray(c.set)) { const { set, ...rest } = c; c = { ...rest, ...(set as Record<string, unknown>) }; }
-        // "type:light" / "room:lounge" — every matching device, now and later; each device keeps only what it can do at run time.
-        const pm = PSEUDO_TARGET.exec(id);
-        if (pm) {
-          if (pm[1] === 'room' ? !x.cfg.rooms.some(r => r.id === pm[2]) : !DEVICE_TYPES.includes(pm[2]!)) fail(`Unknown ${pm[1]} target ${id}`);
-          const cleaned: Record<string, unknown> = {};
-          for (const [k, v] of Object.entries(c)) {
-            if (!FIELD_CAP[k]) fail(`${k} isn’t something devices can do`);
-            cleaned[k] = v;
-          }
-          out[id] = cleaned as Command;
-          continue;
-        }
-        const d = x.device(id) ?? fail(`Unknown device ${id}`);
-        out[id] = cleanTarget(d, c as Command);
-      }
-      if (!Object.keys(out).length) fail('Choose at least one device to set');
-      return { kind: 'set', targets: out };
+    case 'set': return { kind: 'set', targets: checkTargets(obj(a.targets, 'Devices to set'), x) };
+    case 'ramp': {
+      const f = RAMPABLE.includes(a.field as NumericField) ? a.field as NumericField : fail(`Ramp can only ease ${RAMPABLE.join(', ')}`);
+      const to = numOrUndef(a.to, 'Ramp to');
+      const overSec = numOrUndef(a.overSec ?? (a.overMin !== undefined && a.overMin !== null && a.overMin !== '' ? Number(a.overMin) * 60 : undefined), 'Ramp over', 10, 12 * 3600);
+      const stepSec = numOrUndef(a.stepSec, 'Ramp step', 5, 3600);
+      const from = a.from === undefined || a.from === null || a.from === '' ? undefined : numOrUndef(a.from, 'Ramp from');
+      if (to === undefined) fail('Say what to ramp to');
+      if (!overSec) fail('Say how long the ramp takes');
+      return { kind: 'ramp', targets: checkTargets(obj(a.targets, 'Devices to ramp'), x, { [f]: to }), field: f, to: to!, overSec: Math.round(overSec!), ...(from !== undefined ? { from } : {}), stepSec: Math.round(stepSec ?? 60) };
     }
     case 'delay': {
       const s = numOrUndef(a.seconds, 'Wait', 1, 7 * 86400);

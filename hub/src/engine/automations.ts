@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Action, Automation, AutomationRun, Cause, Condition, DeviceState, HomeConfig, NumericField, StateMatch, Trigger } from '../model/types.ts';
+import type { Action, Automation, AutomationRun, Cause, Condition, DeviceState, HomeConfig, NumericField, StateMatch, Targets, Trigger } from '../model/types.ts';
 import type { ChangeEvent, DeviceEvent, Registry } from '../devices/registry.ts';
 import type { Store } from '../store/db.ts';
 import type { ConfigStore } from './config.ts';
@@ -395,6 +395,21 @@ export class Automations {
           if (r === 'stop') return r;
           break;
         }
+        case 'ramp': {
+          const first = this.reg.get(Object.keys(this.reg.expandTargets(x.targets))[0] ?? '');
+          const start = x.from ?? (first ? num(first.state, x.field) : null) ?? 0;
+          const stepSec = Math.max(5, x.stepSec ?? 60);
+          const n = Math.max(1, Math.ceil(x.overSec / stepSec));
+          step(`Ramp ${FIELD[x.field]} to ${x.to} over ${durWords(x.overSec)}`);
+          for (let i = 1; i <= n; i++) {
+            const v = Math.round(start + (x.to - start) * (i / n));
+            const t: Targets = {};
+            for (const [id, cmd] of Object.entries(x.targets)) t[id] = { ...cmd, [x.field]: v };
+            await this.reg.applyTargets(t, cause);
+            if (i < n) await this.sleep(stepSec * 1000, live);
+          }
+          break;
+        }
         case 'repeat': {
           for (let i = 0; i < Math.min(x.times, 100); i++) {
             const r = await this.actions(a, x.actions, live, depth);
@@ -531,6 +546,7 @@ export function actionWords(a: Action, x: Pick<CondCtx, 'reg' | 'cfg'>, targetTe
     case 'notify': return `Notify: “${a.message}”`;
     case 'overlay': return `${a.op === 'start' ? 'Start' : 'End'} ${x.cfg.overlays.find(o => o.id === a.overlay)?.name ?? a.overlay}`;
     case 'if': return `If ${a.conditions.map(c => condWords(c, x)).join(' and ')}: ${a.then.map(k => actionWords(k, x, targetText)).join('; ') || 'nothing'}${a.else?.length ? `; otherwise ${a.else.map(k => actionWords(k, x, targetText)).join('; ')}` : ''}`;
+    case 'ramp': return `${FIELD[a.field]} ramps to ${a.to} over ${durWords(a.overSec)}: ${Object.keys(a.targets).map(id => pseudoLabel(id, x.cfg.rooms) ?? x.reg.get(id)?.name ?? id).join(', ')}`;
     case 'repeat': return `${a.times}×: ${a.actions.map(k => actionWords(k, x, targetText)).join('; ')}`;
     case 'run': return `Run ${x.cfg.automations?.find(o => o.id === a.automation)?.name ?? a.automation}`;
     case 'stop': return 'Stop';

@@ -191,8 +191,8 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
   }
 
   /** Apply many targets at once. Failures on one device don't stop the rest. The caller logs one summary entry. */
-  async applyTargets(targets: Targets, cause: Cause): Promise<{ changed: string[]; prev: Targets }> {
-    // "type:light" / "room:lounge" targets resolve here, at run time — devices added later join in.
+  /** "type:light" / "room:lounge" targets resolve here, at run time — devices added later join in. */
+  expandTargets(targets: Targets): Record<string, Command> {
     const expanded: Record<string, Command> = {};
     for (const [id, cmd] of Object.entries(targets)) {
       const m = PSEUDO_TARGET.exec(id);
@@ -204,6 +204,11 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
         }
       }
     }
+    return expanded;
+  }
+
+  async applyTargets(targets: Targets, cause: Cause): Promise<{ changed: string[]; prev: Targets }> {
+    const expanded = this.expandTargets(targets);
     const changed: string[] = [];
     const prev: Targets = {};
     await Promise.all(Object.entries(expanded).map(async ([id, cmd]) => {
