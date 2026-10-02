@@ -48,7 +48,7 @@ async function fakeConnectLife() {
       if (u.pathname === '/clife-svc/pu/get_device_status_list') {
         assert.equal(u.searchParams.get('appId'), APP.clientId);
         return send(200, { resultCode: 0, deviceList: [
-          { deviceId: '86100c0090000a1b2c3d4e5f', puid: 'pu-ac-1', deviceNickName: 'Bedroom AC', deviceTypeCode: '009', deviceFeatureCode: '199', offlineState: 0, statusList: { ...ac } },
+          { deviceId: '86100c0090000a1b2c3d4e5f', puid: 'pu-ac-1', deviceNickName: 'Bedroom AC', deviceTypeCode: '009', deviceFeatureCode: '199', offlineState: 1, statusList: { ...ac } },
           { deviceId: 'dehum-1', puid: 'pu-dh', deviceNickName: 'Dehumidifier', deviceTypeCode: '007', deviceFeatureCode: '1', statusList: {} },
         ] });
       }
@@ -123,6 +123,9 @@ test('ConnectLife linking, units, and what Activity says', async () => {
   // Fahrenheit units: read as °C, set in °F; out-of-range targets clamped to what the units take.
   assert.deepEqual(acState({ deviceId: 'x', puid: 'p', statusList: { t_temp_type: '1', t_temp: '75', f_temp_in: '80', t_power: '1', t_work_mode: '4' } }),
     { online: true, on: true, hvac: 'auto', fanSpeed: null, target: 24, temp: 26.5 });
+  // ConnectLife's offlineState: 1 is online, 0 offline (as Hisense's own plugin reads it).
+  assert.equal(acState({ deviceId: 'x', puid: 'p', offlineState: 1, statusList: {} }).online, true);
+  assert.equal(acState({ deviceId: 'x', puid: 'p', offlineState: 0, statusList: {} }).online, false);
   assert.deepEqual(acProperties({ target: 24 }, true), { t_temp: '75' });
   assert.deepEqual(acProperties({ target: 40 }), { t_temp: '32' });
   assert.deepEqual(acProperties({ vol: 3 }), {});
