@@ -2,8 +2,12 @@
   "//": "The Kova app's version (docs/VERSIONING.md). store: the X.Y.0 a store binary on this train carries (app.json version). version: what runs, store or over the air (X.Y.Z, PATCH only). train: the native runtime (app.json runtimeVersion). history: newest first; an over-the-air release adds an entry.",
   "train": "kova-mobile-0.2",
   "store": "0.2.0",
-  "version": "0.2.10",
+  "version": "0.2.11",
   "history": [
+    {
+      "version": "0.2.11",
+      "title": "Sign in a browser: type the code your Kova address shows on a computer; sign browsers out"
+    },
     {
       "version": "0.2.10",
       "title": "Integrations in the app: what’s connected, add from the catalog, and each one’s setup, linking and pairing on its own screen"

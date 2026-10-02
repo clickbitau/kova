@@ -2,6 +2,7 @@ import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
 import { timingSafeEqual } from 'node:crypto';
+import { Sessions } from '../services/sessions.ts';
 import type { Hub } from '../hub.ts';
 import type { Cause, Command } from '../model/types.ts';
 import type { AskAction } from '../assistant/assistant.ts';
@@ -82,8 +83,11 @@ const USER = { kind: 'user' as const, label: 'You' };
 
 const asBool = (v: unknown): boolean => typeof v === 'string' ? /^(1|true|yes|on|home|arrived?)$/i.test(v.trim()) : !!v;
 
+/** The key a request carries: `Authorization: Bearer …`, or ?token= (the WebSocket and the boot script). */
+const keyOf = (req: FastifyRequest): string => req.headers.authorization?.replace(/^Bearer\s+/i, '') ?? (req.query as Record<string, string>)?.token ?? '';
+
 function tokenOk(req: FastifyRequest, token: string): boolean {
-  const h = req.headers.authorization?.replace(/^Bearer\s+/i, '') ?? (req.query as Record<string, string>)?.token ?? '';
+  const h = keyOf(req);
   const a = Buffer.from(h), b = Buffer.from(token);
   return a.length === b.length && timingSafeEqual(a, b);
 }
@@ -117,6 +121,19 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
     return !!opts.helixLink && !!given && opts.helixLink.isToken(given) && opts.helixLink.allows(req.method, path);
   };
 
+  // Browsers signed in with a code from someone already signed in (services/sessions.ts).
+  const sessions = new Sessions(hub.store);
+  app.post('/api/login/start', async (req, reply) => { reply.header('cache-control', 'no-store'); return sessions.start(req.headers['user-agent']); });
+  app.get<{ Params: { id: string } }>('/api/login/poll/:id', async (req, reply) => { reply.header('cache-control', 'no-store'); return sessions.poll(req.params.id); });
+  app.post<{ Body: { code?: string } }>('/api/login/approve', async (req, reply) => {
+    const ok = sessions.approve(String(req.body?.code ?? ''), sessions.check(keyOf(req))?.name ?? 'Kova app');
+    return ok ? { ok: true, name: ok.name } : reply.code(400).send({ error: 'That code isn’t right, or it has expired. Codes last 5 minutes.' });
+  });
+  app.get('/api/sessions', async req => ({ sessions: sessions.list(keyOf(req)) }));
+  app.delete<{ Params: { id: string } }>('/api/sessions/:id', async (req, reply) => (sessions.remove(req.params.id) ? { ok: true } : reply.code(404).send({ error: 'No such session' })));
+  // Sign this browser out (its own key stops working).
+  app.post('/api/logout', async req => { const s = sessions.check(keyOf(req)); if (s) sessions.remove(s.id); return { ok: true, signedOut: !!s }; });
+
   if (opts.token || opts.helixLink) {
     app.addHook('onRequest', async (req, reply) => {
       const path = req.url.split('?')[0];
@@ -126,6 +143,10 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
       // A doorbell picture for Helix to fetch: its random key is the credential (services/screen-notices.ts).
       if (req.method === 'GET' && path.startsWith('/api/snap/')) return;
       if (opts.token && tokenOk(req, opts.token)) return;
+      // Signing a browser in (no key yet): ask for a code, and wait for it to be approved.
+      if ((req.method === 'POST' && path === '/api/login/start') || (req.method === 'GET' && path.startsWith('/api/login/poll/'))) return;
+      // A signed-in browser's own key.
+      if (opts.token && sessions.check(keyOf(req))) return;
       if (helixTokenOk(req, path)) { fromHelix.add(req); return; }
       if (opts.token && !personKeyOk(req)) return reply.code(401).send({ error: 'unauthorised' });
     });

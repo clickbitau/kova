@@ -25,6 +25,7 @@ import { WebScreen } from './src/screens/WebScreen';
 import { IntegrationAddScreen, IntegrationsScreen } from './src/screens/IntegrationsScreen';
 import { IntegrationScreen } from './src/screens/IntegrationScreen';
 import { AutomationsScreen } from './src/screens/AutomationsScreen';
+import { BrowsersScreen } from './src/screens/BrowsersScreen';
 import { AutomationEditor } from './src/screens/AutomationEditor';
 import { CustomiseScreen } from './src/screens/CustomiseScreen';
 import { EnergyScreen } from './src/screens/EnergyScreen';
@@ -100,6 +101,7 @@ function Home() {
           <Stack.Screen name="Integration" component={IntegrationScreen} />
           <Stack.Screen name="Web" component={WebScreen} />
           <Stack.Screen name="Automations" component={AutomationsScreen} />
+          <Stack.Screen name="Browsers" component={BrowsersScreen} />
           <Stack.Screen name="AutomationEditor" component={AutomationEditor} />
           <Stack.Screen name="Customise" component={CustomiseScreen} />
           <Stack.Screen name="Energy" component={EnergyScreen} />

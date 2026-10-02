@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e0f10">
+<meta name="robots" content="noindex">
+<title>Sign in to Kova</title>
+<link rel="icon" href="./assets/logo/kova-favicon.svg">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{--page:#0e0f10;--card:#16171a;--inset:#1c1d20;--bone:#f1efea;--stone:#a3a09a;--stone2:#6f6d69;--amber:#f2b14c;--green:#7fd4a0;--red:#ff6b5e}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100dvh;background:var(--page);color:var(--bone);font-family:Manrope,system-ui,sans-serif;-webkit-font-smoothing:antialiased;display:flex;align-items:center;justify-content:center;padding:24px 16px}
+  main{width:100%;max-width:420px;display:flex;flex-direction:column;gap:18px}
+  h1{margin:0;font-size:28px;font-weight:700;letter-spacing:-0.02em}
+  p{margin:0;color:var(--stone);font-size:14px;line-height:1.55}
+  .card{background:var(--card);border-radius:20px;padding:22px;display:flex;flex-direction:column;gap:14px}
+  .code{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:clamp(30px,10vw,40px);letter-spacing:.08em;text-align:center;padding:16px 8px;border-radius:14px;background:var(--inset);user-select:all}
+  .row{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--stone)}
+  .dot{width:8px;height:8px;border-radius:4px;background:var(--amber);animation:b 1.6s ease-in-out infinite}
+  @keyframes b{50%{opacity:.35}}
+  @media (prefers-reduced-motion:reduce){.dot{animation:none}}
+  ol{margin:0;padding-left:20px;color:var(--stone);font-size:14px;line-height:1.75}
+  b{color:var(--bone)}
+  details{color:var(--stone);font-size:13px}
+  summary{cursor:pointer;color:var(--amber);font-weight:700;list-style:none}
+  summary::-webkit-details-marker{display:none}
+  input{width:100%;margin-top:10px;padding:11px 12px;border-radius:12px;background:var(--inset);border:1px solid rgba(255,255,255,.08);color:var(--bone);font:inherit;font-size:14px}
+  button{margin-top:10px;width:100%;padding:12px;border-radius:12px;border:0;background:var(--amber);color:#1a1408;font:inherit;font-weight:700;font-size:14px;cursor:pointer}
+  button:disabled{opacity:.6;cursor:default}
+  .err{color:var(--red)}
+  .ok{color:var(--green)}
+</style>
+</head>
+<body>
+<main>
+  <div style="display:flex;align-items:center;gap:10px"><svg width="28" height="28" viewBox="0 0 48 48"><path d="M8 26L24 11L40 26" fill="none" stroke="#f1efea" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 32L24 24.5L32 32" fill="none" stroke="#f1efea" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="24" cy="38.5" r="3.5" fill="#f2b14c"/></svg><h1>Sign in to Kova</h1></div>
+  <p id="why">This browser isn’t signed in to your home yet.</p>
+  <div class="card">
+    <div class="code" id="code" aria-live="polite">····-····</div>
+    <div class="row" id="state"><span class="dot"></span><span>Waiting for you to approve it…</span></div>
+  </div>
+  <ol>
+    <li>Open the <b>Kova app</b> on your phone.</li>
+    <li>Go to <b>More → Sign in a browser</b>.</li>
+    <li>Type the code above. This browser signs in by itself.</li>
+  </ol>
+  <p>Or, on a computer that’s already signed in: the menu → <b>Signed-in browsers</b>.</p>
+  <details>
+    <summary>Use an access key instead</summary>
+    <p style="margin-top:8px">The hub’s access key works too (it’s in <code>/etc/kova/kova.env</code> on the Kova box). It gives this browser full access; signing in with a code is better.</p>
+    <form id="keyForm"><input id="key" type="password" autocomplete="off" placeholder="Access key" aria-label="Access key"><button id="keyBtn">Sign in with the key</button></form>
+    <p id="keyErr" class="err" style="margin-top:8px"></p>
+  </details>
+</main>
+<script>
+(function () {
+  var codeEl = document.getElementById('code'), stateEl = document.getElementById('state');
+  var pollTimer = null, renewAt = 0;
+  if (/[?&]expired=1/.test(location.search)) document.getElementById('why').textContent = 'This browser was signed out, or its sign-in no longer works. Sign in again.';
+  function done(token) {
+    try { localStorage.setItem('kova_token', token); } catch (e) {}
+    stateEl.innerHTML = '<span class="ok">Signed in. Opening your home…</span>';
+    location.replace('/');
+  }
+  function say(html) { stateEl.innerHTML = html; }
+  function start() {
+    clearTimeout(pollTimer);
+    fetch('/api/login/start', { method: 'POST' }).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (j) {
+      codeEl.textContent = j.code;
+      renewAt = j.expiresAt - 15000;
+      say('<span class="dot"></span><span>Waiting for you to approve it…</span>');
+      poll(j.id);
+    }).catch(function () {
+      say('<span class="err">Can’t reach your hub. Trying again…</span>');
+      pollTimer = setTimeout(start, 5000);
+    });
+  }
+  function poll(id) {
+    pollTimer = setTimeout(function () {
+      if (Date.now() > renewAt) return start(); // a fresh code before this one runs out
+      fetch('/api/login/poll/' + encodeURIComponent(id), { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
+        if (j.state === 'approved' && j.token) return done(j.token);
+        if (j.state === 'expired') return start();
+        poll(id);
+      }).catch(function () { poll(id); });
+    }, 2000);
+  }
+  document.getElementById('keyForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var k = document.getElementById('key').value.trim(), btn = document.getElementById('keyBtn'), err = document.getElementById('keyErr');
+    if (!k) return;
+    btn.disabled = true; err.textContent = '';
+    fetch('/api/state', { headers: { authorization: 'Bearer ' + k } }).then(function (r) {
+      if (r.ok) return done(k);
+      err.textContent = r.status === 401 ? 'That key isn’t right.' : 'The hub answered HTTP ' + r.status + '.';
+    }).catch(function () { err.textContent = 'Can’t reach your hub.'; }).finally(function () { btn.disabled = false; });
+  });
+  start();
+})();
+</script>
+</body>
+</html>

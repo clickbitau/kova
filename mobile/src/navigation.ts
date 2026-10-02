@@ -13,6 +13,8 @@ export type Stack = {
   /** An automation by id, or a new one (optionally starting from a draft, such as a suggestion). */
   AutomationEditor: { id?: string; draft?: Draft; tab?: 'edit' | 'history' } | undefined;
   Customise: undefined;
+  /** More → Sign in a browser: approve a browser's sign-in code; signed-in browsers. */
+  Browsers: undefined;
   Energy: undefined;
   Media: undefined;
   /** More → Integrations: what's connected, and the hub's own updates. */
