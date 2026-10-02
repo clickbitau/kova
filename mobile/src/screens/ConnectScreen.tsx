@@ -3,13 +3,15 @@ import { KeyboardAvoidingView, Platform, ScrollView, TextInput, View } from 'rea
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Network from 'expo-network';
-import { C, F } from '../theme';
+import { C, F, R, SHADOW, SP } from '../theme';
 import { call, findHub, hello } from '../api/client';
 import { addressesOf, chooseAddress, display, kindFor } from '../logic/addresses';
 import { normalizeHubUrl, parseConnectLink, subnetCandidates, type HubConfig } from '../logic/connect';
 import { useHub } from '../state/hub';
 import { Icon } from '../ui/Icon';
-import { Button, Card, Mark, Press } from '../ui/kit';
+import { Button, Card, IconWell, Mark, Spinner } from '../ui/kit';
+import { Glow } from '../ui/Screen';
+import { Appear, haptic } from '../ui/motion';
 import { T } from '../ui/Text';
 
 type Step = 'start' | 'scan' | 'type';
@@ -43,9 +45,11 @@ export function ConnectScreen() {
       if (!r) throw new Error(`No Kova hub answered at ${display(given.url)}. Is this phone on the home Wi-Fi?`);
       const cfg: HubConfig = { ...given, url: r.url, ...(r.hubId ? { hubId: r.hubId } : {}) };
       await call(cfg, 'GET', '/api/state');
+      haptic.success();
       await connect(cfg);
     } catch (e) {
       const m = (e as Error).message;
+      haptic.error();
       setErr(m);
       if (/token/i.test(m)) { setAddr(given.url); setStep('type'); }
     } finally {
@@ -77,14 +81,16 @@ export function ConnectScreen() {
   if (step === 'scan') {
     if (!perm?.granted) {
       return (
-        <View style={{ flex: 1, backgroundColor: C.page, padding: 24, paddingTop: insets.top + 24, gap: 16, justifyContent: 'center' }}>
-          <T size={22} weight={700}>Camera, to scan the code</T>
-          <T size={14} color={C.stone} lineHeight={1.5}>Kova only uses it here, to read the code on your computer’s screen.</T>
-          <Button label="Allow camera" onPress={() => void askPerm()} />
-          <Button kind="secondary" label="Back" onPress={() => setStep('start')} />
+        <View style={{ flex: 1, backgroundColor: C.page, padding: SP[6], paddingTop: insets.top + SP[6], gap: SP[4], justifyContent: 'center' }}>
+          <IconWell icon="qr_code_scanner" color={C.amber} size={56} radius={28} />
+          <T v="title">The camera, to scan the code</T>
+          <T v="body" color={C.stone}>Kova only uses it here, to read the code on your computer’s screen.</T>
+          <Button size="lg" label="Allow the camera" onPress={() => void askPerm()} />
+          <Button kind="ghost" label="Back" onPress={() => setStep('start')} />
         </View>
       );
     }
+    const corner = (s: object) => <View style={[{ position: 'absolute', width: 34, height: 34, borderColor: C.amber }, s]} />;
     return (
       <View style={{ flex: 1, backgroundColor: '#000' }}>
         <CameraView style={{ flex: 1 }} facing="back" barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
@@ -93,70 +99,81 @@ export function ConnectScreen() {
             const cfg = parseConnectLink(data);
             if (!cfg) return;
             scanned.current = true;
+            haptic.success();
             setStep('start');
             void tryHub(cfg).finally(() => { scanned.current = false; });
           }} />
-        <View style={{ position: 'absolute', left: 0, right: 0, top: insets.top + 16, alignItems: 'center', gap: 6 }}>
-          <T size={17} weight={700}>Point at the code</T>
-          <T size={13} color={C.bone2}>Kova on your computer → Kova on your phone</T>
+        <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{ width: 240, height: 240 }}>
+            {corner({ top: 0, left: 0, borderTopWidth: 4, borderLeftWidth: 4, borderTopLeftRadius: 18 })}
+            {corner({ top: 0, right: 0, borderTopWidth: 4, borderRightWidth: 4, borderTopRightRadius: 18 })}
+            {corner({ bottom: 0, left: 0, borderBottomWidth: 4, borderLeftWidth: 4, borderBottomLeftRadius: 18 })}
+            {corner({ bottom: 0, right: 0, borderBottomWidth: 4, borderRightWidth: 4, borderBottomRightRadius: 18 })}
+          </View>
         </View>
-        <View style={{ position: 'absolute', left: 24, right: 24, bottom: insets.bottom + 24 }}>
+        <View style={{ position: 'absolute', left: SP[5], right: SP[5], top: insets.top + SP[4], alignItems: 'center', gap: 6, padding: SP[3], borderRadius: R.lg, backgroundColor: 'rgba(14,15,16,0.7)' }}>
+          <T v="headline" size={17}>Point at the code</T>
+          <T v="footnote" color={C.bone2} center>On a computer: Kova → Kova on your phone</T>
+        </View>
+        <View style={{ position: 'absolute', left: SP[6], right: SP[6], bottom: insets.bottom + SP[6] }}>
           <Button kind="secondary" label="Cancel" onPress={() => setStep('start')} />
         </View>
       </View>
     );
   }
 
+  const field = (value: string, set: (v: string) => void, o: { label: string; placeholder: string; secure?: boolean; url?: boolean; hint?: string }) => (
+    <View style={{ gap: SP[2] }}>
+      <T v="footnote" weight={700} color={C.bone2}>{o.label}</T>
+      <TextInput value={value} onChangeText={set} placeholder={o.placeholder} placeholderTextColor={C.stone2} autoCapitalize="none" autoCorrect={false} keyboardType={o.url ? 'url' : 'default'} secureTextEntry={o.secure}
+        accessibilityLabel={o.label} onSubmitEditing={typed}
+        style={{ height: 50, paddingHorizontal: SP[4], borderRadius: R.md, borderWidth: 1, borderColor: C.line, backgroundColor: C.card, color: C.bone, fontFamily: F[500], fontSize: 16 }} />
+      {o.hint ? <T v="footnote" color={C.stone2}>{o.hint}</T> : null}
+    </View>
+  );
+
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: C.page }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 24, paddingTop: insets.top + 40, paddingBottom: insets.bottom + 24, gap: 22 }} keyboardShouldPersistTaps="handled">
-        <View style={{ alignItems: 'center', gap: 14 }}>
-          <Mark size={64} />
-          <T size={34} weight={800} tracking={-0.04}>Kova</T>
-          <T size={14.5} color={C.stone} center lineHeight={1.5}>Connect to your home’s Kova hub. Everything stays on your network.</T>
+      <Glow color={C.amber} opacity={0.16} />
+      <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: SP[6], paddingTop: insets.top + SP[10], paddingBottom: insets.bottom + SP[6], gap: SP[7] }} keyboardShouldPersistTaps="handled">
+        <View style={{ alignItems: 'center', gap: SP[3] }}>
+          <View style={{ width: 88, height: 88, borderRadius: 26, backgroundColor: C.card, borderWidth: 1, borderColor: C.edgeTop, alignItems: 'center', justifyContent: 'center', boxShadow: SHADOW.card }}>
+            <Mark size={56} />
+          </View>
+          <T v="largeTitle" size={34} style={{ marginTop: SP[2] }}>Welcome to Kova</T>
+          <T v="body" color={C.stone} center>Connect this phone to your home’s hub. Everything stays on your own network.</T>
         </View>
 
         {step === 'start' ? (
-          <View style={{ gap: 10 }}>
-            <Button label="Scan the code" icon="qr_code_scanner" onPress={() => { setErr(null); setStep('scan'); }} />
-            <Button kind="secondary" label="Find my hub on this Wi-Fi" icon="search" busy={busy === 'Looking on this Wi-Fi…'} onPress={() => void find()} />
-            <Press onPress={() => { setErr(null); setStep('type'); }} style={{ alignSelf: 'center', padding: 8 }}>
-              <T size={13.5} weight={600} color={C.amber}>Type the address instead</T>
-            </Press>
-            <Card style={{ padding: 14, gap: 6, marginTop: 8 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={{ gap: SP[3] }}>
+            <Button size="lg" label="Scan the code" icon="qr_code_scanner" onPress={() => { setErr(null); setStep('scan'); }} />
+            <Button size="lg" kind="secondary" label={busy === 'Looking on this Wi-Fi…' ? 'Looking on this Wi-Fi…' : 'Find my hub on this Wi-Fi'} icon="search" busy={busy === 'Looking on this Wi-Fi…'} onPress={() => void find()} />
+            <Button kind="ghost" label="Type the address instead" onPress={() => { setErr(null); setStep('type'); }} />
+            <Card style={{ padding: SP[4], gap: SP[2], marginTop: SP[2] }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2] }}>
                 <Icon name="qr_code_2" size={18} color={C.green} />
-                <T size={13} weight={700}>Where’s the code?</T>
+                <T v="headline" size={14}>Where’s the code?</T>
               </View>
-              <T size={12.5} color={C.stone} lineHeight={1.45}>Open Kova on a computer and choose “Kova on your phone” in the sidebar (or More → Kova app on your phone).</T>
+              <T v="footnote" color={C.stone}>Open Kova on a computer and choose “Kova on your phone” in the sidebar.</T>
             </Card>
           </View>
         ) : (
-          <View style={{ gap: 12 }}>
-            <View style={{ gap: 6 }}>
-              <T size={13} weight={600}>Hub address</T>
-              <TextInput value={addr} onChangeText={setAddr} placeholder="192.168.1.20" placeholderTextColor={C.stone3} autoCapitalize="none" autoCorrect={false} keyboardType="url"
-                style={{ paddingVertical: 12, paddingHorizontal: 13, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', backgroundColor: C.card, color: C.bone, fontFamily: F[400], fontSize: 16 }} />
-            </View>
-            <View style={{ gap: 6 }}>
-              <T size={13} weight={600}>Token</T>
-              <TextInput value={token} onChangeText={setToken} placeholder="only if your hub has one (KOVA_TOKEN)" placeholderTextColor={C.stone3} autoCapitalize="none" autoCorrect={false} secureTextEntry
-                style={{ paddingVertical: 12, paddingHorizontal: 13, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', backgroundColor: C.card, color: C.bone, fontFamily: F[400], fontSize: 16 }} />
-            </View>
-            <Button label="Connect" busy={busy === 'Connecting…'} onPress={typed} />
-            <Press onPress={() => { setErr(null); setStep('start'); }} style={{ alignSelf: 'center', padding: 8 }}>
-              <T size={13.5} weight={600} color={C.amber}>Back</T>
-            </Press>
+          <View style={{ gap: SP[4] }}>
+            {field(addr, setAddr, { label: 'Hub address', placeholder: '192.168.1.20', url: true })}
+            {field(token, setToken, { label: 'Token', placeholder: 'Only if your hub has one', secure: true, hint: 'Kova on your computer shows it next to the code.' })}
+            <Button size="lg" label="Connect" busy={busy === 'Connecting…'} onPress={typed} />
+            <Button kind="ghost" label="Back" onPress={() => { setErr(null); setStep('start'); }} />
           </View>
         )}
 
-        {busy && busy !== 'Connecting…' && busy !== 'Looking on this Wi-Fi…' ? <T size={13} color={C.stone} center>{busy}</T> : null}
-        {busy === 'Connecting…' && step === 'start' ? <T size={13} color={C.stone} center>Connecting…</T> : null}
+        {busy === 'Connecting…' && step === 'start' ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SP[2] }}><Spinner /><T v="callout" color={C.stone}>Connecting…</T></View>
+        ) : null}
         {err ? (
-          <View style={{ flexDirection: 'row', gap: 8, padding: 12, borderRadius: 12, backgroundColor: 'rgba(255,107,94,0.12)' }}>
-            <Icon name="error" size={18} color={C.red} />
-            <T size={13} color="#ffb4ab" lineHeight={1.4} style={{ flex: 1 }}>{err}</T>
-          </View>
+          <Appear style={{ flexDirection: 'row', gap: SP[2] + 2, padding: SP[3] + 2, borderRadius: R.md, backgroundColor: C.redTint, borderWidth: 1, borderColor: C.redLine }}>
+            <Icon name="error" size={19} color={C.red} fill />
+            <T v="callout" color={C.redText} style={{ flex: 1 }}>{err}</T>
+          </Appear>
         ) : null}
       </ScrollView>
     </KeyboardAvoidingView>

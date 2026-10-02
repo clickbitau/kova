@@ -41,7 +41,8 @@ try {
   run('npx', ['expo', 'export', '--platform', 'ios', '--platform', 'android', '--output-dir', out], appDir);
   // The config the manifest carries, with the bundle's own version (app.json keeps the store version).
   const cfg = JSON.parse(execFileSync('npx', ['expo', 'config', '--type', 'public', '--json'], { cwd: appDir, encoding: 'utf8' }));
-  writeFileSync(join(out, 'expoConfig.json'), JSON.stringify({ ...cfg, version: vf.version }, null, 2) + '\n');
+  // The last few release notes ride along, so a phone can say what an update brings before it restarts into it.
+  writeFileSync(join(out, 'expoConfig.json'), JSON.stringify({ ...cfg, version: vf.version, extra: { ...cfg.extra, kovaHistory: vf.history.slice(0, 5) } }, null, 2) + '\n');
   const id = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
   const dest = join(ROOT, 'ota', vf.train, id);
   mkdirSync(join(ROOT, 'ota', vf.train), { recursive: true });

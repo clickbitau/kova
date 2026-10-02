@@ -1,17 +1,19 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Animated, Modal, PanResponder, Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type Insets, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native';
+import { Animated, Modal, PanResponder, Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type AccessibilityRole, type Insets, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, Path } from 'react-native-svg';
-import { C, MOTION, SHADOW } from '../theme';
+import { C, MOTION, R, SHADOW, SP, alpha } from '../theme';
 import type { Toast } from '../state/hub';
 import { Icon } from './Icon';
-import { Appear, haptic, spring, tween, useReducedMotion, useStateValue, type HapticKind } from './motion';
+import { Appear, haptic, shake, spring, tween, useLoop, useReducedMotion, useStateValue, type HapticKind } from './motion';
 import { T } from './Text';
 
-// Motion comes from MOTION in theme.ts (the design's 120 ms press to 0.97, 200 ms state changes, 280 ms sheets),
-// through ui/motion.tsx, which also handles reduced motion and haptics.
+// The app's shared components. Sizes, colours and motion come from theme.ts (TYPE, SP, R, C, MOTION, SHADOW)
+// through ui/motion.tsx, which also handles reduced motion and haptics. Screens compose these; they don't
+// hand-build buttons, chips, rows or cards.
 
-const OUTER = new Set(['flex', 'flexGrow', 'flexShrink', 'flexBasis', 'width', 'minWidth', 'maxWidth', 'alignSelf', 'margin', 'marginTop', 'marginBottom', 'marginLeft', 'marginRight', 'marginHorizontal', 'marginVertical', 'position', 'top', 'left', 'right', 'bottom']);
+const OUTER = new Set(['flex', 'flexGrow', 'flexShrink', 'flexBasis', 'width', 'minWidth', 'maxWidth', 'alignSelf', 'margin', 'marginTop', 'marginBottom', 'marginLeft', 'marginRight', 'marginHorizontal', 'marginVertical', 'position', 'top', 'left', 'right', 'bottom', 'zIndex']);
 
 /** Padding for the hit area of a control drawn smaller than a finger (MOTION.target), from its fixed size. */
 function targetSlop(s: ViewStyle): Insets | undefined {
@@ -20,35 +22,65 @@ function targetSlop(s: ViewStyle): Insets | undefined {
   return x || y ? { left: x, right: x, top: y, bottom: y } : undefined;
 }
 
+export interface PressProps {
+  onPress?: () => void;
+  onLongPress?: () => void;
+  style?: StyleProp<ViewStyle>;
+  children?: ReactNode;
+  disabled?: boolean;
+  hitSlop?: number | Insets;
+  label?: string;
+  hint?: string;
+  role?: AccessibilityRole;
+  selected?: boolean;
+  haptic?: HapticKind;
+  /** How far it gives under the finger: 'soft' for big surfaces (tiles, cards), which shouldn't shrink as much. */
+  give?: 'normal' | 'soft';
+  /** Extra things a screen reader can do with it (a tile's "Controls", since its own buttons are folded into it). */
+  actions?: { name: string; label: string; run: () => void }[];
+}
+
 /**
  * Anything tappable. It gives under the finger (scale to 0.97 and a slight dim, or only the dim with reduced
  * motion) and springs back when let go. Small controls get a hit area of at least 44 pt. `haptic` adds a tap
- * you can feel, for choices that don't already send a command (which has its own).
+ * you can feel, for choices that don't already send a command (which has its own). A long press buzzes.
  */
-export function Press({ onPress, onLongPress, style, children, disabled, hitSlop, label, haptic: feel }: { onPress?: () => void; onLongPress?: () => void; style?: StyleProp<ViewStyle>; children?: ReactNode; disabled?: boolean; hitSlop?: number | Insets; label?: string; haptic?: HapticKind }) {
+export function Press({ onPress, onLongPress, style, children, disabled, hitSlop, label, hint, role = 'button', selected, haptic: feel, give = 'normal', actions }: PressProps) {
   const s = useRef(new Animated.Value(1)).current;
   const reduced = useReducedMotion();
-  // How the button sits in its parent (flex, width) belongs on the outer Pressable; how it looks, on the inner view.
   const flat = (StyleSheet.flatten(style) ?? {}) as ViewStyle & Record<string, unknown>;
   const outer: Record<string, unknown> = {}, inner: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(flat)) (OUTER.has(k) ? outer : inner)[k] = v;
-  const base = (typeof inner.opacity === 'number' ? inner.opacity : 1) * (disabled ? 0.5 : 1);
+  const base = (typeof inner.opacity === 'number' ? inner.opacity : 1) * (disabled ? 0.45 : 1);
   delete inner.opacity;
-  // Made once per look, not every render: a press animates natively, and a fresh node each render would be re-sent.
+  const to = give === 'soft' ? 0.985 : MOTION.press.scale;
   const opacity = useMemo(() => Animated.multiply(s.interpolate({ inputRange: [MOTION.press.scale, 1], outputRange: [reduced ? MOTION.press.dimReduced : MOTION.press.dim, 1], extrapolate: 'clamp' }), base), [s, reduced, base]);
   return (
     <Pressable
-      style={outer as ViewStyle} onPress={onPress && (() => { if (feel) haptic[feel](); onPress(); })} onLongPress={onLongPress} disabled={disabled} hitSlop={hitSlop ?? targetSlop(flat)}
-      onPressIn={() => tween(s, MOTION.press.scale, { duration: MOTION.dur.press }).start()} onPressOut={() => spring(s, 1, 'press').start()}
-      accessibilityRole="button" accessibilityLabel={label} accessibilityState={disabled ? { disabled } : undefined}
+      style={outer as ViewStyle} onPress={onPress && (() => { if (feel) haptic[feel](); onPress(); })}
+      onLongPress={onLongPress && (() => { haptic.light(); onLongPress(); })} delayLongPress={380}
+      disabled={disabled} hitSlop={hitSlop ?? targetSlop(flat)}
+      onPressIn={() => tween(s, to, { duration: MOTION.dur.press }).start()} onPressOut={() => spring(s, 1, 'press').start()}
+      accessibilityRole={role} accessibilityLabel={label} accessibilityHint={hint}
+      accessibilityState={disabled || selected != null ? { disabled: !!disabled, selected } : undefined}
+      accessibilityActions={actions?.map(a => ({ name: a.name, label: a.label }))}
+      onAccessibilityAction={actions && (e => actions.find(a => a.name === e.nativeEvent.actionName)?.run())}
     >
       <Animated.View style={[inner as ViewStyle, 'flex' in outer || 'flexGrow' in outer ? { flexGrow: 1 } : null, { opacity, transform: [{ scale: reduced ? 1 : s }] }]}>{children}</Animated.View>
     </Pressable>
   );
 }
 
-export function Card({ children, style }: { children?: ReactNode; style?: StyleProp<ViewStyle> }) {
-  return <View style={[{ borderRadius: 18, backgroundColor: C.card }, style]}>{children}</View>;
+/**
+ * A card: a surface a step above the page, with a hairline edge that's a touch lighter along the top,
+ * so it reads as raised without a heavy shadow. `tint` gives it a colour wash and edge (an active state).
+ */
+export function Card({ children, style, tint, pad }: { children?: ReactNode; style?: StyleProp<ViewStyle>; tint?: string; pad?: number }) {
+  return (
+    <View style={[{ borderRadius: R.lg, backgroundColor: tint ? alpha(tint, 0.1) : C.card, borderWidth: 1, borderColor: tint ? alpha(tint, 0.3) : C.edge, borderTopColor: tint ? alpha(tint, 0.4) : C.edgeTop, padding: pad }, style]}>
+      {children}
+    </View>
+  );
 }
 
 /** The Kova mark: the roof, the smaller roof, the amber dot. */
@@ -62,48 +94,113 @@ export function Mark({ size = 22, ink = C.bone }: { size?: number; ink?: string 
   );
 }
 
-/** A page title with an optional back button: "Modes", with a small line above. */
-export function PageHead({ over, title, onBack, right }: { over?: string; title: string; onBack?: () => void; right?: ReactNode }) {
+/** A round icon button: back, close, a small tool in a header. */
+export function IconButton({ icon, label, onPress, size = 40, tone = 'plain', fill, color }: { icon: string; label: string; onPress?: () => void; size?: number; tone?: 'plain' | 'amber' | 'ghost'; fill?: boolean; color?: string }) {
+  const bg = tone === 'amber' ? C.amber : tone === 'ghost' ? 'transparent' : C.control2;
+  const fg = color ?? (tone === 'amber' ? C.onAmber : C.bone);
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-      {onBack ? (
-        <Press onPress={onBack} label="Back" style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.07)', alignItems: 'center', justifyContent: 'center' }}>
-          <Icon name="arrow_back" size={21} />
-        </Press>
-      ) : null}
-      <View style={{ flex: 1, gap: 3 }}>
-        {over ? <T size={12.5} weight={500} color={C.stone}>{over}</T> : null}
-        <T size={onBack ? 27 : 32} weight={700} tracking={-0.025}>{title}</T>
-      </View>
-      {right}
-    </View>
-  );
-}
-
-export function SectionTitle({ children, right }: { children: string; right?: ReactNode }) {
-  return (
-    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
-      <T size={17} weight={700} tracking={-0.01}>{children}</T>
-      {right}
-    </View>
-  );
-}
-
-/** A pill chip: room filters, activity filters. Selected is bone on coal, like the design. A choice, so you feel it. */
-export function Pill({ label, on, onPress }: { label: string; on?: boolean; onPress?: () => void }) {
-  return (
-    <Press onPress={onPress} haptic="select" label={label} hitSlop={{ top: 4, bottom: 4 }} style={{ minHeight: 36, justifyContent: 'center', paddingVertical: 8, paddingHorizontal: 15, borderRadius: 999, backgroundColor: on ? C.bone : C.card }}>
-      <T size={13} weight={on ? 700 : 600} color={on ? C.coal : C.bone2}>{label}</T>
+    <Press onPress={onPress} label={label} style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: bg, alignItems: 'center', justifyContent: 'center' }}>
+      <Icon name={icon} size={Math.round(size * 0.5)} color={fg} fill={fill} />
     </Press>
   );
 }
 
-/** A horizontal row that scrolls, bleeding to the screen edges like the web app's pill rows. */
+/** A tinted round well with an icon: rows, cards, headers. */
+export function IconWell({ icon, color = C.bone, bg, size = 36, fill, radius }: { icon: string; color?: string; bg?: string; size?: number; fill?: boolean; radius?: number }) {
+  return (
+    <View style={{ width: size, height: size, borderRadius: radius ?? Math.round(size * 0.32), backgroundColor: bg ?? alpha(color, 0.14), alignItems: 'center', justifyContent: 'center' }}>
+      <Icon name={icon} size={Math.round(size * 0.55)} color={color} fill={fill} />
+    </View>
+  );
+}
+
+/**
+ * A section: a heading (with an optional action on the right, like "See all") and its content, with the
+ * same rhythm everywhere. `caption` is the small capitals kind, for sections inside a sheet or a card.
+ */
+export function Section({ title, action, onAction, caption, children, gap = SP[3], right }: { title?: string; action?: string; onAction?: () => void; caption?: boolean; children?: ReactNode; gap?: number; right?: ReactNode }) {
+  return (
+    <View style={{ gap }}>
+      {title ? (
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: caption ? 18 : 26 }}>
+          {caption ? <T v="overline" color={C.stone2}>{title}</T> : <T v="heading">{title}</T>}
+          {right ?? (action ? (
+            <Press onPress={onAction} hitSlop={12} label={`${action}, ${title}`}>
+              <T v="label" size={13.5} color={C.amber}>{action}</T>
+            </Press>
+          ) : null)}
+        </View>
+      ) : null}
+      {children}
+    </View>
+  );
+}
+
+/** A pill chip for one of many choices (rooms, people). Selected is bone on coal, like the design. You feel it. */
+export function Pill({ label, on, onPress, icon, count }: { label: string; on?: boolean; onPress?: () => void; icon?: string; count?: number }) {
+  return (
+    <Press onPress={onPress} haptic="select" label={label} selected={!!on} hitSlop={{ top: 4, bottom: 4 }}
+      style={{ minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingLeft: icon ? 11 : 15, paddingRight: 15, borderRadius: R.full, backgroundColor: on ? C.bone : C.card, borderWidth: 1, borderColor: on ? C.bone : C.edge }}>
+      {icon ? <Icon name={icon} size={16} color={on ? C.coal : C.stone} /> : null}
+      <T v="labelSm" color={on ? C.coal : C.bone2}>{label}</T>
+      {count != null ? <T v="micro" color={on ? alpha('#000000', 0.55) : C.stone2}>{String(count)}</T> : null}
+    </Press>
+  );
+}
+
+/** A horizontal row that scrolls, bleeding to the screen edges, with the page's gutter at each end. */
 export function HScroll({ children, gap = 6 }: { children: ReactNode; gap?: number }) {
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -18, flexGrow: 0 }} contentContainerStyle={{ paddingHorizontal: 18, paddingVertical: 2, gap }}>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -SP.gutter, flexGrow: 0 }} contentContainerStyle={{ paddingHorizontal: SP.gutter, paddingVertical: 2, gap }}>
       {children}
     </ScrollView>
+  );
+}
+
+export interface SegOption { id: string; label: string; icon?: string; color?: string }
+
+/**
+ * A segmented control for a few choices: a thumb slides to the chosen one on a spring. The choice shows at
+ * once; `onChange` sends it. `value` of null (nothing chosen, e.g. a device that's off) hides the thumb.
+ */
+export function Segmented({ options, value, onChange, color = C.bone, label, compact }: { options: SegOption[]; value: string | null; onChange: (id: string) => void; color?: string; label?: string; compact?: boolean }) {
+  const [w, setW] = useState(0);
+  const [shown, setShown] = useState(value);
+  useEffect(() => setShown(value), [value]);
+  const idx = options.findIndex(o => o.id === shown);
+  const x = useRef(new Animated.Value(Math.max(0, idx))).current;
+  const vis = useStateValue(idx >= 0);
+  const first = useRef(true);
+  useEffect(() => {
+    if (idx < 0) return;
+    if (first.current || !w) { x.setValue(idx); first.current = false; return; }
+    spring(x, idx, 'toggle').start();
+  }, [idx, w, x]);
+  const segW = w ? (w - 6) / options.length : 0;
+  const active = options[idx];
+  const thumb = active?.color ?? color;
+  const h = compact ? 38 : 46;
+  return (
+    <View accessibilityRole="radiogroup" accessibilityLabel={label} onLayout={(e: LayoutChangeEvent) => setW(e.nativeEvent.layout.width)}
+      style={{ flexDirection: 'row', padding: 3, borderRadius: R.md, backgroundColor: C.inset, borderWidth: 1, borderColor: C.edge }}>
+      {segW ? (
+        <Animated.View pointerEvents="none" style={{ position: 'absolute', top: 3, left: 3, width: segW, height: h, borderRadius: R.md - 3,
+          backgroundColor: thumb === C.bone ? C.selected : alpha(thumb, 0.18), borderWidth: 1, borderColor: thumb === C.bone ? C.edgeTop : alpha(thumb, 0.45),
+          opacity: vis, transform: [{ translateX: x.interpolate({ inputRange: [0, Math.max(1, options.length - 1)], outputRange: [0, segW * Math.max(1, options.length - 1)] }) }] }} />
+      ) : null}
+      {options.map(o => {
+        const on = o.id === shown;
+        const fg = on ? (o.color ?? (color === C.bone ? C.bone : color)) : C.stone;
+        return (
+          <Pressable key={o.id} accessibilityRole="radio" accessibilityState={{ checked: on }} accessibilityLabel={o.label}
+            onPress={() => { if (o.id === shown) return; haptic.select(); setShown(o.id); onChange(o.id); }}
+            style={{ flex: 1, height: h, alignItems: 'center', justifyContent: 'center', flexDirection: compact ? 'row' : 'column', gap: compact ? 5 : 1 }}>
+            {o.icon && !compact ? <Icon name={o.icon} size={18} color={fg} fill={on} /> : null}
+            <T v="micro" size={compact ? 12.5 : 11.5} color={on ? (o.color || color === C.bone ? C.bone : fg) : C.stone} numberOfLines={1}>{o.label}</T>
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
 
@@ -112,7 +209,7 @@ export function HScroll({ children, gap = 6 }: { children: ReactNode; gap?: numb
  * follows in the 200 ms state change. It moves the moment it's tapped (and goes back if the change never
  * comes through), so a setting that waits on the hub still answers the finger at once.
  */
-export function Switch({ on, onChange, big, label }: { on: boolean; onChange?: (v: boolean) => void; big?: boolean; label?: string }) {
+export function Switch({ on, onChange, big, label, color = C.amber, disabled }: { on: boolean; onChange?: (v: boolean) => void; big?: boolean; label?: string; color?: string; disabled?: boolean }) {
   const [shown, setShown] = useState(on);
   const onRef = useRef(on);
   onRef.current = on;
@@ -127,7 +224,7 @@ export function Switch({ on, onChange, big, label }: { on: boolean; onChange?: (
     spring(x, shown ? 1 : 0, 'toggle').start();
   }, [shown, x]);
   const c = useStateValue(shown);
-  const w = big ? 52 : 40, h = big ? 32 : 24, k = h - 6;
+  const w = big ? 54 : 44, h = big ? 32 : 26, k = h - 6;
   const vPad = Math.max(8, Math.ceil((MOTION.target - h) / 2)), hPad = Math.max(4, Math.ceil((MOTION.target - w) / 2));
   const flip = () => {
     const v = !shown;
@@ -138,9 +235,10 @@ export function Switch({ on, onChange, big, label }: { on: boolean; onChange?: (
     timer.current = setTimeout(() => setShown(onRef.current), 4000);
   };
   return (
-    <Pressable onPress={flip} onPressIn={() => spring(held, 1, 'grow').start()} onPressOut={() => spring(held, 0, 'grow').start()}
-      accessibilityRole="switch" accessibilityLabel={label} accessibilityState={{ checked: shown }} hitSlop={{ top: vPad, bottom: vPad, left: hPad, right: hPad }}>
-      <Animated.View style={{ width: w, height: h, borderRadius: h / 2, padding: 3, backgroundColor: c.interpolate({ inputRange: [0, 1], outputRange: [C.switchOff, C.amber] }) }}>
+    <Pressable onPress={flip} disabled={disabled} onPressIn={() => spring(held, 1, 'grow').start()} onPressOut={() => spring(held, 0, 'grow').start()}
+      accessibilityRole="switch" accessibilityLabel={label} accessibilityState={{ checked: shown, disabled }} hitSlop={{ top: vPad, bottom: vPad, left: hPad, right: hPad }}
+      style={{ opacity: disabled ? 0.45 : 1 }}>
+      <Animated.View style={{ width: w, height: h, borderRadius: h / 2, padding: 3, backgroundColor: c.interpolate({ inputRange: [0, 1], outputRange: [C.switchOff, color] }) }}>
         <Animated.View style={{ width: k, height: k, borderRadius: k / 2, backgroundColor: '#fff', boxShadow: '0px 1px 3px rgba(0,0,0,0.35)', transform: [
           { translateX: x.interpolate({ inputRange: [0, 1], outputRange: [0, w - k - 6] }) },
           { scale: held.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] }) },
@@ -151,23 +249,22 @@ export function Switch({ on, onChange, big, label }: { on: boolean; onChange?: (
 }
 
 const QUARTERS = [0, 0.25, 0.5, 0.75, 1];
-const THUMB = 24;
 
 /**
- * A slider that reports on release (so a drag isn't a flood of commands). While dragging, the thumb grows,
- * a bubble above it shows the value, and you feel a tick passing 0, 25, 50, 75 and 100 per cent.
+ * A fill slider, the kind you can grab anywhere: 52 pt tall, the fill is the value, the value is written
+ * inside. Dragging moves it from where it was (it doesn't jump to the finger); a tap without a drag sets it
+ * where you tapped. It reports on release, so a drag isn't a flood of commands; you feel a tick passing
+ * 0, 25, 50, 75 and 100 per cent. Screen readers adjust it in tens.
  */
-export function Slider({ value, min = 0, max = 100, color = C.amber, suffix = '', label, onChange, onRelease }: { value: number; min?: number; max?: number; color?: string; suffix?: string; label?: string; onChange?: (v: number) => void; onRelease: (v: number) => void }) {
+export function Slider({ value, min = 0, max = 100, color = C.amber, onColor = C.onAmber, suffix = '%', label, icon, onChange, onRelease, disabled }: { value: number; min?: number; max?: number; color?: string; onColor?: string; suffix?: string; label?: string; icon?: string; onChange?: (v: number) => void; onRelease: (v: number) => void; disabled?: boolean }) {
   const [w, setW] = useState(1);
   const [live, setLive] = useState<number | null>(null);
   const v = live ?? value;
   const held = useRef(new Animated.Value(0)).current;
-  // The responder is made once, so it reads the width and range through a ref: from the first render's
-  // state it would keep a width of 1 and snap every touch to the ends. A drag is where the finger first
-  // touched plus how far it has moved (locationX alone jumps about once the finger leaves the track).
-  const ref = useRef({ w, min, max, onChange, onRelease, x0: 0, last: 0 });
-  Object.assign(ref.current, { w, min, max, onChange, onRelease });
-  const at = (x: number) => { const r = ref.current; return Math.round(r.min + Math.max(0, Math.min(1, x / r.w)) * (r.max - r.min)); };
+  const reduced = useReducedMotion();
+  const ref = useRef({ w, min, max, value, onChange, onRelease, v0: 0, x0: 0, last: 0, moved: false });
+  Object.assign(ref.current, { w, min, max, value, onChange, onRelease });
+  const clamp = (n: number) => { const r = ref.current; return Math.round(Math.max(r.min, Math.min(r.max, n))); };
   const frac = (n: number) => { const r = ref.current; return r.max > r.min ? (n - r.min) / (r.max - r.min) : 0; };
   const move = (n: number) => {
     const r = ref.current, p0 = frac(r.last), p1 = frac(n);
@@ -183,33 +280,86 @@ export function Slider({ value, min = 0, max = 100, color = C.amber, suffix = ''
     onShouldBlockNativeResponder: () => true,
     onPanResponderGrant: e => {
       const r = ref.current;
-      r.x0 = e.nativeEvent.locationX;
-      r.last = at(r.x0);
-      haptic.tick();
+      r.v0 = r.value; r.last = r.value; r.moved = false; r.x0 = e.nativeEvent.locationX;
       spring(held, 1, 'grow').start();
-      setLive(r.last);
-      r.onChange?.(r.last);
     },
-    onPanResponderMove: (_e, g) => move(at(ref.current.x0 + g.dx)),
-    onPanResponderRelease: (_e, g) => { const n = at(ref.current.x0 + g.dx); spring(held, 0, 'grow').start(); setLive(null); ref.current.onRelease(n); },
+    onPanResponderMove: (_e, g) => {
+      const r = ref.current;
+      if (!r.moved && Math.abs(g.dx) < 4) return;
+      r.moved = true;
+      move(clamp(r.v0 + (g.dx / r.w) * (r.max - r.min)));
+    },
+    onPanResponderRelease: (_e, g) => {
+      const r = ref.current;
+      const n = r.moved ? clamp(r.v0 + (g.dx / r.w) * (r.max - r.min)) : clamp(r.min + (r.x0 / r.w) * (r.max - r.min));
+      if (!r.moved) haptic.tick();
+      spring(held, 0, 'grow').start();
+      setLive(n);
+      r.onRelease(n);
+      setTimeout(() => setLive(null), 600);
+    },
     onPanResponderTerminate: () => { spring(held, 0, 'grow').start(); setLive(null); },
   })).current;
   const pct = max > min ? (v - min) / (max - min) : 0;
-  const thumbX = pct * Math.max(0, w - THUMB);
-  const BUBBLE = 54;
-  const bubbleX = Math.max(-6, Math.min(w - BUBBLE + 6, thumbX + THUMB / 2 - BUBBLE / 2));
+  const step = Math.max(1, Math.round((max - min) / 10));
+  const inside = pct > 0.16;
   return (
-    <View onLayout={(e: LayoutChangeEvent) => setW(e.nativeEvent.layout.width)} {...pan.panHandlers}
-      accessible accessibilityRole="adjustable" accessibilityLabel={label} accessibilityValue={{ min, max, now: v }}
-      style={{ height: 44, justifyContent: 'center' }}>
-      <View pointerEvents="none" style={{ height: 8, borderRadius: 4, backgroundColor: C.control, overflow: 'hidden' }}>
-        <View style={{ width: `${pct * 100}%`, height: 8, backgroundColor: color }} />
+    <Animated.View onLayout={(e: LayoutChangeEvent) => setW(e.nativeEvent.layout.width)} {...(disabled ? {} : pan.panHandlers)}
+      accessible accessibilityRole="adjustable" accessibilityLabel={label} accessibilityValue={{ min, max, now: v, text: `${v}${suffix}` }}
+      accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+      onAccessibilityAction={e => onRelease(Math.max(min, Math.min(max, value + (e.nativeEvent.actionName === 'increment' ? step : -step))))}
+      style={{ height: 52, borderRadius: R.md + 2, backgroundColor: C.control, overflow: 'hidden', justifyContent: 'center', opacity: disabled ? 0.45 : 1,
+        transform: reduced ? [] : [{ scaleY: held.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] }) }] }}>
+      <View pointerEvents="none" style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${pct * 100}%`, backgroundColor: color }}>
+        <View style={{ position: 'absolute', right: 6, top: 14, bottom: 14, width: 3, borderRadius: 2, backgroundColor: alpha('#000000', 0.18) }} />
       </View>
-      <Animated.View pointerEvents="none" style={{ position: 'absolute', left: thumbX, width: THUMB, height: THUMB, borderRadius: THUMB / 2, backgroundColor: '#fff', borderWidth: 3, borderColor: color, boxShadow: SHADOW.raised,
-        transform: [{ scale: held.interpolate({ inputRange: [0, 1], outputRange: [1, 1.3] }) }] }} />
-      <Animated.View pointerEvents="none" style={{ position: 'absolute', top: -30, left: bubbleX, width: BUBBLE, height: 28, borderRadius: 10, backgroundColor: C.bone, alignItems: 'center', justifyContent: 'center', boxShadow: SHADOW.raised,
-        opacity: held, transform: [{ translateY: held.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }, { scale: held.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) }] }}>
-        <T size={13} weight={800} color={C.coal}>{`${v}${suffix}`}</T>
+      <View pointerEvents="none" style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: SP[4], gap: SP[2] }}>
+        {icon ? <Icon name={icon} size={20} color={inside ? onColor : C.bone2} fill /> : null}
+        <View style={{ flex: 1 }} />
+        <T v="label" tabular color={pct > 0.86 ? onColor : C.bone}>{`${v}${suffix}`}</T>
+      </View>
+    </Animated.View>
+  );
+}
+
+/** A small spinning arc, for something on its way (a command, a page loading). */
+export function Spinner({ size = 18, color = C.stone, width = 2.2 }: { size?: number; color?: string; width?: number }) {
+  const t = useLoop(true, MOTION.dur.spin, { essential: true });
+  const r = (size - width) / 2, c = 2 * Math.PI * r;
+  return (
+    <Animated.View accessibilityRole="progressbar" accessibilityLabel="Working" style={{ width: size, height: size, transform: [{ rotate: t.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] }) }] }}>
+      <Svg width={size} height={size}>
+        <Circle cx={size / 2} cy={size / 2} r={r} stroke={alpha(color === C.stone ? '#a3a09a' : color, 0.22)} strokeWidth={width} fill="none" />
+        <Circle cx={size / 2} cy={size / 2} r={r} stroke={color} strokeWidth={width} fill="none" strokeDasharray={`${c * 0.28} ${c}`} strokeLinecap="round" />
+      </Svg>
+    </Animated.View>
+  );
+}
+
+/** A dot that breathes: live, reconnecting, recording. Still with reduced motion. */
+export function PulseDot({ color, size = 8 }: { color: string; size?: number }) {
+  const t = useLoop(true, 1600);
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      <Animated.View style={{ position: 'absolute', width: size, height: size, borderRadius: size / 2, backgroundColor: color,
+        opacity: t.interpolate({ inputRange: [0, 0.7, 1], outputRange: [0.55, 0, 0] }), transform: [{ scale: t.interpolate({ inputRange: [0, 1], outputRange: [1, 2.6] }) }] }} />
+      <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: color }} />
+    </View>
+  );
+}
+
+/**
+ * A placeholder in the shape of what's coming, with a light sweeping across it. Screens draw their own
+ * layout out of these while they wait, instead of a spinner. Still (no sweep) with reduced motion.
+ */
+export function Skeleton({ w, h, r = R.sm, style }: { w?: number | `${number}%`; h: number; r?: number; style?: StyleProp<ViewStyle> }) {
+  const t = useLoop(true, MOTION.dur.shimmer);
+  const [width, setWidth] = useState(300);
+  return (
+    <View onLayout={e => setWidth(e.nativeEvent.layout.width)} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+      style={[{ width: w, height: h, borderRadius: r, backgroundColor: C.inset, overflow: 'hidden' }, style]}>
+      <Animated.View style={{ position: 'absolute', top: 0, bottom: 0, width: 160, transform: [{ translateX: t.interpolate({ inputRange: [0, 1], outputRange: [-160, width + 160] }) }] }}>
+        <LinearGradient colors={['rgba(255,255,255,0)', C.shimmer, 'rgba(255,255,255,0)']} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={{ flex: 1 }} />
       </Animated.View>
     </View>
   );
@@ -219,23 +369,23 @@ export function Slider({ value, min = 0, max = 100, color = C.amber, suffix = ''
 const rubber = (d: number, limit = 56) => limit * (1 - 1 / (d * 0.55 / limit + 1));
 
 /**
- * A bottom sheet: 28 px top corners on #141517 over the scrim. It rises on a spring, follows the finger when
- * its top is dragged (stretching a little if pulled up), and closes when let go far enough or flicked down,
+ * A bottom sheet: 28 px top corners over a deep scrim. It rises on a spring, follows the finger when its
+ * top is dragged (stretching a little if pulled up), and closes when let go far enough or flicked down,
  * carrying the flick's speed. Tap the grabber or the scrim to close; its content stays while it slides away.
  */
-export function Sheet({ open, onClose, children }: { open: boolean; onClose: () => void; children: ReactNode }) {
+export function Sheet({ open, onClose, children, label = 'Panel' }: { open: boolean; onClose: () => void; children: ReactNode; label?: string }) {
   const insets = useSafeAreaInsets();
   const { height: screenH } = useWindowDimensions();
   const reduced = useReducedMotion();
   const [h, setH] = useState(screenH);
-  const y = useRef(new Animated.Value(screenH)).current; // how far below its resting place, in px
-  const fade = useRef(new Animated.Value(reduced ? 0 : 1)).current; // with reduced motion it fades instead
+  const y = useRef(new Animated.Value(screenH)).current;
+  const fade = useRef(new Animated.Value(reduced ? 0 : 1)).current;
   const [shown, setShown] = useState(open);
   const shownRef = useRef(shown);
   shownRef.current = shown;
   const hRef = useRef(h);
   hRef.current = h;
-  const flick = useRef(0); // the drag's downward speed when it closed the sheet (px/s), for the slide away
+  const flick = useRef(0);
   const last = useRef(children);
   if (open) last.current = children;
   useEffect(() => {
@@ -276,21 +426,21 @@ export function Sheet({ open, onClose, children }: { open: boolean; onClose: () 
   const lift = y.interpolate({ inputRange: [0, Math.max(1, h)], outputRange: [1, 0], extrapolate: 'clamp' });
   return (
     <Modal transparent visible animationType="none" onRequestClose={onClose} statusBarTranslucent>
-      <Animated.View style={{ flex: 1, backgroundColor: C.scrim, opacity: Animated.multiply(fade, lift) }}>
-        <Pressable style={{ flex: 1 }} onPress={onClose} accessibilityLabel="Close" />
+      <Animated.View style={{ flex: 1, backgroundColor: C.scrimDeep, opacity: Animated.multiply(fade, lift) }}>
+        <Pressable style={{ flex: 1 }} onPress={onClose} accessibilityRole="button" accessibilityLabel={`Close ${label}`} />
       </Animated.View>
-      <Animated.View onLayout={e => setH(e.nativeEvent.layout.height)}
-        style={{ position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: '92%', borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: C.sheet, boxShadow: SHADOW.sheet, opacity: fade, transform: [{ translateY: y }] }}>
-        {/* Below the sheet, so pulling it up shows more sheet rather than the page. */}
+      <Animated.View onLayout={e => setH(e.nativeEvent.layout.height)} accessibilityViewIsModal
+        style={{ position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: '92%', borderTopLeftRadius: R.sheet, borderTopRightRadius: R.sheet, backgroundColor: C.sheet, borderWidth: 1, borderBottomWidth: 0, borderColor: C.edgeTop, boxShadow: SHADOW.sheet, opacity: fade, transform: [{ translateY: y }] }}>
         <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: '100%', height: 120, backgroundColor: C.sheet }} />
         <View {...drag.panHandlers}>
-          <Pressable onPress={onClose} accessibilityLabel="Close" style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 16 }}>
-            <View style={{ width: 40, height: 5, borderRadius: 3, backgroundColor: C.switchOff }} />
+          <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel={`Close ${label}`} accessibilityHint="Or swipe down" style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 14 }}>
+            <View style={{ width: 38, height: 5, borderRadius: 3, backgroundColor: C.switchOff }} />
           </Pressable>
         </View>
         <ScrollView
           onScrollEndDrag={e => { if (e.nativeEvent.contentOffset.y < -70) onClose(); }}
-          contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 34, gap: 18 }} keyboardShouldPersistTaps="handled">
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: SP[5], paddingBottom: insets.bottom + SP[8], gap: SP[6] }} keyboardShouldPersistTaps="handled">
           {open ? children : last.current}
         </ScrollView>
       </Animated.View>
@@ -300,20 +450,19 @@ export function Sheet({ open, onClose, children }: { open: boolean; onClose: () 
 
 /**
  * The confirmation after an action, with Undo when the hub gave one. It springs up from below, settles, and
- * slides away when the hub clears it; a sideways swipe sends it off early. An error buzzes.
+ * slides away when the hub clears it; a sideways swipe sends it off early. An error buzzes and turns red.
  */
 export function ToastHost({ toast, onUndo, bottom }: { toast: Toast | null; onUndo: (t: Toast) => void; bottom: number }) {
   const [cur, setCur] = useState<Toast | null>(toast);
   const reduced = useReducedMotion();
-  const a = useRef(new Animated.Value(0)).current; // 0 away, 1 shown
-  const x = useRef(new Animated.Value(0)).current; // the swipe
+  const a = useRef(new Animated.Value(0)).current;
+  const x = useRef(new Animated.Value(0)).current;
   const hadOne = useRef(false);
   useEffect(() => {
     if (toast) {
       setCur(toast);
       x.setValue(0);
       if (toast.error) haptic.error();
-      // A new message over an old one nudges rather than starting from nothing.
       a.setValue(hadOne.current ? 0.7 : 0);
       hadOne.current = true;
       (reduced ? tween(a, 1, { duration: MOTION.dur.fade }) : spring(a, 1, 'pop')).start();
@@ -339,15 +488,15 @@ export function ToastHost({ toast, onUndo, bottom }: { toast: Toast | null; onUn
   if (!cur) return null;
   const move = reduced ? [] : [{ translateY: a.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }, { scale: a.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1] }) }];
   return (
-    <Animated.View {...swipe.panHandlers} accessibilityLiveRegion="polite" style={{ position: 'absolute', left: 16, right: 16, bottom,
+    <Animated.View {...swipe.panHandlers} accessibilityLiveRegion="polite" accessibilityRole="alert" style={{ position: 'absolute', left: SP[4], right: SP[4], bottom,
       opacity: Animated.multiply(a.interpolate({ inputRange: [0, 1], outputRange: [0, 1], extrapolate: 'clamp' }), x.interpolate({ inputRange: [-300, 0, 300], outputRange: [0, 1, 0], extrapolate: 'clamp' })),
       transform: [{ translateX: x }, ...move] }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48, paddingVertical: 12, paddingLeft: 16, paddingRight: cur.undo ? 6 : 16, borderRadius: 16, backgroundColor: cur.error ? '#3a1d1a' : C.bone, boxShadow: SHADOW.toast }}>
-        {cur.error ? <Icon name="error" size={19} color="#ffb4ab" fill /> : null}
-        <T size={14} weight={600} color={cur.error ? '#ffb4ab' : C.coal} style={{ flex: 1 }}>{cur.text}</T>
-        {cur.undo ? (
-          <Press onPress={() => onUndo(cur)} haptic="select" style={{ minHeight: 36, justifyContent: 'center', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.08)' }}>
-            <T size={13.5} weight={800} color={C.coal}>Undo</T>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3], minHeight: 52, paddingVertical: SP[3], paddingLeft: SP[4], paddingRight: cur.undo || cur.action ? 6 : SP[4], borderRadius: R.lg, backgroundColor: cur.error ? '#3a1d1a' : C.bone, borderWidth: 1, borderColor: cur.error ? C.redLine : 'rgba(255,255,255,0.6)', boxShadow: SHADOW.toast }}>
+        <Icon name={cur.error ? 'error' : cur.action ? 'cloud_download' : cur.undo ? 'check_circle' : 'info'} size={20} color={cur.error ? C.redText : C.coal} fill />
+        <T v="label" weight={600} color={cur.error ? C.redText : C.coal} style={{ flex: 1 }}>{cur.text}</T>
+        {cur.undo || cur.action ? (
+          <Press onPress={() => cur.action ? cur.action.run() : onUndo(cur)} haptic="select" label={cur.action?.label ?? 'Undo'} style={{ minHeight: 40, justifyContent: 'center', paddingVertical: SP[2], paddingHorizontal: SP[4], borderRadius: R.sm + 2, backgroundColor: cur.action ? C.coal : 'rgba(0,0,0,0.08)' }}>
+            <T v="label" weight={800} color={cur.action ? C.bone : C.coal}>{cur.action?.label ?? 'Undo'}</T>
           </Press>
         ) : null}
       </View>
@@ -355,44 +504,145 @@ export function ToastHost({ toast, onUndo, bottom }: { toast: Toast | null; onUn
   );
 }
 
-export function Empty({ icon, title, text, action, onAction }: { icon: string; title: string; text: string; action?: string; onAction?: () => void }) {
+/** Nothing to show: an icon, what's missing in a few words, and what to do about it. `compact` sits inside a section. */
+export function Empty({ icon, title, text, action, onAction, compact, tone = C.stone }: { icon: string; title: string; text?: string; action?: string; onAction?: () => void; compact?: boolean; tone?: string }) {
+  if (compact) {
+    return (
+      <Appear style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3], paddingVertical: SP[4], paddingHorizontal: SP[4], borderRadius: R.lg, borderWidth: 1, borderStyle: 'dashed', borderColor: 'rgba(255,255,255,0.1)' }}>
+        <IconWell icon={icon} color={tone} size={36} />
+        <View style={{ flex: 1, gap: 2 }}>
+          <T v="headline" size={14}>{title}</T>
+          {text ? <T v="footnote" color={C.stone}>{text}</T> : null}
+        </View>
+        {action ? <Button size="sm" kind="secondary" label={action} onPress={onAction} /> : null}
+      </Appear>
+    );
+  }
   return (
-    <Appear style={{ paddingVertical: 30, paddingHorizontal: 18, borderRadius: 18, backgroundColor: C.card, alignItems: 'center', gap: 8 }}>
-      <Icon name={icon} size={30} color={C.stone3} />
-      <T size={15} weight={700} center>{title}</T>
-      <T size={13} color={C.stone} center lineHeight={1.45}>{text}</T>
-      {action ? (
-        <Press onPress={onAction} style={{ marginTop: 8, minHeight: 44, justifyContent: 'center', paddingVertical: 10, paddingHorizontal: 18, borderRadius: 12, backgroundColor: C.amber }}>
-          <T size={14} weight={700} color={C.onAmber}>{action}</T>
-        </Press>
-      ) : null}
+    <Appear style={{ paddingVertical: SP[8], paddingHorizontal: SP[5], borderRadius: R.xl, backgroundColor: C.card, borderWidth: 1, borderColor: C.edge, alignItems: 'center', gap: SP[2] }}>
+      <IconWell icon={icon} color={tone} size={52} radius={26} />
+      <T v="headline" size={16} center style={{ marginTop: SP[2] }}>{title}</T>
+      {text ? <T v="callout" color={C.stone} center>{text}</T> : null}
+      {action ? <View style={{ marginTop: SP[3] }}><Button label={action} onPress={onAction} /></View> : null}
     </Appear>
   );
 }
 
-/** A row in a grouped list: tinted icon well, title and subtitle, chevron. */
-export function Row({ icon, iconBg = C.selected, iconFg = C.bone, title, sub, subColor = C.stone, onPress, right, first }: { icon: string; iconBg?: string; iconFg?: string; title: string; sub?: string; subColor?: string; onPress?: () => void; right?: ReactNode; first?: boolean }) {
+/** A group of rows on one card (an inset grouped list), with an optional caption above and a note below. */
+export function Group({ title, note, children }: { title?: string; note?: string; children: ReactNode }) {
   return (
-    <Press onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 60, paddingVertical: 13, paddingHorizontal: 14, borderTopWidth: first ? 0 : 1, borderTopColor: C.hairline }}>
-      <View style={{ width: 36, height: 36, borderRadius: 11, backgroundColor: iconBg, alignItems: 'center', justifyContent: 'center' }}>
-        <Icon name={icon} size={20} color={iconFg} />
-      </View>
-      <View style={{ flex: 1, gap: 2, minWidth: 0 }}>
-        <T size={14.5} weight={700}>{title}</T>
-        {sub ? <T size={12} color={subColor} numberOfLines={2}>{sub}</T> : null}
-      </View>
-      {right ?? (onPress ? <Icon name="chevron_right" size={20} color={C.stone3} /> : null)}
-    </Press>
+    <View style={{ gap: SP[2] }}>
+      {title ? <T v="overline" color={C.stone2} style={{ paddingHorizontal: 4 }}>{title}</T> : null}
+      <Card style={{ overflow: 'hidden' }}>{children}</Card>
+      {note ? <T v="footnote" color={C.stone2} style={{ paddingHorizontal: 4 }}>{note}</T> : null}
+    </View>
   );
 }
 
-export function Button({ label, icon, onPress, kind = 'primary', busy }: { label: string; icon?: string; onPress?: () => void; kind?: 'primary' | 'secondary' | 'blue'; busy?: boolean }) {
-  const bg = kind === 'primary' ? C.amber : kind === 'blue' ? C.blue : 'rgba(255,255,255,0.08)';
-  const fg = kind === 'primary' ? C.onAmber : kind === 'blue' ? C.onBlue : C.bone;
+/** A row in a grouped list: tinted icon well, title and subtitle, then a chevron, a switch or anything on the right. */
+export function Row({ icon, iconBg, iconFg = C.bone, title, sub, subColor = C.stone, onPress, right, first, badge, fill, busy }: { icon?: string; iconBg?: string; iconFg?: string; title: string; sub?: string; subColor?: string; onPress?: () => void; right?: ReactNode; first?: boolean; badge?: boolean; fill?: boolean; busy?: boolean }) {
+  const body = (
+    <>
+      {icon ? (
+        <View>
+          <IconWell icon={icon} color={iconFg} bg={iconBg ?? (iconFg === C.bone ? C.selected : undefined)} size={36} fill={fill} />
+          {badge ? <View accessibilityLabel="Needs attention" style={{ position: 'absolute', top: -2, right: -2, width: 10, height: 10, borderRadius: 5, backgroundColor: C.amber, borderWidth: 2, borderColor: C.card }} /> : null}
+        </View>
+      ) : null}
+      <View style={{ flex: 1, gap: 2, minWidth: 0 }}>
+        <T v="headline">{title}</T>
+        {sub ? <T v="footnote" color={subColor} numberOfLines={2}>{sub}</T> : null}
+      </View>
+      {busy ? <Spinner /> : right ?? (onPress ? <Icon name="chevron_right" size={20} color={C.stone2} /> : null)}
+    </>
+  );
+  const style: ViewStyle = { flexDirection: 'row', alignItems: 'center', gap: SP[3], minHeight: 62, paddingVertical: SP[3], paddingHorizontal: SP[4], borderTopWidth: first ? 0 : 1, borderTopColor: C.hairline };
+  return onPress ? <Press onPress={onPress} give="soft" label={sub ? `${title}, ${sub}` : title} style={style}>{body}</Press> : <View style={style}>{body}</View>;
+}
+
+/** A row with a switch: the whole row flips it, and a screen reader hears it as one switch. */
+export function SwitchRow({ icon, iconFg, title, sub, on, onChange, first, busy, color }: { icon?: string; iconFg?: string; title: string; sub?: string; on: boolean; onChange: (v: boolean) => void; first?: boolean; busy?: boolean; color?: string }) {
   return (
-    <Press onPress={busy ? undefined : onPress} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, minHeight: 48, paddingVertical: 12, paddingHorizontal: 18, borderRadius: 14, backgroundColor: bg, opacity: busy ? 0.7 : 1 }}>
-      {icon ? <Icon name={icon} size={19} color={fg} /> : null}
-      <T size={14.5} weight={700} color={fg}>{busy ? 'Working…' : label}</T>
-    </Press>
+    <View accessible={false} style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3], minHeight: 62, paddingVertical: SP[3], paddingHorizontal: SP[4], borderTopWidth: first ? 0 : 1, borderTopColor: C.hairline }}>
+      {icon ? <IconWell icon={icon} color={on ? (iconFg ?? C.green) : C.bone} bg={on ? undefined : C.selected} fill={on} size={36} /> : null}
+      <View style={{ flex: 1, gap: 2 }}>
+        <T v="headline">{title}</T>
+        {sub ? <T v="footnote" color={C.stone}>{sub}</T> : null}
+      </View>
+      {busy ? <Spinner /> : <Switch label={title} on={on} onChange={onChange} color={color} />}
+    </View>
+  );
+}
+
+/** A small reading: label in capitals, value large. */
+export function Stat({ label, value, color = C.bone, icon }: { label: string; value: string; color?: string; icon?: string }) {
+  return (
+    <Card style={{ flex: 1, padding: SP[3] + 2, gap: SP[1] }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+        {icon ? <Icon name={icon} size={15} color={C.stone2} /> : null}
+        <T v="eyebrow" color={C.stone2}>{label}</T>
+      </View>
+      <T v="title" size={20} color={color} tabular>{value}</T>
+    </Card>
+  );
+}
+
+/** A person's initial in a circle; a green ring and dot when they're home. */
+export function Avatar({ name, home, size = 34, ring = C.page }: { name: string; home?: boolean; size?: number; ring?: string }) {
+  return (
+    <View accessibilityLabel={`${name}, ${home ? 'home' : 'out'}`} style={{ width: size, height: size }}>
+      <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: home ? alpha(C.green, 0.16) : C.control, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: ring }}>
+        <T weight={800} size={Math.round(size * 0.38)} color={home ? C.green : C.stone}>{name[0]?.toUpperCase() ?? '?'}</T>
+      </View>
+      {home ? <View style={{ position: 'absolute', right: -1, bottom: -1, width: size * 0.32, height: size * 0.32, borderRadius: size, backgroundColor: C.green, borderWidth: 2, borderColor: ring }} /> : null}
+    </View>
+  );
+}
+
+type BtnState = 'idle' | 'busy' | 'done' | 'failed';
+
+/**
+ * A button. If `onPress` returns a promise, it shows a spinner until it settles, then a check (or shakes when
+ * it resolves to false or throws), and ignores taps in between, so nothing is sent twice.
+ */
+export function Button({ label, icon, onPress, kind = 'primary', busy, size = 'md', full, doneLabel }: { label: string; icon?: string; onPress?: () => unknown; kind?: 'primary' | 'secondary' | 'ghost' | 'blue' | 'danger'; busy?: boolean; size?: 'sm' | 'md' | 'lg'; full?: boolean; doneLabel?: string }) {
+  const [st, setSt] = useState<BtnState>('idle');
+  const x = useRef(new Animated.Value(0)).current;
+  const alive = useRef(true);
+  useEffect(() => () => { alive.current = false; }, []);
+  const state: BtnState = busy ? 'busy' : st;
+  const bg = { primary: C.amber, blue: C.blue, secondary: C.control2, ghost: 'transparent', danger: C.redTint }[kind];
+  const fg = { primary: C.onAmber, blue: C.onBlue, secondary: C.bone, ghost: C.amber, danger: C.red }[kind];
+  const h = size === 'sm' ? 36 : size === 'lg' ? 54 : 48;
+  const go = () => {
+    if (state === 'busy' || !onPress) return;
+    const r = onPress();
+    if (!(r instanceof Promise)) return;
+    setSt('busy');
+    r.then(ok => {
+      if (!alive.current) return;
+      if (ok === false) { setSt('failed'); shake(x); setTimeout(() => alive.current && setSt('idle'), 900); return; }
+      setSt('done');
+      setTimeout(() => alive.current && setSt('idle'), MOTION.dur.done);
+    }, () => { if (!alive.current) return; setSt('failed'); shake(x); setTimeout(() => alive.current && setSt('idle'), 900); });
+  };
+  const glyph = state === 'busy' ? <Spinner size={size === 'sm' ? 15 : 18} color={fg} /> : state === 'done' ? <Icon name="check" size={size === 'sm' ? 17 : 19} color={fg} /> : icon ? <Icon name={icon} size={size === 'sm' ? 17 : 19} color={fg} /> : null;
+  return (
+    <Animated.View style={{ transform: [{ translateX: x }], alignSelf: full ? 'stretch' : size === 'sm' ? 'flex-start' : undefined }}>
+      <Press onPress={go} label={label} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SP[2] - 1, minHeight: h, paddingVertical: size === 'sm' ? 7 : 12, paddingHorizontal: size === 'sm' ? 14 : 20, borderRadius: size === 'sm' ? R.sm + 1 : R.md, backgroundColor: bg,
+        borderWidth: kind === 'secondary' ? 1 : 0, borderColor: C.edge, opacity: state === 'busy' ? 0.85 : 1 }}>
+        {glyph}
+        <T v="label" size={size === 'sm' ? 13 : size === 'lg' ? 16 : 15} color={fg}>{state === 'done' && doneLabel ? doneLabel : label}</T>
+      </Press>
+    </Animated.View>
+  );
+}
+
+/** A small rounded tag: a mode's name, NOW, a count. */
+export function Tag({ text, color = C.stone, solid }: { text: string; color?: string; solid?: boolean }) {
+  return (
+    <View style={{ paddingVertical: 3, paddingHorizontal: 8, borderRadius: R.full, backgroundColor: solid ? color : alpha(color, 0.14), alignSelf: 'flex-start' }}>
+      <T v="micro" color={solid ? C.coal : color}>{text}</T>
+    </View>
   );
 }

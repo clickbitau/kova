@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react';
 import { Platform, View } from 'react-native';
 import * as Device from 'expo-device';
-import { C } from '../theme';
+import { C, R, SP } from '../theme';
 import { useHub, useSnap } from '../state/hub';
 import { useNav } from '../navigation';
 import { arriveLeaveOn, startArriveLeave, stopArriveLeave } from '../native/arrive-leave';
 import { forgetPushToken, pushToken, savedPushToken } from '../native/push';
 import { endHomeActivity, liveActivityRunning, liveActivitySupported, startHomeActivity } from '../native/extensions';
 import { Icon } from '../ui/Icon';
-import { Button, Card, HScroll, PageHead, Pill, Switch } from '../ui/kit';
+import { Avatar, Button, Card, Empty, Group, IconWell, Press, Section, SwitchRow } from '../ui/kit';
+import { animateLayout } from '../ui/motion';
+import { locationPlan } from '../logic/presence';
 import { Screen } from '../ui/Screen';
 import { T } from '../ui/Text';
 import { HubAddresses } from './HubAddresses';
@@ -23,7 +25,11 @@ export function ThisPhoneScreen() {
   const [lock, setLock] = useState(liveActivityRunning());
   const canLock = Platform.OS === 'ios';
   const [busy, setBusy] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState(false);
   const me = s.people.find(p => p.id === cfg?.personId);
+  // Warden or the router may already know when this person is home: then location is only an extra.
+  const plan = locationPlan(me);
+  const [extra, setExtra] = useState(false);
 
   useEffect(() => {
     void arriveLeaveOn().then(setGeo);
@@ -72,42 +78,68 @@ export function ThisPhoneScreen() {
     } catch (e) { say((e as Error).message, { error: true }); } finally { setBusy(null); }
   };
 
+  const disconnect = async () => {
+    if (!confirm) { setConfirm(true); setTimeout(() => setConfirm(false), 4000); return true; }
+    await stopArriveLeave(); await togglePush(false); await forget();
+    return true;
+  };
+
   return (
-    <Screen gap={18}>
-      <PageHead over={s.home.name} title="This phone" onBack={() => nav.goBack()} />
-
-      <View style={{ gap: 8 }}>
-        <T size={13} weight={600}>This phone belongs to</T>
-        <HScroll>
-          {s.people.map(p => <Pill key={p.id} label={p.name} on={cfg?.personId === p.id} onPress={() => void setPerson(cfg?.personId === p.id ? undefined : p.id)} />)}
-        </HScroll>
-        {!s.people.length ? <T size={12.5} color={C.stone}>Add the people who live here in Customise home first.</T> : null}
-      </View>
-
-      <Card style={{ overflow: 'hidden' }}>
-        {([
-          ['location_on', 'Arrive and leave', me ? `Tells Kova when ${me.name} gets home or goes out, even with the app closed` : 'Choose who this phone belongs to first', geo, toggleGeo, 'geo'],
-          ['notifications', 'Notifications', 'The doorbell, everyone out with lights on, the internet dropping', push, togglePush, 'push'],
-          ...(canLock ? [['lock', 'Home on the lock screen', 'The mode, lights on and what’s next, with Skip, on the lock screen and in the Dynamic Island', lock, toggleLock, 'lock'] as const] : []),
-        ] as const).map(([icon, title, sub, on, go, id], i) => (
-          <View key={id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderTopWidth: i ? 1 : 0, borderTopColor: C.hairline, opacity: busy === id ? 0.6 : 1 }}>
-            <View style={{ width: 36, height: 36, borderRadius: 11, backgroundColor: on ? 'rgba(127,212,160,0.15)' : C.selected, alignItems: 'center', justifyContent: 'center' }}>
-              <Icon name={icon} size={20} color={on ? C.green : C.bone} />
-            </View>
-            <View style={{ flex: 1, gap: 2 }}>
-              <T size={14.5} weight={700}>{title}</T>
-              <T size={12} color={C.stone} lineHeight={1.35}>{sub}</T>
-            </View>
-            <Switch on={on} onChange={v => void go(v)} />
+    <Screen title="This phone" over={s.home.name} onBack={() => nav.goBack()} gap={SP[6]}>
+      <Section title="Whose phone is this?" caption>
+        {s.people.length ? (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SP[2] + 2 }}>
+            {s.people.map(p => {
+              const on = cfg?.personId === p.id;
+              return (
+                <Press key={p.id} selected={on} haptic="select" label={p.name} onPress={() => void setPerson(on ? undefined : p.id)}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2] + 2, height: 52, paddingLeft: 8, paddingRight: 16, borderRadius: R.lg, backgroundColor: on ? C.amberTint : C.card, borderWidth: 1, borderColor: on ? C.amberLine : C.edge }}>
+                  <Avatar name={p.name} home={p.home} size={36} ring={on ? '#2a2318' : C.card} />
+                  <T v="label" color={on ? C.bone : C.bone2}>{p.name}</T>
+                  {on ? <Icon name="check" size={18} color={C.amber} /> : null}
+                </Press>
+              );
+            })}
           </View>
-        ))}
-      </Card>
-      <T size={12} color={C.stone2} lineHeight={1.45}>Location stays on this phone: it only tells your hub “arrived” or “left”. Kova also uses Warden or your router to see phones on the Wi-Fi, so either one is enough.</T>
+        ) : <Empty compact icon="group" title="No people yet" text="Add the people who live here in Customise home first." />}
+      </Section>
 
-      <Card style={{ padding: 14, gap: 10 }}>
-        <HubAddresses />
-        <Button kind="secondary" label="Disconnect this phone" icon="link_off" onPress={() => void (async () => { await stopArriveLeave(); await togglePush(false); await forget(); })()} />
-      </Card>
+      {plan.needed ? (
+        <Group note="Location stays on this phone: it only tells your hub “arrived” or “left”.">
+          <SwitchRow first icon="location_on" title="Arrive and leave" sub={plan.text} on={geo} busy={busy === 'geo'} onChange={v => void toggleGeo(v)} />
+        </Group>
+      ) : (
+        <View style={{ gap: SP[2] }}>
+          <T v="overline" color={C.stone2} style={{ paddingHorizontal: 4 }}>Arrive and leave</T>
+          <Card style={{ overflow: 'hidden' }}>
+            <View style={{ flexDirection: 'row', gap: SP[3], padding: SP[4] }}>
+              <IconWell icon="check_circle" color={C.green} size={36} fill />
+              <View style={{ flex: 1, gap: 2 }}>
+                <T v="headline">{`Kova knows when ${me?.name ?? 'you'} ${me ? 'is' : 'are'} home`}</T>
+                <T v="footnote" color={C.stone}>{plan.text}</T>
+              </View>
+            </View>
+            {extra || geo ? (
+              <SwitchRow icon="location_on" title="Also use this phone’s location" sub="Optional. It notices leaving a little sooner." on={geo} busy={busy === 'geo'} onChange={v => void toggleGeo(v)} />
+            ) : (
+              <Press onPress={() => { animateLayout(); setExtra(true); }} label="Also use this phone’s location" style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2], minHeight: 48, paddingHorizontal: SP[4], borderTopWidth: 1, borderTopColor: C.hairline }}>
+                <Icon name="location_on" size={18} color={C.stone} />
+                <T v="labelSm" color={C.bone2} style={{ flex: 1 }}>Also use this phone’s location</T>
+                <Icon name="expand_more" size={20} color={C.stone2} />
+              </Press>
+            )}
+          </Card>
+        </View>
+      )}
+
+      <Group>
+        <SwitchRow first icon="notifications" title="Notifications" sub="The doorbell, everyone out with lights on, the internet dropping" on={push} busy={busy === 'push'} onChange={v => void togglePush(v)} />
+        {canLock ? <SwitchRow icon="lock" title="Home on the lock screen" sub="The mode, lights on and what’s next, on the lock screen and in the Dynamic Island" on={lock} onChange={v => void toggleLock(v)} /> : null}
+      </Group>
+
+      <HubAddresses />
+      <Button kind="danger" icon="link_off" label={confirm ? 'Tap again to disconnect' : 'Disconnect this phone'} onPress={disconnect} />
+      <T v="footnote" color={C.stone2} center style={{ marginTop: -SP[4] }}>This phone stops controlling the home until you connect it again.</T>
     </Screen>
   );
 }

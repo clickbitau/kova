@@ -10,7 +10,7 @@ import {
   type AutomationView, type RunAnswer, type HaAutomation, type Idea,
 } from '../logic/automations';
 import { Icon } from '../ui/Icon';
-import { Button, Card, Empty, PageHead, Press, Sheet, Switch } from '../ui/kit';
+import { Button, Card, Empty, Press, Sheet, Switch } from '../ui/kit';
 import { Screen } from '../ui/Screen';
 import { T } from '../ui/Text';
 import { Appear, animateLayout, haptic } from '../ui/motion';
@@ -198,14 +198,13 @@ export function AutomationsScreen() {
   const open = (a: AutomationView) => nav.navigate('AutomationEditor', { id: a.id });
 
   return (
-    <Screen gap={16}>
-      <PageHead over={autos.length ? `${plural(autos.length, 'automation')} · ${on} on` : 'When something happens, do something'} title="Automations" onBack={() => nav.goBack()}
-        right={
+    <Screen gap={16} title="Automations" over={autos.length ? `${plural(autos.length, 'automation')} · ${on} on` : 'When something happens, do something'} onBack={() => nav.goBack()}
+      right={
           <Press onPress={() => nav.navigate('AutomationEditor', {})} label="New automation" style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 8, paddingLeft: 9, paddingRight: 12, borderRadius: 12, backgroundColor: C.amber }}>
             <Icon name="add" size={19} color={C.onAmber} />
             <T size={13} weight={700} color={C.onAmber}>New</T>
           </Press>
-        } />
+        }>
 
       {autos.length > 3 ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 12, paddingRight: 6, borderRadius: 14, backgroundColor: C.card, borderWidth: 1, borderColor: C.line }}>
