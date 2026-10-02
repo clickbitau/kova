@@ -37,6 +37,9 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
   /** Whether a name is music (not a radio source), for a plain answer on speakers that can't play a queue. */
   isMusic: ((media: string) => boolean) | null = null;
 
+  /** Whether a source loops (set by the hub from the home's sources). */
+  sourceLoops: (name: string) => boolean = () => false;
+
   constructor(private store: Store, private sourceUrl: (name: string) => string | undefined = () => undefined, private settings: () => Record<string, DeviceSettings> = () => ({})) {
     super();
     this.saved = store.get<Record<string, DeviceState>>('deviceState') ?? {};
@@ -60,6 +63,7 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
       report: (id, state) => this.report(id, state),
       event: (id, type, data = {}) => this.deviceEvent(id, type, data),
       sourceUrl: this.sourceUrl,
+      sourceLoops: name => this.sourceLoops(name),
       queueFor: (media, opts) => this.queues ? this.queues(media, opts ?? {}) : Promise.resolve(null),
       derive: (id, state) => { const d = this.devices.get(id); if (!d) return; const patch = this.diff(d, state); if (!Object.keys(patch).length) return; d.state = { ...d.state, ...patch }; this.emit('measure'); },
       peer: id => this.adapters.get(id),

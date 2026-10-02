@@ -77,3 +77,22 @@ test('modes that point at missing devices are flagged and can be cleaned up', as
   assert.ok(!hub.config.get().modes.find(m => m.id === 'evening')!.targets.old_switch);
   await hub.stop();
 });
+
+test('media sources: repeat on and off without touching the address; a bad address is refused', async () => {
+  const { hub } = await testHub(12);
+  const app = await buildServer(hub, { webRoot });
+  try {
+    let r = await app.inject({ method: 'PUT', url: '/api/sources/Rain%20sounds', payload: { url: 'https://sounds.example/rain-1h.mp3' } });
+    assert.equal(r.statusCode, 200);
+    r = await app.inject({ method: 'PUT', url: '/api/sources/Rain%20sounds', payload: { loop: true } });
+    const rain = () => hub.config.get().sources.find(s => s.name === 'Rain sounds')!;
+    assert.deepEqual([rain().url, rain().loop], ['https://sounds.example/rain-1h.mp3', true]);
+    assert.equal(hub.reg.sourceLoops('Rain sounds'), true);
+    await app.inject({ method: 'POST', url: `/api/undo/${r.json().undo}` });
+    assert.equal(rain().loop, undefined);
+    r = await app.inject({ method: 'PUT', url: '/api/sources/Rain%20sounds', payload: { loop: 'yes' } });
+    assert.equal(r.statusCode, 400);
+    r = await app.inject({ method: 'PUT', url: '/api/sources/Rain%20sounds', payload: { url: 'ftp://x' } });
+    assert.equal(r.statusCode, 400);
+  } finally { await app.close(); await hub.stop(); }
+});

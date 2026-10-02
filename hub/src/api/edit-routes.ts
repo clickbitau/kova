@@ -150,13 +150,18 @@ export function registerEditRoutes(app: FastifyInstance, hub: Hub): void {
 
   // -------------------------------------------------------------- sources --
   // Media sources (Tarateel, rain sounds…) need a stream address before speakers can play them.
-  app.put<{ Params: { name: string }; Body: { url?: string; icon?: string } }>('/api/sources/:name', async (req, reply) => {
-    const url = req.body?.url?.trim();
+  // Only what's sent changes: { url }, { loop } (a recording plays again when it ends), { icon }.
+  app.put<{ Params: { name: string }; Body: { url?: string; icon?: string; loop?: boolean } }>('/api/sources/:name', async (req, reply) => {
+    const b = req.body ?? {};
+    const url = typeof b.url === 'string' ? b.url.trim() : undefined;
     if (url && !/^https?:\/\/\S+$/.test(url)) return reply.code(400).send({ error: 'Use an http(s) stream address' });
+    if (b.loop !== undefined && typeof b.loop !== 'boolean') return reply.code(400).send({ error: 'loop must be true or false' });
     return edit(c => {
-      const s = c.sources.find(x => x.name === req.params.name);
-      if (s) { s.url = url || undefined; if (req.body.icon) s.icon = req.body.icon; }
-      else c.sources.push({ name: req.params.name, icon: req.body?.icon ?? 'radio', url: url || undefined });
+      let s = c.sources.find(x => x.name === req.params.name);
+      if (!s) { s = { name: req.params.name, icon: b.icon ?? 'radio' }; c.sources.push(s); }
+      if (url !== undefined) s.url = url || undefined;
+      if (b.icon) s.icon = b.icon;
+      if (b.loop !== undefined) { if (b.loop) s.loop = true; else delete s.loop; }
     });
   });
   app.delete<{ Params: { name: string } }>('/api/sources/:name', async (req, reply) => {

@@ -140,6 +140,8 @@ export class SonosAdapter implements Adapter {
         // A grouped speaker can't take its own source; make it stand alone first.
         await this.soap(s.host, AVT, 'BecomeCoordinatorOfStandaloneGroup', { InstanceID: 0 }).catch(() => {});
         await this.soap(s.host, AVT, 'SetAVTransportURI', { InstanceID: 0, CurrentURI: SonosAdapter.uri(url), CurrentURIMetaData: '' });
+        // A recording set to loop plays again from the start each time it ends.
+        await this.soap(s.host, AVT, 'SetPlayMode', { InstanceID: 0, NewPlayMode: this.ctx!.sourceLoops?.(cmd.media) ? 'REPEAT_ONE' : 'NORMAL' }).catch(() => {});
         await this.soap(s.host, AVT, 'Play', { InstanceID: 0, Speed: 1 });
         s.media = cmd.media;
         s.queue = null;
