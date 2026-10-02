@@ -1529,10 +1529,13 @@ class Component extends DCLogic {
     const lightsOn=list.filter(d=>isLight(d)&&d.on).length;
     const inboxLeft=H.findings.length+H.integrations.filter(i=>!i.ok).length;
     const nav=[['home','Now','home'],['modes','Modes','routine'],['autos','Automations','account_tree'],['rooms','Rooms','meeting_room'],['energy','Energy','electric_meter'],['security','Security','shield'],['media','Media','play_circle'],['activity','Activity','history',inboxLeft||''],['assistant','Ask Kova','graphic_eq'],['integrations','Integrations','extension','',1],['import','Import','move_down',(s.imp&&s.imp.review.filter(r=>!r.done).length)||''],['settings','Settings','settings']].concat(adv?[['dev','Developer','code']]:[]).map(([id,label,icon,badge,gap])=>({label,icon,badge:badge||'',mt:gap?'14px':'0px',go:go(id),bg:s.screen===id?'rgba(242,177,76,0.12)':'transparent',fg:s.screen===id?'#f2b14c':'#d8d5cf'}));
-    const room=s.room||(H.rooms[0]||{}).id;
-    const tiles=list.filter(d=>d.room===room).map(d=>{const [st,sf]=this.stateOf(d);return{...d,...this.tint(d),icon:ICON[d.type],state:st,stateFg:sf,showId:adv,toggle:()=>this.toggleDev(d.id),open:()=>this.setState({drawer:d.id,tab:'simple'})}});
-    const rDevs=list.filter(d=>d.room===room);const rOn=rDevs.filter(d=>isLight(d)&&d.on).length;
-    const roomTabs=H.rooms.map(r=>({name:r.name,open:()=>this.setState({room:r.id}),bg:room===r.id?'#f1efea':'#16171a',fg:room===r.id?'#141517':'#d8d5cf'}));
+    // Devices whose room isn't one of the home's (an integration's default, or a room that was deleted): a "No room" tab, so nothing is out of sight.
+    const NOROOM='__none',inRoom=d=>RN[d.room]!==undefined,homeless=list.filter(d=>!d.hidden&&!inRoom(d));
+    const room=s.room===NOROOM&&!homeless.length?(H.rooms[0]||{}).id:(s.room||(H.rooms[0]||{}).id);
+    const inThis=d=>room===NOROOM?!inRoom(d):d.room===room;
+    const tiles=list.filter(inThis).map(d=>{const [st,sf]=this.stateOf(d);return{...d,...this.tint(d),icon:ICON[d.type],state:st,stateFg:sf,showId:adv,toggle:()=>this.toggleDev(d.id),open:()=>this.setState({drawer:d.id,tab:'simple'})}});
+    const rDevs=list.filter(inThis);const rOn=rDevs.filter(d=>isLight(d)&&d.on).length;
+    const roomTabs=[...H.rooms,...(homeless.length?[{id:NOROOM,name:`No room (${homeless.length})`}]:[])].map(r=>({name:r.name,open:()=>this.setState({room:r.id}),bg:room===r.id?'#f1efea':'#16171a',fg:room===r.id?'#141517':'#d8d5cf'}));
     // Imported rules: the Home Assistant automations from the last import, in plain words, with how Kova covers each.
     const AUTOS=s.impAutos||[];
     const RP=[['0px','40px','column'],['28px','12px','column'],['74px','10px','column-reverse'],['74px','38px','column-reverse']];
@@ -1601,7 +1604,7 @@ class Component extends DCLogic {
       avatars:(home.length?home:H.people).slice(0,3).map((p,i)=>({initial:p.name[0],ml:i?'-8px':'0px',op:p.home?1:0.4})),
       peopleLabel:!H.people.length?'No people yet':home.length===H.people.length?(H.people.length===2?'Both home':H.people.length===1?`${H.people[0].name} is home`:'Everyone’s home'):home.length?`${lst(home.map(p=>p.name))} home`:'Nobody home',
       goRooms:go('rooms'),goAutos:go('autos'),lightsOnLabel:`${lightsOn} lights on`,
-      roomName:RN[room]||'',roomTabs,tiles,roomSummary:`${rDevs.length} devices · ${rOn} lights on`,
+      roomName:room===NOROOM?'No room':RN[room]||'',roomTabs,tiles,roomSummary:`${rDevs.length} devices · ${rOn} lights on`,
       roomAllOff:()=>api('POST',`/api/rooms/${room}/off`,{}).then(r=>this.toast(`${RN[room]} lights off`,this.undoFn(r.undo))).catch(x=>this.err(x)),
       autoCount:AUTOS.length?`${AUTOS.length} Home Assistant automation${AUTOS.length===1?'':'s'} · ${AUTOS.filter(a=>a.enabled).length} on · Kova has ${H.modes.length} modes and ${H.overlays.length} overlays`:'Nothing imported yet',strip,autoGroups,sel,hasAutos:AUTOS.length>0,noAutos:!AUTOS.length,
       autoCta:{label:AUTOS.length?'Import a newer backup':'Import from Home Assistant',go:()=>this.setState({screen:'import',impNew:!!s.imp})},
