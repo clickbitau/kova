@@ -27,6 +27,7 @@ export const ICON_CODES: Record<string, string> = {
   block: '\uf08c',
   bluetooth: '\ue1a7',
   bolt: '\uea0b',
+  brightness_6: '\ue3ab',
   call: '\uf0d4',
   call_split: '\ue0b6',
   campaign: '\uef49',

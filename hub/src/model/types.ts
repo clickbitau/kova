@@ -60,6 +60,15 @@ export interface DeviceState {
   target?: number | null;
   temp?: number | null;
   fanSpeed?: FanSpeed | null;
+  /** Air purifiers (the `purifier` capability): fan speed 1…fanLevelMax (setting one switches to manual), the air as the
+   * purifier rates it (1 good … 4 very poor) and its PM2.5 reading, filter life left in %, and its display and child lock. */
+  fanLevel?: number | null;
+  fanLevelMax?: number;
+  airQuality?: number | null;
+  pm25?: number | null;
+  filterLife?: number | null;
+  display?: boolean;
+  childLock?: boolean;
   /** Ducted air conditioners (the `zones` capability): each zone's damper, on or off and how far open (0–100). */
   zones?: Zone[] | null;
   online?: boolean;
@@ -70,7 +79,7 @@ export interface Track { title: string; artist?: string; album?: string; art?: s
 
 export type VacuumActivity = 'cleaning' | 'returning' | 'docked' | 'paused' | 'idle' | 'error';
 
-export type Capability = 'onoff' | 'brightness' | 'colorTemp' | 'color' | 'fanMode' | 'media' | 'volume' | 'power' | 'energy' | 'events' | 'vacuum' | 'battery' | 'pause' | 'library' | 'input' | 'queue' | 'mute' | 'sound' | 'climate' | 'zones';
+export type Capability = 'onoff' | 'brightness' | 'colorTemp' | 'color' | 'fanMode' | 'media' | 'volume' | 'power' | 'energy' | 'events' | 'vacuum' | 'battery' | 'pause' | 'library' | 'input' | 'queue' | 'mute' | 'sound' | 'climate' | 'zones' | 'purifier';
 
 export interface Device {
   id: string;

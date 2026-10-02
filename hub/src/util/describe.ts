@@ -19,6 +19,7 @@ export const FIELD_CAP: Record<string, Capability> = {
   activity: 'vacuum', battery: 'battery', paused: 'pause', input: 'input', skip: 'queue', shuffle: 'queue',
   muted: 'mute', sound: 'sound', night: 'sound', volStep: 'volume',
   hvac: 'climate', target: 'climate', fanSpeed: 'climate', zoneSet: 'zones', zones: 'zones',
+  fanLevel: 'purifier', display: 'purifier', childLock: 'purifier',
 };
 
 /** Drop fields the device can't do, so a mode can target mixed brands safely. */
@@ -37,6 +38,7 @@ export const isPlayer = (d: Pick<Device, 'type'>) => d.type === 'media' || d.typ
 /** Chip text for a target: "Lamp 78% · 3000K", "Speaker · Tarateel 15%", "Ceiling off". */
 export function targetLabel(d: Device, t: Command): string {
   if (d.type === 'vacuum') return t.on === false || t.activity === 'returning' || t.activity === 'docked' ? `${d.name} docks` : `${d.name} cleans`;
+  if (d.type === 'fan' && t.fanLevel != null && !t.mode) return `${d.name} on speed ${t.fanLevel}`;
   if (d.type === 'fan') return `${d.name} on ${t.mode ?? (t.on === false ? 'off' : 'Auto')}`;
   if (d.type === 'internet') return `${d.name} internet ${t.on === false ? 'paused' : 'on'}`;
   if (d.type === 'climate' && t.zoneSet && t.on === undefined && !t.hvac && t.target == null) return `${d.name} ${zoneWords(t.zoneSet)}`;
@@ -61,6 +63,9 @@ export function changeSentence(d: Device, prev: Command, next: Command): string 
     if (a) return `${d.name} ${says[a]}`;
   }
   if (d.type === 'fan' && next.mode) return `${d.name} set to ${next.mode}`;
+  if (d.type === 'fan' && next.fanLevel != null) return `${d.name} fan speed ${next.fanLevel}`;
+  if (d.type === 'fan' && next.display !== undefined) return `${d.name} display ${next.display ? 'on' : 'off'}`;
+  if (d.type === 'fan' && next.childLock !== undefined) return `${d.name} child lock ${next.childLock ? 'on' : 'off'}`;
   if (d.type === 'climate') {
     const HV: Record<string, string> = { cool: 'cooling', heat: 'heating', dry: 'drying', fan: 'fan only', auto: 'auto' };
     if (next.on === false) return `${d.name} off`;

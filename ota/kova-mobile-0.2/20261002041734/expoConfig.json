@@ -1,7 +1,7 @@
 {
   "name": "Kova",
   "slug": "kova",
-  "version": "0.2.11",
+  "version": "0.2.13",
   "runtimeVersion": "kova-mobile-0.2",
   "updates": {
     "enabled": true,
@@ -164,6 +164,14 @@
     },
     "kovaHistory": [
       {
+        "version": "0.2.13",
+        "title": "Purifiers: fan speed, the air, filter life, display and child lock; a tap switches them on or off. Security names cameras."
+      },
+      {
+        "version": "0.2.12",
+        "title": "Settings: where the home is, timezone, prayer times, the doorbell pause; the web gets a Settings page"
+      },
+      {
         "version": "0.2.11",
         "title": "Sign in a browser: type the code your Kova address shows on a computer; sign browsers out"
       },
@@ -174,14 +182,6 @@
       {
         "version": "0.2.9",
         "title": "Customise home, Energy and Media are the app's own screens; with zones for ducted air conditioners"
-      },
-      {
-        "version": "0.2.8",
-        "title": "Ducted air conditioners: zones in the AC panel (name them, open or close, how far open)"
-      },
-      {
-        "version": "0.2.7",
-        "title": "Same device twice? Kova suggests combining a device it reaches through two integrations (a soundbar, a TV) into one; Separate from its panel"
       }
     ]
   },

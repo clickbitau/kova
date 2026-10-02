@@ -63,12 +63,23 @@ export interface PurifierStatus {
   filter_life?: number;
   air_quality?: number;
   air_quality_value?: number;
+  child_lock?: boolean;
 }
 
-export function statusToState(s: PurifierStatus): DeviceState {
-  const st: DeviceState = { on: !!s.enabled, online: true };
+/** Fan speeds: Core 200S and 300S have 3, Core 400S and 600S have 4. */
+export const maxLevel = (deviceType: string) => /^(Core[46]00S|LAP-C[46]\d\dS)/i.test(deviceType) ? 4 : 3;
+
+export function statusToState(s: PurifierStatus, deviceType = ''): DeviceState {
+  const st: DeviceState = { on: !!s.enabled, online: true, fanLevelMax: maxLevel(deviceType) };
   const m = s.mode ? toVeSyncMode(s.mode) : null;
   if (m) st.mode = KOVA_MODE[m];
+  const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  st.fanLevel = n(s.level);
+  st.airQuality = n(s.air_quality);
+  st.pm25 = n(s.air_quality_value);
+  st.filterLife = n(s.filter_life);
+  if (typeof s.display === 'boolean') st.display = s.display;
+  if (typeof s.child_lock === 'boolean') st.childLock = s.child_lock;
   return st;
 }
 
@@ -184,7 +195,8 @@ export class VeSyncClient {
   setSwitch(dev: VeSyncDevice, on: boolean) { return this.bypass(dev, 'setSwitch', { enabled: on, id: 0 }); }
   setPurifierMode(dev: VeSyncDevice, mode: 'auto' | 'sleep') { return this.bypass(dev, 'setPurifierMode', { mode }); }
   /** Fan speed 1–3 (Core300S). Puts the purifier in manual mode. */
-  setLevel(dev: VeSyncDevice, level: number) { return this.bypass(dev, 'setLevel', { id: 0, level: Math.max(1, Math.min(3, Math.round(level))), type: 'wind' }); }
+  setLevel(dev: VeSyncDevice, level: number) { return this.bypass(dev, 'setLevel', { id: 0, level: Math.max(1, Math.min(maxLevel(dev.deviceType), Math.round(level))), type: 'wind' }); }
+  setChildLock(dev: VeSyncDevice, on: boolean) { return this.bypass(dev, 'setChildLock', { child_lock: on }); }
   setDisplay(dev: VeSyncDevice, on: boolean) { return this.bypass(dev, 'setDisplay', { state: on }); }
 }
 
@@ -248,7 +260,7 @@ export class VeSyncAdapter implements Adapter {
         const id = cfg?.id ?? `vesync_${dev.cid.slice(-12).toLowerCase().replace(/[^a-z0-9]/g, '')}`;
         p = { id, dev, level: 1 };
         this.purifiers.set(dev.cid, p);
-        ctx.announce([{ id, name: dev.deviceName, room: cfg?.room ?? 'unassigned', type: 'fan', integration: `Levoit ${dev.deviceType}`, address: dev.cid, capabilities: ['onoff', 'fanMode'] }]);
+        ctx.announce([{ id, name: dev.deviceName, room: cfg?.room ?? 'unassigned', type: 'fan', integration: `Levoit ${dev.deviceType}`, address: dev.cid, capabilities: ['onoff', 'fanMode', 'purifier'] }]);
       } else p.dev = dev;
     }
     await Promise.all([...this.purifiers.values()].map(async p => {
@@ -261,7 +273,7 @@ export class VeSyncAdapter implements Adapter {
         const s = await this.client.getPurifierStatus(p.dev);
         if (s.level) p.level = s.level;
         this.offline.delete(p.id);
-        ctx.report(p.id, statusToState(s));
+        ctx.report(p.id, statusToState(s, p.dev.deviceType));
       } catch (err) {
         this.offline.add(p.id);
         ctx.report(p.id, { online: false });
@@ -270,7 +282,7 @@ export class VeSyncAdapter implements Adapter {
     }));
   }
 
-  async command(d: Device, cmd: Command): Promise<void> {
+  async command(d: Device, cmd: Command): Promise<void | DeviceState> {
     const p = this.purifiers.get(d.address);
     if (!p) throw new Error(`Unknown VeSync device ${d.id}`);
     if (cmd.on === false) { await this.client.setSwitch(p.dev, false); return; }
@@ -282,6 +294,15 @@ export class VeSyncAdapter implements Adapter {
       if (m === 'manual') await this.client.setLevel(p.dev, p.level);
       else await this.client.setPurifierMode(p.dev, m);
     }
+    // A fan speed puts it in manual, as the Levoit app does.
+    if (cmd.fanLevel != null) {
+      const lv = Math.max(1, Math.min(maxLevel(p.dev.deviceType), Math.round(cmd.fanLevel)));
+      await this.client.setLevel(p.dev, lv);
+      p.level = lv;
+      return { fanLevel: lv, mode: 'Manual' };
+    }
+    if (cmd.display !== undefined) await this.client.setDisplay(p.dev, cmd.display);
+    if (cmd.childLock !== undefined) await this.client.setChildLock(p.dev, cmd.childLock);
   }
 
   status(): AdapterStatus {
