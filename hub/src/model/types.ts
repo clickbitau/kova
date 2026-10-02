@@ -336,6 +336,8 @@ export interface HomeConfig {
   favourites?: string[];
   /** Speakers the owner grouped to play together (any brands). Each group is a device of its own. */
   speakerGroups?: SpeakerGroup[];
+  /** Devices reached through several integrations, shown as one. */
+  combined?: CombinedDevice[];
   /** Pause what's playing on players that can pause (a Helix box) when the doorbell rings. Default on. */
   pauseForDoorbell?: boolean;
   /** When / if / then rules the owner made (or took from a suggestion). */
@@ -343,6 +345,13 @@ export interface HomeConfig {
 }
 
 export interface SpeakerGroup { id: string; name: string; room?: string; members: string[] }
+
+/**
+ * One physical device that Kova reaches through more than one integration (a soundbar through Google Cast for music
+ * and SmartThings for power and input), shown as one. `members` in order of preference: each part of a command goes
+ * to the first member that can do it. `hid`: members it hid, shown again when it's separated.
+ */
+export interface CombinedDevice { id: string; name: string; room?: string; members: string[]; hid?: string[] }
 
 // ------------------------------------------------------------------ plans --
 

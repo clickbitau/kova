@@ -14,7 +14,7 @@ export const CAPS: Record<DeviceType, Capability[]> = {
   climate: ['onoff', 'climate'],
 };
 
-const FIELD_CAP: Record<string, Capability> = {
+export const FIELD_CAP: Record<string, Capability> = {
   on: 'onoff', bri: 'brightness', k: 'colorTemp', color: 'color', mode: 'fanMode', media: 'media', vol: 'volume', power: 'power',
   activity: 'vacuum', battery: 'battery', paused: 'pause', input: 'input', skip: 'queue', shuffle: 'queue',
   muted: 'mute', sound: 'sound', night: 'sound', volStep: 'volume',

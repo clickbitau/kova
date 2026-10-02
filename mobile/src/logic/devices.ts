@@ -124,3 +124,10 @@ export function groupDevices(all: Dev[], rooms: Room[], f: { room?: string; type
 }
 
 export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/** A device Kova reaches through two integrations, suggested as one (snapshot `combineIdeas`). */
+export interface CombineIdea { key: string; name: string; members: string[]; why: string }
+/** A device made from several integrations' devices (snapshot `combined`). */
+export interface Combined { id: string; name: string; deviceId: string; members: string[]; memberNames: string[] }
+export const combineIdeasOf = (s: unknown): CombineIdea[] => (s as { combineIdeas?: CombineIdea[] } | null)?.combineIdeas ?? [];
+export const combinedOf = (s: unknown): Combined[] => (s as { combined?: Combined[] } | null)?.combined ?? [];
