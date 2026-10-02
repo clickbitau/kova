@@ -4,7 +4,8 @@ import { C, alpha } from '../theme';
 import { useHub, useSnap } from '../state/hub';
 import { useNav } from '../navigation';
 import { Icon } from '../ui/Icon';
-import { PageHead, Press } from '../ui/kit';
+import { PageHead, Press, Row } from '../ui/kit';
+import { automationsOf } from '../logic/automations';
 import { Screen } from '../ui/Screen';
 import { T } from '../ui/Text';
 import { animateLayout } from '../ui/motion';
@@ -82,6 +83,10 @@ export function ModesScreen() {
             </Press>
           );
         })}
+      </View>
+      <View style={{ borderRadius: 18, overflow: 'hidden', backgroundColor: C.card }}>
+        <Row first icon="account_tree" iconBg={alpha(C.amber, 0.14)} iconFg={C.amber} title="Automations" sub="When something happens, do something: alongside your modes" onPress={() => nav.navigate('Automations')}
+          right={<View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><T size={12.5} color={C.stone}>{String(automationsOf(s).length)}</T><Icon name="chevron_right" size={20} color={C.stone3} /></View>} />
       </View>
     </Screen>
   );

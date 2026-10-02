@@ -1261,7 +1261,7 @@ class Component extends DCLogic {
         status:lr?`${rl} ${lr.atLabel}${lr.result==='skipped'&&lr.detail?' · '+lr.detail:lr.result==='failed'&&lr.detail?' · '+lr.detail:''}`:rl,statusFg:rc,running:a.running>0,
         hasCond:(a.conditionLabels||[]).length>0,op:on?1:0.55,track:on?'#f2b14c':'#35363a',knob:on?'translateX(14px)':'none',fromHa:!!a.origin,
         toggle:()=>api('PATCH','/api/automations/'+a.id,{enabled:!on}).then(done(`${a.name} ${on?'off':'on'}`)).catch(x=>this.err(x)),
-        run:()=>api('POST',`/api/automations/${a.id}/run`).then(r=>this.toast(r.ran?`${a.name}: ${r.run.result==='failed'?'failed':'done'}`:`${a.name}: ${r.why}`)).catch(x=>this.err(x)),
+        run:()=>api('POST',`/api/automations/${a.id}/run`).then(r=>this.toast(!r.ran?`${a.name}: ${r.why}`:r.running?`${a.name} is running`:`${a.name}: ${r.run&&r.run.result==='failed'?'failed':'done'}`)).catch(x=>this.err(x)),
         edit:()=>this.openAuto(a),
         dup:()=>api('POST',`/api/automations/${a.id}/duplicate`).then(done(`Copied ${a.name} (off until you turn it on)`)).catch(x=>this.err(x)),
         remove:()=>api('DELETE','/api/automations/'+a.id).then(done(`${a.name} deleted`)).catch(x=>this.err(x))}});
@@ -1396,7 +1396,7 @@ class Component extends DCLogic {
       editBg:tab==='edit'?'#2a2b2f':'transparent',histBg:tab==='history'?'#2a2b2f':'transparent',
       cancel:()=>this.setState({ae:null}),
       save:()=>{const body=JSON.parse(JSON.stringify(A));(E.id?api('PUT','/api/automations/'+E.id,body):api('POST','/api/automations',body)).then(r=>{this.setState({ae:null});done(E.id?`${A.name} saved`:`${A.name} added`)(r)}).catch(x=>this.err(x))},
-      tryNow:E.id?()=>api('POST',`/api/automations/${E.id}/run`).then(r=>{this.toast(r.ran?'Ran it':r.why);this.openAuto((this.state.hub.automations||[]).find(x=>x.id===E.id),'history')}).catch(x=>this.err(x)):null,canTry:!!E.id}};
+      tryNow:E.id?()=>api('POST',`/api/automations/${E.id}/run`).then(r=>{this.toast(!r.ran?r.why:r.running?'Running: see History':'Ran it');this.openAuto((this.state.hub.automations||[]).find(x=>x.id===E.id),'history')}).catch(x=>this.err(x)):null,canTry:!!E.id}};
   }
   openAuto(a,tab){
     const blank={name:'',enabled:true,mode:'single',triggers:[],conditions:[],actions:[]};
