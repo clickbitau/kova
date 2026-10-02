@@ -54,6 +54,7 @@ function fakeCloud(email: string, password: string) {
         if (method === 'setPurifierMode') purifier.mode = data.mode;
         if (method === 'setLevel') { purifier.mode = 'manual'; purifier.level = data.level; }
         if (method === 'setDisplay') purifier.display = data.state;
+        if (method === 'setChildLock') (purifier as Record<string, unknown>).child_lock = data.child_lock;
         return send({ traceId: body.traceId, code: 0, msg: 'request success', result: { code: 0, result: method === 'getPurifierStatus' ? purifier : {}, traceId: body.traceId } });
       }
       res.statusCode = 404; res.end();
@@ -79,7 +80,10 @@ test('VeSync: logs in, lists purifiers, reports status, and sends power and mode
     assert.equal(d.type, 'fan');
     assert.equal(d.room, 'bedroom');
     assert.equal(d.integration, 'Levoit Core300S');
-    assert.deepEqual(d.state, { on: false, mode: 'Auto', online: true });
+    const pick = (st: { on?: boolean; mode?: string | null; online?: boolean }) => ({ on: st.on, mode: st.mode, online: st.online });
+    assert.deepEqual(pick(d.state), { on: false, mode: 'Auto', online: true });
+    assert.deepEqual(d.capabilities, ['onoff', 'fanMode', 'purifier']);
+    assert.equal(d.state.fanLevelMax, 3, 'a Core 300S has three speeds');
     const off = list.find(x => x.id !== 'bedroom_purifier')!;
     assert.equal(off.state.online, false);
     assert.equal(off.room, 'unassigned');
@@ -107,7 +111,19 @@ test('VeSync: logs in, lists purifiers, reports status, and sends power and mode
     // A change made in the VeSync app shows up on the next poll.
     fake.purifier.enabled = true; fake.purifier.mode = 'auto';
     await vs.poll();
-    assert.deepEqual(reg.get(d.id)!.state, { on: true, mode: 'Auto', online: true });
+    assert.deepEqual(pick(reg.get(d.id)!.state), { on: true, mode: 'Auto', online: true });
+
+    // Fan speed: manual at that speed (clamped to what the model has); display and child lock.
+    fake.calls.length = 0;
+    await reg.command(d.id, { fanLevel: 9 }, { kind: 'user', label: 'You' });
+    await reg.command(d.id, { display: false, childLock: true }, { kind: 'user', label: 'You' });
+    assert.deepEqual(bypasses(fake.calls), [
+      { method: 'setLevel', source: 'APP', data: { id: 0, level: 3, type: 'wind' } },
+      { method: 'setDisplay', source: 'APP', data: { state: false } },
+      { method: 'setChildLock', source: 'APP', data: { child_lock: true } },
+    ]);
+    assert.deepEqual(pick(reg.get(d.id)!.state), { on: true, mode: 'Manual', online: true });
+    assert.equal(reg.get(d.id)!.state.fanLevel, 3);
     await assert.rejects(reg.command(d.id, { mode: 'Turbo' }, { kind: 'user', label: 'You' }));
     assert.equal(vs.status().ok, false, 'one purifier is offline');
   } finally { await reg.stop(); fake.server.close(); }
@@ -168,5 +184,7 @@ test('VeSync helpers', () => {
   assert.ok(!isCorePurifier('LV-PUR131S'));
   assert.equal(toVeSyncMode('Sleep'), 'sleep');
   assert.equal(toVeSyncMode('Turbo'), null);
-  assert.deepEqual(statusToState({ enabled: true, mode: 'manual', level: 3 }), { on: true, mode: 'Manual', online: true });
+  assert.deepEqual(statusToState({ enabled: true, mode: 'manual', level: 3, filter_life: 18, air_quality: 1, air_quality_value: 4, display: true, child_lock: false }, 'Core300S'),
+    { on: true, mode: 'Manual', online: true, fanLevelMax: 3, fanLevel: 3, airQuality: 1, pm25: 4, filterLife: 18, display: true, childLock: false });
+  assert.equal(statusToState({ enabled: false }, 'Core600S').fanLevelMax, 4);
 });

@@ -32,6 +32,14 @@ export interface DeviceState {
   target?: number | null;
   temp?: number | null;
   fanSpeed?: 'auto' | 'quiet' | 'low' | 'medium' | 'high' | 'turbo' | null;
+  /** Air purifiers (`purifier`): fan speed 1…fanLevelMax, the air (1 good … 4 very poor) and PM2.5, filter left in %, display, child lock. */
+  fanLevel?: number | null;
+  fanLevelMax?: number;
+  airQuality?: number | null;
+  pm25?: number | null;
+  filterLife?: number | null;
+  display?: boolean;
+  childLock?: boolean;
   /** Ducted air conditioners (`zones`): each zone's damper, on or off and how far open (0–100). */
   zones?: { n: number; on: boolean; open: number | null }[] | null;
   online?: boolean;

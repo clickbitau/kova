@@ -78,3 +78,12 @@ test('notification taps go to the right place', () => {
   assert.deepEqual(routeFor('/phone.html?embed=1&setup=nest'), { setup: 'nest' });
   assert.deepEqual(routeFor(undefined), {});
 });
+
+test('a purifier: a tap switches it on or off; its line says mode, speed, the air, or a filter running out', () => {
+  const p = { id: 'p', name: 'Purifier', room: 'r', type: 'fan', capabilities: ['onoff', 'fanMode', 'purifier'], on: true, mode: 'Manual', fanLevel: 2, airQuality: 1, filterLife: 80, state: {} } as unknown as Dev;
+  assert.deepEqual(toggleCommand(p, []), { on: false });
+  assert.equal(stateOf(p)[0], 'Manual · speed 2 · air good');
+  assert.equal(stateOf({ ...p, mode: 'Auto', airQuality: 3 } as Dev)[0], 'Auto · air poor');
+  assert.deepEqual(stateOf({ ...p, filterLife: 18 } as Dev), ['Manual · filter 18%', '#f2b14c']);
+  assert.equal(stateOf({ ...p, on: false } as Dev)[0], 'Off');
+});

@@ -2,8 +2,12 @@
   "//": "The Kova app's version (docs/VERSIONING.md). store: the X.Y.0 a store binary on this train carries (app.json version). version: what runs, store or over the air (X.Y.Z, PATCH only). train: the native runtime (app.json runtimeVersion). history: newest first; an over-the-air release adds an entry.",
   "train": "kova-mobile-0.2",
   "store": "0.2.0",
-  "version": "0.2.12",
+  "version": "0.2.13",
   "history": [
+    {
+      "version": "0.2.13",
+      "title": "Purifiers: fan speed, the air, filter life, display and child lock; a tap switches them on or off. Security names cameras."
+    },
     {
       "version": "0.2.12",
       "title": "Settings: where the home is, timezone, prayer times, the doorbell pause; the web gets a Settings page"

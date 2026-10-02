@@ -7,7 +7,7 @@ import { useHub } from '../state/hub';
 import { useSheet } from '../state/sheet';
 import { useNav } from '../navigation';
 import { hubUrl } from '../logic/connect';
-import { combinedOf, devs, FAN_SPEEDS, has, HVAC, ICON, isPlayer, stateOf, tint, type Dev } from '../logic/devices';
+import { AIR, combinedOf, devs, FAN_SPEEDS, filterNote, has, HVAC, ICON, isPlayer, stateOf, tint, type Dev } from '../logic/devices';
 import { arcPath, clampTarget, TARGET_MAX, TARGET_MIN } from '../logic/climate';
 import { snapOpen, visibleZones } from '../logic/zones';
 import { Icon } from '../ui/Icon';
@@ -262,6 +262,7 @@ export function DeviceSheet() {
         </View>
       ) : null}
 
+      {D.type === 'fan' && has(D, 'purifier') ? <Purifier D={D} /> : null}
       {D.type === 'fan' ? block('fanmode', 'Mode',
         <Segmented label="Fan mode" value={D.on !== false ? D.mode ?? null : null} color={C.blue} options={[{ id: 'Auto', label: 'Auto', icon: 'auto_mode' }, { id: 'Sleep', label: 'Sleep', icon: 'bedtime' }, { id: 'Manual', label: 'Manual', icon: 'tune' }]} onChange={m => void send(D.id, { on: true, mode: m })} />,
       ) : null}
@@ -376,5 +377,40 @@ function Zones({ D }: { D: Dev }) {
         </Card>
       ))}
     </Section>
+  );
+}
+
+/** An air purifier: the air and the filter, fan speed (choosing one switches to Manual), display and child lock. */
+function Purifier({ D }: { D: Dev }) {
+  const { send } = useHub();
+  const air = AIR[D.airQuality ?? 0];
+  const fl = D.filterLife;
+  const flColor = fl == null ? C.stone : fl <= 10 ? C.red : fl <= 20 ? C.amber : C.green;
+  const max = D.fanLevelMax ?? 3;
+  return (
+    <View style={{ gap: SP[4] }}>
+      <View style={{ flexDirection: 'row', gap: SP[2] }}>
+        <Card style={{ flex: 1, gap: 2 }}>
+          <T v="footnote" color={C.stone}>Air</T>
+          <T v="title" color={air?.[1] ?? C.stone}>{air?.[0] ?? 'Not reported'}</T>
+          {D.pm25 != null ? <T v="micro" color={C.stone2}>{`PM2.5 ${D.pm25} µg/m³`}</T> : null}
+        </Card>
+        <Card style={{ flex: 1, gap: SP[1] }}>
+          <T v="footnote" color={C.stone}>Filter</T>
+          <T v="title" color={flColor}>{fl != null ? `${fl}%` : '—'}</T>
+          <View style={{ height: 5, borderRadius: 3, backgroundColor: C.control, overflow: 'hidden' }}><View style={{ width: `${Math.max(0, Math.min(100, fl ?? 0))}%`, height: 5, backgroundColor: flColor }} /></View>
+          {filterNote(fl) ? <T v="micro" color={flColor}>{filterNote(fl)}</T> : null}
+        </Card>
+      </View>
+      <Section title="Fan speed" caption gap={SP[2]}>
+        <Segmented label="Fan speed" value={D.on && D.mode === 'Manual' && D.fanLevel ? String(D.fanLevel) : null} color={C.blue}
+          options={Array.from({ length: max }, (_, i) => ({ id: String(i + 1), label: String(i + 1) }))} onChange={v => void send(D.id, { on: true, fanLevel: Number(v), mode: 'Manual' })} />
+        <T v="micro" color={C.stone2}>Choosing a speed switches it to Manual.</T>
+      </Section>
+      <Group>
+        <SwitchRow first icon="brightness_6" title="Display" on={D.display !== false} onChange={v => void send(D.id, { display: v })} />
+        <SwitchRow icon="lock" title="Child lock" on={!!D.childLock} onChange={v => void send(D.id, { childLock: v })} />
+      </Group>
+    </View>
   );
 }

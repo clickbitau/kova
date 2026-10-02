@@ -19,6 +19,12 @@ export const HVAC: [NonNullable<Dev['hvac']>, string, string, string][] = [
 ];
 export const FAN_SPEEDS: [NonNullable<Dev['fanSpeed']>, string][] = [['auto', 'Auto'], ['quiet', 'Quiet'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['turbo', 'Turbo']];
 
+/** The air as a purifier rates it: 1 good … 4 very poor, with its colour. */
+export const AIR: Record<number, [string, string]> = { 1: ['Good', C.green], 2: ['Moderate', '#dcd27e'], 3: ['Poor', C.amber], 4: ['Very poor', C.red] };
+
+/** A purifier's filter: how urgent replacing it is. */
+export const filterNote = (life?: number | null) => life == null ? '' : life <= 10 ? 'Replace the filter now' : life <= 20 ? 'Replace the filter soon' : '';
+
 export const isLight = (d: Pick<Device, 'type'>) => d.type === 'light' || d.type === 'dimmer';
 export const isPlayer = (d: Pick<Device, 'type'>) => d.type === 'media' || d.type === 'tv';
 export const has = (d: Pick<Device, 'capabilities'>, c: string) => (d.capabilities ?? []).includes(c);
@@ -44,7 +50,12 @@ export function stateOf(d: Dev): [string, string] {
     const a = d.activity || (d.on ? 'cleaning' : 'idle');
     return [`${VAC[a] || 'Idle'}${d.battery != null ? ` · ${d.battery}%` : ''}`, a === 'error' ? C.red : a === 'cleaning' ? C.amber : C.stone];
   }
-  if (d.type === 'fan') return [d.mode || 'Auto', C.blue];
+  if (d.type === 'fan') {
+    if (!d.on) return ['Off', C.stone];
+    if (d.filterLife != null && d.filterLife <= 20) return [`${d.mode || 'On'} · filter ${d.filterLife}%`, C.amber];
+    const air = AIR[d.airQuality ?? 0];
+    return [[d.mode || 'On', d.mode === 'Manual' && d.fanLevel ? `speed ${d.fanLevel}` : '', air ? `air ${air[0].toLowerCase()}` : ''].filter(Boolean).join(' · '), C.blue];
+  }
   if (d.type === 'climate') {
     const m = HVAC.find(h => h[0] === d.hvac), room = d.temp != null ? `room ${d.temp}°` : '';
     return d.on ? [[m?.[1] ?? 'On', d.target != null ? `${d.target}°` : '', room].filter(Boolean).join(' · '), m?.[3] ?? C.blue] : [['Off', room].filter(Boolean).join(' · '), C.stone];
@@ -78,7 +89,7 @@ export function tint(d: Dev): { bg: string; border: string; iconBg: string; icon
  */
 export function toggleCommand(d: Dev, sources: { name: string }[]): Command | null {
   if (d.type === 'sensor' || d.type === 'camera') return null;
-  if (d.type === 'fan') return { mode: d.mode === 'Auto' ? 'Sleep' : 'Auto' };
+  if (d.type === 'fan') return { on: !d.on };
   if (d.type === 'vacuum') return { on: !d.on };
   if (has(d, 'library')) return d.on ? { paused: !d.paused } : null;
   if (isPlayer(d) && !has(d, 'media')) return { on: !d.on };
