@@ -243,9 +243,6 @@ export const CATALOG: CatalogItem[] = [
     id: 'smartthings', name: 'Samsung SmartThings', icon: 'speaker', kind: 'Cloud', apply: 'hot',
     description: 'Samsung soundbars (power, input, volume, mute, sound mode, night mode), and your Samsung TVs’ source: switched directly and read back, which the TV’s network remote can’t do. Through your Samsung account.',
     fields: [
-      { key: 'clientId', label: 'SmartThings app client id', type: 'text', help: 'Filled in by Set up with a token below. Or make an OAuth-In app yourself with the SmartThings CLI (smartthings apps:create, scopes r:devices:* and x:devices:*, redirect URI https://httpbin.org/get).' },
-      { key: 'clientSecret', label: 'Client secret', type: 'password' },
-      { key: 'token', label: 'Or a personal access token', type: 'password', help: 'From account.smartthings.com/tokens. SmartThings ends these after 24 hours, so the app above is better.' },
       {
         key: 'rooms', label: 'Rooms', type: 'list', shape: 'map', mapKey: 'name', mapValue: 'room', addLabel: 'Put a soundbar in a room',
         item: [{ key: 'name', label: 'Name in SmartThings', type: 'text', required: true, placeholder: 'Soundbar Q930B' }, room()],
@@ -257,7 +254,6 @@ export const CATALOG: CatalogItem[] = [
         help: 'At account.smartthings.com/tokens make a token with the Devices and Apps permissions ticked. Kova uses it once to make its own app on your account (the token isn’t kept), then opens the Allow page. After allowing, copy the code from the address bar into Finish linking.',
         fields: [{ key: 'token', label: 'SmartThings token', type: 'password', required: true }],
       },
-      { id: 'link', label: 'Link SmartThings', icon: 'link', method: 'GET', path: '/api/integrations/smartthings/auth-url', opensUrl: true, help: 'Save first. Allow Kova, then copy the code from the address bar (?code=…) below.' },
       { id: 'code', label: 'Finish linking', icon: 'key', method: 'POST', path: '/api/integrations/smartthings/auth-code', help: 'Kova keeps the sign-in and starts straight away.', fields: [{ key: 'code', label: 'Code', type: 'text', required: true }] },
     ],
   },
@@ -422,8 +418,10 @@ export const CATALOG: CatalogItem[] = [
   },
   {
     id: 'notify', name: 'Notifications', icon: 'notifications', kind: 'Cloud', apply: 'restart',
-    description: 'Doorbell and “everyone’s out” alerts on your phone, through the Kova phone app or ntfy.',
+    description: 'Alerts on your phone, through the Kova phone app or ntfy: the doorbell, everyone out with lights on, devices and links that stop working, the network, and the home (filters, the air, heat and cold, batteries).',
     fields: [
+      ...([['doorbell', 'Doorbell rings'], ['everyoneOut', 'Everyone’s out and lights are on'], ['offline', 'A device stops responding'], ['links', 'A link to Helix, Warden or a cloud stops working'], ['network', 'Network alerts from Warden'], ['home', 'The home: a filter to replace, poor air, heat and cold, low batteries']] as const)
+        .map(([k, label]) => ({ key: `rules.${k}`, label, type: 'select' as const, options: [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }] })),
       { key: 'ntfy.url', label: 'ntfy server', type: 'text', placeholder: 'https://ntfy.sh' },
       { key: 'ntfy.topic', label: 'ntfy topic', type: 'text', placeholder: 'kova-home-7f3a', help: 'Optional. The phone app gets notifications without it (over HTTPS).' },
       { key: 'ntfy.token', label: 'Access token', type: 'password', placeholder: 'optional' },
