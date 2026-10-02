@@ -101,7 +101,7 @@ export interface EnergyToday {
 }
 
 export interface Snapshot {
-  home: { name: string; timezone: string; now: number; nowHour: number; date: string; dateLabel: string; clock: string; location?: { latitude: number; longitude: number } };
+  home: { name: string; timezone: string; now: number; nowHour: number; date: string; dateLabel: string; clock: string; location?: { latitude: number; longitude: number }; prayerMethod?: string; pauseForDoorbell?: boolean };
   rooms: Room[];
   favourites: string[] | null;
   speakerGroups: SpeakerGroup[];

@@ -15,6 +15,8 @@ export type Stack = {
   Customise: undefined;
   /** More → Sign in a browser: approve a browser's sign-in code; signed-in browsers. */
   Browsers: undefined;
+  /** More → Settings: where the home is, its timezone and prayer method, behaviours. */
+  Settings: undefined;
   Energy: undefined;
   Media: undefined;
   /** More → Integrations: what's connected, and the hub's own updates. */

@@ -89,7 +89,8 @@ export function MoreScreen() {
       </Group>
 
       <Group title="Set up">
-        <Row first icon="home" title="Customise home" sub="Rooms, people, names and favourites" onPress={() => nav.navigate('Customise')} />
+        <Row first icon="settings" iconFg={C.amber} title="Settings" sub="Where the home is, timezone, prayer times, behaviours" onPress={() => nav.navigate('Settings')} />
+        <Row icon="home" title="Customise home" sub="Rooms, people, names and favourites" onPress={() => nav.navigate('Customise')} />
         <Row icon="hub" title="Integrations" sub={bad.length ? `${bad.length} need${bad.length === 1 ? 's' : ''} attention` : `${s.integrations.length} connected`} subColor={bad.length ? C.amber : C.stone} badge={bad.length > 0} onPress={() => nav.navigate('Integrations')} />
       </Group>
 

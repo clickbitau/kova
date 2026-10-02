@@ -117,6 +117,8 @@ export function snapshot(hub: Hub) {
       clock: clock(now, tz),
       // Where the home is, for the phone app's arriving and leaving (it watches a circle around this).
       location: { latitude: cfg.latitude, longitude: cfg.longitude },
+      // For Settings: how prayer times are worked out, and whether the doorbell pauses what's playing.
+      prayerMethod: cfg.prayerMethod ?? 'MuslimWorldLeague', pauseForDoorbell: cfg.pauseForDoorbell !== false,
       // Today's sunrise and sunset as local hours, for day strips.
       sun: (() => { const t = SunCalc.getTimes(new Date(now), cfg.latitude, cfg.longitude); const h = (d: Date) => (isNaN(+d) ? null : localHour(+d, tz)); return { rise: h(t.sunrise), set: h(t.sunset) }; })(),
     },

@@ -1,7 +1,7 @@
 {
   "name": "Kova",
   "slug": "kova",
-  "version": "0.2.10",
+  "version": "0.2.12",
   "runtimeVersion": "kova-mobile-0.2",
   "updates": {
     "enabled": true,
@@ -164,6 +164,14 @@
     },
     "kovaHistory": [
       {
+        "version": "0.2.12",
+        "title": "Settings: where the home is, timezone, prayer times, the doorbell pause; the web gets a Settings page"
+      },
+      {
+        "version": "0.2.11",
+        "title": "Sign in a browser: type the code your Kova address shows on a computer; sign browsers out"
+      },
+      {
         "version": "0.2.10",
         "title": "Integrations in the app: what’s connected, add from the catalog, and each one’s setup, linking and pairing on its own screen"
       },
@@ -174,14 +182,6 @@
       {
         "version": "0.2.8",
         "title": "Ducted air conditioners: zones in the AC panel (name them, open or close, how far open)"
-      },
-      {
-        "version": "0.2.7",
-        "title": "Same device twice? Kova suggests combining a device it reaches through two integrations (a soundbar, a TV) into one; Separate from its panel"
-      },
-      {
-        "version": "0.2.6",
-        "title": "Redesigned app: real loading/offline/pending/failed states, new device panels, App updates in More (check now, restart to update), location only when nothing else knows you're home; with the Automations screens"
       }
     ]
   },
