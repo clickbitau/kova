@@ -23,6 +23,7 @@ import { ModesScreen } from './src/screens/ModesScreen';
 import { ActivityScreen } from './src/screens/ActivityScreen';
 import { ThisPhoneScreen } from './src/screens/ThisPhoneScreen';
 import { WebScreen } from './src/screens/WebScreen';
+import { CameraScreen } from './src/screens/CameraScreen';
 import { IntegrationAddScreen, IntegrationsScreen } from './src/screens/IntegrationsScreen';
 import { IntegrationScreen } from './src/screens/IntegrationScreen';
 import { AutomationsScreen } from './src/screens/AutomationsScreen';
@@ -103,6 +104,7 @@ function Home() {
           <Stack.Screen name="Integrations" component={IntegrationsScreen} />
           <Stack.Screen name="IntegrationAdd" component={IntegrationAddScreen} />
           <Stack.Screen name="Integration" component={IntegrationScreen} />
+          <Stack.Screen name="Camera" component={CameraScreen} />
           <Stack.Screen name="Web" component={WebScreen} />
           <Stack.Screen name="Automations" component={AutomationsScreen} />
           <Stack.Screen name="Browsers" component={BrowsersScreen} />

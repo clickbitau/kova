@@ -44,7 +44,7 @@ export function DevicesScreen() {
   const types = TYPES.filter(t => t.id === 'all' || all.some(t.test));
   const tap = (d: Dev) => { const c = toggleCommand(d, s.sources); if (c) void send(d.id, c); else sheet.open(d.id); };
   const pills = [{ id: 'all', name: 'All rooms' }, ...s.rooms.filter(r => all.some(d => d.room === r.id)), ...(all.some(d => d.room === 'unassigned') ? [{ id: 'unassigned', name: 'Other' }] : [])];
-  const add = () => nav.navigate('Web', { title: 'Add a device', path: '/phone.html?embed=1&add=1' });
+  const add = () => nav.navigate('IntegrationAdd');
   const filtered = room !== 'all' || type !== 'all' || !!q;
 
   return (

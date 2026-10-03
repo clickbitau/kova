@@ -25,7 +25,9 @@ export type Stack = {
   IntegrationAdd: undefined;
   /** One integration's status and setup (an integrations.json section id). */
   Integration: { id: string };
-  /** A page of the hub's phone web app, for what has no screen of its own yet (Add a device, live camera video, editing a mode). */
+  /** A camera: its latest picture, its state and recent events. */
+  Camera: { id: string };
+  /** A page of the hub's phone web app, for what has no screen of its own yet (live camera video, editing a mode). */
   Web: { title: string; path: string };
 };
 

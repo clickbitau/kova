@@ -69,7 +69,7 @@ export function SecurityScreen() {
   // Snapshot images change as events happen: bust the cache every minute.
   const [tick, setTick] = useState(0);
   useEffect(() => { const t = setInterval(() => setTick(x => x + 1), 60_000); return () => clearInterval(t); }, []);
-  const watch = (id: string, name: string) => nav.navigate('Web', { title: name, path: `/phone.html?embed=1&cam=${encodeURIComponent(id)}` });
+  const watch = (id: string) => nav.navigate('Camera', { id });
   const summary = `${home.length ? (home.length === s.people.length && home.length > 1 ? 'Everyone home' : `${home.map(p => p.name).join(' and ')} home`) : 'Nobody home'} · ${cams.length} camera${cams.length === 1 ? '' : 's'}`;
   const netBad = internet?.on === false || internet?.online === false;
 
@@ -78,7 +78,7 @@ export function SecurityScreen() {
       {cams.length ? (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SP[2] + 2 }}>
           {cams.map((c, i) => (
-            <CameraCard key={c.id} c={c} index={i} wide={cams.length === 1 || (cams.length % 2 === 1 && i === cams.length - 1)} onPress={() => watch(c.id, c.name)}
+            <CameraCard key={c.id} c={c} index={i} wide={cams.length === 1 || (cams.length % 2 === 1 && i === cams.length - 1)} onPress={() => watch(c.id)}
               uri={cfg ? `${hubUrl(cfg, `/api/devices/${encodeURIComponent(c.id)}/snapshot`, true)}${cfg.token ? '&' : '?'}t=${tick}` : null} />
           ))}
         </View>

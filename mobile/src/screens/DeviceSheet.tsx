@@ -293,7 +293,7 @@ export function DeviceSheet() {
           <View style={{ aspectRatio: 16 / 9, borderRadius: R.lg, overflow: 'hidden', backgroundColor: C.inset }}>
             <CameraStill uri={cfg ? hubUrl(cfg, `/api/devices/${encodeURIComponent(D.id)}/snapshot`, true) : null} off={D.online === false} label={`Latest picture from ${D.name}`} />
           </View>
-          <Button full icon="videocam" label="Watch live" onPress={() => { close(); nav.navigate('Web', { title: D.name, path: `/phone.html?embed=1&cam=${encodeURIComponent(D.id)}` }); }} />
+          <Button full icon="videocam" label="View camera" onPress={() => { close(); nav.navigate('Camera', { id: D.id }); }} />
         </View>
       ) : null}
 

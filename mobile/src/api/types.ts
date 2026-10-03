@@ -85,7 +85,7 @@ export interface ModeView {
 
 export interface Finding { id: string; modeId: string; kind: string; icon: string; tone: 'alert' | 'check'; title: string; body: string; fix: string; alt: string; done?: string }
 
-export interface ActivityRow { id: number; ts: number; t: string; type: string; icon: string; what: string; why: string }
+export interface ActivityRow { id: number; ts: number; t: string; type: string; icon: string; what: string; why: string; device?: string | null }
 
 export interface Integration { id: string; name: string; icon: string; kind: string; ok: boolean; note?: string; devices: number }
 
@@ -129,6 +129,10 @@ export interface Snapshot {
   /** The hub's own software updates (null when the hub has no updater). */
   update?: HubUpdate | null;
   weather: { temp: number; text: string; icon: string } | null;
+  /** The home at a glance (hub services/insights.ts): outside (with today), inside temperatures, the air. */
+  glance?: Glance;
+  /** Alerts and warnings worth acting on, most urgent first. */
+  insights?: Insight[];
   energy: EnergyToday | null;
   demo?: boolean;
 }
@@ -140,3 +144,10 @@ export interface AskReply {
   undo?: string;
   understood: boolean;
 }
+
+export interface Glance {
+  outside: { temp: number; text: string; icon: string; feels?: number; humidity?: number; wind?: number; uv?: number; high?: number; low?: number; uvMax?: number | null; rain?: string | null } | null;
+  inside: { name: string; temp: number; device: string }[];
+  air: { name: string; level: number; label: string; device: string }[];
+}
+export interface Insight { id: string; level: 'alert' | 'warning' | 'info'; icon: string; title: string; detail?: string; device?: string }

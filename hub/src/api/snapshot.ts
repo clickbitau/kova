@@ -104,7 +104,7 @@ export function snapshot(hub: Hub) {
   const feed = store.feed(80);
   const activity = feed.map(e => ({
     id: e.id, ts: e.ts, t: localDate(e.ts, tz) === today ? clock(e.ts, tz) : `${new Date(e.ts).toLocaleDateString('en-AU', { weekday: 'short', timeZone: tz })} ${clock(e.ts, tz)}`,
-    type: e.feed!, icon: feedIcon(e), what: e.what,
+    type: e.feed!, icon: feedIcon(e), what: e.what, device: e.device,
     why: [e.cause.label, e.cause.detail].filter(Boolean).join(' · '),
   }));
 

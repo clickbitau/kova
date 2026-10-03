@@ -1,7 +1,7 @@
 {
   "name": "Kova",
   "slug": "kova",
-  "version": "0.2.13",
+  "version": "0.2.15",
   "runtimeVersion": "kova-mobile-0.2",
   "updates": {
     "enabled": true,
@@ -164,6 +164,14 @@
     },
     "kovaHistory": [
       {
+        "version": "0.2.15",
+        "title": "Native camera screen, native add-a-device"
+      },
+      {
+        "version": "0.2.14",
+        "title": "Crash reporting: the app reports its own crashes to the hub, with the screen it was on"
+      },
+      {
         "version": "0.2.13",
         "title": "Purifiers: fan speed, the air, filter life, display and child lock; a tap switches them on or off. Security names cameras."
       },
@@ -174,14 +182,6 @@
       {
         "version": "0.2.11",
         "title": "Sign in a browser: type the code your Kova address shows on a computer; sign browsers out"
-      },
-      {
-        "version": "0.2.10",
-        "title": "Integrations in the app: what’s connected, add from the catalog, and each one’s setup, linking and pairing on its own screen"
-      },
-      {
-        "version": "0.2.9",
-        "title": "Customise home, Energy and Media are the app's own screens; with zones for ducted air conditioners"
       }
     ]
   },
