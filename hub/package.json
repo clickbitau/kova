@@ -1,6 +1,6 @@
 {
   "name": "@kova/hub",
-  "version": "0.7.38",
+  "version": "0.7.39",
   "private": true,
   "type": "module",
   "engines": {
@@ -26,6 +26,7 @@
     "qrcode": "^1.5.4",
     "suncalc": "^1.9.0",
     "tsx": "^4.19.0",
+    "undici": "^7.30.0",
     "web-push": "^3.6.7",
     "yaml": "^2.9.1"
   },

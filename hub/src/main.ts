@@ -28,6 +28,7 @@ import { Notifier } from './services/notify.ts';
 import { Backups, parseBackupTime } from './services/backup.ts';
 import { acquireLock, LockedError, type HeldLock } from './util/lock.ts';
 import { KOVA_VERSION } from './version.ts';
+import { Agent, setGlobalDispatcher } from 'undici';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const env = process.env;
@@ -35,6 +36,11 @@ const dataDir = resolve(env.KOVA_DATA ?? resolve(here, '../../data'));
 
 // Everything Kova writes (database, pairings, backups) is private to the user it runs as.
 process.umask(0o077);
+
+// A dead IPv6 route stalls fetch() until it times out instead of falling back to IPv4 (the Smart
+// Life session endpoint apigw.tuyaeu.com resolves to both). Race the families: whichever connects
+// first wins, like browsers do.
+setGlobalDispatcher(new Agent({ connect: { autoSelectFamily: true, autoSelectFamilyAttemptTimeout: 300 } }));
 
 // One hub per data folder, and never while a restore is running.
 let lock: HeldLock;
