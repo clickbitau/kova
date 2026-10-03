@@ -2,7 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { resolve, dirname } from 'node:path';
+import { resolve, dirname, join } from 'node:path';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { existsSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { Store } from '../src/store/db.ts';
 import { Registry } from '../src/devices/registry.ts';
@@ -27,12 +30,13 @@ async function fakeGoogle() {
     queue: [] as { ackId: string; message: { data: string; messageId: string; publishTime: string } }[],
     acked: [] as string[], pulls: 0, emptyPullMs: 20,
     commands: [] as { device: string; command: string; params: Record<string, unknown> }[],
+    imgFetches: 0, imgBroken: false,
     authHeaders: [] as string[],
   };
   const devices = [
     { name: DOORBELL, type: 'sdm.devices.types.DOORBELL', traits: { 'sdm.devices.traits.Info': { customName: '' }, ...liveTrait(['WEB_RTC']) }, parentRelations: [{ parent: `enterprises/${PROJECT}/structures/S/rooms/R1`, displayName: 'Front door' }] },
     { name: GARAGE, type: 'sdm.devices.types.CAMERA', traits: { 'sdm.devices.traits.Info': { customName: 'Garage camera' }, ...liveTrait(['RTSP']), 'sdm.devices.traits.Connectivity': { status: 'OFFLINE' } }, parentRelations: [{ parent: 'x', displayName: 'Garage' }] },
-    { name: OFFICE, type: 'sdm.devices.types.CAMERA', traits: { ...liveTrait(['WEB_RTC']) }, parentRelations: [{ parent: 'x', displayName: 'Office' }] },
+    { name: OFFICE, type: 'sdm.devices.types.CAMERA', traits: { ...liveTrait(['WEB_RTC']), 'sdm.devices.traits.CameraEventImage': { maxResolution: { width: 640, height: 480 } } }, parentRelations: [{ parent: 'x', displayName: 'Office' }] },
     { name: dev('THERMOSTAT00000000000004'), type: 'sdm.devices.types.THERMOSTAT', traits: {}, parentRelations: [{ parent: 'x', displayName: 'Hall' }] },
   ];
   const server = http.createServer((req, res) => {
@@ -58,6 +62,7 @@ async function fakeGoogle() {
         }
         return send({ error: 'unsupported_grant_type' }, 400);
       }
+      if (url.startsWith('/img/')) { s.imgFetches++; res.setHeader('content-type', 'image/jpeg'); res.end(Buffer.from(`jpeg-${url.slice(5).split('?')[0]}`)); return; }
       s.authHeaders.push(req.headers.authorization ?? '');
       if (req.headers.authorization !== `Bearer ${s.token}`) return send({ error: { code: 401, status: 'UNAUTHENTICATED', message: 'Request had invalid authentication credentials.' } }, 401);
       if (url === `/sdm/v1/enterprises/${PROJECT}/devices` && req.method === 'GET') return send({ devices });
@@ -68,6 +73,7 @@ async function fakeGoogle() {
         if (b.command === 'sdm.devices.commands.CameraLiveStream.GenerateWebRtcStream') return send({ results: { answerSdp: `answer-for:${b.params.offerSdp}`, expiresAt: '2026-09-30T13:05:00Z', mediaSessionId: 'ms-1' } });
         if (b.command === 'sdm.devices.commands.CameraLiveStream.ExtendWebRtcStream') return send({ results: { expiresAt: '2026-09-30T13:10:00Z', mediaSessionId: b.params.mediaSessionId } });
         if (b.command === 'sdm.devices.commands.CameraLiveStream.StopWebRtcStream') return send({});
+        if (b.command === 'sdm.devices.commands.CameraEventImage.GenerateImage') return s.imgBroken ? send({ error: { code: 400, message: 'Event image has expired.' } }, 400) : send({ results: { url: `${base}/img/${b.params.eventId}`, token: 'imgtok' } });
         return send({ error: { code: 400, message: 'Command not supported.' } }, 400);
       }
       if (url === `/pubsub/v1/${SUB}:pull`) {
@@ -273,5 +279,32 @@ test('Nest: a revoked refresh token is reported, not thrown, and the event loop 
     assert.equal(reg.list().length, 0);
     assert.equal(nest.status().ok, false);
     assert.match(nest.status().note!, /revoked/);
+  } finally { await reg.stop(); await g.close(); }
+});
+
+test('Nest: each event grabs its image while it still exists — the thumbnail outlives Google’s 30 s', async () => {
+  const g = await fakeGoogle();
+  const dir = await mkdtemp(join(tmpdir(), 'kova-nest-'));
+  const reg = new Registry(new Store(':memory:'));
+  const nest = new NestAdapter(g.opts({ ids: IDS, rooms: ROOMS, subscription: SUB, storageDir: dir }));
+  await reg.addAdapter(nest);
+  try {
+    // A person at the office camera: the adapter fetches the event image on its own.
+    g.publish(OFFICE, { 'sdm.devices.events.CameraPerson.Person': { eventId: 'e-img-1', eventSessionId: 's-1' } }, Date.now());
+    const f = join(dir, 'office_cam.jpg');
+    await until(() => existsSync(f));
+    assert.equal((await readFile(f)).toString(), 'jpeg-e-img-1');
+
+    // Google forgets the image; Kova still has it.
+    g.s.imgBroken = true;
+    const d = reg.get('office_cam')!;
+    const snap = await nest.snapshot(d);
+    assert.equal(snap.body.toString(), 'jpeg-e-img-1');
+
+    // A newer event replaces the cached frame.
+    g.s.imgBroken = false;
+    g.publish(OFFICE, { 'sdm.devices.events.CameraMotion.Motion': { eventId: 'e-img-2', eventSessionId: 's-2' } }, Date.now());
+    await until(() => { try { return readFileSync(f).toString() === 'jpeg-e-img-2'; } catch { return false; } });
+    await rm(dir, { recursive: true });
   } finally { await reg.stop(); await g.close(); }
 });

@@ -1,4 +1,6 @@
 import { setTimeout as sleep } from 'node:timers/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { Adapter, AdapterContext, AdapterStatus, LiveView, Snapshot } from './sdk.ts';
 import type { Command, Device } from '../model/types.ts';
 
@@ -75,6 +77,8 @@ export interface NestOptions {
   /** Pause after an empty pull, and the first retry delay after an error (doubles up to 5 min). */
   idleMs?: number;
   retryMs?: number;
+  /** Where the last event image per camera is kept (Google deletes them ~30 s after the event, so they're grabbed as events arrive). */
+  storageDir?: string;
 }
 
 export class NestError extends Error {
@@ -379,7 +383,11 @@ export class NestAdapter implements Adapter {
       // Newer cameras send a thread of updates for one event session: act on each event once.
       if (eventId && !this.firstTime(`e:${eventId}`)) continue;
       if (ev.eventSessionId && !this.firstTime(`s:${ev.eventSessionId}:${type}`)) continue;
-      if (eventId) cam.lastEvent = { eventId, type, at: Number.isFinite(ts) ? ts : this.now() };
+      if (eventId) {
+        cam.lastEvent = { eventId, type, at: Number.isFinite(ts) ? ts : this.now() };
+        // The image only exists for ~30 s after the event — grab it now so the card thumbnail outlives it.
+        this.cacheEventImage(cam).catch(() => {});
+      }
       this.ctx?.event(cam.id, type, { eventId, eventSessionId: ev.eventSessionId ?? null, timestamp: msg.timestamp ?? publishTime ?? null, source: 'nest' });
     }
   }
@@ -415,16 +423,37 @@ export class NestAdapter implements Adapter {
     await this.execute(this.camFor(d), 'sdm.devices.commands.CameraLiveStream.StopWebRtcStream', { mediaSessionId });
   }
 
-  /** The latest event's still image, for cameras with the CameraEventImage trait (images expire ~30 s after the event). */
+  private thumbPath(c: Camera): string | null { return this.opts.storageDir ? join(this.opts.storageDir, `${c.id}.jpg`) : null; }
+
+  /** Downloads the current event's image; writes it to storageDir when set. */
+  private async fetchEventImage(c: Camera): Promise<Buffer | null> {
+    if (!c.dev.traits?.[T.image] || !c.lastEvent) return null;
+    const r = await this.execute<{ url?: string; token?: string }>(c, 'sdm.devices.commands.CameraEventImage.GenerateImage', { eventId: c.lastEvent.eventId });
+    if (!r.url || !r.token) return null;
+    const res = await fetch(`${r.url}${r.url.includes('?') ? '&' : '?'}width=640`, { headers: { authorization: `Basic ${r.token}` }, signal: AbortSignal.timeout(this.opts.timeoutMs ?? 15_000) });
+    if (!res.ok) return null;
+    const body = Buffer.from(await res.arrayBuffer());
+    const p = this.thumbPath(c);
+    if (p) { await mkdir(this.opts.storageDir!, { recursive: true }); await writeFile(p, body); }
+    return body;
+  }
+
+  /** Caches the newest event image in the background — only the latest event's image is ever kept per camera. */
+  private async cacheEventImage(c: Camera): Promise<void> {
+    if (!this.opts.storageDir) return;
+    try { await this.fetchEventImage(c); } catch { /* best-effort: the thumbnail simply stays older */ }
+  }
+
+  /** The latest event's still image. The cached copy from when the event happened wins — Google's own URL dies ~30 s later. */
   async snapshot(d: Device): Promise<Snapshot> {
     const c = this.camFor(d);
+    const p = this.thumbPath(c);
+    if (p) { try { return { contentType: 'image/jpeg', body: await readFile(p) }; } catch { /* no cached frame yet */ } }
     if (!c.dev.traits?.[T.image]) throw new Error('This camera doesn’t offer event images');
     if (!c.lastEvent) throw new Error('No recent event to show');
-    const r = await this.execute<{ url?: string; token?: string }>(c, 'sdm.devices.commands.CameraEventImage.GenerateImage', { eventId: c.lastEvent.eventId });
-    if (!r.url || !r.token) throw new Error('Google returned no image');
-    const res = await fetch(`${r.url}${r.url.includes('?') ? '&' : '?'}width=640`, { headers: { authorization: `Basic ${r.token}` }, signal: AbortSignal.timeout(this.opts.timeoutMs ?? 15_000) });
-    if (!res.ok) throw new Error(`Event image HTTP ${res.status}`);
-    return { contentType: res.headers.get('content-type') ?? 'image/jpeg', body: Buffer.from(await res.arrayBuffer()) };
+    const body = await this.fetchEventImage(c);
+    if (!body) throw new Error('Google returned no image');
+    return { contentType: 'image/jpeg', body };
   }
 
   // ------------------------------------------------------------------ misc --
