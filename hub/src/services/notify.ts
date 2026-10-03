@@ -139,8 +139,11 @@ export class Notifier {
     this.hub.reg.on('change', onChange);
     await new Promise<void>(resolve => { const t = setTimeout(resolve, this.opts.ringSettleMs ?? 500); t.unref?.(); });
     this.hub.reg.off('change', onChange);
+    // The door to name: its room when it has a real one, else the device's own name minus the "doorbell".
     const room = this.hub.config.get().rooms.find(r => r.id === e.device.room)?.name;
-    const where = room && /door/i.test(room) ? room.toLowerCase() : room ? `${room.toLowerCase()} door` : 'door';
+    const named = e.device.name.replace(/\s+(doorbell|camera|cam)$/i, '');
+    const place = room && !/unsorted/i.test(room) ? room : named;
+    const where = place && /door/i.test(place) ? place.toLowerCase() : place ? `${place.toLowerCase()} door` : 'door';
     const names = [...lit].map(id => this.hub.reg.get(id)?.name).filter((n): n is string => !!n);
     const held = [...paused].map(id => this.hub.reg.get(id)?.name).filter((n): n is string => !!n);
     const body = [`${e.device.name} rang.`, names.length ? `Light the way turned on ${list(names)}.` : '', held.length ? `Paused ${list(held)}.` : ''].filter(Boolean).join(' ');
