@@ -284,7 +284,8 @@ export function describeResult(r: unknown): ActionResult {
     return { label: human(k), value: typeof v === 'boolean' ? (v ? 'Yes' : 'No') : show(v), mono, copy: mono || /url|key|link/i.test(k) };
   });
   const headline = typeof r.next === 'string' ? r.next : typeof r.status === 'string' && !rows.length ? r.status : undefined;
-  return { headline: headline ?? (!rows.length && !codeKey ? 'Done.' : undefined), code: codeKey ? String(r[codeKey]) : undefined, qrSvg: typeof r.qrSvg === 'string' ? r.qrSvg : undefined, rows };
+  const qrSvg = typeof r.qrSvg === 'string' ? r.qrSvg : undefined;
+  return { headline: headline ?? (!rows.length && !codeKey ? 'Done.' : undefined), code: !qrSvg && codeKey ? String(r[codeKey]) : undefined, qrSvg, rows };
 }
 
 // --------------------------------------------------------------- list --

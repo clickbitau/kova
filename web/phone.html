@@ -667,7 +667,7 @@ const human=k=>k.replace(/([A-Z])/g,' $1').replace(/^./,c=>c.toUpperCase());
 function resRows(r){if(r==null||typeof r!=='object')return[{k:'Result',v:String(r)}];
   if(r.enabled===false)return[{k:'Status',v:'Not running on this hub yet'}];
   const show=v=>Array.isArray(v)?(v.length?v.map(x=>x&&typeof x==='object'?(x.name||x.id||JSON.stringify(x)):String(x)).join('\n'):'None'):v&&typeof v==='object'?Object.entries(v).map(([a,b])=>`${human(a)}: ${b&&typeof b==='object'?JSON.stringify(b):b}`).join('\n'):String(v);
-  const rows=Object.entries(r).filter(([k])=>k!=='ok'&&k!=='enabled'&&k!=='status'&&k!=='next'&&k!=='qrSvg').map(([k,v])=>({k:human(k),v:show(v),font:/code|payload|pin|url/i.test(k)?"'JetBrains Mono',monospace":'inherit'}));
+  const rows=Object.entries(r).filter(([k])=>k!=='ok'&&k!=='enabled'&&k!=='status'&&k!=='next'&&k!=='qrSvg'&&!(k==='code'&&r.qrSvg)).map(([k,v])=>({k:human(k),v:show(v),font:/code|payload|pin|url/i.test(k)?"'JetBrains Mono',monospace":'inherit'}));
   return rows.length?rows:[{k:'Done',v:'OK',font:'inherit'}]}
 // "Wednesday 30 Sept" → "Wed 30 Sep", as in the phone design.
 const shortDate=d=>String(d||'').replace(/^(\w{3})\w*/,'$1').replace(/\bSept\b/,'Sep');
