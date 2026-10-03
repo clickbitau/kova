@@ -320,6 +320,24 @@ Only use device, person, mode and overlay ids from the home context; never inven
       required: ['room'],
     },
   },
+  {
+    name: 'combine_devices',
+    description: `Two or more device ids that are really one physical device seen through different integrations (e.g. the same TV discovered twice). They show as one device; the members are hidden while combined. Use when the user says two entries are the same thing. name defaults to the first member's name; room is a room id, optional.`,
+    parameters: {
+      type: 'object',
+      properties: {
+        members: { type: 'array', items: { type: 'string' } },
+        name: { type: 'string' },
+        room: { type: 'string' },
+      },
+      required: ['members'],
+    },
+  },
+  {
+    name: 'separate_devices',
+    description: 'Split a combined device back into its separate devices. id is the combined device id (combined_…, from the Devices list or the result of combine_devices).',
+    parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+  },
 ] as const;
 
 type ToolName = typeof TOOLS[number]['name'];
@@ -397,9 +415,28 @@ export interface LearnedEntry { ts: number; engine: string; uses: number; steps:
 const REQUESTS_KEY = 'assistant.requests';
 const LEARNED_KEY = 'assistant.learned';
 const MEMORY_KEY = 'assistant.memory';
+const CONVO_KEY = 'assistant.conversation';
 const REQUESTS_CAP = 200;
 const LEARNED_CAP = 100;
 const MEMORY_CAP = 50;
+const CONVO_CAP = 20;
+/** Older turns are dropped — a stale thread confuses the model more than no thread does. */
+const CONVO_AGE_MS = 8 * 3600_000;
+
+/** One turn of the Ask Kova conversation — user said, Kova replied. */
+export interface ConvoTurn { role: 'user' | 'assistant'; text: string; ts: number }
+
+/** The last few exchanges, oldest first, so "yes", "the second one" and "do it" still land. */
+export function convoRecent(store: Store): ConvoTurn[] {
+  return (store.get<ConvoTurn[]>(CONVO_KEY) ?? []).filter(t => Date.now() - t.ts < CONVO_AGE_MS).slice(-CONVO_CAP);
+}
+
+/** Remember one turn of the conversation. Called for every ask, whichever side handled it. */
+export function convoAdd(store: Store, role: ConvoTurn['role'], text: string): void {
+  const t = text.trim().slice(0, 800);
+  if (!t) return;
+  store.set(CONVO_KEY, [...convoRecent(store), { role, text: t, ts: Date.now() }]);
+}
 
 /** Facts the user asked the AI to keep ("note it down"): {ts, text} list, newest last. */
 export function memoryList(store: Store): { ts: number; text: string }[] {
@@ -735,6 +772,45 @@ export class Toolbox {
           this.ai.store.append({ kind: 'system', device: null, feed: 'system', what: `Ask Kova removed the room “${room.name}”${inside.length ? `, ${inside.length} device${inside.length === 1 ? '' : 's'} moved` : ''}`, data: { room: room.id, moved: inside.map(d => d.id) }, cause: AI_CAUSE });
           return JSON.stringify({ ok: true, removed: room.id, moved: inside.map(d => d.id) });
         }
+        case 'combine_devices': {
+          const cfg = this.ai.config.get();
+          const raw = Array.isArray(args.members) ? [...new Set(args.members.map(String))] : [];
+          const devs: Device[] = [], unknown: string[] = [];
+          for (const m of raw) { const d = this.device(m); if (d) devs.push(d); else unknown.push(m); }
+          if (unknown.length) return JSON.stringify({ ok: false, error: `Unknown device ids: ${unknown.join(', ')}` });
+          if (devs.length < 2) return JSON.stringify({ ok: false, error: 'Pick at least two devices' });
+          const taken = new Set((cfg.combined ?? []).flatMap(x => x.members));
+          for (const d of devs) {
+            if (d.adapter === 'combined' || d.adapter === 'groups') return JSON.stringify({ ok: false, error: `${d.name} is already more than one device` });
+            if (taken.has(d.id)) return JSON.stringify({ ok: false, error: `${d.name} is already part of a combined device` });
+          }
+          const name = (typeof args.name === 'string' ? args.name.trim().replace(/\s+/g, ' ').slice(0, 60) : '') || devs[0]!.name;
+          const room = args.room == null ? undefined : this.roomId(args.room);
+          if (args.room != null && !room) return JSON.stringify({ ok: false, error: `Unknown room ${String(args.room)} — use an id from the Rooms list` });
+          let id = slug(name) || 'device', n = 2;
+          while ((cfg.combined ?? []).some(x => x.id === id)) id = `${slug(name) || 'device'}_${n++}`;
+          const undo = this.ai.config.update(c => {
+            const hid = devs.map(d => d.id).filter(m => !c.devices?.[m]?.hidden);
+            c.devices ??= {};
+            for (const m of hid) c.devices[m] = { ...c.devices[m], hidden: true };
+            c.combined = [...(c.combined ?? []), { id, name, members: devs.map(d => d.id), hid, ...(room ? { room } : {}) }];
+          });
+          this.undos.push(this.ai.engine.registerUndo(undo));
+          this.ai.store.append({ kind: 'system', device: `combined_${id}`, feed: 'system', what: `Ask Kova shows ${devs.map(d => d.name).join(' and ')} as one — “${name}”`, data: { combined: id, members: devs.map(d => d.id) }, cause: AI_CAUSE });
+          return JSON.stringify({ ok: true, id: `combined_${id}`, name });
+        }
+        case 'separate_devices': {
+          const want = String(args.id ?? '').replace(/^combined_/, '');
+          const x = (this.ai.config.get().combined ?? []).find(c => c.id === want || `combined_${c.id}` === String(args.id));
+          if (!x) return JSON.stringify({ ok: false, error: `No combined device ${String(args.id)}` });
+          const undo = this.ai.config.update(c => {
+            for (const m of x.hid ?? []) if (c.devices?.[m]) delete c.devices[m].hidden;
+            c.combined = (c.combined ?? []).filter(y => y.id !== x.id);
+          });
+          this.undos.push(this.ai.engine.registerUndo(undo));
+          this.ai.store.append({ kind: 'system', device: `combined_${x.id}`, feed: 'system', what: `Ask Kova separated “${x.name}” back into its devices`, data: { combined: x.id }, cause: AI_CAUSE });
+          return JSON.stringify({ ok: true, separated: x.id });
+        }
         default:
           return JSON.stringify({ ok: false, error: `Unknown tool ${name}` });
       }
@@ -748,11 +824,14 @@ export class Toolbox {
 
 export interface EngineResult { text: string }
 
+/** A plain conversation turn passed to an engine — the recent thread, ending with the current request. */
+export interface ChatTurn { role: 'user' | 'assistant'; content: string }
+
 /** One AI backend. `run` drives the tool loop and returns the final text; it may throw. */
 export interface AiEngine {
   readonly kind: 'local' | 'cloud';
   readonly label: string;
-  run(system: string, question: string, tools: Toolbox): Promise<EngineResult>;
+  run(system: string, chat: ChatTurn[], tools: Toolbox): Promise<EngineResult>;
 }
 
 /** Friendly reason a request failed, safe to show the user. */
@@ -779,10 +858,10 @@ export class LocalAiEngine implements AiEngine {
     return `${/\/v\d+$/.test(u) ? u : `${u}/v1`}/chat/completions`;
   }
 
-  async run(system: string, question: string, tools: Toolbox): Promise<EngineResult> {
+  async run(system: string, chat: ChatTurn[], tools: Toolbox): Promise<EngineResult> {
     type Msg = { role: 'system' | 'user' | 'assistant' | 'tool'; content: string | null; tool_calls?: ToolCall[]; tool_call_id?: string };
     type ToolCall = { id: string; type: 'function'; function: { name: string; arguments: string } };
-    const messages: Msg[] = [{ role: 'system', content: system }, { role: 'user', content: question }];
+    const messages: Msg[] = [{ role: 'system', content: system }, ...chat];
     const deadline = Date.now() + this.opts.timeoutMs;
     for (let round = 0; round < MAX_ROUNDS; round++) {
       let res: Response;
@@ -839,9 +918,9 @@ export class CloudAiEngine implements AiEngine {
     this.client = new Anthropic({ apiKey: opts.apiKey, authToken: null, baseURL: opts.baseURL, timeout: opts.timeoutMs, maxRetries: 1 });
   }
 
-  async run(system: string, question: string, tools: Toolbox): Promise<EngineResult> {
+  async run(system: string, chat: ChatTurn[], tools: Toolbox): Promise<EngineResult> {
     const model = this.opts.model;
-    const messages: Anthropic.Beta.Messages.BetaMessageParam[] = [{ role: 'user', content: question }];
+    const messages: Anthropic.Beta.Messages.BetaMessageParam[] = chat.map(t => ({ role: t.role, content: t.content }));
     const toolDefs: Anthropic.Beta.Messages.BetaTool[] = TOOLS.map(t => ({ name: t.name, description: t.description, input_schema: t.parameters as unknown as Anthropic.Beta.Messages.BetaTool.InputSchema }));
     const fallback = FALLBACK_MODELS.has(model);
     for (let round = 0; round < MAX_ROUNDS; round++) {
@@ -888,7 +967,7 @@ export class CloudAiEngine implements AiEngine {
 // -------------------------------------------------------------- assistant --
 
 const SYSTEM = `You are Ask Kova, the assistant for a smart home hub. The hub's built-in parser couldn't handle this request, so it was passed to you.
-Use the tools to act: set_devices, start_overlay, end_overlay, explain_device, list_schedule, create_automation, update_automation, delete_automation, create_room, rename_room, delete_room, update_device, remember, forget. Only use device, room, overlay, mode and person ids from the home context below; never invent ids.
+Use the tools to act: set_devices, start_overlay, end_overlay, explain_device, list_schedule, create_automation, update_automation, delete_automation, create_room, rename_room, delete_room, update_device, combine_devices, separate_devices, remember, forget. Only use device, room, overlay, mode and person ids from the home context below; never invent ids. When the user answers a question you just asked (yes, sure, the second one, do it), read the recent conversation to see what it refers to before answering.
 Anything asked to happen regularly, at a time, or when something else happens is an automation — build it with create_automation, then tell the user what it will do in the words the tool returns.
 Ducted air conditioner zones are numbered; a zone only has a name when the state lists one. If a request names rooms for a zoned AC and the zones are unnamed, ask which zone number is which room instead of guessing.
 If the request can't be done with these tools or the shared context, say so plainly instead of guessing. Reply like a text message — plain text only, no markdown (never ** or # or \` characters — they show raw in the chat). Keep it short: a sentence or two usually; when listing several things, one item per line starting with "- ". Refer to automations and devices by their names, not their ids.`;
@@ -1079,10 +1158,13 @@ export class AiAssistant {
     }
     if (typeof e === 'string') { this.logRequest('unhandled', q, e, [], false); return { text: e, source: 'Built-in · nothing left your home', actions: [], understood: false }; }
     const share = { ...s.share, cameras: false as const };
-    const source: AskReply['source'] = e.kind === 'local' ? 'Local AI on your server' : `${e.label} · sent ${sharedLabel(share)}`;
+    const history = convoRecent(this.store);
+    const chat: ChatTurn[] = [...history.map(t => ({ role: t.role, content: t.text })), { role: 'user', content: q }];
+    const source: AskReply['source'] = e.kind === 'local' ? 'Local AI on your server' : `${e.label} · sent ${sharedLabel(share, history.length ? ['recent chat'] : [])}`;
     try {
       this.lastShare = share;
       const ctx = this.buildContext(share);
+      if (history.length) ctx.shared.push('recent chat');
       const notes = s.instructions.trim() ? `\n\nStanding instructions from the user:\n${s.instructions.trim()}` : '';
       const system = `${SYSTEM}${notes}\n\nHome context (shared by the user):\n${ctx.text}`;
       this.store.append({
@@ -1093,7 +1175,7 @@ export class AiAssistant {
       const tools = new Toolbox(this, ctx);
       const key = norm(q);
       let text: string;
-      try { text = cleanReply((await e.run(system, q, tools)).text); } catch (err) {
+      try { text = cleanReply((await e.run(system, chat, tools)).text); } catch (err) {
         const out = err instanceof AiError ? err.message : `${e.label} failed: ${err instanceof Error ? err.message : String(err)}`;
         this.logRequest(e.label, q, out, tools.called, false, tools.calls);
         // Anything already done stays undoable.
@@ -1120,9 +1202,9 @@ export class AiAssistant {
   }
 }
 
-/** "names and device states" for the Cloud AI source tag. */
-export function sharedLabel(share: ShareSettings): string {
-  const parts = [share.names && 'names', share.rooms && 'device states', share.history && 'activity history', share.presence && 'who’s home'].filter(Boolean) as string[];
+/** "names and device states" for the Cloud AI source tag. `extra` adds things sent that aren't share toggles (recent chat). */
+export function sharedLabel(share: ShareSettings, extra: string[] = []): string {
+  const parts = [share.names && 'names', share.rooms && 'device states', share.history && 'activity history', share.presence && 'who’s home', ...extra].filter(Boolean) as string[];
   if (!parts.length) return 'your request only';
   return parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
 }

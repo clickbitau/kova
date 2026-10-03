@@ -11,7 +11,7 @@ import { MatterAdapter } from '../adapters/matter.ts';
 import { HomeKitControllerAdapter } from '../adapters/homekit-controller.ts';
 import { snapshot } from './snapshot.ts';
 import { registerEditRoutes } from './edit-routes.ts';
-import { AiAssistant, loadSettings, publicSettings, saveSettings, requestLog, learnedPhrases, forgetPhrase, memoryList, forgetMemory, type AiOptions, type SettingsPatch } from '../assistant/ai.ts';
+import { AiAssistant, loadSettings, publicSettings, saveSettings, requestLog, learnedPhrases, forgetPhrase, memoryList, forgetMemory, convoAdd, type AiOptions, type SettingsPatch } from '../assistant/ai.ts';
 import { isLight, isPlayer } from '../util/describe.ts';
 import type { HomeKitBridge } from '../bridges/homekit.ts';
 import type { MatterBridge } from '../bridges/matter-bridge.ts';
@@ -614,11 +614,11 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
     const r = await hub.assistant.ask(text);
     const settings = loadSettings(hub.store);
     // Only what the built-in parser couldn't handle goes to an AI engine.
-    if (!r.understood) {
-      if (settings.engine !== 'builtin' && text.trim()) return ai.ask(text, settings);
-      if (text.trim()) ai.logRequest('builtin', text, r.text, [], false); // parser gap: remember it
-    }
-    return r;
+    const out = !r.understood && settings.engine !== 'builtin' && text.trim() ? await ai.ask(text, settings) : r;
+    if (!r.understood && settings.engine === 'builtin' && text.trim()) ai.logRequest('builtin', text, r.text, [], false); // parser gap: remember it
+    // Keep the exchange so follow-ups — "yes", "the second one", "do it" — still land.
+    if (text.trim()) { convoAdd(hub.store, 'user', text); convoAdd(hub.store, 'assistant', out.text); }
+    return out;
   });
   // What Kova understood, as chips, without running anything (for the live preview while typing).
   app.post<{ Body: { text: string } }>('/api/ask/parse', async req => {

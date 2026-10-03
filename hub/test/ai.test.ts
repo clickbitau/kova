@@ -67,7 +67,7 @@ test('Local AI: tool call changes a device through the engine, logged, tagged an
   assert.equal(fake.received.length, 2);
   assert.equal(fake.received[0].url, '/v1/chat/completions');
   assert.equal(fake.received[0].body.model, 'llama3');
-  assert.deepEqual(fake.received[0].body.tools.map((t: any) => t.function.name), ['set_devices', 'start_overlay', 'end_overlay', 'explain_device', 'list_schedule', 'remember', 'forget', 'create_automation', 'update_automation', 'delete_automation', 'create_room', 'update_device', 'rename_room', 'delete_room']);
+  assert.deepEqual(fake.received[0].body.tools.map((t: any) => t.function.name), ['set_devices', 'start_overlay', 'end_overlay', 'explain_device', 'list_schedule', 'remember', 'forget', 'create_automation', 'update_automation', 'delete_automation', 'create_room', 'update_device', 'rename_room', 'delete_room', 'combine_devices', 'separate_devices']);
   const toolMsg = fake.received[1].body.messages.find((m: any) => m.role === 'tool');
   assert.equal(toolMsg.tool_call_id, 'call_1');
   assert.equal(JSON.parse(toolMsg.content).ok, true);
@@ -176,7 +176,7 @@ test('Cloud AI: Anthropic Messages tool loop against a fake endpoint', async () 
   assert.equal(first.headers['x-api-key'], 'sk-ant-test');
   assert.equal(first.headers.authorization, undefined);
   assert.equal(first.body.model, 'claude-opus-5-5');
-  assert.deepEqual(first.body.tools.map((t: any) => t.name), ['set_devices', 'start_overlay', 'end_overlay', 'explain_device', 'list_schedule', 'remember', 'forget', 'create_automation', 'update_automation', 'delete_automation', 'create_room', 'update_device', 'rename_room', 'delete_room']);
+  assert.deepEqual(first.body.tools.map((t: any) => t.name), ['set_devices', 'start_overlay', 'end_overlay', 'explain_device', 'list_schedule', 'remember', 'forget', 'create_automation', 'update_automation', 'delete_automation', 'create_room', 'update_device', 'rename_room', 'delete_room', 'combine_devices', 'separate_devices']);
   assert.ok(!('tool_choice' in first.body) || first.body.tool_choice.type === 'auto');
   const sys = JSON.stringify(first.body.system);
   for (const c of CAMERAS) assert.ok(!sys.includes(c), `camera ${c} was sent`);
@@ -485,5 +485,54 @@ test('AI room tools refuse bad input instead of inventing ids', async () => {
   const r = await ask('do some room organising');
   assert.match(r.text, /do not exist/i);
   assert.equal(hub.config.get().rooms.filter(x => x.id === 'lounge').length, 1, 'no duplicate room');
+  await app.close(); await hub.stop(); await fake.close();
+});
+
+test('Ask Kova remembers the conversation — "yes" follows through', async () => {
+  const fake = await fakeServer([
+    openAiText('There is no "entryway" room. Should I create it?'),
+    openAiToolCall('create_room', { name: 'Entryway', icon: 'door_front' }),
+    openAiToolCall('update_device', { id: 'lamp', room: 'entryway' }),
+    openAiText('Done — Entryway exists and the lamp is in it.'),
+  ]);
+  const { hub, app, put, ask } = await setup();
+  await put({ engine: 'local', local: { url: fake.url, model: 'm' } });
+
+  const r1 = await ask('the lamp is the entryway lamp');
+  assert.match(r1.text, /entryway/i);
+  const r2 = await ask('yes');
+  assert.match(r2.text, /entryway/i);
+  // The follow-up reached the engine with the earlier exchange behind it.
+  const sent = fake.received[1].body.messages as { role: string; content: string }[];
+  assert.deepEqual(sent.slice(-3).map(m => m.role), ['user', 'assistant', 'user']);
+  assert.match(sent[sent.length - 3]!.content, /entryway lamp/i);
+  assert.match(sent[sent.length - 2]!.content, /create it/i);
+  assert.equal(sent[sent.length - 1]!.content, 'yes');
+  assert.ok(hub.config.get().rooms.some(r => r.id === 'entryway'), 'the room was created');
+  assert.equal(hub.reg.get('lamp')!.room, 'entryway');
+  await app.close(); await hub.stop(); await fake.close();
+});
+
+test('AI can combine two entries for one physical device, and undo splits them', async () => {
+  const fake = await fakeServer([
+    openAiToolCall('combine_devices', { members: ['bedroom_tv', 'living_display'], name: 'The telly' }),
+    openAiText('Done — they show as one now.'),
+  ]);
+  const { hub, app, put, ask } = await setup();
+  await put({ engine: 'local', local: { url: fake.url, model: 'm' } });
+
+  const r = await ask('those are the same tv, group them');
+  assert.match(r.text, /one/i);
+  const c = hub.config.get().combined ?? [];
+  assert.equal(c.length, 1);
+  assert.deepEqual(c[0]!.members.sort(), ['bedroom_tv', 'living_display']);
+  assert.equal(c[0]!.name, 'The telly');
+  assert.ok(hub.reg.get('combined_the_telly'), 'the combined card registered');
+  // Members hide while combined; separating brings them back.
+  assert.ok(hub.reg.get('bedroom_tv')!.hidden && hub.reg.get('living_display')!.hidden);
+  assert.ok(r.undo);
+  await app.inject({ method: 'POST', url: `/api/undo/${r.undo}` });
+  assert.equal((hub.config.get().combined ?? []).length, 0);
+  assert.ok(!hub.reg.get('bedroom_tv')!.hidden);
   await app.close(); await hub.stop(); await fake.close();
 });
