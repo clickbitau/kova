@@ -1,7 +1,7 @@
 {
   "name": "Kova",
   "slug": "kova",
-  "version": "0.2.12",
+  "version": "0.2.14",
   "runtimeVersion": "kova-mobile-0.2",
   "updates": {
     "enabled": true,
@@ -164,6 +164,14 @@
     },
     "kovaHistory": [
       {
+        "version": "0.2.14",
+        "title": "Crash reporting: the app reports its own crashes to the hub, with the screen it was on"
+      },
+      {
+        "version": "0.2.13",
+        "title": "Purifiers: fan speed, the air, filter life, display and child lock; a tap switches them on or off. Security names cameras."
+      },
+      {
         "version": "0.2.12",
         "title": "Settings: where the home is, timezone, prayer times, the doorbell pause; the web gets a Settings page"
       },
@@ -174,14 +182,6 @@
       {
         "version": "0.2.10",
         "title": "Integrations in the app: what’s connected, add from the catalog, and each one’s setup, linking and pairing on its own screen"
-      },
-      {
-        "version": "0.2.9",
-        "title": "Customise home, Energy and Media are the app's own screens; with zones for ducted air conditioners"
-      },
-      {
-        "version": "0.2.8",
-        "title": "Ducted air conditioners: zones in the AC panel (name them, open or close, how far open)"
       }
     ]
   },

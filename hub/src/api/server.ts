@@ -134,6 +134,19 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
   // Sign this browser out (its own key stops working).
   app.post('/api/logout', async req => { const s = sessions.check(keyOf(req)); if (s) sessions.remove(s.id); return { ok: true, signedOut: !!s }; });
 
+  // A phone app reporting its own crash: logged to the event store so a pattern can be found in Activity.
+  app.post<{ Body: { message?: string; stack?: string; kind?: string; screen?: string; crumbs?: string[]; app?: string; platform?: string; at?: number } }>('/api/app/crash', async req => {
+    const b = req.body ?? {};
+    if (typeof b.message !== 'string' || !b.message) return { ok: false };
+    hub.store.append({
+      kind: 'system', device: null, feed: 'system',
+      what: `App crashed${b.screen ? ` on ${b.screen}` : ''}${b.kind === 'fatal' ? ' (fatal)' : ''}`,
+      data: { message: b.message.slice(0, 500), stack: typeof b.stack === 'string' ? b.stack.slice(0, 6000) : undefined, kind: b.kind, screen: b.screen, crumbs: Array.isArray(b.crumbs) ? b.crumbs.slice(-12) : undefined, app: b.app, platform: b.platform, at: b.at },
+      cause: { kind: 'system', label: 'Kova app' },
+    });
+    return { ok: true };
+  });
+
   if (opts.token || opts.helixLink) {
     app.addHook('onRequest', async (req, reply) => {
       const path = req.url.split('?')[0];

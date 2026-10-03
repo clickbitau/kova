@@ -11,6 +11,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useLastTap } from './src/native/push';
 import { useQuickActionCallback } from 'expo-quick-actions/hooks';
 import { shareHub, syncExtensions } from './src/native/extensions';
+import { CrashBoundary, crumb, initCrashReporting } from './src/native/crash';
 import { C, SP } from './src/theme';
 import { HubProvider, useHub } from './src/state/hub';
 import { SheetProvider } from './src/state/sheet';
@@ -62,6 +63,7 @@ function Home() {
   const { cfg, loading, snap, conn, toast, undo, api, say } = useHub();
   const insets = useSafeAreaInsets();
   const nav = useRef<NavigationContainerRef<StackParams>>(null);
+  useEffect(() => initCrashReporting(() => cfg), [cfg]);
 
   // Widgets, the Live Activity and the app icon's quick actions follow the hub.
   useEffect(() => { shareHub(cfg); }, [cfg]);
@@ -91,7 +93,8 @@ function Home() {
   if (!snap) return conn === 'offline' ? <CantReach /> : <NowSkeleton />;
   return (
     <SheetProvider>
-      <NavigationContainer ref={nav} theme={theme}>
+      <CrashBoundary>
+      <NavigationContainer ref={nav} theme={theme} onStateChange={() => crumb(nav.current?.getCurrentRoute()?.name ?? '')}>
         <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.page }, animation: 'slide_from_right', gestureEnabled: true, fullScreenGestureEnabled: true }}>
           <Stack.Screen name="Tabs" component={Tabs} />
           <Stack.Screen name="Modes" component={ModesScreen} />
@@ -111,6 +114,7 @@ function Home() {
         </Stack.Navigator>
         <DeviceSheet />
       </NavigationContainer>
+      </CrashBoundary>
       <ToastHost toast={toast} onUndo={t => t.undo && void undo(t.undo)} bottom={insets.bottom + 96} />
     </SheetProvider>
   );
