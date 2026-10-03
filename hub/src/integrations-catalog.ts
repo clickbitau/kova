@@ -483,7 +483,7 @@ function checkFields(fields: Field[], obj: Record<string, unknown>, where: strin
         if (f.multiple ? !Array.isArray(v) || v.some(x => typeof x !== 'string') : typeof v !== 'string') errs.push(`${where}: ${f.label} must be ${f.multiple ? 'a list of text' : 'text'}`);
         break;
       case 'select': {
-        const opts = f.options === 'rooms' ? home?.rooms : f.options === 'people' ? home?.people : f.options?.map(o => o.value);
+        const opts = f.options === 'rooms' ? ['unassigned', ...(home?.rooms ?? [])] : f.options === 'people' ? home?.people : f.options?.map(o => o.value);
         if (typeof v !== 'string') errs.push(`${where}: ${f.label} must be text`);
         else if (opts && !opts.includes(v)) errs.push(`${where}: ${f.label} "${v}" isn’t one of ${f.options === 'rooms' ? 'your rooms' : f.options === 'people' ? 'the people in this home' : opts.join(', ')}`);
         break;
