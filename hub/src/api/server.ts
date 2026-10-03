@@ -425,27 +425,19 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
 
   // Linking Smart Life with a QR, the way the Home Assistant integration does: the hub shows a code, the app
   // scans it, Tuya hands the hub a session, and the session lists every device with its local key. One pairing
-  // at a time; the POST shows the code, the GET polls until scanned or lapsed (~4.5 min), then imports.
-  let tuyaPair: { qr: string; userCode: string; at: number } | null = null;
+  // at a time; the POST shows the code and the hub itself polls Tuya every few seconds until scanned or lapsed
+  // (~4.5 min) — the import must not depend on a page staying open. The GET just reports where it got to.
+  type TuyaPair = { qr: string; userCode: string; at: number; status: 'pending' | 'working' | 'approved' | 'expired' | 'failed'; devices?: unknown; restartNeeded?: boolean; error?: string; timer?: NodeJS.Timeout };
+  let tuyaPair: TuyaPair | null = null;
 
-  app.post<{ Body: { userCode?: string } }>('/api/integrations/tuya/qr-pair', async (req, reply) => {
-    const userCode = String(req.body?.userCode ?? '').trim();
-    if (!userCode) return reply.code(400).send({ error: 'Your Smart Life user code is needed (Me → Settings → Account and Security → User Code)' });
-    try {
-      const qr = await qrStart(userCode, opts.tuyaLink?.clientId, opts.tuyaLink?.base);
-      tuyaPair = { qr, userCode, at: Date.now() };
-      const qrSvg = await QRCode.toString(`tuyaSmart--qrLogin?token=${qr}`, { type: 'svg', margin: 1, errorCorrectionLevel: 'M', color: { dark: '#141517', light: '#f1efea' } });
-      return { code: qr, qrSvg, next: 'Scan this in the Smart Life app (Profile → + → Scan). It lapses in about five minutes.' };
-    } catch (e) { return fail(reply, e); }
-  });
-
-  app.get('/api/integrations/tuya/qr-pair', async (req, reply) => {
-    const pair = tuyaPair;
-    if (!pair) return { status: 'expired', error: 'No link is under way — show a code first.' };
-    if (Date.now() - pair.at > 270_000) { tuyaPair = null; return { status: 'expired', error: 'The code lapsed. Show a new one.' }; }
+  const finishTuyaPair = async (pair: TuyaPair): Promise<void> => {
+    if (tuyaPair !== pair || pair.status !== 'pending') return;
+    if (Date.now() - pair.at > 270_000) { pair.status = 'expired'; pair.error = 'The code lapsed. Show a new one.'; if (pair.timer) clearInterval(pair.timer); return; }
     const hit = await qrPoll(pair.qr, pair.userCode, opts.tuyaLink?.clientId, opts.tuyaLink?.base).catch(() => null);
-    if (!hit) return { status: 'pending' };
-    if (!opts.integrationsPath) return reply.code(400).send({ error: 'This hub has no integrations file configured' });
+    if (!hit) return;
+    pair.status = 'working';
+    if (pair.timer) clearInterval(pair.timer);
+    if (!opts.integrationsPath) { pair.status = 'failed'; pair.error = 'This hub has no integrations file configured'; return; }
     try {
       const current = loadIntegrations(opts.integrationsPath) ?? {};
       const { session, devices } = await importFromSession(hit.session, {
@@ -459,17 +451,43 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
       if (needIp.length || devices.length) found = await discover({ durationMs: opts.tuyaCloud?.discoverMs ?? 6000, ports: opts.tuyaCloud?.discoverPorts, want: needIp.length ? devices.filter(d => !d.sub).map(d => d.id) : undefined });
       const merged = mergeCloudDevices(current.tuya, devices, { rooms: hub.config.get().rooms, found });
       const section = { ...merged.tuya, session };
-      tuyaPair = null;
       if (opts.integrations) {
         const applied = await opts.integrations.update('tuya', section);
-        return { status: 'approved', ok: true, devices: merged.devices, restartNeeded: applied.restartRequired };
+        pair.restartNeeded = applied.restartRequired;
+      } else {
+        saveIntegrations(opts.integrationsPath, { ...current, tuya: section });
+        pair.restartNeeded = true;
       }
-      saveIntegrations(opts.integrationsPath, { ...current, tuya: section });
-      return { status: 'approved', ok: true, devices: merged.devices, restartNeeded: true };
+      pair.status = 'approved';
+      pair.devices = merged.devices;
+      hub.store.append({ kind: 'system', device: null, feed: 'system', what: `Smart Life linked: ${merged.devices.length} device${merged.devices.length === 1 ? '' : 's'} joined Kova`, data: { devices: merged.devices.map((d: { id: string }) => d.id) }, cause: { kind: 'system', label: 'Tuya' } });
     } catch (e) {
-      tuyaPair = null;
-      return { status: 'failed', error: e instanceof Error ? e.message : String(e) };
+      pair.status = 'failed';
+      pair.error = e instanceof Error ? e.message : String(e);
     }
+  };
+
+  app.post<{ Body: { userCode?: string } }>('/api/integrations/tuya/qr-pair', async (req, reply) => {
+    const userCode = String(req.body?.userCode ?? '').trim();
+    if (!userCode) return reply.code(400).send({ error: 'Your Smart Life user code is needed (Me → Settings → Account and Security → User Code)' });
+    if (tuyaPair?.timer) clearInterval(tuyaPair.timer);
+    try {
+      const qr = await qrStart(userCode, opts.tuyaLink?.clientId, opts.tuyaLink?.base);
+      const pair: TuyaPair = { qr, userCode, at: Date.now(), status: 'pending' };
+      tuyaPair = pair;
+      pair.timer = setInterval(() => void finishTuyaPair(pair), 3000);
+      pair.timer.unref?.();
+      const qrSvg = await QRCode.toString(`tuyaSmart--qrLogin?token=${qr}`, { type: 'svg', margin: 1, errorCorrectionLevel: 'M', color: { dark: '#141517', light: '#f1efea' } });
+      return { code: qr, qrSvg, next: 'Scan this in the Smart Life app (Profile → + → Scan). It lapses in about five minutes.' };
+    } catch (e) { return fail(reply, e); }
+  });
+
+  app.get('/api/integrations/tuya/qr-pair', async () => {
+    const pair = tuyaPair;
+    if (!pair) return { status: 'expired', error: 'No link is under way — show a code first.' };
+    if (pair.status === 'pending') await finishTuyaPair(pair); // a watching client still gets an immediate answer
+    if (pair.status === 'approved') return { status: 'approved', ok: true, devices: pair.devices, restartNeeded: pair.restartNeeded };
+    return { status: pair.status === 'working' ? 'pending' : pair.status, ...(pair.error ? { error: pair.error } : {}) };
   });
 
   // In-app setup. Secrets never leave the hub: GET shows "••••", and sending "••••" back keeps the stored value.
