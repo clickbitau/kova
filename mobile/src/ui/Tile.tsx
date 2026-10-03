@@ -33,7 +33,7 @@ export function Tile({ d, onToggle, onOpen }: { d: Dev; onToggle: () => void; on
     if (first.current) { first.current = false; return; }
     if (!d.on || reducedMotion()) return;
     pop.setValue(0.84);
-    spring(pop, 1, 'pop').start();
+    spring(pop, 1, 'pop', { native: false }).start();
   }, [d.on, pop]);
   // The ring only after a beat: most commands land before it would show.
   const [slow, setSlow] = useState(false);

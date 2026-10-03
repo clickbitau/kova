@@ -66,6 +66,8 @@ export function HubProvider({ children }: { children: ReactNode }) {
     return n;
   }), []);
   const ws = useRef<WebSocket | null>(null);
+  const connRef = useRef<Conn>(conn);
+  useEffect(() => { connRef.current = conn; }, [conn]);
   const retry = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Bumped to reopen the live link at once (pull to refresh while offline). */
@@ -275,17 +277,30 @@ export function HubProvider({ children }: { children: ReactNode }) {
    * answers as this hub, the request goes once more there. A write that timed out isn't re-sent (it may have
    * reached the hub).
    */
+  // A request that landed means the hub answers, whatever the live socket is doing — say so, and nudge the
+  // socket back open at once rather than waiting out the backoff.
+  const noteReachable = useCallback(() => {
+    if (connRef.current === 'live') return;
+    connRef.current = 'live';
+    setConn('live');
+    if (!ws.current || ws.current.readyState !== WebSocket.OPEN) setKick(k => k + 1);
+  }, []);
+
   const api = useCallback(async <T,>(method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, body?: unknown): Promise<T> => {
     const { c, r } = await ready();
     try {
-      return await call<T>({ ...c, url: r.url }, method, path, body);
+      const out = await call<T>({ ...c, url: r.url }, method, path, body);
+      noteReachable();
+      return out;
     } catch (e) {
       if (!(e instanceof HubError) || e.status !== 0) throw e;
       const next = await choose();
       if (!next || next.url === r.url || (method !== 'GET' && e.timedOut)) throw e;
-      return call<T>({ ...(cfgRef.current ?? c), url: next.url }, method, path, body);
+      const out = await call<T>({ ...(cfgRef.current ?? c), url: next.url }, method, path, body);
+      noteReachable();
+      return out;
     }
-  }, [ready, choose]);
+  }, [ready, choose, noteReachable]);
 
   const send = useCallback(async (id: string, cmd: Command, done?: string) => {
     haptic.select();

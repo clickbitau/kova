@@ -174,7 +174,7 @@ export function Segmented({ options, value, onChange, color = C.bone, label, com
   useEffect(() => {
     if (idx < 0) return;
     if (first.current || !w) { x.setValue(idx); first.current = false; return; }
-    spring(x, idx, 'toggle').start();
+    spring(x, idx, 'toggle', { native: false }).start();
   }, [idx, w, x]);
   const segW = w ? (w - 6) / options.length : 0;
   const active = options[idx];
