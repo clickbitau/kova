@@ -23,7 +23,10 @@ import { HELIX_AUTO, HELIX_REMOTE, type HelixLink } from '../services/helix-link
 import type { SnapLinks } from '../services/screen-notices.ts';
 import type { Notifier } from '../services/notify.ts';
 import type { PushSubscription } from 'web-push';
-import { importFromCloud, type CloudImportOptions } from '../adapters/tuya/cloud.ts';
+import { importFromCloud, isPrivateIp, mergeCloudDevices, type CloudImportOptions } from '../adapters/tuya/cloud.ts';
+import { importFromSession, qrPoll, qrStart, type ConsumerSession } from '../adapters/tuya/consumer.ts';
+import { discover } from '../adapters/tuya/discover.ts';
+import QRCode from 'qrcode';
 import { loadIntegrations, saveIntegrations } from '../integrations.ts';
 
 import { CATALOG } from '../integrations-catalog.ts';
@@ -64,6 +67,8 @@ export interface ServerOptions {
   integrationsPath?: string;
   /** Tuya cloud import overrides (tests point baseUrl at a fake server and turn discovery off). */
   tuyaCloud?: Pick<CloudImportOptions, 'baseUrl' | 'discoverMs' | 'discoverPorts' | 'now'>;
+  /** The Smart Life QR-link service; defaults to Tuya's. Tests point it at a fake. */
+  tuyaLink?: { base?: string; clientId?: string };
 
   /** In-app setup of integrations.json. Without it the setup routes answer 503. */
   integrations?: IntegrationsManager;
@@ -416,6 +421,55 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
       saveIntegrations(opts.integrationsPath, { ...current, tuya: r.tuya });
       return { ok: true, devices: r.devices, restartNeeded: true };
     } catch (e) { return fail(reply, e); }
+  });
+
+  // Linking Smart Life with a QR, the way the Home Assistant integration does: the hub shows a code, the app
+  // scans it, Tuya hands the hub a session, and the session lists every device with its local key. One pairing
+  // at a time; the POST shows the code, the GET polls until scanned or lapsed (~4.5 min), then imports.
+  let tuyaPair: { qr: string; userCode: string; at: number } | null = null;
+
+  app.post<{ Body: { userCode?: string } }>('/api/integrations/tuya/qr-pair', async (req, reply) => {
+    const userCode = String(req.body?.userCode ?? '').trim();
+    if (!userCode) return reply.code(400).send({ error: 'Your Smart Life user code is needed (Me → Settings → Account and Security → User Code)' });
+    try {
+      const qr = await qrStart(userCode, opts.tuyaLink?.clientId, opts.tuyaLink?.base);
+      tuyaPair = { qr, userCode, at: Date.now() };
+      const qrSvg = await QRCode.toString(`tuyaSmart--qrLogin?token=${qr}`, { type: 'svg', margin: 1, errorCorrectionLevel: 'M', color: { dark: '#141517', light: '#f1efea' } });
+      return { code: qr, qrSvg, next: 'Scan this in the Smart Life app (Profile → + → Scan). It lapses in about five minutes.' };
+    } catch (e) { return fail(reply, e); }
+  });
+
+  app.get('/api/integrations/tuya/qr-pair', async (req, reply) => {
+    const pair = tuyaPair;
+    if (!pair) return { status: 'expired', error: 'No link is under way — show a code first.' };
+    if (Date.now() - pair.at > 270_000) { tuyaPair = null; return { status: 'expired', error: 'The code lapsed. Show a new one.' }; }
+    const hit = await qrPoll(pair.qr, pair.userCode, opts.tuyaLink?.clientId, opts.tuyaLink?.base).catch(() => null);
+    if (!hit) return { status: 'pending' };
+    if (!opts.integrationsPath) return reply.code(400).send({ error: 'This hub has no integrations file configured' });
+    try {
+      const current = loadIntegrations(opts.integrationsPath) ?? {};
+      const { session, devices } = await importFromSession(hit.session, {
+        existing: current.tuya, rooms: hub.config.get().rooms,
+        log: line => console.log('[tuya]', line),
+      });
+      // LAN addresses for the devices that need one, like the cloud import does.
+      const known = new Map((current.tuya?.devices ?? []).map(d => [d.id, d.host]));
+      const needIp = devices.filter(d => !d.sub && !known.get(d.id) && !isPrivateIp(d.ip)).map(d => d.id);
+      let found = new Map<string, import('../adapters/tuya/discover.ts').Discovered>();
+      if (needIp.length || devices.length) found = await discover({ durationMs: opts.tuyaCloud?.discoverMs ?? 6000, ports: opts.tuyaCloud?.discoverPorts, want: needIp.length ? devices.filter(d => !d.sub).map(d => d.id) : undefined });
+      const merged = mergeCloudDevices(current.tuya, devices, { rooms: hub.config.get().rooms, found });
+      const section = { ...merged.tuya, session };
+      tuyaPair = null;
+      if (opts.integrations) {
+        const applied = await opts.integrations.update('tuya', section);
+        return { status: 'approved', ok: true, devices: merged.devices, restartNeeded: applied.restartRequired };
+      }
+      saveIntegrations(opts.integrationsPath, { ...current, tuya: section });
+      return { status: 'approved', ok: true, devices: merged.devices, restartNeeded: true };
+    } catch (e) {
+      tuyaPair = null;
+      return { status: 'failed', error: e instanceof Error ? e.message : String(e) };
+    }
   });
 
   // In-app setup. Secrets never leave the hub: GET shows "••••", and sending "••••" back keeps the stored value.

@@ -73,7 +73,7 @@ export interface TuyaCloudDevice {
 
 interface RawDevice { id?: string; name?: string; local_key?: string; ip?: string; category?: string; product_name?: string; product_id?: string; online?: boolean; is_online?: boolean; uid?: string; sub?: boolean; node_id?: string; gateway_id?: string }
 
-const toDevice = (r: RawDevice): TuyaCloudDevice => ({
+export const toDevice = (r: RawDevice): TuyaCloudDevice => ({
   id: String(r.id),
   name: (r.name ?? '').trim() || String(r.id),
   ...(r.local_key ? { key: r.local_key } : {}),

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Linking, View } from 'react-native';
+import { SvgXml } from 'react-native-svg';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { C, R, SP, alpha } from '../theme';
 import { useHub, useSnap } from '../state/hub';
@@ -38,10 +39,15 @@ function Note({ msg, err }: { msg?: Msg; err?: string | null }) {
   );
 }
 
-/** What an action answered: its sentence, a pairing code large (with Copy), the rest as rows. */
+/** What an action answered: its sentence, a code to scan or a pairing code large (with Copy), the rest as rows. */
 function Result({ r }: { r: ActionResult }) {
   return (
     <View style={{ gap: SP[3], padding: SP[3], borderRadius: R.md, backgroundColor: C.inset, borderWidth: 1, borderColor: C.edge }}>
+      {r.qrSvg ? (
+        <View style={{ alignSelf: 'center', borderRadius: R.md, backgroundColor: C.bone, padding: SP[3], overflow: 'hidden' }}>
+          <SvgXml xml={r.qrSvg} width={208} height={208} />
+        </View>
+      ) : null}
       {r.code ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2] }}>
           <T mono size={30} tracking={0.12} color={C.bone} selectable style={{ flex: 1 }}>{r.code}</T>
@@ -210,7 +216,7 @@ export function IntegrationScreen({ route, navigation }: NativeStackScreenProps<
         const p = await api<{ status: PairState; error?: string }>('GET', a.path);
         if (p.status === 'pending') { setResults(r => ({ ...r, [a.id]: { res, pair: { state: 'pending', error: p.error } } })); return; }
         clearInterval(polls.current[a.id]);
-        put(a.id, { res: p.status === 'approved' ? undefined : res, pair: { state: p.status, error: p.error } });
+        put(a.id, { res: p.status === 'approved' ? describeResult(p) : res, pair: { state: p.status, error: p.error } });
         if (p.status === 'approved') { haptic.success(); say(`${item?.name ?? 'It'} is paired`); void setup.reload(); }
       } catch { /* keep asking */ }
     }, 2500);

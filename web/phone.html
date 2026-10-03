@@ -552,6 +552,8 @@
 </div>
 </sc-for>
 <div onClick="{{ ac.run }}" style="align-self:flex-start;padding:8px 14px;border-radius:10px;background:rgba(255,255,255,0.08);font-size:13px;font-weight:700;cursor:pointer">{{ ac.btn }}</div>
+<sc-if value="{{ ac.hasQr }}" hint-placeholder-val="{{ false }}"><div style="align-self:center;border-radius:12px;background:#f1efea;padding:12px"><img src="{{ ac.qr }}" style="width:208px;height:208px;display:block" alt="Code to scan in the other app"></div></sc-if>
+<sc-if value="{{ ac.hasNote }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;color:{{ ac.noteFg }};line-height:1.45">{{ ac.note }}</span></sc-if>
 <sc-if value="{{ ac.hasErr }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;color:#ff6b5e;line-height:1.45">{{ ac.err }}</span></sc-if>
 <sc-if value="{{ ac.hasRows }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;background:#141517;border-radius:10px;overflow:hidden">
 <sc-for list="{{ ac.rows }}" as="rr" hint-placeholder-count="2"><div style="display:flex;justify-content:space-between;gap:12px;padding:10px 12px;border-top:1px solid rgba(255,255,255,0.05);font-size:12.5px"><span style="color:#a3a09a;flex:none">{{ rr.k }}</span><span style="font-weight:600;text-align:right;word-break:break-all;white-space:pre-line;font-family:{{ rr.font }}">{{ rr.v }}</span></div></sc-for>
@@ -665,7 +667,7 @@ const human=k=>k.replace(/([A-Z])/g,' $1').replace(/^./,c=>c.toUpperCase());
 function resRows(r){if(r==null||typeof r!=='object')return[{k:'Result',v:String(r)}];
   if(r.enabled===false)return[{k:'Status',v:'Not running on this hub yet'}];
   const show=v=>Array.isArray(v)?(v.length?v.map(x=>x&&typeof x==='object'?(x.name||x.id||JSON.stringify(x)):String(x)).join('\n'):'None'):v&&typeof v==='object'?Object.entries(v).map(([a,b])=>`${human(a)}: ${b&&typeof b==='object'?JSON.stringify(b):b}`).join('\n'):String(v);
-  const rows=Object.entries(r).filter(([k])=>k!=='ok'&&k!=='enabled').map(([k,v])=>({k:human(k),v:show(v),font:/code|payload|pin|url/i.test(k)?"'JetBrains Mono',monospace":'inherit'}));
+  const rows=Object.entries(r).filter(([k])=>k!=='ok'&&k!=='enabled'&&k!=='status'&&k!=='next'&&k!=='qrSvg').map(([k,v])=>({k:human(k),v:show(v),font:/code|payload|pin|url/i.test(k)?"'JetBrains Mono',monospace":'inherit'}));
   return rows.length?rows:[{k:'Done',v:'OK',font:'inherit'}]}
 // "Wednesday 30 Sept" → "Wed 30 Sep", as in the phone design.
 const shortDate=d=>String(d||'').replace(/^(\w{3})\w*/,'$1').replace(/\bSept\b/,'Sep');
@@ -808,8 +810,21 @@ class Component extends DCLogic {
     this.igPatch({busy:a.id});
     try{const r=await api(a.method,a.path,a.method==='POST'?fromForm(a.fields||[],ig.acts[a.id]||{}):undefined);
       if(a.opensUrl&&r&&r.url){if(win)win.location.href=r.url;else location.href=r.url}else if(win)win.close();
-      res({rows:a.opensUrl&&r&&r.url?[{k:'Opened',v:'Google sign-in, in a new tab. When it sends you to google.com, copy the code= value from the address and paste it below.',font:'inherit'}]:resRows(r)})}
+      const out={rows:a.opensUrl&&r&&r.url?[{k:'Opened',v:'Google sign-in, in a new tab. When it sends you to google.com, copy the code= value from the address and paste it below.',font:'inherit'}]:resRows(r)};
+      if(r&&typeof r.qrSvg==='string')out.qr='data:image/svg+xml;utf8,'+encodeURIComponent(r.qrSvg);
+      if(r&&typeof r.next==='string')out.note=r.next;
+      res(out);
+      // Pairing that finishes in the other app (Smart Life, Warden): a code is shown, the GET on the same path says how it went.
+      if(a.method==='POST'&&/\/pair$/.test(a.path)&&r&&typeof r.code==='string')this.igPairWatch(a.id,a.path)}
     catch(e){if(win)win.close();res({err:e.message})}}
+  igPairWatch(aid,path){const W=this._igPair||(this._igPair={});clearInterval(W[aid]);
+    const put=v=>this.setState(s=>s.ig?{ig:{...s.ig,actRes:{...s.ig.actRes,[aid]:{...s.ig.actRes[aid],...v}}}}:{});
+    W[aid]=setInterval(async()=>{try{const p=await api('GET',path);
+      if(p.status==='pending'){put({note:p.error?`Waiting for you to approve it… (${p.error})`:'Waiting for you to approve it…',noteFg:'#f2b14c'});return}
+      clearInterval(W[aid]);
+      if(p.status==='approved'){put({note:'Linked — devices are in Kova.',noteFg:'#7fd4a0',rows:resRows(p)});this.loadInteg();this.toast('Paired. Kova is connected.')}
+      else put({note:p.error||(p.status==='expired'?'The code ran out before it was approved — start again for a new one.':'Pairing stopped. Try again.'),noteFg:'#ff6b5e'});
+    }catch(e){}},2500)}
   pagesVals(s,H,devs,list,RN){
     const pg=s.page;
     // More
@@ -916,7 +931,7 @@ class Component extends DCLogic {
         save:()=>this.igSave(),test:()=>this.igTest(),remove:()=>this.igRemove(),close:()=>kovaClose(()=>this.setState({ig:null})),
         actions:(it.actions||[]).map(a=>{const r=G.actRes[a.id]||{};const inp=G.acts[a.id]||{};
           return{label:a.label,icon:a.icon,help:a.help||'',hasHelp:!!a.help,btn:G.busy===a.id?'Working…':a.opensUrl?'Open Google sign-in':a.method==='GET'?'Show':a.label,run:()=>this.igAct(a),
-            fields:(a.fields||[]).map(f=>fvm(f,getP(inp,kp(f))??'',v=>this.igActSet(a.id,kp(f),v))),hasErr:!!r.err,err:r.err||'',hasRows:!!r.rows,rows:r.rows||[]}})}}
+            fields:(a.fields||[]).map(f=>fvm(f,getP(inp,kp(f))??'',v=>this.igActSet(a.id,kp(f),v))),hasErr:!!r.err,err:r.err||'',hasRows:!!r.rows,rows:r.rows||[],hasQr:!!r.qr,qr:r.qr||'',hasNote:!!r.note,note:r.note||'',noteFg:r.noteFg||'#a3a09a'}})}}
     return {igOpen:!!G,ig,igPicking:picking,igListOn:!picking,pickItems,igLoadErr:s.igLoadErr||'',hasIgLoadErr:!!s.igLoadErr,
       pickSub:!s.igCat?'Loading…':pickItems.length?`${pickItems.length} available. Pick one to set it up.`:'Everything in the catalog is already set up.',
       addLabel:picking?'Done':'Add',addIcon:picking?'close':'add',addBg:picking?'rgba(255,255,255,0.08)':'#f2b14c',addFg:picking?'#f1efea':'#1a1408',

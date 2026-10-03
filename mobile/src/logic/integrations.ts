@@ -264,7 +264,7 @@ export function pairWords(s: PairState, error?: string): { text: string; tone: '
 }
 
 export interface ResultRow { label: string; value: string; mono?: boolean; copy?: boolean }
-export interface ActionResult { headline?: string; code?: string; rows: ResultRow[] }
+export interface ActionResult { headline?: string; code?: string; qrSvg?: string; rows: ResultRow[] }
 
 const human = (k: string) => k.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase());
 const show = (v: unknown): string => {
@@ -278,13 +278,13 @@ export function describeResult(r: unknown): ActionResult {
   if (!isObj(r)) return { rows: r == null ? [] : [{ label: 'Result', value: String(r) }] };
   if (r.enabled === false) return { headline: 'Not running on this hub yet. Save it, then restart the hub if it says so.', rows: [] };
   const codeKey = ['code', 'setupCode', 'manualCode', 'manualPairingCode', 'pin'].find(k => typeof r[k] === 'string' || typeof r[k] === 'number');
-  const skip = new Set(['ok', 'enabled', 'next', 'url', 'redirectUri', ...(codeKey ? [codeKey] : [])]);
+  const skip = new Set(['ok', 'enabled', 'next', 'url', 'redirectUri', 'status', 'qrSvg', ...(codeKey ? [codeKey] : [])]);
   const rows = Object.entries(r).filter(([k, v]) => !skip.has(k) && v != null && v !== '').map(([k, v]) => {
     const mono = /code|payload|pin|url|key|mac|host|ip\b/i.test(k);
     return { label: human(k), value: typeof v === 'boolean' ? (v ? 'Yes' : 'No') : show(v), mono, copy: mono || /url|key|link/i.test(k) };
   });
   const headline = typeof r.next === 'string' ? r.next : typeof r.status === 'string' && !rows.length ? r.status : undefined;
-  return { headline: headline ?? (!rows.length && !codeKey ? 'Done.' : undefined), code: codeKey ? String(r[codeKey]) : undefined, rows };
+  return { headline: headline ?? (!rows.length && !codeKey ? 'Done.' : undefined), code: codeKey ? String(r[codeKey]) : undefined, qrSvg: typeof r.qrSvg === 'string' ? r.qrSvg : undefined, rows };
 }
 
 // --------------------------------------------------------------- list --

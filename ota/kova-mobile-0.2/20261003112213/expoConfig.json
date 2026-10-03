@@ -1,7 +1,7 @@
 {
   "name": "Kova",
   "slug": "kova",
-  "version": "0.2.15",
+  "version": "0.2.17",
   "runtimeVersion": "kova-mobile-0.2",
   "updates": {
     "enabled": true,
@@ -164,6 +164,14 @@
     },
     "kovaHistory": [
       {
+        "version": "0.2.17",
+        "title": "Tuya: link with Smart Life QR; fix animation crash and stuck Ask box"
+      },
+      {
+        "version": "0.2.16",
+        "title": "Fix a render crash when toggling a device (JS vs native animation mix); the reconnect banner now clears when requests succeed; camera screen matches the app’s style"
+      },
+      {
         "version": "0.2.15",
         "title": "Native camera screen, native add-a-device"
       },
@@ -174,14 +182,6 @@
       {
         "version": "0.2.13",
         "title": "Purifiers: fan speed, the air, filter life, display and child lock; a tap switches them on or off. Security names cameras."
-      },
-      {
-        "version": "0.2.12",
-        "title": "Settings: where the home is, timezone, prayer times, the doorbell pause; the web gets a Settings page"
-      },
-      {
-        "version": "0.2.11",
-        "title": "Sign in a browser: type the code your Kova address shows on a computer; sign browsers out"
       }
     ]
   },

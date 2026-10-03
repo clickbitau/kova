@@ -92,6 +92,12 @@ export const CATALOG: CatalogItem[] = [
       ],
     }],
     actions: [{
+      id: 'link', label: 'Link with Smart Life', icon: 'qr_code_2', method: 'POST', path: '/api/integrations/tuya/qr-pair',
+      help: 'Kova shows a code; you scan it in the Smart Life app. Every device — the gateway and the things behind it — comes in with its local key, no cloud project needed. Control stays on your network.',
+      fields: [
+        { key: 'userCode', label: 'Smart Life user code', type: 'text', required: true, placeholder: 'A1b2C3d', help: 'Smart Life → Me → Settings (top right) → Account and Security → User Code' },
+      ],
+    }, {
       id: 'cloud', label: 'Get keys from the Tuya cloud', icon: 'cloud_download', method: 'POST', path: '/api/integrations/tuya/cloud-import',
       help: 'One-time: make a cloud project at iot.tuya.com, link your Smart Life app to it, and paste its Access ID and Secret. Kova fetches every device’s key, finds them on your network, and keeps your names and rooms.',
       fields: [
