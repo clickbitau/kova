@@ -45,7 +45,7 @@ export function AskScreen() {
   const [focus, setFocus] = useState(false);
   const scroll = useRef<ScrollView>(null);
   useScrollToTop(scroll);
-  const ready = !!text.trim() && !busy;
+  const ready = !!text.trim();
   const can = useStateValue(ready);
 
   // The "Understood" preview, a moment after typing stops.
@@ -55,22 +55,38 @@ export function AskScreen() {
     return () => clearTimeout(t);
   }, [text, api]);
 
-  const ask = async (q: string) => {
-    const t = q.trim();
-    if (!t || busy) return;
-    haptic.select();
-    setText(''); setChips([]); setBusy(true);
-    setChat(c => [...c, { id: Date.now(), from: 'you', text: t }]);
+  // A sent message leaves the box and lands in the chat straight away; a slow or hung request before it never
+  // eats the next one — each waits its turn while the reply for it is on the way.
+  const queue = useRef<string[]>([]);
+  const asking = useRef(false);
+  const drain = async () => {
+    if (asking.current) return;
+    asking.current = true; setBusy(true);
     try {
-      const r = await api<AskReply>('POST', '/api/ask', { text: t });
-      setChat(c => [...c, { id: Date.now() + 1, from: 'kova', text: r.text, src: r.source, actions: r.actions, undo: r.undo }]);
-      if (r.undo) haptic.success();
-    } catch (e) {
-      haptic.error();
-      setChat(c => [...c, { id: Date.now() + 1, from: 'kova', text: (e as Error).message, failed: true }]);
+      while (queue.current.length) {
+        const t = queue.current.shift()!;
+        try {
+          const r = await api<AskReply>('POST', '/api/ask', { text: t });
+          setChat(c => [...c, { id: Date.now() + 1, from: 'kova', text: r.text, src: r.source, actions: r.actions, undo: r.undo }]);
+          if (r.undo) haptic.success();
+        } catch (e) {
+          haptic.error();
+          setChat(c => [...c, { id: Date.now() + 1, from: 'kova', text: (e as Error).message, failed: true }]);
+        }
+      }
     } finally {
-      setBusy(false);
+      asking.current = false; setBusy(false);
     }
+  };
+
+  const ask = (q: string) => {
+    const t = q.trim();
+    if (!t) return;
+    haptic.select();
+    setText(''); setChips([]);
+    queue.current.push(t);
+    setChat(c => [...c, { id: Date.now(), from: 'you', text: t }]);
+    void drain();
   };
 
   const run = async (m: Msg, a: AskReply['actions'][number]) => {
