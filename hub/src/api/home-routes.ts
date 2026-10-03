@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { Hub } from '../hub.ts';
-import type { HomeConfig } from '../model/types.ts';
+import { ROOM_ICONS, type HomeConfig } from '../model/types.ts';
 import { groupDeviceId } from '../adapters/groups.ts';
 import { combinedDeviceId } from '../adapters/combined.ts';
 import { isPlayer } from '../util/describe.ts';
@@ -13,7 +13,6 @@ import { slug } from '../tools/import-ha.ts';
 type Reply = { code: (n: number) => { send: (b: { error: string }) => unknown } };
 /** How prayer times can be worked out (adhan's calculation methods). */
 export const PRAYER_METHODS = ['MuslimWorldLeague', 'Egyptian', 'Karachi', 'UmmAlQura', 'Dubai', 'MoonsightingCommittee', 'NorthAmerica', 'Kuwait', 'Qatar', 'Singapore', 'Tehran', 'Turkey'];
-const ROOM_ICONS = ['weekend', 'kitchen', 'desk', 'bed', 'single_bed', 'crib', 'music_note', 'local_laundry_service', 'garage_home', 'door_front', 'yard', 'bathtub', 'stairs', 'meeting_room', 'chair', 'tv', 'deck', 'balcony', 'fitness_center', 'checkroom'];
 
 export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
   const edit = (fn: (c: HomeConfig) => void) => ({ undo: hub.engine.registerUndo(hub.config.update(fn)) });

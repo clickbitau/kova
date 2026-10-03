@@ -146,6 +146,9 @@ export interface Room {
   icon: string;
 }
 
+/** Material Symbols icons a room can have — offered wherever a room is made or renamed. */
+export const ROOM_ICONS = ['weekend', 'kitchen', 'desk', 'bed', 'single_bed', 'crib', 'music_note', 'local_laundry_service', 'garage_home', 'door_front', 'yard', 'bathtub', 'stairs', 'meeting_room', 'chair', 'tv', 'deck', 'balcony', 'fitness_center', 'checkroom'];
+
 export interface Person {
   id: string;
   name: string;

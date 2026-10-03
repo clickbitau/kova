@@ -4,10 +4,11 @@ import type { Engine } from '../engine/engine.ts';
 import type { Registry } from '../devices/registry.ts';
 import type { ConfigStore } from '../engine/config.ts';
 import type { Store } from '../store/db.ts';
-import type { Automation, Cause, Command, Device, Targets } from '../model/types.ts';
+import { ROOM_ICONS, type Automation, type Cause, type Command, type Device, type Targets } from '../model/types.ts';
 import { FIELD_CAP, isPlayer, pseudoLabel, targetLabel } from '../util/describe.ts';
 import { checkAutomation } from '../engine/automation-check.ts';
 import { actionWords, condWords, triggerWords } from '../engine/automations.ts';
+import { slug } from '../tools/import-ha.ts';
 import { clock } from '../util/time.ts';
 import { norm, type AskReply } from './assistant.ts';
 
@@ -267,6 +268,58 @@ Only use device, person, mode and overlay ids from the home context; never inven
     description: 'Delete an automation by id (from the Automations list). Only when the user asks, or it is a duplicate of one being created. When merging automations, create or update the surviving one FIRST and delete the other only after that returns ok.',
     parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
   },
+  {
+    name: 'create_room',
+    description: 'Create a room — a part of the home like Nursery, Garage or Hallway. Returns its room id; put devices in it with update_device.',
+    parameters: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        icon: { type: 'string', enum: [...ROOM_ICONS], description: 'Pick the closest fit; optional.' },
+      },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'update_device',
+    description: `Change how a device is organised — for "the X is in the master bedroom", "rename it", "hide it", "put it on my favourites". name renames it, room moves it (a room id from the Rooms list — create_room first if it doesn't exist yet), favourite puts it on the Now page, hidden takes it out of view.`,
+    parameters: {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+        name: { type: 'string' },
+        room: { type: 'string' },
+        favourite: { type: 'boolean' },
+        hidden: { type: 'boolean' },
+      },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'rename_room',
+    description: 'Rename a room, or change its icon. room is a room id from the Rooms list.',
+    parameters: {
+      type: 'object',
+      properties: {
+        room: { type: 'string' },
+        name: { type: 'string' },
+        icon: { type: 'string', enum: [...ROOM_ICONS] },
+      },
+      required: ['room'],
+    },
+  },
+  {
+    name: 'delete_room',
+    description: `Remove a room. Devices in it aren't lost — they move to moveTo, another room id from the Rooms list. If the room has devices and no moveTo is given, the call fails with the count so you can ask where they should go.`,
+    parameters: {
+      type: 'object',
+      properties: {
+        room: { type: 'string' },
+        moveTo: { type: 'string' },
+      },
+      required: ['room'],
+    },
+  },
 ] as const;
 
 type ToolName = typeof TOOLS[number]['name'];
@@ -385,6 +438,8 @@ export interface AiContext {
   text: string;
   shared: string[];
   deviceIds: Map<string, string>;
+  /** The room id the model gives → the real one (neutral `roomN` aliases when names are private). */
+  roomIds: Map<string, string>;
 }
 
 /** Runs tool calls against the engine, collecting undo ids. One per ask. */
@@ -403,6 +458,15 @@ export class Toolbox {
   private device(alias: unknown): Device | undefined {
     const id = typeof alias === 'string' ? this.ctx.deviceIds.get(alias) : undefined;
     return id ? this.ai.reg.get(id) : undefined;
+  }
+
+  /** The real room id for what the model sent (a `roomN` alias when names are private), or undefined. */
+  private roomId(alias: unknown): string | undefined {
+    if (typeof alias !== 'string') return undefined;
+    const rooms = this.ai.config.get().rooms;
+    if (rooms.some(r => r.id === alias)) return alias;
+    const id = this.ctx.roomIds.get(alias);
+    return id && rooms.some(r => r.id === id) ? id : undefined;
   }
 
   async run(name: string, input: unknown): Promise<string> {
@@ -587,6 +651,90 @@ export class Toolbox {
             return JSON.stringify({ ok: true, id, name: cur.name });
           } catch (e) { return JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e) }); }
         }
+        case 'create_room': {
+          const name = typeof args.name === 'string' ? args.name.trim().replace(/\s+/g, ' ').slice(0, 40) : '';
+          if (!name) return JSON.stringify({ ok: false, error: 'Give the room a name' });
+          const icon = typeof args.icon === 'string' && (ROOM_ICONS as readonly string[]).includes(args.icon) ? args.icon : 'meeting_room';
+          const rooms = this.ai.config.get().rooms;
+          let id = slug(name) || 'room', n = 2;
+          while (rooms.some(r => r.id === id)) id = `${slug(name) || 'room'}_${n++}`;
+          const undo = this.ai.config.update(c => { c.rooms.push({ id, name, icon }); });
+          this.undos.push(this.ai.engine.registerUndo(undo));
+          this.ai.store.append({ kind: 'system', device: null, feed: 'system', what: `Ask Kova made the room “${name}”`, data: { room: id }, cause: AI_CAUSE });
+          return JSON.stringify({ ok: true, id, name });
+        }
+        case 'update_device': {
+          const d = this.device(args.id);
+          if (!d) return JSON.stringify({ ok: false, error: `Unknown device ${String(args.id)}` });
+          const rooms = this.ai.config.get().rooms;
+          const rawRoom = args.room == null ? undefined : String(args.room).trim();
+          const room = !rawRoom ? rawRoom : this.roomId(rawRoom);
+          if (rawRoom && !room) return JSON.stringify({ ok: false, error: `Unknown room ${rawRoom} — use an id from the Rooms list, or create_room first` });
+          const name = args.name == null ? undefined : String(args.name).trim().replace(/\s+/g, ' ').slice(0, 60);
+          if (name === '') return JSON.stringify({ ok: false, error: 'Give it a name' });
+          const favourite = typeof args.favourite === 'boolean' ? args.favourite : undefined;
+          const hidden = typeof args.hidden === 'boolean' ? args.hidden : undefined;
+          if (name === undefined && room === undefined && favourite === undefined && hidden === undefined) return JSON.stringify({ ok: false, error: 'Nothing to change' });
+          // Same override model as PATCH /api/devices/:id/settings: store only what differs from the adapter's own.
+          const orig = d.original ?? { name: d.name, room: d.room };
+          const undo = this.ai.config.update(c => {
+            const s = { ...(c.devices?.[d.id] ?? {}) };
+            if (name !== undefined) { if (name === orig.name) delete s.name; else s.name = name; }
+            if (room !== undefined) { if (!room || room === orig.room) delete s.room; else s.room = room; }
+            if (hidden !== undefined) { if (hidden) s.hidden = true; else delete s.hidden; }
+            c.devices = { ...(c.devices ?? {}) };
+            if (Object.keys(s).length) c.devices[d.id] = s; else delete c.devices[d.id];
+            if (favourite !== undefined) { const f = (c.favourites ?? []).filter(x => x !== d.id); c.favourites = favourite ? [...f, d.id] : f; }
+          });
+          this.undos.push(this.ai.engine.registerUndo(undo));
+          const bits: string[] = [];
+          if (name) bits.push(`renamed it “${name}”`);
+          if (room) bits.push(`moved it to ${rooms.find(r => r.id === room)?.name ?? room}`);
+          if (favourite === true) bits.push('favourited it'); else if (favourite === false) bits.push('took it off favourites');
+          if (hidden === true) bits.push('hid it'); else if (hidden === false) bits.push('unhid it');
+          this.ai.store.append({ kind: 'system', device: d.id, feed: 'system', what: `Ask Kova ${bits.join(' and ') || 'updated'} — ${d.name}`, data: { device: d.id }, cause: AI_CAUSE });
+          return JSON.stringify({ ok: true, id: d.id, name: name ?? d.name, room: room ?? d.room });
+        }
+        case 'rename_room': {
+          const rid = this.roomId(args.room);
+          const room = rid ? this.ai.config.get().rooms.find(r => r.id === rid) : undefined;
+          if (!room) return JSON.stringify({ ok: false, error: `Unknown room ${String(args.room)} — use an id from the Rooms list` });
+          const name = args.name === undefined ? undefined : String(args.name).trim().replace(/\s+/g, ' ').slice(0, 40);
+          if (name === '') return JSON.stringify({ ok: false, error: 'Give the room a name' });
+          const icon = typeof args.icon === 'string' && (ROOM_ICONS as readonly string[]).includes(args.icon) ? args.icon : undefined;
+          if (name === undefined && icon === undefined) return JSON.stringify({ ok: false, error: 'Nothing to change' });
+          const was = room.name;
+          const undo = this.ai.config.update(c => { const r = c.rooms.find(x => x.id === room.id)!; if (name) r.name = name; if (icon) r.icon = icon; });
+          this.undos.push(this.ai.engine.registerUndo(undo));
+          this.ai.store.append({ kind: 'system', device: null, feed: 'system', what: `Ask Kova renamed the room “${was}” to “${name ?? was}”`, data: { room: room.id }, cause: AI_CAUSE });
+          return JSON.stringify({ ok: true, id: room.id, name: name ?? room.name });
+        }
+        case 'delete_room': {
+          const cfg = this.ai.config.get();
+          const rid = this.roomId(args.room);
+          const room = rid ? cfg.rooms.find(r => r.id === rid) : undefined;
+          if (!room) return JSON.stringify({ ok: false, error: `Unknown room ${String(args.room)} — use an id from the Rooms list` });
+          const inside = this.ai.reg.list().filter(d => d.room === room.id);
+          const rawMove = args.moveTo === undefined ? undefined : String(args.moveTo);
+          const moveTo = rawMove === undefined ? undefined : this.roomId(rawMove);
+          if (inside.length && moveTo === undefined) return JSON.stringify({ ok: false, error: `${inside.length} device${inside.length === 1 ? ' is' : 's are'} in ${room.name} — ask where they should go, then call again with moveTo` });
+          if (moveTo !== undefined && moveTo === room.id) return JSON.stringify({ ok: false, error: 'Choose a different room to move them to' });
+          if (rawMove !== undefined && moveTo === undefined) return JSON.stringify({ ok: false, error: `Unknown room ${rawMove} to move devices to` });
+          const undo = this.ai.config.update(c => {
+            c.rooms = c.rooms.filter(r => r.id !== room.id);
+            c.devices = { ...(c.devices ?? {}) };
+            for (const d of inside) {
+              const orig = d.original?.room ?? d.room;
+              const s = { ...(c.devices[d.id] ?? {}) };
+              if (moveTo === orig) delete s.room; else s.room = moveTo;
+              if (Object.keys(s).length) c.devices[d.id] = s; else delete c.devices[d.id];
+            }
+            for (const [g, rooms] of Object.entries(c.groups)) c.groups[g] = rooms.filter(r => r !== room.id);
+          });
+          this.undos.push(this.ai.engine.registerUndo(undo));
+          this.ai.store.append({ kind: 'system', device: null, feed: 'system', what: `Ask Kova removed the room “${room.name}”${inside.length ? `, ${inside.length} device${inside.length === 1 ? '' : 's'} moved` : ''}`, data: { room: room.id, moved: inside.map(d => d.id) }, cause: AI_CAUSE });
+          return JSON.stringify({ ok: true, removed: room.id, moved: inside.map(d => d.id) });
+        }
         default:
           return JSON.stringify({ ok: false, error: `Unknown tool ${name}` });
       }
@@ -740,7 +888,7 @@ export class CloudAiEngine implements AiEngine {
 // -------------------------------------------------------------- assistant --
 
 const SYSTEM = `You are Ask Kova, the assistant for a smart home hub. The hub's built-in parser couldn't handle this request, so it was passed to you.
-Use the tools to act: set_devices, start_overlay, end_overlay, explain_device, list_schedule, create_automation, update_automation, delete_automation, remember, forget. Only use device, overlay, mode and person ids from the home context below; never invent ids.
+Use the tools to act: set_devices, start_overlay, end_overlay, explain_device, list_schedule, create_automation, update_automation, delete_automation, create_room, rename_room, delete_room, update_device, remember, forget. Only use device, room, overlay, mode and person ids from the home context below; never invent ids.
 Anything asked to happen regularly, at a time, or when something else happens is an automation — build it with create_automation, then tell the user what it will do in the words the tool returns.
 Ducted air conditioner zones are numbered; a zone only has a name when the state lists one. If a request names rooms for a zoned AC and the zones are unnamed, ask which zone number is which room instead of guessing.
 If the request can't be done with these tools or the shared context, say so plainly instead of guessing. Reply like a text message — plain text only, no markdown (never ** or # or \` characters — they show raw in the chat). Keep it short: a sentence or two usually; when listing several things, one item per line starting with "- ". Refer to automations and devices by their names, not their ids.`;
@@ -835,7 +983,8 @@ export class AiAssistant {
       }
       shared.push('activity history');
     }
-    return { text: lines.join('\n'), shared, deviceIds };
+    const roomIds = new Map(cfg.rooms.map(r => [roomAlias.get(r.id)!, r.id]));
+    return { text: lines.join('\n'), shared, deviceIds, roomIds };
   }
 
   /** The engine for the current settings, or a reason it can't run. */

@@ -5,6 +5,7 @@ import type { AddressInfo } from 'node:net';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { testHub } from './helpers.ts';
+import { learnedPhrases } from '../src/assistant/ai.ts';
 import { buildServer } from '../src/api/server.ts';
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../web');
@@ -66,7 +67,7 @@ test('Local AI: tool call changes a device through the engine, logged, tagged an
   assert.equal(fake.received.length, 2);
   assert.equal(fake.received[0].url, '/v1/chat/completions');
   assert.equal(fake.received[0].body.model, 'llama3');
-  assert.deepEqual(fake.received[0].body.tools.map((t: any) => t.function.name), ['set_devices', 'start_overlay', 'end_overlay', 'explain_device', 'list_schedule', 'remember', 'forget', 'create_automation', 'update_automation', 'delete_automation']);
+  assert.deepEqual(fake.received[0].body.tools.map((t: any) => t.function.name), ['set_devices', 'start_overlay', 'end_overlay', 'explain_device', 'list_schedule', 'remember', 'forget', 'create_automation', 'update_automation', 'delete_automation', 'create_room', 'update_device', 'rename_room', 'delete_room']);
   const toolMsg = fake.received[1].body.messages.find((m: any) => m.role === 'tool');
   assert.equal(toolMsg.tool_call_id, 'call_1');
   assert.equal(JSON.parse(toolMsg.content).ok, true);
@@ -175,7 +176,7 @@ test('Cloud AI: Anthropic Messages tool loop against a fake endpoint', async () 
   assert.equal(first.headers['x-api-key'], 'sk-ant-test');
   assert.equal(first.headers.authorization, undefined);
   assert.equal(first.body.model, 'claude-opus-5-5');
-  assert.deepEqual(first.body.tools.map((t: any) => t.name), ['set_devices', 'start_overlay', 'end_overlay', 'explain_device', 'list_schedule', 'remember', 'forget', 'create_automation', 'update_automation', 'delete_automation']);
+  assert.deepEqual(first.body.tools.map((t: any) => t.name), ['set_devices', 'start_overlay', 'end_overlay', 'explain_device', 'list_schedule', 'remember', 'forget', 'create_automation', 'update_automation', 'delete_automation', 'create_room', 'update_device', 'rename_room', 'delete_room']);
   assert.ok(!('tool_choice' in first.body) || first.body.tool_choice.type === 'auto');
   const sys = JSON.stringify(first.body.system);
   for (const c of CAMERAS) assert.ok(!sys.includes(c), `camera ${c} was sent`);
@@ -441,5 +442,48 @@ test('remember + forget: a fact persists into the next request\'s context', asyn
   // forget removes it; the DELETE route drops it by index.
   assert.equal((await app.inject({ method: 'DELETE', url: '/api/assistant/memory/0' })).statusCode, 200);
   assert.equal((await app.inject({ url: '/api/assistant/memory' })).json().memory.length, 0);
+  await app.close(); await hub.stop(); await fake.close();
+});
+
+test('AI can create a room, move a device into it, rename it — all undoable', async () => {
+  const fake = await fakeServer([
+    openAiToolCall('create_room', { name: 'Play room', icon: 'chair' }),
+    openAiToolCall('update_device', { id: 'lamp', room: 'play_room' }),
+    openAiToolCall('rename_room', { room: 'play_room', name: 'Playroom' }),
+    openAiText('Done — the Playroom exists and the lamp is in it.'),
+  ]);
+  const { hub, app, put, ask } = await setup();
+  await put({ engine: 'local', local: { url: fake.url, model: 'm' } });
+
+  const r = await ask('make a play room and move the lamp in, then call it playroom');
+  assert.match(r.text, /playroom/i);
+  const room = hub.config.get().rooms.find(x => x.id === 'play_room');
+  assert.ok(room, 'room was created');
+  assert.equal(room.name, 'Playroom');
+  assert.equal(room.icon, 'chair');
+  assert.equal(hub.reg.get('lamp')!.room, 'play_room');
+  // organisational changes are not learned — creating "another play room" must not replay.
+  assert.equal(learnedPhrases(hub.store).length, 0, 'organisational changes are not learned');
+
+  assert.ok(r.undo, 'an undo was offered');
+  await app.inject({ method: 'POST', url: `/api/undo/${r.undo}` });
+  assert.equal(hub.config.get().rooms.find(x => x.id === 'play_room'), undefined, 'undo removed the room');
+  assert.equal(hub.reg.get('lamp')!.room, 'lounge', 'undo moved the device back');
+  await app.close(); await hub.stop(); await fake.close();
+});
+
+test('AI room tools refuse bad input instead of inventing ids', async () => {
+  const fake = await fakeServer([
+    openAiToolCall('create_room', { name: 'Lounge' }),
+    openAiToolCall('update_device', { id: 'no_such_device', room: 'lounge' }),
+    openAiToolCall('rename_room', { room: 'no_such_room', name: 'X' }),
+    openAiText('Sorry, those rooms and devices do not exist.'),
+  ]);
+  const { hub, app, put, ask } = await setup();
+  await put({ engine: 'local', local: { url: fake.url, model: 'm' } });
+
+  const r = await ask('do some room organising');
+  assert.match(r.text, /do not exist/i);
+  assert.equal(hub.config.get().rooms.filter(x => x.id === 'lounge').length, 1, 'no duplicate room');
   await app.close(); await hub.stop(); await fake.close();
 });
