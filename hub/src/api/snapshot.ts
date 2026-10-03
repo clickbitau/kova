@@ -12,6 +12,19 @@ import SunCalc from 'suncalc';
 
 const FEED_ICON: Record<string, string> = { mode: 'routine', run: 'bolt', presence: 'person_pin_circle', state: 'lightbulb', system: 'info', skip: 'event_busy' };
 
+const IPV4 = /\b(?:\d{1,3}\.){3}\d{1,3}\b/;
+
+/** Which physical device (MAC) a registry device sits on, via the router's device table. */
+function netOf(reg: Hub['reg']) {
+  const warden = reg.adapters.get('warden') as { byIp?: Map<string, { mac: string; name?: string }> } | undefined;
+  if (!warden?.byIp?.size) return undefined;
+  const byIp = warden.byIp;
+  return (d: Device) => {
+    const ip = IPV4.exec(d.address ?? '')?.[0] ?? IPV4.exec(d.name)?.[0];
+    return ip ? byIp.get(ip) : undefined;
+  };
+}
+
 function feedIcon(e: LogEntry): string {
   if (e.kind === 'device_event') return e.data.type === 'ring' ? 'doorbell' : 'person';
   if (e.kind === 'presence') return e.data.home ? 'person_pin_circle' : 'directions_walk';
@@ -150,7 +163,7 @@ export function snapshot(hub: Hub) {
     // When / if / then, with each part in words; and ones Kova suggests from how devices are connected.
     automations: engine.automations.list().map(a => ({ ...a, ...autoWords(a), lastRun: runSummary(engine.automations.lastRun(a.id)), running: engine.automations.running(a.id) })),
     // Devices that look like one thing reached through two integrations, and the ones already combined.
-    combineIdeas: combineIdeas(reg.list(), cfg.combined ?? [], cfg.dismissedFindings, id => !!cfg.devices?.[id]?.hidden, a => reg.adapters.get(a)?.name ?? a),
+    combineIdeas: combineIdeas(reg.list(), cfg.combined ?? [], cfg.dismissedFindings, id => !!cfg.devices?.[id]?.hidden, a => reg.adapters.get(a)?.name ?? a, netOf(reg)),
     combined: (cfg.combined ?? []).map(c => ({ ...c, deviceId: combinedDeviceId(c), memberNames: c.members.map(m => reg.get(m)?.name ?? m) })),
     automationIdeas: automationIdeas(cfg, reg.devices, hub.screens()).map(i => ({ ...i, ...autoWords(i) })),
     overlays: cfg.overlays.map(o => ({ id: o.id, name: o.name, icon: o.icon, endsLabel: o.endsLabel, targets: targetList(o.targets) })),

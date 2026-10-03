@@ -142,15 +142,45 @@ const words = (s: string) => new Set(s.toLowerCase().split(/[^a-z0-9]+/).filter(
 export interface CombineIdea { key: string; name: string; members: string[]; why: string }
 
 /**
- * Devices from different integrations that look like the same thing: players with a distinctive word in common
- * ("Soundbar", a model like "Q930B"), in the same room or not yet in one. The one that switches and picks inputs
- * goes first, the one that plays music after.
+ * Devices from different integrations that look like the same thing. Two kinds of evidence:
+ *  - `netOf`: the same MAC at each one's address — the router literally sees one physical device.
+ *  - players with a distinctive word in common ("Soundbar", a model like "Q930B"), in the same room
+ *    or not yet in one.
+ * The one that switches and picks inputs goes first, the one that plays music after.
  */
-export function combineIdeas(devices: Device[], combined: CombinedDevice[], dismissed: string[], hidden: (id: string) => boolean, via: (adapterId: string) => string = id => id): CombineIdea[] {
+export function combineIdeas(devices: Device[], combined: CombinedDevice[], dismissed: string[], hidden: (id: string) => boolean, via: (adapterId: string) => string = id => id, netOf?: (d: Device) => { mac: string; name?: string } | undefined): CombineIdea[] {
   const taken = new Set(combined.flatMap(c => c.members));
-  const players = devices.filter(d => (d.type === 'media' || d.type === 'tv') && !['groups', 'combined', 'helix'].includes(d.adapter) && !taken.has(d.id) && !hidden(d.id));
+  const skip = new Set(['groups', 'combined', 'helix', 'warden']);
   const out: CombineIdea[] = [];
   const used = new Set<string>();
+  const controls = (d: Device) => d.capabilities.includes('input') || d.capabilities.includes('sound') ? 0 : 1;
+  const name = (ds: Device[]) => ds.map(d => d.name.replace(/\s*\([^)]*\)\s*$/, '').trim()).sort((x, y) => y.length - x.length)[0];
+
+  // One MAC at several addresses: proven to be the same hardware, whatever each integration calls it.
+  if (netOf) {
+    const byMac = new Map<string, { net?: string; devs: Device[] }>();
+    for (const d of devices) {
+      if (taken.has(d.id) || hidden(d.id) || skip.has(d.adapter)) continue;
+      const net = netOf(d);
+      if (!net?.mac) continue;
+      const g = byMac.get(net.mac) ?? { net: net.name, devs: [] };
+      g.devs.push(d);
+      byMac.set(net.mac, g);
+    }
+    for (const [mac, g] of byMac) {
+      if (g.devs.length < 2) continue;
+      const members = [...g.devs].sort((x, y) => controls(x) - controls(y));
+      const key = `combine:${members.map(d => d.id).sort().join('+')}`;
+      if (dismissed.includes(`idea:${key}`)) continue;
+      for (const d of members) used.add(d.id);
+      out.push({
+        key, name: name(members), members: members.map(d => d.id),
+        why: `${members.map(d => `“${d.name}” through ${via(d.adapter)}`).join(' and ')} all reach the same device on your network (${g.net ? `“${g.net}”, ` : ''}${mac}). As one, each integration does what it does best.`,
+      });
+    }
+  }
+
+  const players = devices.filter(d => (d.type === 'media' || d.type === 'tv') && !skip.has(d.adapter) && !taken.has(d.id) && !hidden(d.id));
   for (let i = 0; i < players.length; i++) {
     for (let j = i + 1; j < players.length; j++) {
       const a = players[i], b = players[j];
@@ -158,15 +188,12 @@ export function combineIdeas(devices: Device[], combined: CombinedDevice[], dism
       const sameRoom = a.room === b.room || a.room === 'unassigned' || b.room === 'unassigned';
       const shared = [...words(a.name)].filter(w => words(b.name).has(w));
       if (!sameRoom || !shared.length) continue;
-      const controls = (d: Device) => d.capabilities.includes('input') || d.capabilities.includes('sound') ? 0 : 1;
       const pair = [a, b].sort((x, y) => controls(x) - controls(y));
       const key = `combine:${pair.map(d => d.id).sort().join('+')}`;
       if (dismissed.includes(`idea:${key}`)) continue;
       used.add(a.id); used.add(b.id);
-      // The fuller name, without a model number in brackets: "Samsung Soundbar Q930B", "Bedroom Oled".
-      const name = pair.map(d => d.name.replace(/\s*\([^)]*\)\s*$/, '').trim()).sort((x, y) => y.length - x.length)[0];
       out.push({
-        key, name, members: pair.map(d => d.id),
+        key, name: name(pair), members: pair.map(d => d.id),
         why: `“${pair[0].name}” through ${via(pair[0].adapter)} and “${pair[1].name}” through ${via(pair[1].adapter)} look like the same device. As one, ${via(pair[0].adapter)} does what it does best (power, input, sound) and ${via(pair[1].adapter)} plays music.`,
       });
     }

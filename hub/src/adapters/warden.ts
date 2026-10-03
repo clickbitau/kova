@@ -229,6 +229,8 @@ export class WardenAdapter implements Adapter {
   private retry: NodeJS.Timeout | null = null;
   /** Kova switch id → Warden device id, once known. */
   private devIds = new Map<string, string>();
+  /** IP → the physical device it currently belongs to, from the last device table. Lets the rest of Kova prove two integrations reached the same hardware. */
+  readonly byIp = new Map<string, { mac: string; name?: string }>();
   private summary = '';
 
   constructor(private opts: WardenOptions, private clock: () => number = Date.now) {
@@ -376,7 +378,12 @@ export class WardenAdapter implements Adapter {
       if (!this.legacy) {
         try {
           const devices = await this.api.devices();
-          for (const dev of devices) this.onDevice(dev);
+          this.byIp.clear();
+          for (const dev of devices) {
+            this.onDevice(dev);
+            const mac = dev.macs[0] && normMac(dev.macs[0]);
+            if (mac) for (const ip of dev.ips) this.byIp.set(ip, { mac, name: deviceLabel(dev) });
+          }
           count = devices.filter(d => d.online).length;
         } catch (e) {
           if (!notFound(e)) throw e;
@@ -406,6 +413,7 @@ export class WardenAdapter implements Adapter {
     for (const i of await this.api.incidents(this.since)) this.onIncident(i);
     if (!this.switches.length) return;
     const [paused, clients] = await Promise.all([this.api.paused(), this.api.clients()]);
+    for (const c of clients) if (c.ip) this.byIp.set(c.ip, { mac: normMac(c.mac), name: c.name || c.hostname });
     const byMac = new Map(clients.map(c => [normMac(c.mac), c]));
     for (const d of this.switches) {
       if (!d.mac) continue;

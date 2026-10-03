@@ -82,3 +82,29 @@ test('combined devices: routing, merged state, and which devices look like one',
   assert.deepEqual(ideas.map(i => [i.name, i.members]), [['Bedroom Oled', ['tv', 'c']]], 'a speaker and a Sonos called "Kitchen…" share only a generic word');
   assert.deepEqual(combineIdeas([tv, cast], [], ['idea:combine:c+tv'], () => false), [], 'dismissed');
 });
+
+test('the router seeing one MAC at two addresses proves the integrations reached the same device', () => {
+  const dev = (id: string, adapter: string, caps: string[], state: DeviceState, name = id, room = 'lounge', type = 'media'): Device => ({ id, name, room, type, adapter, capabilities: caps, state, integration: adapter, address: id } as Device);
+  // Different names, different rooms, not even both players — the MAC is still decisive.
+  const tv = dev('tv1', 'samsungtv', ['onoff', 'input'], {}, 'Bedroom Oled (QA55S90DAWXXY)', 'bedroom', 'tv');
+  const tvCast = dev('tv2', 'cast', ['onoff', 'media'], {}, 'Bedroom TV', 'unassigned', 'media');
+  const speaker = dev('sp', 'sonos', ['onoff', 'media'], {}, 'Den speaker', 'den', 'media');
+  const macs = new Map([['tv1', 'aa:bb:cc:dd:ee:01'], ['tv2', 'aa:bb:cc:dd:ee:01'], ['sp', 'aa:bb:cc:dd:ee:02']]);
+  const netOf = (d: Device) => ({ mac: macs.get(d.id)!, name: 'Bedroom Oled' });
+
+  const ideas = combineIdeas([tv, tvCast, speaker], [], [], () => false, id => id, netOf);
+  assert.deepEqual(ideas.map(i => i.members), [['tv1', 'tv2']], 'the two on one MAC pair up; the speaker on its own MAC does not join');
+  assert.match(ideas[0].why, /same device on your network/);
+  assert.equal(ideas[0].name, 'Bedroom Oled');
+
+  // Three integrations on one MAC: one idea, all members, control-capable first.
+  const tv3 = dev('tv3', 'smartthings', ['onoff'], {}, 'Bedroom Oled', 'bedroom', 'tv');
+  macs.set('tv3', 'aa:bb:cc:dd:ee:01');
+  const three = combineIdeas([tv, tvCast, tv3, speaker], [], [], () => false, id => id, netOf);
+  assert.deepEqual(three.map(i => i.members), [['tv1', 'tv2', 'tv3']]);
+
+  // Already combined / hidden / dismissed entries stay out of it.
+  assert.deepEqual(combineIdeas([tv, tvCast], [{ id: 'x', name: 'x', members: ['tv1', 'tv2'] }], [], () => false, id => id, netOf), [], 'already combined');
+  assert.deepEqual(combineIdeas([tv, tvCast], [], [], id => id === 'tv2', id => id, netOf), [], 'one hidden');
+  assert.deepEqual(combineIdeas([tv, tvCast], [], ['idea:combine:tv1+tv2'], () => false, id => id, netOf), [], 'dismissed');
+});
