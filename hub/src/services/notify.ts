@@ -322,7 +322,7 @@ export class Notifier {
       } catch (err) { errors.push(`app: ${String((err as Error).message ?? err)}`); }
     }
     if (this.opts.ntfy) {
-      try { await this.sendNtfy(n); out.ntfy = true; } catch (err) { errors.push(`ntfy: ${String((err as Error).message ?? err)}`); }
+      try { await this.sendNtfy(n); out.ntfy = true; } catch (err) { errors.push(`ntfy: ${(err as Error).constructor?.name} ${String((err as Error).message ?? err)} ${(err as {code?:string}).code ?? ''}`); }
     }
     const phones = out.push + out.app;
     const channels = [phones ? `${phones} phone${phones === 1 ? '' : 's'}` : null, out.ntfy ? 'ntfy' : null].filter(Boolean);
@@ -364,7 +364,7 @@ export class Notifier {
     return { sent, gone, errors };
   }
 
-  private sendNtfy(n: Notification): Promise<void> {
+  private async sendNtfy(n: Notification): Promise<void> {
     const o = this.opts.ntfy!;
     const abs = (u: string) => this.opts.publicUrl ? new URL(u, this.opts.publicUrl).href : /^https?:/.test(u) ? u : null;
     const click = n.url ? abs(n.url) : null;
@@ -376,10 +376,10 @@ export class Notifier {
     });
     // ntfy's JSON publishing goes to the server root with the topic in the body (keeps titles UTF-8 safe).
     const u = new URL(o.url.replace(/\/+$/, '') + '/');
-    return new Promise((resolve, reject) => {
+    const post = (family?: number) => new Promise<void>((resolve, reject) => {
       const mod = u.protocol === 'https:' ? https : http;
       const req = mod.request(u, {
-        method: 'POST', timeout: 10_000,
+        method: 'POST', timeout: 10_000, ...(family ? { family } : {}),
         headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body), ...(o.token ? { authorization: `Bearer ${o.token}` } : {}) },
       }, res => {
         res.resume();
@@ -389,6 +389,13 @@ export class Notifier {
       req.on('error', reject);
       req.end(body);
     });
+    // Some LANs have a broken IPv6 route: a dual-stack lookup stalls on it. Retry IPv4-only when the send
+    // couldn't reach a server at all (an HTTP error means it did).
+    try { await post(); }
+    catch (err) {
+      if (err instanceof Error && /^HTTP /.test(err.message)) throw err;
+      await post(4);
+    }
   }
 
   /** Row on the Integrations screen. */
