@@ -689,10 +689,11 @@ document.write('<script src="/api/boot.js'+(t?"?token="+encodeURIComponent(t):""
 <div style="display:flex;flex-direction:column;gap:8px"><div style="display:flex;justify-content:space-between;font-size:13px;font-weight:600"><span>Brightness</span><span style="color:#a3a09a">{{ dr.briLabel }}</span></div><input type="range" min="1" max="100" value="{{ dr.bri }}" onChange="{{ dr.setBri }}" style="width:100%"></div>
 </sc-if>
 <sc-if value="{{ dr.hasWarmth }}" hint-placeholder-val="{{ false }}">
-<div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:13px;font-weight:600">Warmth</span><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
-<sc-for list="{{ dr.temps }}" as="k" hint-placeholder-count="4">
-<div onClick="{{ k.pick }}" style="padding:10px 0;border-radius:10px;text-align:center;font-size:12px;font-weight:700;cursor:pointer;background:{{ k.bg }};color:#1a1408;outline:{{ k.ring }};outline-offset:2px">{{ k.label }}</div>
-</sc-for>
+<div style="display:flex;flex-direction:column;gap:8px"><div style="display:flex;justify-content:space-between;font-size:13px;font-weight:600"><span>Warmth</span><span style="color:#a3a09a">{{ dr.kLabel }}</span></div><input type="range" min="2000" max="6500" step="50" value="{{ dr.kVal }}" onChange="{{ dr.setK }}" style="width:100%;accent-color:#f2b14c"></div>
+</sc-if>
+<sc-if value="{{ dr.hasColor }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:13px;font-weight:600">Colour</span><div style="display:grid;grid-template-columns:repeat(8,1fr);gap:8px">
+<sc-for list="{{ dr.colors }}" as="c" hint-placeholder-count="8"><div onClick="{{ c.pick }}" style="aspect-ratio:1;border-radius:50%;background:{{ c.bg }};outline:{{ c.ring }};outline-offset:2px;cursor:pointer"></div></sc-for>
 </div></div>
 </sc-if>
 <sc-if value="{{ dr.isPurifier }}" hint-placeholder-val="{{ false }}">
@@ -1636,7 +1637,8 @@ class Component extends DCLogic {
       const usedIn=(D.usedIn||[]).map(u=>({name:u.name,open:()=>this.setState(u.kind==='mode'?{screen:'modes',modeSel:u.id,drawer:null}:{screen:'modes',drawer:null})}));
       dr={name:D.name,room:RN[D.room]||'',icon:ICON[D.type],bg:t.bg,iconFg:D.on&&isLight(D)?(D.color||'#f2b14c'):t.iconFg,big:st.split(' · ')[0],dimmable:D.type==='dimmer'&&D.on,bri:D.bri,briLabel:D.bri+'%',hasWarmth:(D.capabilities||[]).includes('colorTemp')&&D.on,
         setBri:e=>this.patch(D.id,{bri:+e.target.value}),toggle:()=>this.toggleDev(D.id),
-        temps:[2200,2700,3000,4000].map(k=>({label:k+'K',bg:k===2200?'#ffb56b':k===2700?'#ffc98a':k===3000?'#ffd9a8':'#fff1dc',ring:D.k===k?'2px solid #f2b14c':'none',pick:()=>this.send(D.id,{k,color:null})})),
+        kVal:D.k||3000,kLabel:D.k?D.k+'K':'Colour',setK:e=>this.send(D.id,{on:true,k:+e.target.value,color:null}),
+        hasColor:(D.capabilities||[]).includes('color')&&D.on,colors:['#ff5a4e','#ff9f43','#ffd93d','#6bd968','#3fd0c9','#4aa3ff','#8b6bff','#ff6bd6'].map(c=>({bg:c,ring:(D.color||'').toLowerCase()===c?'2px solid #fff':'none',pick:()=>this.send(D.id,{on:true,color:c})})),
         ...this.climateView(D),...this.purifierView(D),...this.combinedView(D),facts:[['State',st],['Integration',D.integ],['Room',RN[D.room]||D.room],['Last changed',D.why.now]].map(([k,v])=>({k,v})),usedIn,usedNone:usedIn.length?'':'Not used by any mode, overlay or behaviour yet',
         code:JSON.stringify({id:D.id,address:D.eid,type:D.type,capabilities:D.capabilities,state:D.state,integration:D.integ,room:D.room},null,2)}}
     const tabs=['simple','details'].concat(adv?['code']:[]).map(t=>({label:t[0].toUpperCase()+t.slice(1),go:()=>this.setState({tab:t}),bg:s.tab===t?'#2a2b2f':'transparent',fg:s.tab===t?'#f1efea':'#a3a09a'}));
