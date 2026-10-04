@@ -195,7 +195,7 @@ document.write('<script src="/api/boot.js'+(t?"?token="+encodeURIComponent(t):""
 </sc-if>
 
 <sc-if value="{{ isRooms }}" hint-placeholder-val="{{ false }}">
-<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;color:#a3a09a">Rooms</span><h1 style="margin:0;font-size:30px;font-weight:700;letter-spacing:-0.02em">{{ roomName }}</h1></div>
+<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;color:#a3a09a">Devices</span><h1 style="margin:0;font-size:30px;font-weight:700;letter-spacing:-0.02em">{{ roomName }}</h1></div>
 <sc-for list="{{ combineIdeas }}" as="ci" hint-placeholder-count="1">
 <div style="display:flex;flex-direction:column;gap:10px;padding:16px;border-radius:16px;background:rgba(242,177,76,0.07);border:1px solid rgba(242,177,76,0.25)">
 <div style="display:flex;gap:10px;align-items:flex-start"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#f2b14c">join</span><div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:0"><span style="font-size:12px;font-weight:700;color:#f2b14c">Same device twice?</span><span style="font-size:14px;font-weight:700">{{ ci.name }}</span><span style="font-size:13px;color:#d8d5cf;line-height:1.5">{{ ci.why }}</span></div></div>
@@ -207,7 +207,7 @@ document.write('<script src="/api/boot.js'+(t?"?token="+encodeURIComponent(t):""
 <div onClick="{{ rt.open }}" style="padding:7px 13px;border-radius:999px;font-size:13px;font-weight:600;cursor:pointer;background:{{ rt.bg }};color:{{ rt.fg }}">{{ rt.name }}</div>
 </sc-for>
 </div>
-<div style="display:flex;align-items:center;gap:10px;font-size:13px;color:#a3a09a"><span>{{ roomSummary }}</span><span onClick="{{ roomAllOff }}" style="color:#f2b14c;font-weight:600;cursor:pointer">Turn all lights off</span></div>
+<div style="display:flex;align-items:center;gap:10px;font-size:13px;color:#a3a09a"><span>{{ roomSummary }}</span><sc-if value="{{ roomAllOff }}" hint-placeholder-val="{{ true }}"><span onClick="{{ roomAllOff }}" style="color:#f2b14c;font-weight:600;cursor:pointer">Turn all lights off</span></sc-if></div>
 <div data-kova-grid2 style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px">
 <sc-for list="{{ tiles }}" as="d" hint-placeholder-count="6">
 <div style="border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:22px;background:{{ d.bg }};border:1px solid {{ d.border }};transition:background .2s">
@@ -960,7 +960,7 @@ const b64u=s=>{const p='='.repeat((4-s.length%4)%4);const r=atob((s+p).replace(/
 const PUSH_UI={insecure:['Notifications need HTTPS','Open Kova over https:// to get alerts here, or use the ntfy app','notifications_off',null],install:['Add Kova to your Home Screen','iPhone only shows alerts for Home Screen apps: Share → Add to Home Screen','add_to_home_screen',null],unsupported:['No notifications in this browser','Use the ntfy app for alerts instead','notifications_off',null],denied:['Notifications are blocked','Allow them for Kova in Settings → Notifications','notifications_off',null],off:['Enable notifications','Doorbell, lights left on, devices not responding','notifications','Enable'],on:['Notifications are on','Doorbell, lights left on, devices not responding','notifications_active','Test']};
 
 class Component extends DCLogic {
-  state={hub:BOOT,conn:!!window.KOVA_BOOT,screen:this.props.startScreen??'home',room:(BOOT.rooms[0]||{}).id,drawer:null,tab:'simple',advanced:(this.props.depth??'Simple')==='Advanced',sel:'sunset',toast:null,undo:null,merging:false,merged:false,done:{},linked:{},q:'',camSel:null,push:pushBase(),mediaSel:null,actF:'all',inboxDone:{},iq:'',intF:'All',draft:'',chat:[{from:'kova',text:`Hi. ${BOOT.devices.filter(d=>isLight(d)&&d.state.on).length} lights are on and the home is in ${(BOOT.modes.find(m=>m.id===BOOT.current.modeId)||BOOT.modes[0]).name}. What do you need?`}],preview:null,pv:null,modeSel:null,igCat:null,igCfg:null,igPick:false,ig:null,igLoadErr:null,imp:null,impAutos:[],impFile:null,impKey:'',impPath:'',impBusy:null,impPct:0,impErr:null,impNeedKey:false,impNew:false,showCode:false};
+  state={hub:BOOT,conn:!!window.KOVA_BOOT,screen:this.props.startScreen??'home',room:null,drawer:null,tab:'simple',advanced:(this.props.depth??'Simple')==='Advanced',sel:'sunset',toast:null,undo:null,merging:false,merged:false,done:{},linked:{},q:'',camSel:null,push:pushBase(),mediaSel:null,actF:'all',inboxDone:{},iq:'',intF:'All',draft:'',chat:[{from:'kova',text:`Hi. ${BOOT.devices.filter(d=>isLight(d)&&d.state.on).length} lights are on and the home is in ${(BOOT.modes.find(m=>m.id===BOOT.current.modeId)||BOOT.modes[0]).name}. What do you need?`}],preview:null,pv:null,modeSel:null,igCat:null,igCfg:null,igPick:false,ig:null,igLoadErr:null,imp:null,impAutos:[],impFile:null,impKey:'',impPath:'',impBusy:null,impPct:0,impErr:null,impNeedKey:false,impNew:false,showCode:false};
   componentDidMount(){this.connect();this._igLoad=this.loadInteg();this.loadImport();this.pushCheck();this.deepLink()}
   async pushCheck(){const b=pushBase();this.setState({push:b});if(b!=='off')return;try{const reg=await swReady;const sub=await reg.pushManager.getSubscription();if(sub){this.setState({push:'on'});api('POST','/api/push/subscribe',{subscription:sub.toJSON()}).catch(()=>{})}}catch(e){}}
   async pushGo(){const st=this.state.push;
@@ -1584,14 +1584,14 @@ class Component extends DCLogic {
     const go=screen=>()=>this.setState({screen});
     const lightsOn=list.filter(d=>isLight(d)&&d.on).length;
     const inboxLeft=H.findings.length+H.integrations.filter(i=>!i.ok).length;
-    const nav=[['home','Now','home'],['modes','Modes','routine'],['autos','Automations','account_tree'],['rooms','Rooms','meeting_room'],['energy','Energy','electric_meter'],['security','Security','shield'],['media','Media','play_circle'],['activity','Activity','history',inboxLeft||''],['assistant','Ask Kova','graphic_eq'],['integrations','Integrations','extension','',1],['import','Import','move_down',(s.imp&&s.imp.review.filter(r=>!r.done).length)||''],['settings','Settings','settings']].concat(adv?[['dev','Developer','code']]:[]).map(([id,label,icon,badge,gap])=>({label,icon,badge:badge||'',mt:gap?'14px':'0px',go:go(id),bg:s.screen===id?'rgba(242,177,76,0.12)':'transparent',fg:s.screen===id?'#f2b14c':'#d8d5cf'}));
+    const nav=[['home','Now','home'],['modes','Modes','routine'],['autos','Automations','account_tree'],['rooms','Devices','devices'],['energy','Energy','electric_meter'],['security','Security','shield'],['media','Media','play_circle'],['activity','Activity','history',inboxLeft||''],['assistant','Ask Kova','graphic_eq'],['integrations','Integrations','extension','',1],['import','Import','move_down',(s.imp&&s.imp.review.filter(r=>!r.done).length)||''],['settings','Settings','settings']].concat(adv?[['dev','Developer','code']]:[]).map(([id,label,icon,badge,gap])=>({label,icon,badge:badge||'',mt:gap?'14px':'0px',go:go(id),bg:s.screen===id?'rgba(242,177,76,0.12)':'transparent',fg:s.screen===id?'#f2b14c':'#d8d5cf'}));
     // Devices whose room isn't one of the home's (an integration's default, or a room that was deleted): a "No room" tab, so nothing is out of sight.
     const NOROOM='__none',inRoom=d=>RN[d.room]!==undefined,homeless=list.filter(d=>!d.hidden&&!inRoom(d));
-    const room=s.room===NOROOM&&!homeless.length?(H.rooms[0]||{}).id:(s.room||(H.rooms[0]||{}).id);
-    const inThis=d=>room===NOROOM?!inRoom(d):d.room===room;
+    const ALL='__all',room=s.room===NOROOM&&!homeless.length?ALL:(s.room||ALL);
+    const inThis=d=>!d.hidden&&(room===NOROOM?!inRoom(d):room===ALL||d.room===room);
     const tiles=list.filter(inThis).map(d=>{const [st,sf]=this.stateOf(d);return{...d,...this.tint(d),icon:ICON[d.type],state:st,stateFg:sf,showId:adv,toggle:()=>this.toggleDev(d.id),open:()=>this.setState({drawer:d.id,tab:'simple'})}});
     const rDevs=list.filter(inThis);const rOn=rDevs.filter(d=>isLight(d)&&d.on).length;
-    const roomTabs=[...H.rooms,...(homeless.length?[{id:NOROOM,name:`No room (${homeless.length})`}]:[])].map(r=>({name:r.name,open:()=>this.setState({room:r.id}),bg:room===r.id?'#f1efea':'#16171a',fg:room===r.id?'#141517':'#d8d5cf'}));
+    const roomTabs=[{id:ALL,name:'All'},...H.rooms,...(homeless.length?[{id:NOROOM,name:`No room (${homeless.length})`}]:[])].map(r=>({name:r.name,open:()=>this.setState({room:r.id}),bg:room===r.id?'#f1efea':'#16171a',fg:room===r.id?'#141517':'#d8d5cf'}));
     // Imported rules: the Home Assistant automations from the last import, in plain words, with how Kova covers each.
     const AUTOS=s.impAutos||[];
     const RP=[['0px','40px','column'],['28px','12px','column'],['74px','10px','column-reverse'],['74px','38px','column-reverse']];
@@ -1660,8 +1660,8 @@ class Component extends DCLogic {
       avatars:(home.length?home:H.people).slice(0,3).map((p,i)=>({initial:p.name[0],ml:i?'-8px':'0px',op:p.home?1:0.4})),
       peopleLabel:!H.people.length?'No people yet':home.length===H.people.length?(H.people.length===2?'Both home':H.people.length===1?`${H.people[0].name} is home`:'Everyone’s home'):home.length?`${lst(home.map(p=>p.name))} home`:'Nobody home',
       goRooms:go('rooms'),goAutos:go('autos'),lightsOnLabel:`${lightsOn} lights on`,
-      roomName:room===NOROOM?'No room':RN[room]||'',roomTabs,tiles,roomSummary:`${rDevs.length} devices · ${rOn} lights on`,
-      roomAllOff:()=>api('POST',`/api/rooms/${room}/off`,{}).then(r=>this.toast(`${RN[room]} lights off`,this.undoFn(r.undo))).catch(x=>this.err(x)),
+      roomName:room===ALL?'All devices':room===NOROOM?'No room':RN[room]||'',roomTabs,tiles,roomSummary:`${rDevs.length} devices · ${rOn} lights on`,
+      roomAllOff:room===ALL?()=>api('POST','/api/lights/off').then(r=>this.toast(`${r.changed.length} light${r.changed.length===1?'':'s'} off`,this.undoFn(r.undo))).catch(x=>this.err(x)):room===NOROOM?null:()=>api('POST',`/api/rooms/${room}/off`,{}).then(r=>this.toast(`${RN[room]} lights off`,this.undoFn(r.undo))).catch(x=>this.err(x)),
       autoCount:AUTOS.length?`${AUTOS.length} Home Assistant automation${AUTOS.length===1?'':'s'} · ${AUTOS.filter(a=>a.enabled).length} on · Kova has ${H.modes.length} modes and ${H.overlays.length} overlays`:'Nothing imported yet',strip,autoGroups,sel,hasAutos:AUTOS.length>0,noAutos:!AUTOS.length,
       autoCta:{label:AUTOS.length?'Import a newer backup':'Import from Home Assistant',go:()=>this.setState({screen:'import',impNew:!!s.imp})},
       stripNote:`White line = now, ${H.home.clock} · sunrise ${fmt(rise)}, sunset ${fmt(set)}`,sunRise:(rise/24*100)+'%',sunSet:(set/24*100)+'%',sunDay:((set-rise)/24*100)+'%',stripNow:(H.home.nowHour/24*100)+'%',
