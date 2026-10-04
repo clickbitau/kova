@@ -302,8 +302,10 @@ export class MatterAdapter implements Adapter {
     const found: { ep: Endpoint; type: DeviceType; capabilities: Capability[] }[] = [];
     for (const ep of node.endpoints) {
       if (ep.number === undefined || ep.number === 0) continue;
-      const kind = classify(shapeOf(ep));
+      const shape = shapeOf(ep);
+      const kind = classify(shape);
       if (kind) found.push({ ep, ...kind });
+      this.ctx?.log(`${baseName} endpoint ${ep.number}: ${JSON.stringify(shape)}`);
     }
     const infos: DeviceInfo[] = found.map(({ ep, type, capabilities }, i) => {
       const id = `matter_${nodeId}_${ep.number}`;
