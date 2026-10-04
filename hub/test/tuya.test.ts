@@ -244,3 +244,20 @@ test('Tuya light data points map both ways', () => {
   assert.deepEqual(lightToDps(l, { bri: 1, k: 2700 }), { '22': 10, '23': 0, '21': 'white' });
   assert.deepEqual(dpsToLight(l, { '20': false, '22': 500, '23': 500 }), { on: false, bri: 50, k: 4600 });
 });
+
+test('a light whose spec guessed the wrong dps re-points to the ones the device reports', async () => {
+  // The cloud spec gave no dp ids, so the import guessed the v2 layout (20/22) — but the device speaks v1 (1/3).
+  const fake = fakeSwitch('3.5', { '1': false, '3': 478 });
+  await new Promise<void>(r => fake.server.listen(0, '127.0.0.1', r));
+  const port = (fake.server.address() as AddressInfo).port;
+  const reg = new Registry(new Store(':memory:'));
+  await reg.addAdapter(new TuyaAdapter({ devices: [{ id: 'dev1', host: '127.0.0.1', port, key: KEY.toString(), version: '3.5', light: { switch: '20', bri: '22', briMin: 10, briMax: 1000, name: 'Office LED', room: 'office', id: 'office_led' } }] }));
+  const until = async (fn: () => boolean) => { for (let i = 0; i < 100 && !fn(); i++) await new Promise(r => setTimeout(r, 20)); assert.ok(fn()); };
+  try {
+    await until(() => reg.get('office_led')?.state.on === false);
+    assert.equal(reg.get('office_led')!.state.bri, 48, 'brightness comes from the real dp');
+    await reg.command('office_led', { on: true, bri: 50 }, { kind: 'user', label: 'You' });
+    await until(() => fake.dps['1'] === true);
+    assert.equal(fake.dps['3'], 500, 'commands go to the device dps, not the guessed ones');
+  } finally { await reg.stop(); fake.server.close(); }
+});

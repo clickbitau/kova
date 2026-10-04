@@ -310,7 +310,28 @@ export class TuyaAdapter implements Adapter {
     return [...Object.keys(d.switches ?? {}).map(dp => switchId(d, dp)), ...(d.light ? [lightId(d)] : [])];
   }
 
+  /** A spec that leaves out dp ids means the light's dps were guessed; what the device reports is the truth. */
+  private remapLight(d: TuyaDeviceConfig, dps: Dps): void {
+    const l = d.light;
+    if (!l) return;
+    const bools = Object.keys(dps).filter(k => typeof dps[k] === 'boolean');
+    const ints = Object.keys(dps).filter(k => typeof dps[k] === 'number');
+    const inRange = (k: string, lo?: number, hi?: number) => (dps[k] as number) >= (lo ?? 0) && (dps[k] as number) <= (hi ?? 1000);
+    let moved = false;
+    if (!(l.switch in dps) && bools.length) { l.switch = bools[0]; moved = true; }
+    if (l.bri && !(l.bri in dps)) {
+      const cand = ints.find(k => k !== l.switch && inRange(k, l.briMin, l.briMax));
+      if (cand) { l.bri = cand; moved = true; }
+    }
+    if (l.temp && !(l.temp in dps)) {
+      const cand = ints.find(k => k !== l.switch && k !== l.bri && inRange(k, l.tempMin, l.tempMax));
+      if (cand) { l.temp = cand; moved = true; }
+    }
+    if (moved) this.ctx?.log(`${d.name ?? d.id}: its data points were not where the cloud spec said — using the ones it actually reports (switch ${l.switch}${l.bri ? `, brightness ${l.bri}` : ''}${l.temp ? `, warmth ${l.temp}` : ''})`);
+  }
+
   private onDps(d: TuyaDeviceConfig, dps: Dps): void {
+    this.remapLight(d, dps);
     const all = { ...this.known.get(d.id), ...dps };
     this.known.set(d.id, all);
     for (const dp of Object.keys(d.switches ?? {})) {
