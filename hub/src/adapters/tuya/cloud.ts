@@ -255,6 +255,7 @@ export function isPrivateIp(ip?: string): boolean {
 
 const LIGHT_CATEGORIES = new Set(['dj', 'dd', 'xdd', 'fwd', 'dc', 'fsd', 'tyndj', 'gyd', 'sxd']);
 const PLUG_CATEGORIES = new Set(['cz', 'pc']);
+const GATEWAY_CATEGORIES = new Set(['wg', 'wg2']);
 /** Tuya's standard v2 light, for a light whose specification couldn't be fetched. */
 const DEFAULT_V2_LIGHT: TuyaLightDps = { switch: '20', mode: '21', bri: '22', briMin: 10, briMax: 1000, temp: '23', tempMin: 0, tempMax: 1000, colour: '24', colourFormat: 'hsv16', colourMax: 1000 };
 
@@ -310,26 +311,31 @@ export function mergeCloudDevices(existing: TuyaOptions | undefined, cloud: Clou
   const kovaId = (name: string, room: string) => uniqueId(room === 'unassigned' ? `tuya_${slug(name)}` : `${room}_${slug(name).replace(new RegExp(`^${room}_`), '') || 'light'}`);
 
   // Gateways that something in this account sits behind: kept as connections even with no switches of their own.
+  // The cloud lists a gateway's category (wg2…) but often leaves gateway_id off the sub-devices; with just the
+  // one gateway in the home there is nothing else they could be behind, so the single one is theirs.
+  const gwIds = cloud.filter(c => !c.sub && GATEWAY_CATEGORIES.has(c.category ?? '')).map(c => c.id);
   const gateways = new Set(cloud.filter(c => c.sub && c.gatewayId).map(c => c.gatewayId!));
+  if (gwIds.length === 1 && cloud.some(c => c.sub && c.nodeId && !c.gatewayId)) gateways.add(gwIds[0]);
 
   for (const c of cloud) {
     const base = { id: c.id, name: c.name, category: c.category, product: c.product, online: c.online, hasKey: !!c.key };
     if (c.sub) {
-      if (!c.gatewayId || !c.nodeId) { report.push({ ...base, status: 'skipped', note: 'behind a gateway, but the cloud gave no gateway or node id' }); continue; }
+      const gw = c.gatewayId ?? (gwIds.length === 1 ? gwIds[0] : undefined);
+      if (!gw || !c.nodeId) { report.push({ ...base, status: 'skipped', note: gwIds.length > 1 ? 'behind a gateway, but the cloud did not say which' : 'behind a gateway, but the cloud gave no gateway or node id' }); continue; }
       const notes: string[] = [];
       const e = tuya.devices.find(d => d.id === c.id);
       if (e) {
-        e.gateway = c.gatewayId; e.cid = c.nodeId;
+        e.gateway = gw; e.cid = c.nodeId;
         if (c.key) e.key = c.key;
         if (!e.light && !Object.keys(e.switches ?? {}).length) Object.assign(e, mapNew(c, c.spec ?? [], rooms, kovaId, notes));
-        report.push({ ...base, status: 'updated', as: describe(e), note: [`through gateway ${c.gatewayId}`, ...notes].join('; ') });
+        report.push({ ...base, status: 'updated', as: describe(e), note: [`through gateway ${gw}`, ...notes].join('; ') });
         continue;
       }
       const mapped = mapNew(c, c.spec ?? [], rooms, kovaId, notes);
       if (!mapped.light && !mapped.switches) { report.push({ ...base, status: 'skipped', note: `category ${c.category ?? '?'} isn't supported yet` }); continue; }
-      const d: TuyaDeviceConfig = { id: c.id, host: '', key: c.key ?? '', gateway: c.gatewayId, cid: c.nodeId, name: c.name, ...(c.category ? { category: c.category } : {}), ...(c.product ? { product: c.product } : {}), ...mapped };
+      const d: TuyaDeviceConfig = { id: c.id, host: '', key: c.key ?? '', gateway: gw, cid: c.nodeId, name: c.name, ...(c.category ? { category: c.category } : {}), ...(c.product ? { product: c.product } : {}), ...mapped };
       tuya.devices.push(d);
-      report.push({ ...base, status: 'added', as: describe(d), note: [`through gateway ${c.gatewayId}`, ...notes].join('; ') });
+      report.push({ ...base, status: 'added', as: describe(d), note: [`through gateway ${gw}`, ...notes].join('; ') });
       continue;
     }
     const disc = found.get(c.id);
