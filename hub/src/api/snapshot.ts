@@ -176,6 +176,9 @@ export function snapshot(hub: Hub) {
     music: hub.music?.cached() ?? [],
     update: hub.updates?.status() ?? null,
     findings,
+    // What Kova notices: the home at a glance, and alerts and warnings (services/insights.ts).
+    insights: hub.insights.current(),
+    glance: hub.insights.glance(),
     activity,
     integrations: [
       ...[...reg.adapters.values()].map(a => ({ id: a.id, name: a.name, icon: a.icon, kind: a.kind, ...a.status(), devices: reg.list().filter(d => d.adapter === a.id).length })),
