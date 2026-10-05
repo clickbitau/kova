@@ -200,13 +200,14 @@ function fakeCast(members: string[] = []) {
       }
     });
     sock.on('close', () => st.socks.delete(sock));
+    sock.on('error', () => st.socks.delete(sock));
   });
   /** The speaker moves to the next song by itself and says so (unsolicited MEDIA_STATUS). */
   const advance = () => {
     const at = st.items.findIndex(i => i.itemId === st.current) + 1;
     st.current = st.items[at].itemId;
     const cur = st.items[at];
-    for (const s of st.socks) s.write(encodeMessage({ source: 'web-1', destination: '*', namespace: NS.media, data: { type: 'MEDIA_STATUS', status: [{ mediaSessionId: 7, playerState: 'PLAYING', currentItemId: cur.itemId, media: cur.media }] } }));
+    for (const s of st.socks) if (!s.destroyed) s.write(encodeMessage({ source: 'web-1', destination: '*', namespace: NS.media, data: { type: 'MEDIA_STATUS', status: [{ mediaSessionId: 7, playerState: 'PLAYING', currentItemId: cur.itemId, media: cur.media }] } }));
   };
   return { server, st, advance, titles: () => st.items.map(i => i.media.metadata.title), now: () => st.items.find(i => i.itemId === st.current)?.media.metadata.title };
 }
