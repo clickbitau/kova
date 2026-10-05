@@ -70,8 +70,21 @@ export interface Device {
 }
 
 export interface Room { id: string; name: string; icon: string }
+export interface PresenceEvidence {
+  source: string;
+  kind: 'warden' | 'router' | 'ping' | 'app' | 'phone' | 'manual' | 'other';
+  home: boolean;
+  weight: number;
+  reliability: number;
+  at: number;
+}
 export interface Person {
   id: string; name: string; detail: string; home: boolean; since: number | null; sinceLabel: string;
+  /** Confidence in the current home/away state, 0–1 (null on older hubs/state). */
+  confidence?: number | null;
+  confidenceLabel?: string;
+  /** The signals behind the latest presence decision, strongest first. */
+  evidence?: PresenceEvidence[];
   /** What already tells the hub this person is home without their phone's location (e.g. ['Warden']); empty or missing when nothing does. */
   via?: string[];
 }
@@ -109,7 +122,7 @@ export interface EnergyToday {
 }
 
 export interface Snapshot {
-  home: { name: string; timezone: string; now: number; nowHour: number; date: string; dateLabel: string; clock: string; location?: { latitude: number; longitude: number }; prayerMethod?: string; pauseForDoorbell?: boolean };
+  home: { name: string; timezone: string; now: number; nowHour: number; date: string; dateLabel: string; clock: string; location?: { latitude: number; longitude: number; radiusM?: number; source?: 'manual' | 'geocode' | 'phone' | 'import'; updatedAt?: number | null }; prayerMethod?: string; pauseForDoorbell?: boolean };
   rooms: Room[];
   favourites: string[] | null;
   speakerGroups: SpeakerGroup[];

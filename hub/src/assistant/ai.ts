@@ -11,6 +11,7 @@ import { actionWords, condWords, triggerWords } from '../engine/automations.ts';
 import { slug } from '../tools/import-ha.ts';
 import { clock } from '../util/time.ts';
 import { norm, type AskReply } from './assistant.ts';
+import type { JevAdvisor } from '../services/jev.ts';
 
 // Optional AI engines for Ask Kova. They only ever see requests the built-in
 // parser couldn't handle, only the context the user chose to share, never
@@ -337,6 +338,18 @@ Only use device, person, mode and overlay ids from the home context; never inven
     name: 'separate_devices',
     description: 'Split a combined device back into its separate devices. id is the combined device id (combined_…, from the Devices list or the result of combine_devices).',
     parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+  },
+  {
+    name: 'review_action',
+    description: 'Ask the local Jev advisor for an advisory risk check before a destructive, broad, privacy-sensitive, security-sensitive, or hard-to-undo action. Returns allow, confirm, or block. Use sparingly — not for routine light, media, or climate changes.',
+    parameters: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', description: 'The action being considered, in plain words.' },
+        context: { type: 'string', description: 'Why the user wants it and anything that makes it safer or riskier.' },
+      },
+      required: ['action'],
+    },
   },
 ] as const;
 
@@ -811,6 +824,16 @@ export class Toolbox {
           this.ai.store.append({ kind: 'system', device: `combined_${x.id}`, feed: 'system', what: `Ask Kova separated “${x.name}” back into its devices`, data: { combined: x.id }, cause: AI_CAUSE });
           return JSON.stringify({ ok: true, separated: x.id });
         }
+        case 'review_action': {
+          const action = typeof args.action === 'string' ? args.action.trim() : '';
+          if (!action) return JSON.stringify({ ok: false, error: 'Give the action to review' });
+          const jev = this.ai.jev;
+          if (!jev?.configured) return JSON.stringify({ ok: false, error: 'Jev is not configured on this hub' });
+          try {
+            const r = await jev.gate(action, typeof args.context === 'string' ? args.context : '');
+            return JSON.stringify({ ok: true, recommendation: r.recommendation, riskScore: r.riskScore, safeProbability: r.safeProbability, note: r.note });
+          } catch (e) { return JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e) }); }
+        }
         default:
           return JSON.stringify({ ok: false, error: `Unknown tool ${name}` });
       }
@@ -967,8 +990,9 @@ export class CloudAiEngine implements AiEngine {
 // -------------------------------------------------------------- assistant --
 
 const SYSTEM = `You are Ask Kova, the assistant for a smart home hub. The hub's built-in parser couldn't handle this request, so it was passed to you.
-Use the tools to act: set_devices, start_overlay, end_overlay, explain_device, list_schedule, create_automation, update_automation, delete_automation, create_room, rename_room, delete_room, update_device, combine_devices, separate_devices, remember, forget. Only use device, room, overlay, mode and person ids from the home context below; never invent ids. When the user answers a question you just asked (yes, sure, the second one, do it), read the recent conversation to see what it refers to before answering.
+Use the tools to act: set_devices, start_overlay, end_overlay, explain_device, list_schedule, create_automation, update_automation, delete_automation, create_room, rename_room, delete_room, update_device, combine_devices, separate_devices, remember, forget, review_action. Only use device, room, overlay, mode and person ids from the home context below; never invent ids. When the user answers a question you just asked (yes, sure, the second one, do it), read the recent conversation to see what it refers to before answering.
 Anything asked to happen regularly, at a time, or when something else happens is an automation — build it with create_automation, then tell the user what it will do in the words the tool returns.
+For destructive, broad, privacy-sensitive, security-sensitive, or hard-to-undo actions, call review_action first. If it says confirm, ask the user to confirm before acting; if it says block, do not do it. Do not use it for routine light, media, or climate changes.
 Ducted air conditioner zones are numbered; a zone only has a name when the state lists one. If a request names rooms for a zoned AC and the zones are unnamed, ask which zone number is which room instead of guessing.
 If the request can't be done with these tools or the shared context, say so plainly instead of guessing. Reply like a text message — plain text only, no markdown (never ** or # or \` characters — they show raw in the chat). Keep it short: a sentence or two usually; when listing several things, one item per line starting with "- ". Refer to automations and devices by their names, not their ids.`;
 
@@ -977,6 +1001,8 @@ export interface AiOptions {
   anthropicBaseUrl?: string;
   /** Whole-request timeout. */
   timeoutMs?: number;
+  /** Optional JEV advisor for the review_action tool. */
+  jev?: JevAdvisor;
 }
 
 export class AiAssistant {
@@ -987,6 +1013,9 @@ export class AiAssistant {
   music: (() => { name: string; kind: string }[]) | null = null;
 
   constructor(readonly engine: Engine, readonly reg: Registry, readonly config: ConfigStore, readonly store: Store, private opts: AiOptions = {}) {}
+
+  /** JEV structured decisions, when configured server-side. */
+  get jev(): JevAdvisor | undefined { return this.opts.jev; }
 
   /** Build the home context the user chose to share. Cameras are never included. */
   buildContext(share: ShareSettings): AiContext {

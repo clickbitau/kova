@@ -25,6 +25,7 @@ import { ScreenNotices, SnapLinks } from './services/screen-notices.ts';
 import { HelixMusic } from './services/helix-music.ts';
 import { WardenLink } from './services/warden-link.ts';
 import { Notifier } from './services/notify.ts';
+import { JevAdvisor } from './services/jev.ts';
 import { Backups, parseBackupTime } from './services/backup.ts';
 import { acquireLock, LockedError, type HeldLock } from './util/lock.ts';
 import { KOVA_VERSION } from './version.ts';
@@ -71,7 +72,7 @@ const hub = new Hub({
   initialConfig,
   adapters,
   demo,
-  weather: env.KOVA_WEATHER === '0' ? undefined : new Weather(),
+  weather: env.KOVA_WEATHER === '0' ? undefined : new Weather(Date.now),
 });
 
 await hub.start();
@@ -221,9 +222,13 @@ const backups = new Backups({
 backups.start();
 hub.services.push({ id: 'backups', name: 'Backups', icon: 'backup', kind: 'Local', status: () => backups.status() });
 
+const jev = JevAdvisor.fromEnv(env, hub.store);
+if (jev.configured) hub.services.push({ id: 'jev', name: 'Jev decisions', icon: 'psychology', kind: 'Cloud', status: () => ({ ok: true, note: 'Structured advisory decisions enabled' }) });
+
 const app = await buildServer(hub, {
   webRoot: resolve(here, '../../web'), token: env.KOVA_TOKEN || undefined,
   homekit, matterBridge, nest: integrations?.nest, presence, helixLink, snapLinks, otaDir: env.KOVA_OTA_DIR ? resolve(env.KOVA_OTA_DIR) : resolve(here, '../../ota'), notifier, integrationsPath: integrationsFile, integrations: setup, haImport, backups,
+  jev,
   // The phone app's address away from home: KOVA_REMOTE_URL, else the public URL notifications link to.
   remoteUrl: () => env.KOVA_REMOTE_URL || setup.raw('notify')?.publicUrl,
 });

@@ -10,7 +10,9 @@ export class ConfigStore extends EventEmitter<{ changed: [] }> {
     super();
     const saved = store.get<HomeConfig>('config');
     this.cfg = saved ?? initial();
-    if (!saved) store.set('config', this.cfg);
+    // Older configs only had latitude/longitude. Keep those, and make `home.location` the canonical field too.
+    this.cfg.location ??= { latitude: this.cfg.latitude, longitude: this.cfg.longitude };
+    if (!saved || !saved.location) store.set('config', this.cfg);
   }
 
   get(): HomeConfig { return this.cfg; }

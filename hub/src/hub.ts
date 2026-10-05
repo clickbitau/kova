@@ -1,3 +1,4 @@
+import { Insights } from './services/insights.ts';
 import type { Screen } from './engine/automation-ideas.ts';
 import { EventEmitter } from 'node:events';
 import type { Updates } from './services/updates.ts';
@@ -48,6 +49,8 @@ export class Hub extends EventEmitter<{ changed: [] }> {
   readonly energy: Energy;
   /** Speaker groups made in Kova (they're devices of their own). */
   readonly groups: SpeakerGroupsAdapter;
+  /** What Kova notices: the home at a glance, and alerts and warnings (services/insights.ts). */
+  readonly insights: Insights;
   /** Devices reached through several integrations, shown as one (adapters/combined.ts). */
   readonly combined: CombinedAdapter;
   /** Helix music on any speaker (services/helix-music.ts), once Helix is set up. */
@@ -90,6 +93,10 @@ export class Hub extends EventEmitter<{ changed: [] }> {
     this._demo = !!opts.demo;
     this.weather = opts.weather;
     this.engine.on('changed', () => this.emit('changed'));
+    this.insights = new Insights(this.reg, this.store, () => ({
+      cfg: this.config.get(), now: this.engine.now(), weather: this.weather ? { current: this.weather.current, today: this.weather.today } : null,
+      failing: [...this.reg.adapters.values()].filter(a => a.id !== 'virtual' && !a.status().ok).map(a => ({ id: a.id, name: a.name, note: a.status().note })),
+    }));
     this.reg.on('measure', () => this.emit('changed'));
     this.weather?.on('changed', () => this.emit('changed'));
   }
@@ -103,6 +110,8 @@ export class Hub extends EventEmitter<{ changed: [] }> {
     this.engine.start(this.opts.tickMs ?? 1000);
     this.energy.start(this.opts.energyMs ?? (this.opts.tickMs === 0 ? 0 : 60_000));
     this.weather?.start(this.config.get());
+    // A new location or timezone in Settings: the forecast for the new place.
+    this.config.on('changed', () => this.weather?.moved(this.config.get()));
   }
 
   async stop(): Promise<void> {

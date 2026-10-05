@@ -156,9 +156,29 @@ export interface Person {
   detail: string;
 }
 
+export type PresenceSourceKind = 'warden' | 'router' | 'ping' | 'app' | 'phone' | 'manual' | 'other';
+
+/** One signal that helped decide whether someone is home. */
+export interface PresenceEvidence {
+  /** Human label, e.g. "Router (Warden)" or "Kova app (location)". */
+  source: string;
+  /** Source family, used for per-person learning. */
+  kind: PresenceSourceKind;
+  home: boolean;
+  /** Effective vote strength after the learned source reliability. */
+  weight: number;
+  /** Learned reliability for this source/person, 0–1. */
+  reliability: number;
+  at: number;
+}
+
 export interface PersonState {
   home: boolean;
   since: number;
+  /** Confidence in `home`, 0–1. */
+  confidence?: number;
+  /** The signals behind the latest decision, strongest first. */
+  evidence?: PresenceEvidence[];
 }
 
 // ---------------------------------------------------------------- rhythms --
@@ -349,11 +369,23 @@ export interface MediaSource {
   loop?: boolean;
 }
 
+/** The real point Kova treats as "home", and how it was chosen. */
+export interface HomeLocation {
+  latitude: number;
+  longitude: number;
+  /** Geofence radius; defaults to the phone app's 150 m when unset. */
+  radiusM?: number;
+  source?: 'manual' | 'geocode' | 'phone' | 'import';
+  updatedAt?: number;
+}
+
 export interface HomeConfig {
   name: string;
   /** The home's street address, as the owner chose it in Settings (the location comes from it). */
   address?: string;
   timezone: string;
+  /** The real home point and geofence, when saved through the newer location field. */
+  location?: HomeLocation;
   latitude: number;
   longitude: number;
   prayerMethod?: string;

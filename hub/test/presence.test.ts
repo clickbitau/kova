@@ -72,6 +72,8 @@ test('Presence (router): phone appears → home at once; gone → away only afte
     await presence.poll();
     assert.equal(hub.engine.people.methel.home, true, 'home immediately');
     assert.equal(lastPresence()?.cause.label, ROUTER);
+    assert.ok((hub.engine.people.methel.confidence ?? 0) > 0.6);
+    assert.equal(hub.engine.people.methel.evidence?.[0]?.source, ROUTER);
     assert.match(presence.status().note ?? '', /Router: 1 phone seen/);
 
     // The phone sleeps and drops off Wi-Fi: not away yet.
@@ -107,6 +109,8 @@ test('Presence: a phone automation "left" beats the router for 15 minutes; "arri
     await presence.report('methel', false);
     assert.equal(hub.engine.people.methel.home, false);
     assert.equal(lastPresence()?.cause.label, PHONE);
+    assert.ok((hub.engine.people.methel.confidence ?? 0) > 0.7);
+    assert.equal(hub.engine.people.methel.evidence?.[0]?.kind, 'phone');
     for (let i = 0; i < 5; i++) { clock.t += MIN; await presence.poll(); }
     assert.equal(hub.engine.people.methel.home, false, 'router still sees the phone, but "left" wins');
 
@@ -121,6 +125,9 @@ test('Presence: a phone automation "left" beats the router for 15 minutes; "arri
     opn.arp.push(opn.phone(METHEL_MAC, '10.10.30.5')); clock.t += MIN; await presence.poll();
     assert.equal(hub.engine.people.methel.home, true, 'back home after the window');
     assert.equal(lastPresence()?.cause.label, ROUTER);
+    const learned = hub.store.get<Record<string, Record<string, { reliability: number; correct: number; contradicted: number }>>>('presenceLearning');
+    assert.ok((learned?.methel?.router?.correct ?? 0) > 0, 'router evidence learned as correct');
+    assert.ok((learned?.methel?.phone?.contradicted ?? 0) > 0, 'the beaten "left" report learned as contradicted');
 
     // A stale ARP entry right after "left" doesn't flip someone back home at 15 min…
     await presence.report('methel', false);
@@ -208,6 +215,10 @@ test('Presence API: per-person key works without the master token; missing or wr
     assert.equal(left.statusCode, 200);
     assert.equal(hub.engine.people.methel.home, false);
     assert.equal(hub.store.feed(5).find(e => e.kind === 'presence')?.cause.label, PHONE);
+    const snap = (await app.inject({ url: '/api/state', headers: { authorization: 'Bearer master' } })).json();
+    const methelSnap = snap.people.find((p: { id: string }) => p.id === 'methel');
+    assert.ok(methelSnap.confidence > 0.7);
+    assert.equal(methelSnap.evidence[0].kind, 'phone');
     // Arrive with a JSON body instead.
     const arrived = await app.inject({ method: 'POST', url: `/api/people/methel/presence?key=${encodeURIComponent(m.key)}`, payload: { home: true } });
     assert.equal(arrived.statusCode, 200);

@@ -27,7 +27,7 @@ export function SettingsScreen() {
       const p = await Location.requestForegroundPermissionsAsync();
       if (!p.granted) { say('Kova needs your location once to set where the home is', { error: true }); return; }
       const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      await put({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }, 'Location saved: sun and prayer times follow it');
+      await put({ location: { latitude: pos.coords.latitude, longitude: pos.coords.longitude, radiusM: loc?.radiusM, source: 'phone' } }, 'Location saved: sun and prayer times follow it');
     } catch (e) { say((e as Error).message, { error: true }); } finally { setLocating(false); }
   };
 

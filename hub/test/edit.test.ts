@@ -128,12 +128,36 @@ test('home settings: name, location, timezone, prayer method and the doorbell pa
     assert.deepEqual([c.latitude, c.longitude, c.timezone, c.prayerMethod, c.pauseForDoorbell, c.name], [-33.8688, 151.2093, 'Australia/Sydney', 'Karachi', false, 'The Ahmeds']);
     const s = (await app.inject({ url: '/api/state' })).json();
     assert.deepEqual([s.home.prayerMethod, s.home.pauseForDoorbell, s.home.timezone], ['Karachi', false, 'Australia/Sydney']);
+    const firstUndo = r.json().undo;
+    r = await put({ location: { latitude: -31.95, longitude: 115.86, radiusM: 220, source: 'phone' } });
+    assert.equal(r.statusCode, 200, r.body);
+    assert.deepEqual(hub.config.get().location, { latitude: -31.95, longitude: 115.86, radiusM: 220, source: 'phone', updatedAt: hub.engine.now() });
+    const s2 = (await app.inject({ url: '/api/state' })).json();
+    assert.deepEqual(s2.home.location, { latitude: -31.95, longitude: 115.86, radiusM: 220, source: 'phone', updatedAt: hub.engine.now() });
+    r = await put({ location: { radiusM: 260 } });
+    assert.equal(r.statusCode, 200, r.body);
+    assert.deepEqual(hub.config.get().location, { latitude: -31.95, longitude: 115.86, radiusM: 260, source: 'phone', updatedAt: hub.engine.now() });
     await app.inject({ method: 'POST', url: `/api/undo/${r.json().undo}` });
+    await app.inject({ method: 'POST', url: `/api/undo/${firstUndo}` });
     assert.equal(hub.config.get().timezone, 'Australia/Perth');
-    for (const [bad, msg] of [[{ timezone: 'Mars/Base' }, /isn’t a timezone/], [{ latitude: 10 }, /together/], [{ latitude: 100, longitude: 0 }, /−90 to 90/], [{ prayerMethod: 'Lunar' }, /one of/], [{ name: '  ' }, /name/]] as const) {
+    for (const [bad, msg] of [[{ timezone: 'Mars/Base' }, /isn’t a timezone/], [{ latitude: 10 }, /together/], [{ latitude: 100, longitude: 0 }, /−90 to 90/], [{ location: { latitude: -31, longitude: 115, radiusM: 20 } }, /radiusM/], [{ location: { latitude: -31, longitude: 115, source: 'gps' } }, /source/], [{ prayerMethod: 'Lunar' }, /one of/], [{ name: '  ' }, /name/]] as const) {
       r = await put(bad);
       assert.equal(r.statusCode, 400);
       assert.match(r.json().error, msg);
     }
+  } finally { await app.close(); await hub.stop(); }
+});
+
+test('address: saved with its location, cleared with null; searching needs enough of it', async () => {
+  const { hub } = await testHub(12);
+  const app = await buildServer(hub, { webRoot });
+  try {
+    let r = await app.inject({ method: 'PUT', url: '/api/home', payload: { address: '1 Example Street, Exampletown', latitude: -31.9, longitude: 115.8 } });
+    assert.equal(r.statusCode, 200);
+    assert.equal((await app.inject({ url: '/api/state' })).json().home.address, '1 Example Street, Exampletown');
+    await app.inject({ method: 'PUT', url: '/api/home', payload: { address: null } });
+    assert.equal(hub.config.get().address, undefined);
+    r = await app.inject({ url: '/api/geocode?q=ab' });
+    assert.match(r.json().error, /Type more/);
   } finally { await app.close(); await hub.stop(); }
 });

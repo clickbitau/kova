@@ -1,10 +1,15 @@
-import { hubUrl, type HubConfig } from '../logic/connect';
-import { parseHello, type Hello } from '../logic/addresses';
+import { hubUrl, type HubConfig } from '../logic/connect.ts';
+import { parseHello, type Hello } from '../logic/addresses.ts';
 
 export class HubError extends Error {
+  readonly status: number;
+  readonly timedOut: boolean;
   /** status 0: nothing answered. `timedOut`: the request may have reached the hub, so a write isn't re-sent. */
-  constructor(message: string, readonly status: number, readonly timedOut = false) { super(message); }
+  constructor(message: string, status: number, timedOut = false) { super(message); this.status = status; this.timedOut = timedOut; }
 }
+
+/** Ask Kova can wait on a cloud/local model and several tool calls; give it more than the normal 12 s. */
+export const ASK_TIMEOUT_MS = 120_000;
 
 const withTimeout = (ms: number) => {
   const c = new AbortController();

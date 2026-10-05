@@ -129,9 +129,9 @@ export function snapshot(hub: Hub) {
       dateLabel: new Date(now).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'short', timeZone: tz }).replace(/\bSept\b/, 'Sep'),
       clock: clock(now, tz),
       // Where the home is, for the phone app's arriving and leaving (it watches a circle around this).
-      location: { latitude: cfg.latitude, longitude: cfg.longitude },
+      location: cfg.location ? { latitude: cfg.location.latitude, longitude: cfg.location.longitude, ...(cfg.location.radiusM !== undefined ? { radiusM: cfg.location.radiusM } : {}), ...(cfg.location.source ? { source: cfg.location.source } : {}), ...(cfg.location.updatedAt !== undefined ? { updatedAt: cfg.location.updatedAt } : {}) } : { latitude: cfg.latitude, longitude: cfg.longitude },
       // For Settings: how prayer times are worked out, and whether the doorbell pauses what's playing.
-      prayerMethod: cfg.prayerMethod ?? 'MuslimWorldLeague', pauseForDoorbell: cfg.pauseForDoorbell !== false,
+      prayerMethod: cfg.prayerMethod ?? 'MuslimWorldLeague', pauseForDoorbell: cfg.pauseForDoorbell !== false, address: cfg.address ?? null,
       // Today's sunrise and sunset as local hours, for day strips.
       sun: (() => { const t = SunCalc.getTimes(new Date(now), cfg.latitude, cfg.longitude); const h = (d: Date) => (isNaN(+d) ? null : localHour(+d, tz)); return { rise: h(t.sunrise), set: h(t.sunset) }; })(),
     },
@@ -147,7 +147,10 @@ export function snapshot(hub: Hub) {
     }),
     groups: cfg.groups,
     // `via`: what already knows whether they're home without their phone's location (the app then doesn't need it).
-    people: cfg.people.map(p => ({ ...p, via: hub.presenceVia(p.id), home: engine.people[p.id]?.home ?? true, since: engine.people[p.id]?.since ?? null, sinceLabel: engine.people[p.id] ? clock(engine.people[p.id].since, tz) : '' })),
+    people: cfg.people.map(p => {
+      const st = engine.people[p.id];
+      return { ...p, via: hub.presenceVia(p.id), home: st?.home ?? true, since: st?.since ?? null, sinceLabel: st ? clock(st.since, tz) : '', confidence: st?.confidence ?? null, confidenceLabel: st?.confidence == null ? '' : `${Math.round(st.confidence * 100)}%`, evidence: st?.evidence ?? [] };
+    }),
     // zoneNames: what the owner calls a ducted air conditioner's zones. `watts` / `typicalWatts`: what a device with no
     // meter draws while on, the owner's figure and Kova's (Energy page).
     devices: reg.list().map(d => ({ ...d, why: engine.why(d.id), usedIn: engine.usedIn(d.id), ...wattsSetting(d, cfg.devices?.[d.id]?.watts), ...(cfg.devices?.[d.id]?.zoneNames ? { zoneNames: cfg.devices[d.id].zoneNames } : {}) })),

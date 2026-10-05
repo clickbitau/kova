@@ -58,7 +58,7 @@ export async function startArriveLeave(c: ArriveLeave): Promise<StartResult> {
   if (!bg.granted) return { ok: false, why: 'Choose “Always” for Location in Settings, so Kova notices when the app is closed.' };
   await setJson(KEY, c);
   if (await Location.hasStartedGeofencingAsync(GEOFENCE_TASK).catch(() => false)) await Location.stopGeofencingAsync(GEOFENCE_TASK);
-  await Location.startGeofencingAsync(GEOFENCE_TASK, [{ identifier: 'home', latitude: c.home.latitude, longitude: c.home.longitude, radius: HOME_RADIUS_M, notifyOnEnter: true, notifyOnExit: true }]);
+  await Location.startGeofencingAsync(GEOFENCE_TASK, [{ identifier: 'home', latitude: c.home.latitude, longitude: c.home.longitude, radius: c.home.radiusM ?? HOME_RADIUS_M, notifyOnEnter: true, notifyOnExit: true }]);
   return { ok: true };
 }
 

@@ -41,6 +41,7 @@ test('geofence: arriving counts at once; leaving only when really away', () => {
   assert.ok(Math.abs(distanceM(home, { latitude: -31.95, longitude: 115.87 }) - 944) < 5);
   assert.equal(presenceFor('enter'), true);
   assert.equal(presenceFor('exit', { latitude: -31.9505, longitude: 115.86 }, home), null, 'still within the circle: GPS noise');
+  assert.equal(presenceFor('exit', { latitude: -31.9505, longitude: 115.86 }, { ...home, radiusM: 50 }), false, 'the saved home radius is used');
   assert.equal(presenceFor('exit', { latitude: -31.96, longitude: 115.86 }, home), false);
   assert.equal(presenceFor('exit', null, home), false);
 });

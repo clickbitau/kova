@@ -18,7 +18,7 @@ export interface NotifyOptions {
   /** Kova's address as your phone reaches it (e.g. https://kova.example.com), for links in ntfy notifications. */
   publicUrl?: string;
   /** Built-in rules, all on by default. */
-  rules?: { doorbell?: boolean; everyoneOut?: boolean; offline?: boolean; network?: boolean; links?: boolean };
+  rules?: { doorbell?: boolean; everyoneOut?: boolean; offline?: boolean; network?: boolean; links?: boolean; home?: boolean };
   /** A link that worked (Helix, SmartThings, OwnTone, Warden…) must be failing this long before "Kova lost Helix". Default 5. */
   linkAfterMin?: number;
   /** A device must be offline this long before "X isn't responding". Default 10. */
@@ -83,7 +83,8 @@ export class Notifier {
   }
 
   private get now(): number { return this.hub.engine.now(); }
-  private rule(name: keyof NonNullable<NotifyOptions['rules']>): boolean { return this.opts.rules?.[name] !== false; }
+  /** On unless switched off (false, or "off" from the settings form). */
+  private rule(name: keyof NonNullable<NotifyOptions['rules']>): boolean { const v = this.opts.rules?.[name] as unknown; return v !== false && v !== 'off'; }
 
   start(): void {
     const onEvent = (e: DeviceEvent) => {
@@ -91,6 +92,16 @@ export class Notifier {
       if (e.device.adapter === 'warden' && this.rule('network')) this.track(this.onNetwork(e));
     };
     this.hub.reg.on('event', onEvent);
+    // The home's alerts and warnings (filter, the air, heat and cold, batteries): told once, when each first appears.
+    const onInsight = (i: import('./insights.ts').Insight) => {
+      if (!this.rule('home')) return;
+      this.track(this.notify({ title: i.title, body: i.detail ?? '', tag: `insight-${i.id}`, url: i.device ? `/phone.html?device=${encodeURIComponent(i.device)}` : '/phone.html' }));
+    };
+    this.hub.insights.on('new', onInsight);
+    // Insights are worked out when someone looks; this looks every minute too, so a push doesn't wait for a screen.
+    const look = setInterval(() => { try { this.hub.insights.current(); } catch { /* next minute */ } }, 60_000);
+    look.unref?.();
+    this.off.push(() => this.hub.insights.off('new', onInsight), () => clearInterval(look));
     const onChanged = () => this.onPresence();
     this.hub.engine.on('changed', onChanged);
     const onMeasure = () => this.checkDevices();

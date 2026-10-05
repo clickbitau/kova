@@ -6,6 +6,7 @@ import { useSheet } from '../state/sheet';
 import { useNav } from '../navigation';
 import { devs, favourites, isLight, plural, toggleCommand, type Dev } from '../logic/devices';
 import { dayBands } from '../logic/day';
+import { glanceCards, insightColor } from '../logic/glance';
 import { Icon } from '../ui/Icon';
 import { Avatar, Button, Card, Empty, HScroll, IconWell, Mark, Press, Section, Skeleton } from '../ui/kit';
 import { Screen } from '../ui/Screen';
@@ -32,6 +33,8 @@ export function NowScreen() {
   const tap = (d: Dev) => { const c = toggleCommand(d, s.sources); if (c) void send(d.id, c); else sheet.open(d.id); };
   const end = () => api('POST', '/api/overlays/end').then(() => { say(`Back to ${M?.name}`); return true; }).catch(e => { say((e as Error).message, { error: true }); return false; });
   const bands = dayBands(s);
+  const cards = glanceCards(s.glance);
+  const alerts = s.insights ?? [];
 
   return (
     <Screen glow={M?.color} head={
@@ -78,6 +81,35 @@ export function NowScreen() {
           ) : null}
         </View>
       </View>
+
+      {cards.length ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SP[2] }}>
+          {cards.map(c => (
+            <Press key={c.key} onPress={c.device ? () => sheet.open(c.device!) : undefined} label={`${c.label}: ${c.value}. ${c.sub}`} style={{ flexGrow: 1, flexBasis: cards.length > 2 ? '30%' : '45%' }}>
+              <Card style={{ gap: 2, minHeight: 96 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[1] }}><Icon name={c.icon} size={18} color={c.color} fill /><T v="micro" color={C.stone}>{c.label}</T></View>
+                <T v="headline" numberOfLines={1}>{c.value}</T>
+                {c.sub ? <T v="micro" color={C.stone} numberOfLines={3}>{c.sub}</T> : null}
+              </Card>
+            </Press>
+          ))}
+        </View>
+      ) : null}
+      {alerts.map((i, n) => (
+        <Appear key={i.id} index={n}>
+          <Card tint={insightColor(i.level)} style={{ flexDirection: 'row', gap: SP[3], alignItems: 'flex-start', backgroundColor: alpha(insightColor(i.level), i.level === 'info' ? 0.04 : 0.08) }}>
+            <Icon name={i.icon} size={22} color={insightColor(i.level)} />
+            <View style={{ flex: 1, gap: 2 }}>
+              <T v="headline">{i.title}</T>
+              {i.detail ? <T v="footnote" color={C.stone}>{i.detail}</T> : null}
+              <View style={{ flexDirection: 'row', gap: SP[4], marginTop: SP[1] }}>
+                {i.device ? <Press onPress={() => sheet.open(i.device!)} label={`Open ${i.title}`}><T v="labelSm">Open</T></Press> : null}
+                <Press onPress={() => void act('POST', `/api/insights/${encodeURIComponent(i.id)}/snooze`, { hours: 24 }, 'Hidden for a day')} label="Not now"><T v="labelSm" color={C.stone}>Not now</T></Press>
+              </View>
+            </View>
+          </Card>
+        </Appear>
+      ))}
 
       <Card style={{ padding: SP[4], gap: SP[2] }}>
         <View style={{ height: 40, borderRadius: R.sm, overflow: 'hidden', flexDirection: 'row' }} accessibilityLabel={`Today: ${bands.map(b => `${b.name} from ${b.from}`).join(', ')}`}>

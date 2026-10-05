@@ -35,7 +35,7 @@ interface HubCtx {
   setPerson(personId: string | undefined): Promise<void>;
   /** Replace the address list (server settings), and pick again from it. */
   setAddresses(list: HubAddress[]): Promise<void>;
-  api<T = unknown>(method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, body?: unknown): Promise<T>;
+  api<T = unknown>(method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, body?: unknown, timeoutMs?: number): Promise<T>;
   /** Change a device, showing the change at once; the hub's next snapshot has the final word. */
   /** Resolves true when the hub took it (errors are shown here). */
   send(id: string, cmd: Command, done?: string): Promise<boolean>;
@@ -286,17 +286,17 @@ export function HubProvider({ children }: { children: ReactNode }) {
     if (!ws.current || ws.current.readyState !== WebSocket.OPEN) setKick(k => k + 1);
   }, []);
 
-  const api = useCallback(async <T,>(method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, body?: unknown): Promise<T> => {
+  const api = useCallback(async <T,>(method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, body?: unknown, timeoutMs?: number): Promise<T> => {
     const { c, r } = await ready();
     try {
-      const out = await call<T>({ ...c, url: r.url }, method, path, body);
+      const out = await call<T>({ ...c, url: r.url }, method, path, body, timeoutMs);
       noteReachable();
       return out;
     } catch (e) {
       if (!(e instanceof HubError) || e.status !== 0) throw e;
       const next = await choose();
       if (!next || next.url === r.url || (method !== 'GET' && e.timedOut)) throw e;
-      const out = await call<T>({ ...(cfgRef.current ?? c), url: next.url }, method, path, body);
+      const out = await call<T>({ ...(cfgRef.current ?? c), url: next.url }, method, path, body, timeoutMs);
       noteReachable();
       return out;
     }

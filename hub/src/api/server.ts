@@ -37,7 +37,9 @@ import { registerHomeRoutes } from './home-routes.ts';
 import { registerLanAppRoutes } from './lan-apps-routes.ts';
 import { registerAppLinkRoutes } from './app-link.ts';
 import { AppUpdates, registerAppUpdateRoutes } from './app-updates.ts';
+import { registerJevRoutes } from './jev-routes.ts';
 import type { Backups } from '../services/backup.ts';
+import { JevAdvisor } from '../services/jev.ts';
 import { KOVA_VERSION } from '../version.ts';
 import { createReadStream } from 'node:fs';
 
@@ -51,6 +53,8 @@ export interface ServerOptions {
   matterBridge?: MatterBridge;
   /** Optional AI engine options, e.g. the Anthropic base URL (tests point it at a fake server). */
   ai?: AiOptions;
+  /** TypeSafe/JEV structured decisions. Configured server-side; absent means the routes report unavailable. */
+  jev?: JevAdvisor;
   /** Nest settings from integrations.json, for the one-time account linking routes (no refresh token needed yet). */
   nest?: Partial<Pick<NestOptions, 'projectId' | 'clientId' | 'clientSecret' | 'tokenUrl'>>;
   /** Presence sources and per-person keys for phone automations. */
@@ -184,6 +188,9 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
   app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_req, body, done) => done(null, Object.fromEntries(new URLSearchParams(String(body)))));
 
   const fail = (reply: { code: (n: number) => { send: (b: unknown) => unknown } }, err: unknown) => reply.code(400).send({ error: err instanceof Error ? err.message : String(err) });
+
+  const jev = opts.jev ?? new JevAdvisor({ store: hub.store });
+  registerJevRoutes(app, hub, jev);
 
   // ---------------------------------------------------------------- read --
   app.get('/api/state', async () => snapshot(hub));
@@ -610,7 +617,7 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
 
   // Assistant engine settings. Built-in is the default; AI engines only ever see requests the built-in parser can't handle.
   // API keys are write-only: GET reports hasKey, never the key. Cameras are never shared, whatever is sent.
-  const ai = new AiAssistant(hub.engine, hub.reg, hub.config, hub.store, opts.ai);
+  const ai = new AiAssistant(hub.engine, hub.reg, hub.config, hub.store, { ...opts.ai, jev });
   ai.music = () => hub.music?.cached() ?? [];
   app.get('/api/assistant/settings', async () => publicSettings(loadSettings(hub.store)));
   app.put<{ Body: SettingsPatch }>('/api/assistant/settings', async (req, reply) => {

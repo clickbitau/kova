@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
-import type { Cause, Command, Device, DeviceState, LightTheWayTrigger, Mode, Overlay, PersonState, PlanItem, Targets } from '../model/types.ts';
+import type { Cause, Command, Device, DeviceState, LightTheWayTrigger, Mode, Overlay, PersonState, PlanItem, PresenceEvidence, Targets } from '../model/types.ts';
 import type { Store } from '../store/db.ts';
 import type { ChangeEvent, DeviceEvent, Registry } from '../devices/registry.ts';
 import type { ConfigStore } from './config.ts';
@@ -75,7 +75,11 @@ export class Engine extends EventEmitter<{ changed: [] }> {
     this.skips = new Set(this.store.get<string[]>('skips') ?? []);
     this.overlay = this.store.get<ActiveOverlay | null>('overlay') ?? null;
     this.people = this.store.get<Record<string, PersonState>>('people') ?? {};
-    for (const p of this.cfg.people) this.people[p.id] ??= { home: true, since: t };
+    for (const p of this.cfg.people) {
+      this.people[p.id] ??= { home: true, since: t };
+      // States saved before confidence existed start unsure; the next real observation replaces this.
+      this.people[p.id].confidence ??= 0.5;
+    }
     this.pendingEntry = this.store.get<string | null>('pendingEntry') ?? null;
     // Don't replay what we missed while off: take the current mode as-is and carry on.
     const cur = this.planner.modeAt(t).mode.id;
@@ -306,15 +310,26 @@ export class Engine extends EventEmitter<{ changed: [] }> {
 
   // ------------------------------------------------------------- people --
 
-  async setPresence(personId: string, home: boolean, source?: string): Promise<void> {
+  async setPresence(personId: string, home: boolean, source?: string, decision?: { confidence?: number; evidence?: PresenceEvidence[] }): Promise<void> {
     const p = this.cfg.people.find(x => x.id === personId);
     if (!p) throw new Error(`Unknown person ${personId}`);
+    const t = this.now();
     const cur = this.people[personId];
-    if (cur?.home === home) return;
+    if (cur?.home === home) {
+      if (!decision) return;
+      const next: PersonState = { ...cur, confidence: decision.confidence ?? cur.confidence, evidence: decision.evidence ?? cur.evidence };
+      if (next.confidence === cur.confidence && next.evidence === cur.evidence) return;
+      this.people[personId] = next;
+      this.store.set('people', this.people);
+      this.emit('changed');
+      return;
+    }
     const wasAnyone = this.anyoneHome();
-    this.people[personId] = { home, since: this.now() };
+    const confidence = decision?.confidence ?? 0.9;
+    const evidence = decision?.evidence ?? [{ source: source ?? p.detail, kind: 'other' as const, home, weight: 0.9, reliability: 1, at: t }];
+    this.people[personId] = { home, since: t, confidence, evidence };
     this.store.set('people', this.people);
-    this.store.append({ kind: 'presence', device: null, feed: 'people', what: `${p.name} ${home ? 'arrived home' : 'left home'}`, data: { person: personId, home }, cause: { kind: 'presence', id: personId, label: source ?? p.detail } });
+    this.store.append({ kind: 'presence', device: null, feed: 'people', what: `${p.name} ${home ? 'arrived home' : 'left home'}`, data: { person: personId, home, confidence, evidence }, cause: { kind: 'presence', id: personId, label: source ?? p.detail } });
     if (home) {
       for (const t of this.cfg.lightTheWay.triggers.filter(x => 'arrival' in x.on)) await this.lightTheWay({ ...t, label: `${p.name} came home` });
       const o = this.overlay && this.cfg.overlays.find(x => x.id === this.overlay!.id);

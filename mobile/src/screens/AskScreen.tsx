@@ -3,6 +3,7 @@ import { Animated, KeyboardAvoidingView, Platform, ScrollView, TextInput, View }
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useScrollToTop } from '@react-navigation/native';
 import type { AskReply } from '../api/types';
+import { ASK_TIMEOUT_MS } from '../api/client';
 import { C, F, R, SP } from '../theme';
 import { useHub, useSnap } from '../state/hub';
 import { isLight, plural } from '../logic/devices';
@@ -66,7 +67,7 @@ export function AskScreen() {
       while (queue.current.length) {
         const t = queue.current.shift()!;
         try {
-          const r = await api<AskReply>('POST', '/api/ask', { text: t });
+          const r = await api<AskReply>('POST', '/api/ask', { text: t }, ASK_TIMEOUT_MS);
           setChat(c => [...c, { id: Date.now() + 1, from: 'kova', text: r.text, src: r.source, actions: r.actions, undo: r.undo }]);
           if (r.undo) haptic.success();
         } catch (e) {

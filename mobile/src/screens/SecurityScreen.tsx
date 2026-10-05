@@ -89,16 +89,19 @@ export function SecurityScreen() {
       <Section title="Who’s home">
         {s.people.length ? (
           <Card style={{ overflow: 'hidden' }}>
-            {s.people.map((p, i) => (
-              <View key={p.id} style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3], paddingVertical: SP[3], paddingHorizontal: SP[4], borderTopWidth: i ? 1 : 0, borderTopColor: C.hairline }}>
-                <Avatar name={p.name} home={p.home} size={38} ring={C.card} />
-                <View style={{ flex: 1, gap: 1 }}>
-                  <T v="headline">{p.name}</T>
-                  <T v="footnote" color={C.stone}>{`${p.home ? 'Home' : 'Out'}${p.sinceLabel ? ` since ${p.sinceLabel}` : ''}${p.detail ? ` · ${p.detail}` : ''}`}</T>
+            {s.people.map((p, i) => {
+              const basis = p.evidence?.[0]?.source;
+              return (
+                <View key={p.id} style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3], paddingVertical: SP[3], paddingHorizontal: SP[4], borderTopWidth: i ? 1 : 0, borderTopColor: C.hairline }}>
+                  <Avatar name={p.name} home={p.home} size={38} ring={C.card} />
+                  <View style={{ flex: 1, gap: 1 }}>
+                    <T v="headline">{p.name}</T>
+                    <T v="footnote" color={C.stone}>{`${p.home ? 'Home' : 'Out'}${p.sinceLabel ? ` since ${p.sinceLabel}` : ''}${p.detail ? ` · ${p.detail}` : ''}${basis ? ` · ${basis}` : ''}`}</T>
+                  </View>
+                  <T v="micro" color={p.home ? C.green : C.stone2}>{`${p.home ? 'HOME' : 'OUT'}${p.confidenceLabel ? ` · ${p.confidenceLabel}` : ''}`}</T>
                 </View>
-                <T v="micro" color={p.home ? C.green : C.stone2}>{p.home ? 'HOME' : 'OUT'}</T>
-              </View>
-            ))}
+              );
+            })}
           </Card>
         ) : <Empty compact icon="group" title="No people yet" text="Add the people who live here in Customise home." />}
       </Section>

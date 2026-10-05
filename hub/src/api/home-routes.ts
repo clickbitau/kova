@@ -23,24 +23,88 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
 
   // The home's details: only what's sent changes. Location and timezone move sun and prayer times; the prayer
   // method decides how prayer times are worked out.
-  app.put<{ Body: { name?: string; timezone?: string; latitude?: number; longitude?: number; prayerMethod?: string; pauseForDoorbell?: boolean } }>('/api/home', async (req, reply) => {
+  app.put<{ Body: { name?: string; address?: string | null; timezone?: string; latitude?: number; longitude?: number; location?: { latitude?: number; longitude?: number; radiusM?: number; source?: string }; prayerMethod?: string; pauseForDoorbell?: boolean } }>('/api/home', async (req, reply) => {
     const b = req.body ?? {};
     const name = b.name === undefined ? undefined : text(b.name);
     if (name === '') return bad(reply, 'Give the home a name');
     if (b.timezone !== undefined) {
       try { new Intl.DateTimeFormat('en', { timeZone: b.timezone }); } catch { return bad(reply, `${b.timezone} isn’t a timezone (e.g. Australia/Perth)`); }
     }
-    if ((b.latitude === undefined) !== (b.longitude === undefined)) return bad(reply, 'Send latitude and longitude together');
-    if (b.latitude !== undefined && !(typeof b.latitude === 'number' && Math.abs(b.latitude) <= 90 && typeof b.longitude === 'number' && Math.abs(b.longitude) <= 180)) return bad(reply, 'Latitude is −90 to 90, longitude −180 to 180');
+    const latitude = b.location?.latitude ?? b.latitude;
+    const longitude = b.location?.longitude ?? b.longitude;
+    if ((latitude === undefined) !== (longitude === undefined)) return bad(reply, 'Send latitude and longitude together');
+    if (latitude !== undefined && !(typeof latitude === 'number' && Math.abs(latitude) <= 90 && typeof longitude === 'number' && Math.abs(longitude) <= 180)) return bad(reply, 'Latitude is −90 to 90, longitude −180 to 180');
+    if (b.location?.radiusM !== undefined && !(typeof b.location.radiusM === 'number' && b.location.radiusM >= 50 && b.location.radiusM <= 1000)) return bad(reply, 'location.radiusM is 50–1000');
+    if (b.location?.source !== undefined && !['manual', 'geocode', 'phone', 'import'].includes(b.location.source)) return bad(reply, 'location.source is manual, geocode, phone or import');
     if (b.prayerMethod !== undefined && !PRAYER_METHODS.includes(b.prayerMethod)) return bad(reply, `Prayer method is one of ${PRAYER_METHODS.join(', ')}`);
     if (b.pauseForDoorbell !== undefined && typeof b.pauseForDoorbell !== 'boolean') return bad(reply, 'pauseForDoorbell must be true or false');
     return edit(c => {
       if (name) c.name = name;
+      if (b.address !== undefined) { const a = b.address ? text(b.address, 200) : ''; if (a) c.address = a; else delete c.address; }
       if (b.timezone) c.timezone = b.timezone;
-      if (b.latitude !== undefined) { c.latitude = Math.round(b.latitude * 1e5) / 1e5; c.longitude = Math.round(b.longitude! * 1e5) / 1e5; }
+      if (latitude !== undefined) {
+        const lat = Math.round(latitude * 1e5) / 1e5, lon = Math.round(longitude! * 1e5) / 1e5;
+        c.latitude = lat; c.longitude = lon;
+        c.location = { latitude: lat, longitude: lon, ...(b.location?.radiusM !== undefined ? { radiusM: Math.round(b.location.radiusM) } : c.location?.radiusM ? { radiusM: c.location.radiusM } : {}), source: (b.location?.source ?? 'manual') as 'manual' | 'geocode' | 'phone' | 'import', updatedAt: hub.engine.now() };
+      } else if (b.location) {
+        c.location = { latitude: c.location?.latitude ?? c.latitude, longitude: c.location?.longitude ?? c.longitude, ...(b.location.radiusM !== undefined ? { radiusM: Math.round(b.location.radiusM) } : c.location?.radiusM ? { radiusM: c.location.radiusM } : {}), source: (b.location.source ?? c.location?.source ?? 'manual') as 'manual' | 'geocode' | 'phone' | 'import', updatedAt: hub.engine.now() };
+      }
       if (b.prayerMethod) c.prayerMethod = b.prayerMethod;
       if (b.pauseForDoorbell !== undefined) c.pauseForDoorbell = b.pauseForDoorbell;
     });
+  });
+
+  // Finding the home's address (Settings): Google Maps when a server-side key is configured, otherwise OpenStreetMap's
+  // Nominatim. Both go through the hub so no API key is ever in a phone/browser app. Answers are cached for a day.
+  const geoCache = new Map<string, { at: number; results: unknown[] }>();
+  let geoLast = 0;
+  app.get<{ Querystring: { q?: string } }>('/api/geocode', async (req, reply) => {
+    const q = text(req.query.q, 200);
+    if (q.length < 4) return bad(reply, 'Type more of the address');
+    const googleKey = process.env.GOOGLE_MAPS_API_KEY ?? process.env.KOVA_GOOGLE_MAPS_API_KEY;
+    const cf = hub.config.get(), key = `${googleKey ? 'google' : 'osm'}:${q.toLowerCase()}@${Math.round(cf.latitude)},${Math.round(cf.longitude)}`;
+    const hit = geoCache.get(key);
+    if (hit && Date.now() - hit.at < 86_400_000) return { results: hit.results };
+    const wait = geoLast + 1100 - Date.now();
+    if (wait > 0) await new Promise(r => setTimeout(r, wait));
+    geoLast = Date.now();
+    try {
+      // Matches near where the home already is come first (a box ±3° around it, not a limit), so a street name that
+      // exists in many countries finds the local one.
+      if (googleKey) {
+        try {
+          const c = hub.config.get();
+          const params: Record<string, string> = { address: q, key: googleKey, language: req.headers['accept-language'] ?? 'en' };
+          if (c.latitude || c.longitude) params.bounds = `${c.latitude - 3},${c.longitude - 3}|${c.latitude + 3},${c.longitude + 3}`;
+          const u = `https://maps.googleapis.com/maps/api/geocode/json?${new URLSearchParams(params)}`;
+          const res = await fetch(u, { signal: AbortSignal.timeout(10_000) });
+          if (res.ok) {
+            const j = await res.json() as { status: string; results?: { formatted_address?: string; geometry?: { location?: { lat?: number; lng?: number } } }[] };
+            if (j.status === 'OK' || j.status === 'ZERO_RESULTS') {
+              const results = (j.results ?? []).map(r => ({ label: r.formatted_address ?? '', latitude: Number(r.geometry?.location?.lat), longitude: Number(r.geometry?.location?.lng) })).filter(r => r.label && Number.isFinite(r.latitude) && Number.isFinite(r.longitude));
+              geoCache.set(key, { at: Date.now(), results });
+              return { results };
+            }
+          }
+        } catch { /* fall back to OpenStreetMap below */ }
+      }
+      const c = hub.config.get(), near: Record<string, string> = c.latitude || c.longitude ? { viewbox: [c.longitude - 3, c.latitude + 3, c.longitude + 3, c.latitude - 3].map(n => n.toFixed(3)).join(','), bounded: '0' } : {};
+      const u = `https://nominatim.openstreetmap.org/search?${new URLSearchParams({ q, format: 'jsonv2', limit: '5', addressdetails: '0', ...near })}`;
+      const res = await fetch(u, { headers: { 'User-Agent': 'Kova (https://github.com/clickbitau/kova)', 'Accept-Language': req.headers['accept-language'] ?? 'en' }, signal: AbortSignal.timeout(10_000) });
+      if (!res.ok) return bad(reply, `The address search answered HTTP ${res.status}`, 502);
+      const results = ((await res.json()) as { display_name: string; lat: string; lon: string }[]).map(r => ({ label: r.display_name, latitude: Number(r.lat), longitude: Number(r.lon) }));
+      geoCache.set(key, { at: Date.now(), results });
+      return { results };
+    } catch { return bad(reply, 'Couldn’t reach the address search: is the hub online?', 502); }
+  });
+
+  // Not now: an alert or warning on the Now page goes quiet for so many hours (24 by default).
+  app.post<{ Params: { id: string }; Body: { hours?: number } }>('/api/insights/:id/snooze', async (req, reply) => {
+    const hours = req.body?.hours == null ? 24 : Number(req.body.hours);
+    if (!Number.isFinite(hours) || hours < 1 || hours > 720) return bad(reply, 'hours is 1 to 720');
+    hub.insights.snooze(req.params.id, hours);
+    hub.emit('changed');
+    return { ok: true };
   });
 
   // ---------------------------------------------------------------- devices --

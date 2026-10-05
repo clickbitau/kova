@@ -3,6 +3,7 @@ import http from 'node:http';
 import https from 'node:https';
 import net from 'node:net';
 import type { Hub } from '../hub.ts';
+import type { PresenceEvidence, PresenceSourceKind } from '../model/types.ts';
 import { Warden, type WardenDevice, type WardenOptions, type WardenPerson } from '../adapters/warden.ts';
 import { LanHttpError } from '../util/lan-http.ts';
 
@@ -30,31 +31,78 @@ export const WARDEN = 'Router (Warden)';
 const WARDEN_RECENT_MS = 3 * 60_000;
 export const PING = 'Network (ping)';
 export const PHONE = 'Phone automation';
-/** An explicit "left" from a phone beats the router this long: a phone stays on Wi-Fi while you drive off. */
+/** An explicit "left" always has this long before the network can outvote it: the phone can still be on Wi-Fi while driving off. */
 export const LEFT_WINS_MS = 15 * 60_000;
 /** Longer than any stale ARP entry (FreeBSD keeps them 20 min): still listed after this, the phone is really here. */
 export const ARP_STALE_MS = 45 * 60_000;
+/** A reported "left" matters less as it ages; reliable fresh network evidence can eventually overrule it. */
+const LEFT_HALF_LIFE_MS = 30 * 60_000;
+/** A conflicting source needs this much of the vote before it changes state. */
+const FLIP_AT = 0.55;
+/** The remembered state counts a little, so one weak sighting doesn't flap presence. */
+const INERTIA = 0.18;
+
+/** Prior trust in each source family before per-person learning adjusts it. */
+const SOURCE_BASE: Record<PresenceSourceKind, number> = {
+  manual: 0.98,
+  app: 0.9,
+  phone: 0.82,
+  warden: 0.84,
+  router: 0.68,
+  ping: 0.58,
+  other: 0.7,
+};
+
+interface SourceReading {
+  kind: PresenceSourceKind;
+  source: string;
+  home: boolean;
+  /** Prior vote strength before learned reliability is applied, 0–1. */
+  strength: number;
+  at: number;
+}
 
 interface PersonNet {
   /** What the network sources last concluded (after the away debounce). */
   home: boolean;
   lastSeen: number;
-  /** A phone automation said "left": router sightings don't count until this clears. */
-  left: { at: number; sawAbsent: boolean } | null;
+  /** A phone said "left": network sightings have to outvote it after the minimum hold. */
+  left: { at: number; sawAbsent: boolean; source: string; kind: PresenceSourceKind; strength: number } | null;
 }
 
+interface LearningRow { reliability: number; correct: number; contradicted: number; updatedAt: number }
+type Learning = Record<string, Partial<Record<PresenceSourceKind, LearningRow>>>;
+
 const normMac = (m: string) => m.toLowerCase().replace(/-/g, ':').split(':').map(x => x.padStart(2, '0')).join(':');
+const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
+const round2 = (n: number) => Math.round(n * 100) / 100;
+const decay = (ageMs: number, halfLifeMs: number) => Math.pow(0.5, Math.max(0, ageMs) / halfLifeMs);
+
+/** Which family to learn from a human source label. */
+export function sourceKind(source: string | undefined): PresenceSourceKind {
+  const s = (source ?? '').toLowerCase();
+  if (s.includes('warden')) return 'warden';
+  if (s.includes('opnsense') || s.includes('router')) return 'router';
+  if (s.includes('ping') || s.includes('network check')) return 'ping';
+  if (s.includes('location') || s.includes('app') || s.includes('geofence')) return 'app';
+  if (s.includes('manual') || s.includes('user') || s.includes('you') || s.includes('test')) return 'manual';
+  if (s.includes('phone') || s.includes('automation') || s.includes('shortcut')) return 'phone';
+  return 'other';
+}
 
 /**
- * Combines the router, a TCP "ping" and phone automations (iOS Shortcuts,
- * Android automations) into one home/away per person, and tells the engine.
- * Network sources mark someone home the moment their phone shows up and away
- * only after it has been gone for `awayAfterMin`.
+ * Combines the router, a TCP "ping" and phone reports into one home/away per
+ * person, and tells the engine. Each report is evidence: a source prior, a
+ * learned per-person reliability, freshness and the remembered state decide
+ * the confidence. Network sources still mark someone home at once and away
+ * only after `awayAfterMin`; a phone "left" gets a minimum hold before network
+ * evidence can outvote it.
  */
 export class Presence {
   private timer: NodeJS.Timeout | null = null;
   private net = new Map<string, PersonNet>();
   private keys: Record<string, string>;
+  private learning: Learning;
   private polling = false;
   /** For the Integrations screen. */
   private last: { router?: { seen: number; total: number } | { error: string }; routerName?: 'Warden'; ping?: { up: number; total: number } } = {};
@@ -62,6 +110,7 @@ export class Presence {
   /** `warden` reads the Warden section as it is now, so linking Warden later works without a restart. */
   constructor(private hub: Hub, private opts: PresenceOptions = {}, private sources: { warden?: () => WardenOptions | undefined; onReport?: (personId: string, home: boolean, source: string) => void } = {}) {
     this.keys = hub.store.get<Record<string, string>>('presenceKeys') ?? {};
+    this.learning = hub.store.get<Learning>('presenceLearning') ?? {};
   }
 
   private get now(): number { return this.hub.engine.now(); }
@@ -148,15 +197,16 @@ export class Presence {
 
   // -------------------------------------------------------------- reports --
 
-  /** An explicit report from a phone automation (or the app). "Arrived" wins at once; "left" beats the router for 15 minutes, then the router has the say. */
+  /** An explicit report from a phone automation (or the app). It wins immediately, then joins the learned evidence model. */
   async report(personId: string, home: boolean, source = PHONE): Promise<void> {
+    const kind = sourceKind(source);
     const n = this.net.get(personId);
     if (n) {
       // Arrived: the phone may not be on Wi-Fi yet, so the away debounce starts from now.
       if (home) { n.left = null; n.home = true; n.lastSeen = this.now; }
-      else { n.left = { at: this.now, sawAbsent: false }; n.home = false; }
+      else { n.left = { at: this.now, sawAbsent: false, source, kind, strength: SOURCE_BASE[kind] }; n.home = false; }
     }
-    await this.hub.engine.setPresence(personId, home, source);
+    await this.apply(personId, [{ kind, source, home, strength: SOURCE_BASE[kind], at: this.now }], { force: true, learn: kind === 'manual' });
     // Tell Warden too (services/warden-link.ts), so it doesn't alarm about the phone of someone Kova knows is home.
     try { this.sources.onReport?.(personId, home, source); } catch { /* best effort */ }
   }
@@ -171,39 +221,36 @@ export class Presence {
       for (const [id, n] of this.net) {
         const byRouter = router?.get(id);
         const byPing = ping?.get(id);
+        const readings = [byRouter, byPing].filter((r): r is SourceReading => !!r);
         // No source could answer for this person: leave them as they are.
-        if (byRouter === undefined && byPing === undefined) continue;
-        const seen = !!byRouter || !!byPing;
+        if (!readings.length) continue;
+        const seen = readings.some(r => r.home);
         // Someone changed presence outside Kova's sources (the API without a key, a test): treat it like a phone report.
         const eng = this.hub.engine.people[id];
         if (eng && eng.home !== n.home) {
           n.home = eng.home;
           if (eng.home) { n.left = null; n.lastSeen = Math.max(n.lastSeen, eng.since); }
-          else n.left = { at: eng.since, sawAbsent: false };
+          else n.left = { at: eng.since, sawAbsent: false, source: eng.evidence?.[0]?.source ?? PHONE, kind: eng.evidence?.[0]?.kind ?? 'phone', strength: eng.evidence?.[0]?.weight ?? SOURCE_BASE.phone };
         }
         if (seen) n.lastSeen = t;
         if (n.left) {
-          if (!seen) n.left.sawAbsent = true;
-          // Still seen once the "left" window is over. A live source (Warden, the network check) means the "left" was
-          // wrong: a location glitch overnight; nobody is on the home network 15 minutes after really leaving. The
-          // OPNsense ARP table keeps a phone listed for a while after it has gone, so there it takes the phone dropping
-          // off and coming back, or still being listed well past any stale entry.
-          else {
-            const live = (byRouter && this.last.routerName === 'Warden') || byPing;
-            const after = t - n.left.at;
-            if ((live && after >= LEFT_WINS_MS) || (n.left.sawAbsent && after >= LEFT_WINS_MS) || after >= ARP_STALE_MS) n.left = null;
-          }
-          if (n.left) continue;
+          if (!seen) { n.left.sawAbsent = true; continue; }
+          const after = t - n.left.at;
+          const live = (byRouter?.kind === 'warden' && byRouter.home) || byPing?.home === true;
+          const eligible = (live && after >= LEFT_WINS_MS) || (n.left.sawAbsent && after >= LEFT_WINS_MS) || after >= ARP_STALE_MS;
+          // A "left" cannot be overruled instantly. OPNsense also has to see the phone disappear and return, unless it
+          // has stayed in ARP well past any stale entry; a continuous sighting inside that window may just be stale.
+          if (!eligible || (!live && !n.left.sawAbsent && after < ARP_STALE_MS)) continue;
+          const left: SourceReading = { kind: n.left.kind, source: n.left.source, home: false, strength: n.left.strength * decay(after, LEFT_HALF_LIFE_MS), at: n.left.at };
+          const d = await this.apply(id, [...readings, left], { inertia: false, learn: n.left.sawAbsent || after >= ARP_STALE_MS });
+          n.home = d.home;
+          if (d.home) n.left = null;
+          continue;
         }
-        const routerLabel = this.last.routerName === 'Warden' ? WARDEN : ROUTER;
-        const label = seen ? (byRouter ? routerLabel : PING) : (byRouter !== undefined ? routerLabel : PING);
-        if (seen && !n.home) {
-          n.home = true;
-          await this.set(id, true, label);
-        } else if (!seen && n.home && t - n.lastSeen >= this.awayMs) {
-          n.home = false;
-          await this.set(id, false, label);
-        }
+        // Home sightings apply at once. Absence is debounced, then becomes away evidence.
+        if (!seen && n.home && t - n.lastSeen < this.awayMs) continue;
+        const d = await this.apply(id, readings, { learn: true });
+        n.home = d.home;
       }
     } finally {
       this.polling = false;
@@ -211,26 +258,65 @@ export class Presence {
     this.hub.emit('changed');
   }
 
-  private async set(id: string, home: boolean, label: string): Promise<void> {
-    try { await this.hub.engine.setPresence(id, home, label); } catch (err) { console.warn(`[presence] ${id}: ${String(err)}`); }
+  /** Score evidence, optionally learn from a decisive change, then update the engine. */
+  private async apply(personId: string, readings: SourceReading[], opts: { force?: boolean; inertia?: boolean; learn?: boolean } = {}): Promise<{ home: boolean; confidence: number; evidence: PresenceEvidence[] }> {
+    const current = this.hub.engine.people[personId]?.home ?? this.net.get(personId)?.home ?? true;
+    const evidence = readings.map(r => {
+      const reliability = this.reliability(personId, r.kind);
+      return { source: r.source, kind: r.kind, home: r.home, weight: round2(clamp01(r.strength) * reliability), reliability: round2(reliability), at: r.at };
+    }).sort((a, b) => b.weight - a.weight).slice(0, 5);
+    const inertia = opts.inertia === false ? 0 : INERTIA;
+    let homeW = current ? inertia : 0;
+    let awayW = current ? 0 : inertia;
+    for (const e of evidence) (e.home ? homeW += e.weight : awayW += e.weight);
+    const total = homeW + awayW;
+    const pHome = total ? homeW / total : current ? 1 : 0;
+    const home = opts.force ? (readings[0]?.home ?? current) : pHome >= FLIP_AT ? true : pHome <= 1 - FLIP_AT ? false : current;
+    const confidence = round2(clamp01(home ? pHome : 1 - pHome));
+    if ((opts.learn ?? false) && (opts.force || home !== current)) this.learn(personId, evidence, home);
+    const label = evidence.find(e => e.home === home)?.source ?? evidence[0]?.source;
+    await this.hub.engine.setPresence(personId, home, label, { confidence, evidence });
+    return { home, confidence, evidence };
   }
 
-  /** Per person: true if any of their phones is in the router's table, false if none; null map when the router can't be read. */
-  private async readRouter(): Promise<Map<string, boolean> | null> {
+  private reliability(personId: string, kind: PresenceSourceKind): number {
+    return this.learning[personId]?.[kind]?.reliability ?? 0.82;
+  }
+
+  /** EWMA-ish source reliability: evidence that agrees with the outcome gains a little; evidence against it loses more. */
+  private learn(personId: string, evidence: PresenceEvidence[], outcome: boolean): void {
+    if (!evidence.length) return;
+    const by = this.learning[personId] ??= {};
+    let changed = false;
+    for (const e of evidence) {
+      const row = by[e.kind] ??= { reliability: 0.82, correct: 0, contradicted: 0, updatedAt: this.now };
+      const agree = e.home === outcome;
+      const step = agree ? 0.06 * e.weight : 0.18 * e.weight;
+      const next = clamp01(row.reliability + (agree ? (1 - row.reliability) * step : (0 - row.reliability) * step));
+      if (agree) row.correct++; else row.contradicted++;
+      row.reliability = Math.max(0.2, Math.min(0.98, next));
+      row.updatedAt = this.now;
+      changed = true;
+    }
+    if (changed) this.hub.store.set('presenceLearning', this.learning);
+  }
+
+  /** Per person: the latest reading each network source can offer. */
+  private async readRouter(): Promise<Map<string, SourceReading> | null> {
     const w = this.sources.warden?.();
     if (w?.url && w.token) return this.readWarden(w);
     const o = this.opts.opnsense;
     if (!o) return null;
     try {
-      const macs = new Set<string>();
+      const macs = new Map<string, number>();
       const arp = await getJson(`${o.url.replace(/\/+$/, '')}/api/diagnostics/interface/getArp`, o);
-      for (const e of rows(arp)) if (e.mac && !e.expired) macs.add(normMac(e.mac));
+      for (const e of rows(arp)) if (e.mac && !e.expired) macs.set(normMac(e.mac), this.now);
       // IPv6 neighbours too; older firmware may not have it, which is fine.
       try {
         const ndp = await getJson(`${o.url.replace(/\/+$/, '')}/api/diagnostics/interface/getNdp`, o);
-        for (const e of rows(ndp)) if (e.mac) macs.add(normMac(e.mac));
+        for (const e of rows(ndp)) if (e.mac) macs.set(normMac(e.mac), this.now);
       } catch { /* optional */ }
-      return this.match(macs);
+      return this.match(macs, ROUTER, 'router', 0.68, 0.55);
     } catch (err) {
       this.last.router = { error: err instanceof Error ? err.message : String(err) };
       return null;
@@ -241,7 +327,7 @@ export class Presence {
    * Who Warden says is here. A person's phones (by any MAC Warden has seen them use) on a device that's online,
    * or Warden's own presence for the person of the same name (or the one chosen). People Warden can't speak for are left out.
    */
-  private async readWarden(w: WardenOptions): Promise<Map<string, boolean> | null> {
+  private async readWarden(w: WardenOptions): Promise<Map<string, SourceReading> | null> {
     this.last.routerName = 'Warden';
     const api = new Warden(w);
     try {
@@ -250,20 +336,29 @@ export class Presence {
       if (!devices) {
         // Older Warden: clients by MAC, seen recently.
         const now = Date.now();
-        const macs = new Set((await api.clients())
-          .filter(c => c.lastSeenAt ? now - Date.parse(c.lastSeenAt) < WARDEN_RECENT_MS : c.online !== false)
-          .map(c => normMac(c.mac)));
-        return this.match(macs);
+        const macs = new Map<string, number>();
+        for (const c of await api.clients()) {
+          const at = c.lastSeenAt ? Date.parse(c.lastSeenAt) : NaN;
+          if (Number.isFinite(at) ? now - at < WARDEN_RECENT_MS : c.online !== false) macs.set(normMac(c.mac), Number.isFinite(at) ? at : this.now);
+        }
+        return this.match(macs, WARDEN, 'warden', 0.78, 0.58);
       }
-      const online = new Set(devices.filter(d => d.online).flatMap(d => d.macs.map(normMac)));
-      const out = this.match(online);
+      const online = new Map<string, number>();
+      for (const d of devices.filter(d => d.online)) {
+        const at = Date.parse(d.lastSeenAt ?? d.onlineSince ?? '') || this.now;
+        for (const mac of d.macs) online.set(normMac(mac), at);
+      }
+      const out = this.match(online, WARDEN, 'warden', 0.78, 0.58);
       const people = await api.people().catch(() => [] as WardenPerson[]);
       const byName = new Map(people.map(p => [p.name.trim().toLowerCase(), p]));
       for (const p of this.hub.config.get().people) {
         if (out.has(p.id)) continue;
         const set = this.opts.people?.[p.id]?.wardenPerson;
         const wp = set ? people.find(x => x.id === set) ?? byName.get(set.trim().toLowerCase()) : byName.get(p.name.trim().toLowerCase());
-        if (wp && wp.devices.length) out.set(p.id, wp.presence.home);
+        if (wp && wp.devices.length) {
+          const at = Date.parse(wp.presence.since ?? '') || this.now;
+          out.set(p.id, { kind: 'warden', source: WARDEN, home: wp.presence.home, strength: 0.86, at });
+        }
       }
       return out;
     } catch (err) {
@@ -273,28 +368,29 @@ export class Presence {
   }
 
   /** Per person: whether any of their phones is among `macs`. */
-  private match(macs: Set<string>): Map<string, boolean> {
-    const out = new Map<string, boolean>();
+  private match(macs: Map<string, number>, source: string, kind: PresenceSourceKind, seenStrength: number, absentStrength: number): Map<string, SourceReading> {
+    const out = new Map<string, SourceReading>();
     let seen = 0, total = 0;
     for (const [id, p] of Object.entries(this.opts.people ?? {})) {
       const phones = (p.phones ?? []).map(normMac);
       if (!phones.length) continue;
       total += phones.length;
-      const here = phones.filter(m => macs.has(m)).length;
-      seen += here;
-      out.set(id, here > 0);
+      const hits = phones.filter(m => macs.has(m));
+      seen += hits.length;
+      const home = hits.length > 0;
+      out.set(id, { kind, source, home, strength: home ? seenStrength : absentStrength, at: hits.length ? Math.max(...hits.map(m => macs.get(m)!)) : this.now });
     }
     this.last.router = { seen, total };
     return out;
   }
 
-  private async readPing(): Promise<Map<string, boolean> | null> {
+  private async readPing(): Promise<Map<string, SourceReading> | null> {
     const hosts = Object.entries(this.opts.pingHosts ?? {});
     if (!hosts.length) return null;
     const port = this.opts.probePort ?? 62078;
     const res = await Promise.all(hosts.map(async ([id, ip]) => [id, await probe(ip, port, this.opts.probeTimeoutMs ?? 2000)] as const));
     this.last.ping = { up: res.filter(([, up]) => up).length, total: res.length };
-    return new Map(res);
+    return new Map(res.map(([id, up]) => [id, { kind: 'ping' as const, source: PING, home: up, strength: up ? 0.58 : 0.5, at: this.now }]));
   }
 
   /**
