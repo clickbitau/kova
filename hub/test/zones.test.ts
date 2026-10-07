@@ -26,7 +26,7 @@ after(async () => { for (const d of open) await d(); });
 const unlinked = (c: HomeConfig) => { const s = c.devices?.ducted_ac; if (s?.zoneNames) s.zoneRoomsAuto = { ...s.zoneNames }; };
 
 async function setup(tweak?: (c: HomeConfig) => void, hour = 12, link = false) {
-  const t = await testHub(hour, c => { if (!link) unlinked(c); tweak?.(c); });
+  const t = await testHub(hour, c => { if (link) delete c.devices!.ducted_ac!.zoneRoomsAuto; else unlinked(c); tweak?.(c); });
   const app = await buildServer(t.hub, { webRoot, ai: { timeoutMs: 3000 } });
   const patch = (id: string, payload: unknown) => app.inject({ method: 'PATCH', url: `/api/devices/${id}/settings`, payload: payload as object });
   const state = async () => (await app.inject({ url: '/api/state' })).json();

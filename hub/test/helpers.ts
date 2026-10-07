@@ -14,7 +14,9 @@ export async function testHub(startHour = 12, tweak?: (c: HomeConfig) => void, o
   const virtual = new VirtualAdapter(demoDevices());
   const hub = new Hub({
     dbPath: ':memory:',
-    initialConfig: () => { const c = demoConfig(); tweak?.(c); return c; },
+    // The demo AC's zones start unlinked (as if Kova had linked them by name once and the owner cleared them), so
+    // tests choose their own zone rooms; a test of the linking itself drops zoneRoomsAuto in its tweak.
+    initialConfig: () => { const c = demoConfig(); const s = c.devices?.ducted_ac; if (s?.zoneNames) s.zoneRoomsAuto = { ...s.zoneNames }; tweak?.(c); return c; },
     adapters: [virtual],
     now: () => clock.t,
     tickMs: 0,
