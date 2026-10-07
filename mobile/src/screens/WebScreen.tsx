@@ -9,6 +9,7 @@ import { hubUrl } from '../logic/connect';
 import type { Stack } from '../navigation';
 import { Button, Empty, IconButton, Skeleton } from '../ui/kit';
 import { T } from '../ui/Text';
+import { Screen } from '../ui/Screen';
 import { tween, useLoop } from '../ui/motion';
 
 /** A thin bar sliding along the top while a page loads. */
@@ -43,7 +44,12 @@ export function WebScreen({ route, navigation }: NativeStackScreenProps<Stack, '
     globalThis.addEventListener?.('message', on);
     return () => globalThis.removeEventListener?.('message', on);
   }, [navigation]);
-  if (!cfg) return null;
+  // No real hub (the demo home): its pages aren't here to show.
+  if (!cfg) return (
+    <Screen title={route.params.title} onBack={() => navigation.goBack()}>
+      <Empty icon="cloud_off" title="This page is on your hub" text="Live camera view and the mode editor open from your own Kova hub. The demo home doesn’t have one." action="Back" onAction={() => navigation.goBack()} />
+    </Screen>
+  );
   const uri = hubUrl(cfg, route.params.path, true);
   const retry = () => { setFailed(false); setLoading(true); setKey(k => k + 1); };
   return (

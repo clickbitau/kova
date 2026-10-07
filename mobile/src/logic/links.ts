@@ -23,3 +23,6 @@ export const NATIVE_PAGES: Record<string, 'Modes' | 'Activity' | 'Automations' |
   modes: 'Modes', activity: 'Activity', autos: 'Automations', automations: 'Automations', energy: 'Energy', media: 'Media', customise: 'Customise',
   integrations: 'Integrations',
 };
+
+/** Kova's privacy policy (the text is docs/privacy-policy.md). The one place the app keeps its address. */
+export const PRIVACY_POLICY_URL = 'https://clickbit.com.au/privacy/kova';

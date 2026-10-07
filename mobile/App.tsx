@@ -13,7 +13,8 @@ import { useQuickActionCallback } from 'expo-quick-actions/hooks';
 import { shareHub, syncExtensions } from './src/native/extensions';
 import { CrashBoundary, crumb, initCrashReporting } from './src/native/crash';
 import { C, SP } from './src/theme';
-import { HubProvider, useHub } from './src/state/hub';
+import { useHub } from './src/state/hub';
+import { HubRoot, useDemo } from './src/state/demo';
 import { SheetProvider } from './src/state/sheet';
 import type { Stack as StackParams } from './src/navigation';
 import { NATIVE_PAGES, routeFor } from './src/logic/links';
@@ -62,13 +63,15 @@ function CantReach() {
 
 function Home() {
   const { cfg, loading, snap, conn, toast, undo, api, say } = useHub();
+  const { demo } = useDemo();
   const insets = useSafeAreaInsets();
   const nav = useRef<NavigationContainerRef<StackParams>>(null);
   useEffect(() => initCrashReporting(() => cfg), [cfg]);
 
   // Widgets, the Live Activity and the app icon's quick actions follow the hub.
   useEffect(() => { shareHub(cfg); }, [cfg]);
-  useEffect(() => { if (snap) syncExtensions(snap); }, [snap]);
+  // Not the demo home: widgets and the lock screen show only a real home.
+  useEffect(() => { if (snap && !demo) syncExtensions(snap); }, [snap, demo]);
   useQuickActionCallback(a => {
     if (a.id === 'lights-off') void api<{ changed: string[]; undo: string }>('POST', '/api/lights/off').then(x => say(`${x.changed.length} lights off`, { undo: x.undo })).catch(e => say((e as Error).message, { error: true }));
     else if (a.id.startsWith('overlay:')) void api<{ undo: string }>('POST', `/api/overlays/${encodeURIComponent(String(a.params?.overlay ?? ''))}/start`).then(x => say(`${a.title} is on`, { undo: x.undo })).catch(e => say((e as Error).message, { error: true }));
@@ -90,7 +93,7 @@ function Home() {
   }, [last, !!snap]);
 
   if (loading) return <Splash />;
-  if (!cfg) return <ConnectScreen />;
+  if (!cfg && !demo) return <ConnectScreen />;
   if (!snap) return conn === 'offline' ? <CantReach /> : <NowSkeleton />;
   return (
     <SheetProvider>
@@ -132,7 +135,7 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: C.page }}>
       <SafeAreaProvider>
         <StatusBar style="light" />
-        {fonts ? <HubProvider><Home /></HubProvider> : <View style={{ flex: 1, backgroundColor: C.page }} />}
+        {fonts ? <HubRoot><Home /></HubRoot> : <View style={{ flex: 1, backgroundColor: C.page }} />}
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

@@ -5,8 +5,9 @@ import { useScrollToTop } from '@react-navigation/native';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { C, SP } from '../theme';
 import { useHub } from '../state/hub';
+import { useDemo } from '../state/demo';
 import { Icon } from './Icon';
-import { IconButton, PulseDot } from './kit';
+import { IconButton, Press, PulseDot } from './kit';
 import { haptic, spring, tween, useReducedMotion } from './motion';
 import { T } from './Text';
 
@@ -32,6 +33,26 @@ export function Glow({ color, opacity = 0.22 }: { color: string; opacity?: numbe
  * "Back online" for a moment. It sits in the page's flow (it never covers the header) and slides open.
  */
 export function ConnBanner() {
+  const { demo } = useDemo();
+  return demo ? <DemoBanner /> : <HubBanner />;
+}
+
+/** In the demo home, on every screen: a "Demo home" badge, and the way out to connect a real hub. */
+export function DemoBanner() {
+  const { leaveDemo } = useDemo();
+  return (
+    <View accessibilityRole="summary" accessibilityLabel="Demo home. Nothing here is real." style={{ flexDirection: 'row', alignItems: 'center', gap: 10, height: 40, paddingLeft: 12, paddingRight: 4, borderRadius: 20, backgroundColor: C.amberTint, borderWidth: 1, borderColor: C.amberLine }}>
+      <Icon name="science" size={17} color={C.amber} fill />
+      <T v="labelSm" color={C.amber}>Demo home</T>
+      <T v="footnote" color={C.stone} numberOfLines={1} style={{ flex: 1 }}>Nothing here is real</T>
+      <Press onPress={() => void leaveDemo()} label="Leave the demo and connect your hub" style={{ height: 32, justifyContent: 'center', paddingHorizontal: 12, borderRadius: 16, backgroundColor: C.control2 }}>
+        <T v="labelSm" size={12.5} color={C.bone}>Connect a hub</T>
+      </Press>
+    </View>
+  );
+}
+
+function HubBanner() {
   const { conn, refresh } = useHub();
   const [show, setShow] = useState<'off' | 'down' | 'back'>(conn === 'offline' ? 'down' : 'off');
   const was = useRef(conn);

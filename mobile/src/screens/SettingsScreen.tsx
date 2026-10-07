@@ -9,12 +9,19 @@ import { Group, Row, Sheet, SwitchRow } from '../ui/kit';
 import { Screen } from '../ui/Screen';
 import { T } from '../ui/Text';
 import { Icon } from '../ui/Icon';
+import { askLocation } from '../logic/location-consent';
+import { locationAsk } from '../native/arrive-leave';
+import { useDemo } from '../state/demo';
+import { openPrivacyPolicy } from '../ui/PrivacyLink';
+import { useLocationDisclosure } from './LocationDisclosure';
 
 /** More → Settings: where the home is (sun and prayer times follow it), its timezone and prayer method, behaviours, and the rest. */
 export function SettingsScreen() {
   const s = useSnap();
   const nav = useNav();
   const { act, say } = useHub();
+  const { demo } = useDemo();
+  const { disclose, view: disclosure } = useLocationDisclosure();
   const [pick, setPick] = useState<'tz' | 'method' | null>(null);
   const [q, setQ] = useState('');
   const [locating, setLocating] = useState(false);
@@ -22,10 +29,12 @@ export function SettingsScreen() {
   const put = (body: object, done: string) => act('PUT', '/api/home', body, done);
 
   const here = async () => {
+    if (demo) { if (await disclose('once')) say('In the demo home Kova doesn’t use your location.'); return; }
     setLocating(true);
     try {
-      const p = await Location.requestForegroundPermissionsAsync();
-      if (!p.granted) { say('Kova needs your location once to set where the home is', { error: true }); return; }
+      // Kova's own disclosure first, then the system prompt (logic/location-consent.ts).
+      const p = await askLocation('once', locationAsk(disclose));
+      if (!p.ok) { if (p.reason !== 'declined') say(p.why, { error: true }); return; }
       const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       await put({ location: { latitude: pos.coords.latitude, longitude: pos.coords.longitude, radiusM: loc?.radiusM, source: 'phone' } }, 'Location saved: sun and prayer times follow it');
     } catch (e) { say((e as Error).message, { error: true }); } finally { setLocating(false); }
@@ -54,6 +63,9 @@ export function SettingsScreen() {
         <Row icon="computer" iconFg={C.blue} title="Sign in a browser" sub="Your home on a computer, and signed-in browsers" onPress={() => nav.navigate('Browsers')} />
         <Row icon="hub" title="Integrations and hub updates" sub="What’s connected, Kova’s version and updates" onPress={() => nav.navigate('Integrations')} />
       </Group>
+      <Group title="About">
+        <Row first icon="lock" iconFg={C.green} title="Privacy policy" sub="What Kova collects, where it goes, and your choices" onPress={openPrivacyPolicy} right={<Icon name="arrow_outward" size={18} color={C.stone2} />} />
+      </Group>
 
       <Sheet open={pick === 'tz'} onClose={() => setPick(null)} label="Timezone">
         <T v="title">Timezone</T>
@@ -80,6 +92,7 @@ export function SettingsScreen() {
           ))}
         </Group>
       </Sheet>
+      {disclosure}
     </Screen>
   );
 }

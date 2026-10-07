@@ -8,6 +8,8 @@ import { call, findHub, hello } from '../api/client';
 import { addressesOf, chooseAddress, display, kindFor } from '../logic/addresses';
 import { normalizeHubUrl, parseConnectLink, subnetCandidates, type HubConfig } from '../logic/connect';
 import { useHub } from '../state/hub';
+import { useDemo } from '../state/demo';
+import { PrivacyLink } from '../ui/PrivacyLink';
 import { Icon } from '../ui/Icon';
 import { Button, Card, IconWell, Mark, Spinner } from '../ui/kit';
 import { Glow } from '../ui/Screen';
@@ -22,6 +24,7 @@ type Step = 'start' | 'scan' | 'type';
  */
 export function ConnectScreen() {
   const { connect } = useHub();
+  const { startDemo } = useDemo();
   const insets = useSafeAreaInsets();
   const [step, setStep] = useState<Step>('start');
   const [addr, setAddr] = useState('');
@@ -156,6 +159,16 @@ export function ConnectScreen() {
               </View>
               <T v="footnote" color={C.stone}>Open Kova on a computer and choose “Kova on your phone” in the sidebar.</T>
             </Card>
+            <Card tint={C.blue} style={{ padding: SP[4], gap: SP[3] }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3] }}>
+                <IconWell icon="science" color={C.blue} size={40} fill />
+                <View style={{ flex: 1, gap: 2 }}>
+                  <T v="headline">No hub yet?</T>
+                  <T v="footnote" color={C.stone}>Look around a demo home: lights, modes, energy and Ask Kova. It runs on this phone, with nothing real behind it.</T>
+                </View>
+              </View>
+              <Button kind="blue" icon="play_arrow" label="Try the demo" onPress={() => { haptic.success(); void startDemo(); }} />
+            </Card>
           </View>
         ) : (
           <View style={{ gap: SP[4] }}>
@@ -175,6 +188,7 @@ export function ConnectScreen() {
             <T v="callout" color={C.redText} style={{ flex: 1 }}>{err}</T>
           </Appear>
         ) : null}
+        <PrivacyLink />
       </ScrollView>
     </KeyboardAvoidingView>
   );

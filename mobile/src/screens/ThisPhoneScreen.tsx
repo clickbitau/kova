@@ -14,12 +14,16 @@ import { locationPlan } from '../logic/presence';
 import { Screen } from '../ui/Screen';
 import { T } from '../ui/Text';
 import { HubAddresses } from './HubAddresses';
+import { useLocationDisclosure } from './LocationDisclosure';
+import { useDemo } from '../state/demo';
 
 /** Who this phone belongs to, arriving and leaving by location, notifications, and which hub it talks to. */
 export function ThisPhoneScreen() {
   const s = useSnap();
   const { cfg, api, say, setPerson, forget, addresses, route } = useHub();
   const nav = useNav();
+  const { demo, leaveDemo } = useDemo();
+  const { disclose, view: disclosure } = useLocationDisclosure();
   const [geo, setGeo] = useState(false);
   const [push, setPush] = useState(false);
   const [lock, setLock] = useState(liveActivityRunning());
@@ -37,6 +41,8 @@ export function ThisPhoneScreen() {
   }, []);
 
   const toggleGeo = async (on: boolean) => {
+    // The demo home shows the disclosure as it is, but never asks for location or starts watching it.
+    if (demo) { if (on && await disclose('foreground')) say('In the demo home Kova doesn’t use your location. Connect your own hub to turn this on.'); return; }
     if (!cfg) return;
     if (!on) { await stopArriveLeave(); setGeo(false); say('Kova no longer uses this phone’s location'); return; }
     if (!me) { say('First choose who this phone belongs to', { error: true }); return; }
@@ -47,8 +53,8 @@ export function ThisPhoneScreen() {
       const setup = await api<{ people: { id: string; key: string }[] }>('GET', '/api/presence/setup');
       const key = setup.people.find(p => p.id === me.id)?.key;
       if (!key) throw new Error('The hub has no key for this person yet');
-      const r = await startArriveLeave({ hubUrl: route?.url ?? cfg.url, addresses, hubId: cfg.hubId ?? null, personId: me.id, key, home });
-      if (!r.ok) { say(r.why, { error: true }); return; }
+      const r = await startArriveLeave({ hubUrl: route?.url ?? cfg.url, addresses, hubId: cfg.hubId ?? null, personId: me.id, key, home }, disclose);
+      if (!r.ok) { say(r.why, { error: !r.declined }); return; }
       setGeo(true);
       say(`Kova will know when ${me.name} arrives and leaves`);
     } catch (e) { say((e as Error).message, { error: true }); } finally { setBusy(null); }
@@ -61,6 +67,7 @@ export function ThisPhoneScreen() {
   };
 
   const togglePush = async (on: boolean) => {
+    if (demo) { if (on) say('Notifications come from your own hub. The demo home doesn’t send any.'); return; }
     if (!on) {
       const t = await savedPushToken();
       if (t) await api('DELETE', '/api/push/app', { token: t }).catch(() => {});
@@ -79,6 +86,7 @@ export function ThisPhoneScreen() {
   };
 
   const disconnect = async () => {
+    if (demo) { await leaveDemo(); return true; }
     if (!confirm) { setConfirm(true); setTimeout(() => setConfirm(false), 4000); return true; }
     await stopArriveLeave(); await togglePush(false); await forget();
     return true;
@@ -137,9 +145,19 @@ export function ThisPhoneScreen() {
         {canLock ? <SwitchRow icon="lock" title="Home on the lock screen" sub="The mode, lights on and what’s next, on the lock screen and in the Dynamic Island" on={lock} onChange={v => void toggleLock(v)} /> : null}
       </Group>
 
-      <HubAddresses />
-      <Button kind="danger" icon="link_off" label={confirm ? 'Tap again to disconnect' : 'Disconnect this phone'} onPress={disconnect} />
-      <T v="footnote" color={C.stone2} center style={{ marginTop: -SP[4] }}>This phone stops controlling the home until you connect it again.</T>
+      {demo ? (
+        <>
+          <Button kind="secondary" icon="link" label="Leave the demo and connect your hub" onPress={disconnect} />
+          <T v="footnote" color={C.stone2} center style={{ marginTop: -SP[4] }}>The demo home runs on this phone only. Nothing here is real or sent anywhere.</T>
+        </>
+      ) : (
+        <>
+          <HubAddresses />
+          <Button kind="danger" icon="link_off" label={confirm ? 'Tap again to disconnect' : 'Disconnect this phone'} onPress={disconnect} />
+          <T v="footnote" color={C.stone2} center style={{ marginTop: -SP[4] }}>This phone stops controlling the home until you connect it again.</T>
+        </>
+      )}
+      {disclosure}
     </Screen>
   );
 }

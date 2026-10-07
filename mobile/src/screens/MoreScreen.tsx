@@ -11,6 +11,8 @@ import { T } from '../ui/Text';
 import appVersion from '../version.json';
 import { display, KIND_LABEL } from '../logic/addresses';
 import { automationsOf } from '../logic/automations';
+import { useDemo } from '../state/demo';
+import { openPrivacyPolicy } from '../ui/PrivacyLink';
 
 const TONE = { ok: C.green, ready: C.amber, busy: C.stone, error: C.red, muted: C.stone } as const;
 
@@ -66,9 +68,21 @@ export function MoreScreen() {
   const players = s.devices.filter(d => (d.type === 'media' || d.type === 'tv') && d.state.on).length;
   const me = s.people.find(p => p.id === cfg?.personId);
   const live = conn === 'live';
+  const { demo, leaveDemo } = useDemo();
   return (
     <Screen title="More" over={s.home.name} gap={SP[6]}>
-      <Card style={{ padding: SP[4], flexDirection: 'row', alignItems: 'center', gap: SP[3] }}>
+      {demo ? (
+        <Card tint={C.amber} style={{ padding: SP[4], gap: SP[3] }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3] }}>
+            <IconWell icon="science" color={C.amber} size={40} fill />
+            <View style={{ flex: 1, gap: 2 }}>
+              <T v="headline">You’re in the demo home</T>
+              <T v="footnote" color={C.stone}>It runs on this phone only. Nothing here is real, and nothing is sent anywhere.</T>
+            </View>
+          </View>
+          <Button icon="link" label="Leave the demo and connect your hub" onPress={() => leaveDemo()} />
+        </Card>
+      ) : <Card style={{ padding: SP[4], flexDirection: 'row', alignItems: 'center', gap: SP[3] }}>
         <IconWell icon="router" color={live ? C.green : conn === 'connecting' ? C.amber : C.red} size={40} />
         <View style={{ flex: 1, gap: 2 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2] }}>
@@ -77,7 +91,7 @@ export function MoreScreen() {
           </View>
           <T v="footnote" color={C.stone} numberOfLines={1}>{live && route ? `${KIND_LABEL[route.kind]} · ${display(route.url)}` : display(cfg?.url)}</T>
         </View>
-      </Card>
+      </Card>}
 
 
       <Group title="Your home">
@@ -99,7 +113,12 @@ export function MoreScreen() {
         <Row icon="computer" iconFg={C.blue} title="Sign in a browser" sub="Type the code your Kova address shows on a computer" onPress={() => nav.navigate('Browsers')} />
       </Group>
 
-      <AppUpdates />
+      {demo ? null : <AppUpdates />}
+
+      <Group title="About">
+        <Row first icon="lock" iconFg={C.green} title="Privacy policy" sub="What Kova collects, where it goes, and your choices" onPress={openPrivacyPolicy} right={<Icon name="arrow_outward" size={18} color={C.stone2} />} />
+        <Row icon="info" title={`Kova ${running.version}`} sub="Made by ClickBIT" />
+      </Group>
 
       <View style={{ alignItems: 'center', gap: SP[2], paddingTop: SP[2] }}>
         <Mark size={22} ink={C.stone2} />
