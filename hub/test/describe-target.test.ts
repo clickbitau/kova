@@ -17,3 +17,12 @@ test('target words say every setting, not only the first', () => {
   assert.equal(targetLabel(pur, { mode: 'Sleep', childLock: true, display: false }), 'Purifier on Sleep · child lock on, display off');
   assert.equal(targetLabel(dev('light', 'Lamp'), { on: true, bri: 40 }), 'Lamp 40%');
 });
+
+test('activity words describe what changed, not what an integration repeated', async () => {
+  const { changeSentence } = await import('../src/util/describe.ts');
+  const ac = dev('climate', 'AC');
+  const prev = { on: false, hvac: 'dry', zones: [{ n: 3, on: true, open: 100 }, { n: 4, on: true, open: 100 }] } as never;
+  const next = { on: false, hvac: 'dry', zones: [{ n: 3, on: false, open: 100 }, { n: 4, on: true, open: 100 }] } as never;
+  assert.equal(changeSentence(ac, prev, next), 'AC zone 3 off');
+  assert.equal(changeSentence(ac, { on: true } as never, { on: false } as never), 'AC off');
+});

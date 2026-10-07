@@ -77,7 +77,11 @@ function targetHead(d: Device, t: Command): string {
 }
 
 /** Activity-feed sentence for a single device change: "Lamp dimmed to 78%". */
-export function changeSentence(d: Device, prev: Command, next: Command): string {
+export function changeSentence(d: Device, prev: Command, next0: Command): string {
+  // Only what really changed: an integration that reports its whole state with each change ("on: false" again
+  // while a zone closed) mustn't read as "AC off".
+  const diff = Object.fromEntries(Object.entries(next0).filter(([k, v]) => !(k in prev) || JSON.stringify((prev as Record<string, unknown>)[k]) !== JSON.stringify(v)));
+  const next: Command = Object.keys(diff).length ? diff as Command : next0;
   // Sensors: a door or window, motion.
   if (typeof next.open === 'boolean') return `${d.name} ${next.open ? 'opened' : 'closed'}`;
   if (typeof next.motion === 'boolean') return `${d.name}: ${next.motion ? 'motion' : 'clear'}`;
