@@ -30,7 +30,7 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
   // The home's details: only what's sent changes. Location and timezone move sun and prayer times; the prayer
   // method decides how prayer times are worked out. A new location far from the old one (another town) gets the
   // timezone there too, unless one is sent: the answer says so (`timezone`), and Undo puts both back.
-  app.put<{ Body: { name?: string; address?: string | null; timezone?: string; timezoneHint?: string; latitude?: number; longitude?: number; location?: { latitude?: number; longitude?: number; radiusM?: number; source?: string; provider?: string; placeId?: string }; prayerMethod?: string; pauseForDoorbell?: boolean } }>('/api/home', async (req, reply) => {
+  app.put<{ Body: { name?: string; address?: string | null; timezone?: string; timezoneHint?: string; latitude?: number; longitude?: number; location?: { latitude?: number; longitude?: number; radiusM?: number; source?: string; provider?: string; placeId?: string }; prayerMethod?: string; pauseForDoorbell?: boolean; learnFromYou?: boolean } }>('/api/home', async (req, reply) => {
     const b = req.body ?? {};
     const name = b.name === undefined ? undefined : text(b.name);
     if (name === '') return bad(reply, 'Give the home a name');
@@ -48,6 +48,7 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
     if (b.location?.provider === 'google' && !b.location.placeId) return bad(reply, 'A point from Google needs its placeId');
     if (b.prayerMethod !== undefined && !PRAYER_METHODS.includes(b.prayerMethod)) return bad(reply, `Prayer method is one of ${PRAYER_METHODS.join(', ')}`);
     if (b.pauseForDoorbell !== undefined && typeof b.pauseForDoorbell !== 'boolean') return bad(reply, 'pauseForDoorbell must be true or false');
+    if (b.learnFromYou !== undefined && typeof b.learnFromYou !== 'boolean') return bad(reply, 'learnFromYou must be true or false');
     const source = b.location?.source as LocationSource | undefined;
     // The timezone of a new place: only when it moved a long way (fine-tuning the pin never changes the clock), and
     // only when that zone keeps a different clock. The phone's own zone is the best guess when it's the phone's location.
@@ -80,6 +81,7 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
       }
       if (b.prayerMethod) c.prayerMethod = b.prayerMethod;
       if (b.pauseForDoorbell !== undefined) c.pauseForDoorbell = b.pauseForDoorbell;
+      if (b.learnFromYou !== undefined) c.learnFromYou = b.learnFromYou;
     });
     return { ...r, ...(timezone && timezone !== before.timezone && b.timezone === undefined ? { timezone } : {}) };
   });

@@ -614,6 +614,14 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
     try { return { undo: hub.engine.registerUndo(hub.checker.fix(req.params.id)) }; } catch (e) { return fail(reply, e); }
   });
   app.post<{ Params: { id: string } }>('/api/findings/:id/dismiss', async req => ({ undo: hub.engine.registerUndo(hub.checker.dismiss(req.params.id)) }));
+  // Learned suggestions: "Not now" (back in a week), and "Suggest again" from What Kova has learned.
+  app.post<{ Params: { id: string } }>('/api/findings/:id/snooze', async req => ({ undo: hub.engine.registerUndo(hub.checker.snooze(req.params.id)) }));
+  app.post<{ Params: { id: string } }>('/api/findings/:id/restore', async req => ({ undo: hub.engine.registerUndo(hub.checker.restore(req.params.id)) }));
+  // "Why do you suggest this?": the suggestion and the days it's based on, in words.
+  app.get<{ Params: { id: string } }>('/api/findings/:id/why', async (req, reply) => {
+    const text = hub.checker.learner.explain(req.params.id);
+    return text ? { text } : reply.code(404).send({ error: 'That suggestion no longer applies' });
+  });
 
   app.patch<{ Params: { id: string }; Body: { lightTheWay?: boolean; onlyWhenSomeoneHome?: boolean } }>('/api/modes/:id', async (req, reply) => {
     if (!hub.config.get().modes.some(m => m.id === req.params.id)) return reply.code(404).send({ error: 'unknown mode' });

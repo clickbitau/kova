@@ -1,7 +1,7 @@
 import type { Engine } from './engine.ts';
 import type { Store } from '../store/db.ts';
 import type { ConfigStore } from './config.ts';
-import type { Command, Device, Mode } from '../model/types.ts';
+import type { Command, Device, Mode, Targets } from '../model/types.ts';
 import { isLight } from '../util/describe.ts';
 import { addDays } from '../util/time.ts';
 import { Learner } from './learn.ts';
@@ -18,6 +18,15 @@ export interface Finding {
   alt: string;
   /** What the toast says once fixed, when it isn't "<mode> updated". */
   done?: string;
+  /** Learned from what people do (engine/learn.ts): "Not now" puts it off for a week, `never` says no for good. */
+  learned?: boolean;
+  never?: string;
+  /** The automation it's about, for its own screen. */
+  automationId?: string;
+  /** The days it's based on, and what happened on each. */
+  evidence?: { day: string; text: string }[];
+  /** Other ways to apply it, each with an id of its own for /fix. */
+  more?: { id: string; title: string; body: string; fix: string; done?: string }[];
 }
 
 export type DayResult = 'ok' | 'problem' | 'skipped' | 'none';
@@ -35,8 +44,8 @@ const DAYS = 14;
 export class Checker {
   readonly learner: Learner;
 
-  constructor(private engine: Engine, private store: Store, private config: ConfigStore, private devices: () => Map<string, Device>) {
-    this.learner = new Learner(engine, store, config, devices);
+  constructor(private engine: Engine, private store: Store, private config: ConfigStore, private devices: () => Map<string, Device>, expand?: (t: Targets) => Record<string, Command>) {
+    this.learner = new Learner(engine, store, config, devices, expand);
   }
 
   findings(): Finding[] {
@@ -191,6 +200,15 @@ export class Checker {
     if (kind === 'stays-on') return this.config.update(c => { const m = c.modes.find(x => x.id === b); if (m) m.targets[a] = { on: false }; });
     throw new Error(`Unknown finding ${id}`);
   }
+
+  /** "Not now" on a learned suggestion: it comes back in a week. Other findings have no "later". */
+  snooze(id: string): () => void {
+    if (!id.startsWith('learn:')) return this.dismiss(id);
+    return this.learner.snooze(id);
+  }
+
+  /** Suggest it again: no longer put off or dismissed. */
+  restore(id: string): () => void { return this.learner.restore(id); }
 
   dismiss(id: string): () => void {
     return this.config.update(c => { if (!c.dismissedFindings.includes(id)) c.dismissedFindings.push(id); });

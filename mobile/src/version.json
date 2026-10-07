@@ -9,6 +9,10 @@
       "title": "Household accounts: invite people with a link or QR, roles for adults, children and guests, and each person’s own phone and notifications"
     },
     {
+      "version": "0.2.34",
+      "title": "Kova learns from what you do: an automation you start early, a value you always change, one you undo, or two things you do one after the other become suggestions with the days they’re based on, on Modes and the automation’s own screen; Not now, Don’t suggest again, Why?, and Settings → What Kova has learned"
+    },
+    {
       "version": "0.2.33",
       "title": "Announcements that play over what speakers are doing and then put them back, speaker loudness so one level sounds the same in every room, and prayer times as an opt-in integration with the waqt on Now"
     },

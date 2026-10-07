@@ -208,12 +208,12 @@ export function NowScreen() {
       ) : null}
 
       {s.findings.length ? (
-        <Press give="soft" onPress={() => nav.navigate('Modes')} label={`${plural(s.findings.length, 'thing')} worth a look in your modes`}>
+        <Press give="soft" onPress={() => nav.navigate('Modes')} label={`${plural(s.findings.length, 'thing')} worth a look`}>
           <Card tint={C.green} style={{ paddingVertical: SP[4], paddingHorizontal: SP[4], flexDirection: 'row', alignItems: 'center', gap: SP[3] }}>
-            <IconWell icon="fact_check" color={C.green} size={40} />
-            <View style={{ flex: 1, gap: 2 }}>
+            <IconWell icon={s.findings.some(f => f.learned) ? 'auto_awesome' : 'fact_check'} color={C.green} size={40} />
+            <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
               <T v="headline">{`${plural(s.findings.length, 'thing')} worth a look`}</T>
-              <T v="footnote" color={C.stone}>Kova checked your modes against the last two weeks</T>
+              <T v="footnote" color={C.stone}>{s.findings.some(f => f.learned) ? 'From what you do by hand, and your modes over the last two weeks' : 'Kova checked your modes against the last two weeks'}</T>
             </View>
             <Icon name="chevron_right" size={20} color={C.stone} />
           </Card>

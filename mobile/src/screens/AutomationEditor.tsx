@@ -27,6 +27,7 @@ import { Icon } from '../ui/Icon';
 import { Button, IconWell, Pill, Press, Segmented, Sheet, Switch } from '../ui/kit';
 import { Appear, animateLayout, haptic } from '../ui/motion';
 import { T } from '../ui/Text';
+import { FindingCard } from './FindingCard';
 
 // The automation editor, full screen. A live summary in plain words up top, then When / Only if / Then as cards
 // that nest (groups of conditions, if / otherwise, repeat, wait until), so anything the assistant can build can
@@ -1540,6 +1541,10 @@ export function AutomationEditor() {
                     </View>
                   </Appear>
                 ) : null}
+                {/* What Kova learned about this automation from what you do (hub engine/learn.ts). */}
+                {id ? s.findings.filter(f => f.automationId === id).map(f => (
+                  <FindingCard key={f.id} f={f} tag={false} onApplied={() => void load(true)} />
+                )) : null}
                 <SummaryCard draft={draft} names={names} />
                 {notes.length ? (
                   <View style={{ gap: 6, padding: 14, borderRadius: R.md, backgroundColor: C.amberTint, borderWidth: 1, borderColor: C.amberLine }}>

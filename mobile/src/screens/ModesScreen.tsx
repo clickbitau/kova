@@ -10,6 +10,7 @@ import { automationsOf } from '../logic/automations';
 import { Screen } from '../ui/Screen';
 import { T } from '../ui/Text';
 import { Appear, animateLayout, spring } from '../ui/motion';
+import { FindingCard } from './FindingCard';
 
 const DAY = { ok: '', problem: C.red, skipped: '#26272b', none: C.inset } as const;
 
@@ -88,32 +89,13 @@ export function ModesScreen() {
   const { act } = useHub();
   const nav = useNav();
   const [open, setOpen] = useState(s.current.modeId);
-  const modeById = (id: string) => s.modes.find(m => m.id === id);
   return (
     <Screen title="Modes" over="How your home behaves through the day" onBack={() => nav.goBack()}>
       {s.findings.length ? (
         <Section title="Worth a look" gap={SP[2] + 2}>
-          {s.findings.map((f, i) => {
-            const m = modeById(f.modeId);
-            const fg = f.tone === 'alert' ? C.red : C.amber;
-            return (
-              <Appear key={f.id} index={i}>
-                <Card style={{ padding: SP[4], gap: SP[2] + 2, borderLeftWidth: 3, borderLeftColor: fg }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Icon name={f.icon} size={17} color={fg} />
-                    <T v="eyebrow" color={fg} style={{ flex: 1 }}>{f.kind}</T>
-                    {m ? <Tag text={m.name} color={m.color} /> : null}
-                  </View>
-                  <T v="headline">{f.title}</T>
-                  <T v="footnote" color={C.stone}>{f.body}</T>
-                  <View style={{ flexDirection: 'row', gap: SP[2], marginTop: SP[1], flexWrap: 'wrap' }}>
-                    <Button size="sm" label={f.fix} onPress={() => act('POST', `/api/findings/${encodeURIComponent(f.id)}/fix`, {}, f.done ?? `${m?.name ?? 'Mode'} updated`)} />
-                    <Button size="sm" kind="secondary" label="Keep as is" onPress={() => act('POST', `/api/findings/${encodeURIComponent(f.id)}/dismiss`, {}, 'Kept as is')} />
-                  </View>
-                </Card>
-              </Appear>
-            );
-          })}
+          {s.findings.map((f, i) => (
+            <Appear key={f.id} index={i}><FindingCard f={f} /></Appear>
+          ))}
         </Section>
       ) : null}
       <Section title="Through the day" action="New mode" onAction={() => nav.navigate('ModeEditor')} gap={SP[2] + 2}>

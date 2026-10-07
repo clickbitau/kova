@@ -22,6 +22,8 @@ export const ROUTES: Record<string, Rule> = {
   'GET /api/app/manifest': r('public'),
   'GET /api/app/assets/:runtime/:update/:key': r('public'),
   'GET /api/snap/:key': r('public'),
+  // Announcement audio for the speakers, which can't send a key: the clip's random id is its key (announce-routes.ts).
+  'GET /api/clip/:file': r('public'),
   'POST /api/login/start': r('public'),
   'GET /api/login/poll/:id': r('public'),
   'POST /api/invite/peek': r('public'),
@@ -99,6 +101,10 @@ export const ROUTES: Record<string, Rule> = {
   'DELETE /api/moments/:id': r('automate'),
   'POST /api/findings/:id/fix': r('automate'),
   'POST /api/findings/:id/dismiss': r('automate'),
+  // Learned suggestions: put off for a week, offered again, and why (the days behind one), like fix and dismiss.
+  'POST /api/findings/:id/snooze': r('automate'),
+  'POST /api/findings/:id/restore': r('automate'),
+  'GET /api/findings/:id/why': r('automate'),
 
   // ---- the home's everyday settings: rooms, devices, favourites, groups, alerts, Ask Kova's notes
   'PATCH /api/devices/:id/settings': r('home'),
@@ -120,6 +126,16 @@ export const ROUTES: Record<string, Rule> = {
   'DELETE /api/sources/:name': r('home'),
   'PUT /api/security/settings': r('home'),
   'PUT /api/room-climate': r('home'),
+  // Announcements: the clips and recordings automations play (making automations), a speaker's loudness test (its settings).
+  'GET /api/clips': r('automate'),
+  'POST /api/clips': r('automate'),
+  'PATCH /api/clips/:id': r('automate'),
+  'DELETE /api/clips/:id': r('automate'),
+  'GET /api/adhans': r('automate'),
+  'POST /api/devices/:id/announce-test': r('home'),
+  // Prayer times: anyone may read today's times; switching the integration and its method is the owner's, like any integration.
+  'GET /api/prayer': r('view'),
+  'PUT /api/prayer': r('owner'),
   'POST /api/insights/:id/snooze': r('home'),
   'DELETE /api/insights/:id/snooze': r('home'),
   'GET /api/maps/static': r('home'),

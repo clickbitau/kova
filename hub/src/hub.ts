@@ -144,8 +144,9 @@ export class Hub extends EventEmitter<{ changed: [] }> {
     this.adhans = new Adhans(clipDir, { fetch: opts.fetch });
     this.announcer = new Announcer(this.reg, this.config, { clips: this.clips, adhans: this.adhans, base: host => this.lanBase(host), now: () => this.engine.now() });
     this.engine.automations.announcer = this.announcer;
-    this.checker = new Checker(this.engine, this.store, this.config, () => this.reg.devices);
+    this.checker = new Checker(this.engine, this.store, this.config, () => this.reg.devices, t => this.reg.expandTargets(t));
     this.assistant = new Assistant(this.engine, this.reg, this.config);
+    this.assistant.learner = this.checker.learner;
     this.maps = new Maps({ now: opts.now, ...opts.maps, store: this.store, near: () => { const c = this.config.get(); return c.latitude || c.longitude ? { latitude: c.latitude, longitude: c.longitude } : null; } });
     this.energy = new Energy(this.store, this.reg, () => this.config.get().timezone, opts.now, () => this.config.get().devices ?? {});
     this._demo = !!opts.demo;

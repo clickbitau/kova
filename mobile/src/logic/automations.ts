@@ -67,7 +67,7 @@ export type Action =
   | { kind: 'overlay'; overlay: string; op: 'start' | 'end' }
   | { kind: 'if'; conditions: Condition[]; then: Action[]; else?: Action[] }
   | { kind: 'repeat'; times: number; actions: Action[] }
-  | { kind: 'ramp'; targets: Targets; field: RampField; to: number; from?: number; overSec: number; stepSec?: number }
+  | { kind: 'ramp'; targets: Targets; field: RampField; to: number; from?: number; overSec: number; stepSec?: number; /** Devices easing to their own end (learned), by id. */ toFor?: Record<string, number> }
   | { kind: 'run'; automation: string }
   | { kind: 'stop' }
   | AnnounceAction;

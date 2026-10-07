@@ -193,6 +193,8 @@ export function snapshot(hub: Hub) {
       maps: { google: hub.maps.google },
       // For Settings: how prayer times are worked out, and whether the doorbell pauses what's playing.
       prayerMethod: cfg.prayerMethod ?? 'MuslimWorldLeague', pauseForDoorbell: cfg.pauseForDoorbell !== false, address: cfg.address ?? null,
+      // Whether Kova learns from what people do by hand (engine/learn.ts).
+      learnFromYou: cfg.learnFromYou !== false,
       // Today's sunrise and sunset as local hours, for day strips.
       sun: (() => { const t = SunCalc.getTimes(new Date(now), cfg.latitude, cfg.longitude); const h = (d: Date) => (isNaN(+d) ? null : localHour(+d, tz)); return { rise: h(t.sunrise), set: h(t.sunset) }; })(),
     },
@@ -270,6 +272,8 @@ export function snapshot(hub: Hub) {
     music: hub.music?.cached() ?? [],
     update: hub.updates?.status() ?? null,
     findings,
+    // What Kova has learned from what people do: every suggestion, with whether it's new, put off or not wanted.
+    learned: checker.learner.view(),
     // What Kova notices: the home at a glance, and alerts and warnings (services/insights.ts).
     insights: hub.insights.current(),
     glance: hub.insights.glance(),

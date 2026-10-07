@@ -531,15 +531,22 @@ export class Automations {
           break;
         }
         case 'ramp': {
-          const first = this.reg.get(Object.keys(this.reg.expandTargets(x.targets))[0] ?? '');
+          // Targets saved without the value ({}) still find their devices: "type:light" only matches dimmers for bri.
+          const ids = Object.keys(this.reg.expandTargets(Object.fromEntries(Object.entries(x.targets).map(([k, c]) => [k, { ...c, [x.field]: x.to }]))));
+          const first = this.reg.get(ids.find(id => !(id in (x.toFor ?? {}))) ?? ids[0] ?? '');
           const start = x.from ?? (first ? num(first.state, x.field) : null) ?? 0;
           const stepSec = Math.max(5, x.stepSec ?? 60);
           const n = Math.max(1, Math.ceil(x.overSec / stepSec));
           step(`Ramp ${FIELD[x.field]} to ${x.to} over ${durWords(x.overSec)}`);
+          // Devices with an end of their own ease from where they are to it, alongside the rest.
+          const own = Object.entries(x.toFor ?? {}).filter(([id, to]) => Number.isFinite(to) && ids.includes(id))
+            .map(([id, to]) => { const d = this.reg.get(id); return { id, to, from: x.from ?? (d ? num(d.state, x.field) : null) ?? start }; });
           for (let i = 1; i <= n; i++) {
             const v = Math.round(start + (x.to - start) * (i / n));
             const t: Targets = {};
             for (const [id, cmd] of Object.entries(x.targets)) t[id] = { ...cmd, [x.field]: v };
+            // Named after the shared targets, so they win over a "type:light" for that one device.
+            for (const o of own) t[o.id] = { ...(t[o.id] ?? {}), [x.field]: Math.round(o.from + (o.to - o.from) * (i / n)) };
             await this.reg.applyTargets(t, cause);
             if (i < n) await this.sleep(stepSec * 1000, live);
           }
@@ -749,7 +756,10 @@ export function actionWords(a: Action, x: Pick<CondCtx, 'reg' | 'cfg'> & { clipN
     case 'notify': return `Notify: “${a.message}”`;
     case 'overlay': return `${a.op === 'start' ? 'Start' : 'End'} ${x.cfg.overlays.find(o => o.id === a.overlay)?.name ?? a.overlay}`;
     case 'if': return `If ${a.conditions.map(c => condWords(c, x)).join(' and ')}: ${a.then.map(k => actionWords(k, x, targetText)).join('; ') || 'nothing'}${a.else?.length ? `; otherwise ${a.else.map(k => actionWords(k, x, targetText)).join('; ')}` : ''}`;
-    case 'ramp': return `${FIELD[a.field]} ramps to ${a.to} over ${durWords(a.overSec)}: ${Object.keys(a.targets).map(id => pseudoLabel(id, x.cfg.rooms) ?? x.reg.get(id)?.name ?? id).join(', ')}`;
+    case 'ramp': {
+      const own = Object.entries(a.toFor ?? {}).map(([id, v]) => `${x.reg.get(id)?.name ?? id} to ${v}`);
+      return `${FIELD[a.field]} ramps to ${a.to} over ${durWords(a.overSec)}: ${Object.keys(a.targets).map(id => pseudoLabel(id, x.cfg.rooms) ?? x.reg.get(id)?.name ?? id).join(', ')}${own.length ? ` (${own.join(', ')})` : ''}`;
+    }
     case 'repeat': return `${a.times}×: ${a.actions.map(k => actionWords(k, x, targetText)).join('; ')}`;
     case 'run': return `Run ${x.cfg.automations?.find(o => o.id === a.automation)?.name ?? a.automation}`;
     case 'stop': return 'Stop';
