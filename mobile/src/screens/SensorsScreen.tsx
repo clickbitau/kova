@@ -9,7 +9,7 @@ import { useNav } from '../navigation';
 import { groupSensors, sensorFlags, type SensorCard } from '../logic/sensors';
 import { plural } from '../logic/devices';
 import { Icon } from '../ui/Icon';
-import { Card, Empty, Press } from '../ui/kit';
+import { Card, Empty, Notice, Press } from '../ui/kit';
 import { Screen } from '../ui/Screen';
 import { T } from '../ui/Text';
 import { Appear, animateLayout } from '../ui/motion';
@@ -33,7 +33,7 @@ function SensorTile({ c, index, onPress }: { c: SensorCard; index: number; onPre
             </View>
           </View>
           <View style={{ gap: 2 }}>
-            <T v="label" numberOfLines={1}>{c.name}</T>
+            <T v="label" numberOfLines={2}>{c.name}</T>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <T size={24} weight={700} tracking={-0.03} tabular color={c.mainColor} numberOfLines={1}>{c.main}</T>
               {c.trend ? <Icon name={c.trend[0]} size={18} color={c.trend[1]} /> : null}
@@ -62,12 +62,7 @@ export function SensorsScreen() {
     <Screen title="Sensors" over={all.length ? `${plural(all.length, 'sensor')} in ${plural(rooms, 'room')}` : 'They only report'} onBack={() => nav.goBack()}>
       {flags.length ? (
         <View style={{ gap: SP[2] }}>
-          {flags.map(f => (
-            <View key={f.text} style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2], padding: SP[3], borderRadius: R.md, backgroundColor: alpha(f.color, 0.1) }}>
-              <Icon name={f.icon} size={18} color={f.color} />
-              <T v="callout" weight={600} color={f.color} style={{ flex: 1 }}>{f.text}</T>
-            </View>
-          ))}
+          {flags.map(f => <Notice key={f.text} compact icon={f.icon} color={f.color} title={f.text} />)}
         </View>
       ) : null}
 
