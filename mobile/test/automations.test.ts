@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  ACTION_KINDS, CONDITION_KINDS, TRIGGER_KINDS, bodyOf, canMove, changeKind, clockOf, commandChoices, commandFromKey, ctxOf, dayOn, daysWords,
+  ACTION_KINDS, CONDITION_KINDS, TRIGGER_KINDS, bodyOf, canMove, changeKind, clockOf, commandFromKey, commandKey, ctxOf, dayOn, daysWords,
   deviceLabel, deviceSections, draftOf, filterAutomations, getAt, haState, lastRunLine, minToSec, moveAt, newAction, newCondition, newTrigger,
   parseClock, pushAt, removeAt, retarget, rhythmFromKey, rhythmKey, rhythmWords, sameDraft, secToMin, setAt, splitSeconds, stateFromKey, stateKey,
-  stateOptions, toSeconds, runTime, automationsOf, ideasOf, startRun, runMessage, toggleDay, toggleIn, withCurrent, withOffset, withPending, type Draft, type HaAutomation,
+  toSeconds, runTime, automationsOf, ideasOf, startRun, runMessage, toggleDay, toggleIn, withCurrent, withOffset, withPending, type Draft, type HaAutomation,
 } from '../src/logic/automations.ts';
 import type { Device, Room } from '../src/api/types.ts';
 
@@ -54,14 +54,14 @@ test('remove, push and move in nested lists', () => {
 test('every kind has a default, from the home', () => {
   assert.equal(ctx.device, 'door');
   assert.equal(ctx.actDevice, 'lamp', 'cameras are not set');
-  assert.deepEqual(ctx.actCommand, { on: false });
+  assert.deepEqual(ctx.actCommand, { on: true });
   assert.equal(ctx.other, 'other', 'never itself');
   for (const k of TRIGGER_KINDS) assert.equal(newTrigger(k.v, ctx).kind, k.v);
   for (const k of CONDITION_KINDS) assert.equal(newCondition(k.v, ctx).kind, k.v);
   for (const k of ACTION_KINDS) assert.equal(newAction(k.v, ctx).kind, k.v);
   assert.deepEqual(newTrigger('device', ctx), { kind: 'device', device: 'door', to: { on: true } });
   assert.deepEqual(newCondition('any', ctx), { kind: 'any', conditions: [{ kind: 'device', device: 'door', is: { on: true } }] });
-  assert.deepEqual(newAction('set', ctx), { kind: 'set', targets: { lamp: { on: false } } });
+  assert.deepEqual(newAction('set', ctx), { kind: 'set', targets: { lamp: { on: true } } });
   assert.deepEqual(newAction('if', ctx), { kind: 'if', conditions: [{ kind: 'device', device: 'door', is: { on: true } }], then: [], else: [] });
   assert.deepEqual(newCondition('mode', {}), { kind: 'mode', modes: [] });
 });
@@ -74,28 +74,12 @@ test('changing kind keeps the device and a group keeps its conditions', () => {
   assert.deepEqual(changeKind({ kind: 'device', device: 'lamp', is: { on: true } }, newCondition('presence', ctx)), { kind: 'presence', who: 'anyone', home: true });
 });
 
-test('a state match finds its option whatever order its keys come in', () => {
+test('a state match keys the same whatever order its keys come in', () => {
   assert.equal(stateKey({ input: 'hdmi2', on: true }), stateKey({ on: true, input: 'hdmi2' }));
-  const o = stateOptions({ input: 'hdmi2', on: true });
-  assert.equal(o.find(x => x.v === stateKey({ input: 'hdmi2', on: true }))?.label, 'on HDMI 2');
-  assert.equal(o.length, stateOptions().length, 'a known one is not added again');
-  const odd = stateOptions({ mode: 'Sleep' });
-  assert.equal(odd[odd.length - 1].label, 'mode Sleep');
   assert.deepEqual(stateFromKey(stateKey({ on: false })), { on: false });
   assert.equal(stateFromKey(''), undefined);
   assert.equal(stateKey(undefined), '');
-});
-
-test('commands a step can set, with the current one kept', () => {
-  const lamp = devices[1], speaker = devices[2], box = devices[3], ac = devices[4];
-  assert.deepEqual(commandChoices(lamp, []).map(o => o.label), ['Off', 'On at 5%', 'On at 10%', 'On at 25%', 'On at 50%', 'On at 78%', 'On at 100%']);
-  assert.deepEqual(commandChoices(speaker, [{ name: 'Rain' }]).map(o => o.label), ['Stop', 'Play Rain at 30%']);
-  assert.deepEqual(commandChoices(box, []).map(o => o.label), ['Pause', 'Stop']);
-  assert.equal(commandChoices(ac, [])[0].label, 'Cool to 24°');
-  const odd = commandChoices(lamp, [], { bri: 40, on: true });
-  assert.equal(odd[0].label, 'On, 40%');
-  assert.deepEqual(commandFromKey(odd[0].v), { bri: 40, on: true });
-  assert.equal(commandChoices(lamp, [], { bri: 50, on: true }).length, 7, 'same command in another key order is known');
+  assert.deepEqual(commandFromKey(commandKey({ on: true, bri: 40 })), { bri: 40, on: true });
 });
 
 test('swapping a device in a step keeps its place', () => {

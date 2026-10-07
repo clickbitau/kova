@@ -2,8 +2,12 @@
   "//": "The Kova app's version (docs/VERSIONING.md). store: the X.Y.0 a store binary on this train carries (app.json version). version: what runs, store or over the air (X.Y.Z, PATCH only). train: the native runtime (app.json runtimeVersion). history: newest first; an over-the-air release adds an entry.",
   "train": "kova-mobile-0.2",
   "store": "0.2.0",
-  "version": "0.2.18",
+  "version": "0.2.19",
   "history": [
+    {
+      "version": "0.2.19",
+      "title": "Automations: build by hand anything the assistant can, with a live summary; one-time schedules (Schedule once, Scheduled and Done)"
+    },
     {
       "version": "0.2.18",
       "title": "Tuya link: show the QR, not the raw code text"
