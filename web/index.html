@@ -1372,7 +1372,9 @@ class Component extends DCLogic {
   async goLive(d){
     this.stopLive(true);
     const cam=d.id,NO='Live view isn’t available for this camera yet';
-    if(d.adapter!=='nest'||typeof RTCPeerConnection==='undefined'){this.setState({live:{cam,msg:NO}});return}
+    // `live`: the hub says whether the camera's integration can stream it (older hubs don't: then Nest can).
+    const can=d.live===true||(d.live==null&&d.adapter==='nest');
+    if(!can||typeof RTCPeerConnection==='undefined'){this.setState({live:{cam,msg:NO}});return}
     const pc=new RTCPeerConnection();this._pc=pc;
     const stream=new MediaStream();this._stream=stream;
     // SDM wants an offer with audio, then video, then a data channel.

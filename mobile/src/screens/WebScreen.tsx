@@ -25,7 +25,7 @@ function LoadingBar({ on }: { on: boolean }) {
 
 /**
  * A page of the hub’s own phone web app, for the screens that are mostly setup (customising
- * the home, the mode editor, energy, media) and for live camera video (WebRTC, straight from the camera's cloud).
+ * the home, the mode editor, energy, media). Live camera video plays in the Camera screen itself (ui/LivePlayer.tsx).
  * `embed=1` hides the web app's tab bar, and its back button hands back to the app ("back" message);
  * the token goes in the address once and the page keeps it. While it loads, a bar runs along the top over
  * the page's shape; if it can't load, it says so with Try again and Back.

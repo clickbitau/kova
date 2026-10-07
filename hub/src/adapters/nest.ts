@@ -224,6 +224,7 @@ export class NestAdapter implements Adapter {
   constructor(private opts: NestOptions) {
     this.auth = new GoogleAuth(opts);
     this.liveView = {
+      supports: d => { const c = this.cams.get(d.address) ?? this.byId.get(d.id); return !!c && webRtcCapable(c.dev); },
       offer: (d, offerSdp) => this.webRtcOffer(d, offerSdp),
       extend: (d, mediaSessionId) => this.webRtcExtend(d, mediaSessionId),
       stop: (d, mediaSessionId) => this.webRtcStop(d, mediaSessionId),

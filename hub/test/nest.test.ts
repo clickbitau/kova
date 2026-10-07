@@ -213,6 +213,11 @@ test('Nest: WebRTC live view through the hub API, and account linking routes', a
   await hub.reg.addAdapter(new NestAdapter(g.opts({ ids: IDS, rooms: ROOMS })));
   const app = await buildServer(hub, { webRoot, nest: { projectId: PROJECT, clientId: 'cid.apps.googleusercontent.com', clientSecret: 'GOCSPX-secret', tokenUrl: `${g.base}/token` } });
   try {
+    // The apps learn which cameras can stream: WebRTC ones can, RTSP-only ones can't; other devices don't say.
+    const st = (await app.inject({ url: '/api/state' })).json() as { devices: { id: string; live?: boolean }[] };
+    const live = Object.fromEntries(st.devices.filter(d => ['doorbell', 'garage_cam', 'office_cam', 'lamp'].includes(d.id)).map(d => [d.id, d.live]));
+    assert.deepEqual(live, { doorbell: true, garage_cam: false, office_cam: true, lamp: undefined });
+
     const r = await app.inject({ method: 'POST', url: '/api/devices/doorbell/webrtc', payload: { offerSdp: 'v=0 offer' } });
     assert.equal(r.statusCode, 200);
     assert.deepEqual(r.json(), { answerSdp: 'answer-for:v=0 offer', mediaSessionId: 'ms-1', expiresAt: '2026-09-30T13:05:00Z' });

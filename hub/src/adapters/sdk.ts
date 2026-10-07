@@ -67,6 +67,8 @@ export interface Adapter {
 
 /** WebRTC signalling for cameras whose cloud or device speaks WebRTC to the browser directly. */
 export interface LiveView {
+  /** Whether this camera can stream (e.g. a Nest camera that offers WebRTC, not only RTSP). Unset: every camera can. */
+  supports?(device: Device): boolean;
   /** Browser's SDP offer → the camera's answer. The session ends at `expiresAt` unless extended. */
   offer(device: Device, offerSdp: string): Promise<{ answerSdp: string; mediaSessionId: string; expiresAt: string }>;
   extend(device: Device, mediaSessionId: string): Promise<{ mediaSessionId: string; expiresAt: string }>;

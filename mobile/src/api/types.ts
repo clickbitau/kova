@@ -96,6 +96,8 @@ export interface Device {
   /** Devices with no meter: the owner's figure for what it draws while on (null: not set) and Kova's typical one. */
   watts?: number | null;
   typicalWatts?: number | null;
+  /** Cameras (hub 0.7.58 and later): whether Kova can play its live video. Older hubs don't say. */
+  live?: boolean;
 }
 
 export interface Room { id: string; name: string; icon: string }
