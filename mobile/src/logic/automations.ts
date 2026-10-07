@@ -69,7 +69,38 @@ export type Action =
   | { kind: 'repeat'; times: number; actions: Action[] }
   | { kind: 'ramp'; targets: Targets; field: RampField; to: number; from?: number; overSec: number; stepSec?: number }
   | { kind: 'run'; automation: string }
-  | { kind: 'stop' };
+  | { kind: 'stop' }
+  | AnnounceAction;
+
+/** One speaker of an announcement. */
+export interface AnnounceTarget {
+  /** The level the owner thinks of (0–100); unset: the step's. It plays at this × the speaker's loudness. */
+  vol?: number;
+  /** Dropped for now: kept in the list, one tap back. */
+  off?: boolean;
+  /** Left out while any of these overlays is on. */
+  skipWhile?: string[];
+}
+/**
+ * Play something on speakers over whatever they play, then put them back (hub model/types.ts AnnounceAction). Media
+ * is a source's name, an http(s) URL, "clip:<id>", "adhan:<key>" or "Song: <title>".
+ */
+export interface AnnounceAction {
+  kind: 'announce';
+  /** Unset (or empty) only while it's still to be chosen. */
+  media?: string;
+  /** Another pick when that prayer's time started the run (Fajr's call). */
+  mediaFor?: Partial<Record<Prayer, string>>;
+  vol: number;
+  /** Speakers (or Kova speaker groups) by device id. */
+  targets: Record<string, AnnounceTarget>;
+  /** Players paused while it plays; they carry on after. */
+  pause?: string[];
+  /** Put the speakers back as they were (true), or only their volumes (false). */
+  restore: boolean;
+  /** The longest it may take, in seconds (5–1800, default 420). */
+  maxSec?: number;
+}
 
 export type RunMode = 'single' | 'restart' | 'queued' | 'parallel';
 export type RunResult = 'running' | 'done' | 'stopped' | 'skipped' | 'cancelled' | 'failed';
@@ -178,7 +209,7 @@ const opts = <V extends string>(l: [V, string][]): Opt<V>[] => l.map(([v, label]
 
 export const TRIGGER_KINDS = opts<Trigger['kind']>([['device', 'A device changes'], ['numeric', 'A reading goes above or below'], ['event', 'A device event'], ['room', 'Something happens in a room'], ['time', 'A time of day'], ['once', 'Once, at a date and time'], ['every', 'Every few minutes'], ['presence', 'Someone comes or goes'], ['mode', 'A mode starts'], ['overlay', 'An overlay starts or ends'], ['hub', 'Kova starts']]);
 export const CONDITION_KINDS = opts<Condition['kind']>([['device', 'A device is'], ['numeric', 'A reading is above or below'], ['time', 'The time or day'], ['presence', 'Who’s home'], ['mode', 'The mode'], ['overlay', 'An overlay'], ['room', 'Activity in a room'], ['any', 'Any of these'], ['all', 'All of these'], ['not', 'None of these']]);
-export const ACTION_KINDS = opts<Action['kind']>([['set', 'Set devices'], ['ramp', 'Ramp gradually'], ['delay', 'Wait a while'], ['wait', 'Wait until something is true'], ['notify', 'Send a notification'], ['overlay', 'Start or end an overlay'], ['if', 'If … otherwise …'], ['repeat', 'Repeat'], ['run', 'Run another automation'], ['stop', 'Stop here']]);
+export const ACTION_KINDS = opts<Action['kind']>([['set', 'Set devices'], ['ramp', 'Ramp gradually'], ['delay', 'Wait a while'], ['wait', 'Wait until something is true'], ['notify', 'Send a notification'], ['announce', 'Announce on speakers'], ['overlay', 'Start or end an overlay'], ['if', 'If … otherwise …'], ['repeat', 'Repeat'], ['run', 'Run another automation'], ['stop', 'Stop here']]);
 export const RUN_MODES = opts<RunMode>([['single', 'Ignore the new start'], ['restart', 'Start over'], ['queued', 'Run again after'], ['parallel', 'Run alongside']]);
 
 /** An icon for each kind of part, so a long automation can be scanned. */
@@ -188,7 +219,7 @@ export const KIND_ICON: Record<string, string> = {
   'condition:device': 'toggle_on', 'condition:numeric': 'thermostat', 'condition:time': 'schedule', 'condition:presence': 'person', 'condition:mode': 'routine',
   'condition:overlay': 'layers', 'condition:room': 'sensor_occupied', 'condition:any': 'call_split', 'condition:all': 'fact_check', 'condition:not': 'block',
   'action:set': 'tune', 'action:ramp': 'brightness_6', 'action:delay': 'timer', 'action:wait': 'pending', 'action:notify': 'notifications',
-  'action:overlay': 'layers', 'action:if': 'call_split', 'action:repeat': 'repeat', 'action:run': 'play_arrow', 'action:stop': 'stop',
+  'action:overlay': 'layers', 'action:announce': 'campaign', 'action:if': 'call_split', 'action:repeat': 'repeat', 'action:run': 'play_arrow', 'action:stop': 'stop',
 };
 
 export const FIELDS = opts<NumericField>([['temp', 'temperature (°C)'], ['target', 'set temperature (°C)'], ['humidity', 'humidity (%)'], ['lux', 'light level (lux)'], ['pm25', 'PM2.5 (µg/m³)'], ['power', 'power (W)'], ['energy', 'energy today (kWh)'], ['grid', 'grid power (W, minus = exporting)'], ['load', 'home power use (W)'], ['battery', 'battery (%)'], ['bri', 'brightness (%)'], ['vol', 'volume (%)']]);
@@ -216,7 +247,7 @@ export const labelOf = <V extends string>(list: Opt<V>[], v: V | undefined, fall
 
 // ------------------------------------------------------------- devices ----
 
-type Dev = Pick<Device, 'id' | 'type' | 'capabilities'> & { kind?: Device['kind']; name?: string; integration?: string; room?: string; state?: Partial<Device['state']>; zoneNames?: Record<string, string>; zoneRooms?: Record<string, string[]>; archived?: boolean };
+type Dev = Pick<Device, 'id' | 'type' | 'capabilities'> & { kind?: Device['kind']; name?: string; integration?: string; room?: string; state?: Partial<Device['state']>; zoneNames?: Record<string, string>; zoneRooms?: Record<string, string[]>; archived?: boolean; hidden?: boolean; adapter?: string; canAnnounce?: boolean; announceTrim?: number };
 const has = (d: { capabilities?: string[] }, c: string) => (d.capabilities ?? []).includes(c);
 const isPlayerType = (t: string | undefined) => t === 'media' || t === 'tv';
 
@@ -984,6 +1015,9 @@ export interface Ctx {
   other?: string;
   /** The home's clock, for "once". */
   now?: string;
+  /** Every speaker an announcement plays on to start with, and what it plays (the adhan, while prayer times are on). */
+  speakers?: string[];
+  announceMedia?: string;
 }
 
 export function newTrigger(kind: Trigger['kind'], c: Ctx): Trigger {
@@ -1027,6 +1061,7 @@ export function newAction(kind: Action['kind'], c: Ctx): Action {
     case 'repeat': return { kind, times: 2, actions: [] };
     case 'run': return { kind, automation: c.other ?? '' };
     case 'stop': return { kind };
+    case 'announce': return { kind, media: c.announceMedia ?? '', vol: 20, targets: Object.fromEntries((c.speakers ?? []).map(id => [id, {}])), pause: [], restore: true };
   }
 }
 
@@ -1120,7 +1155,7 @@ export function bodyOf(d: Draft): Draft {
 export const sameDraft = (a: Draft, b: Draft) => JSON.stringify(bodyOf(a)) === JSON.stringify(bodyOf(b));
 
 /** The context for new parts, from the home. */
-export function ctxOf(o: { devices: Dev[]; sources: { name: string }[]; music?: MusicItem[]; modes: { id: string }[]; overlays: { id: string }[]; automations: { id: string }[]; rooms?: Pick<Room, 'id'>[]; self?: string | null; now?: string }): Ctx {
+export function ctxOf(o: { devices: Dev[]; sources: { name: string }[]; music?: MusicItem[]; modes: { id: string }[]; overlays: { id: string }[]; automations: { id: string }[]; rooms?: Pick<Room, 'id'>[]; self?: string | null; now?: string; prayer?: { on: boolean; adhan?: { media?: string } } | null }): Ctx {
   const act = o.devices.find(canSet);
   // Room triggers and conditions start on the first room with a camera or sensor in it, else the first room.
   const rooms = o.rooms ?? [];
@@ -1130,6 +1165,7 @@ export function ctxOf(o: { devices: Dev[]; sources: { name: string }[]; music?: 
     device: o.devices[0]?.id, actDevice: act?.id, actCommand: act ? firstCommand(act, o.sources, o.music) : undefined,
     rampDevice: ramp?.id, rampField: ramp ? (has(ramp, 'brightness') ? 'bri' : has(ramp, 'volume') ? 'vol' : 'target') : undefined,
     mode: o.modes[0]?.id, overlay: o.overlays[0]?.id, room, other: o.automations.find(a => a.id !== o.self)?.id, now: o.now,
+    speakers: announceSpeakers(o.devices).map(d => d.id), announceMedia: (o.prayer?.on && o.prayer.adhan?.media) || '',
   };
 }
 /** Can this device ramp this field? */
@@ -1146,6 +1182,10 @@ export interface Names {
   overlays: { id: string; name: string }[];
   automations: { id: string; name: string }[];
   now?: string;
+  /** For announcements: clips and built-in recordings by name, and speaker groups' members. */
+  clips?: { id: string; name: string }[];
+  adhans?: { id: string; title: string }[];
+  speakerGroups?: { deviceId: string; members: string[] }[];
 }
 const nm = (l: { id: string; name: string }[], id: string | undefined) => (id ? l.find(x => x.id === id)?.name ?? id : '');
 const dn = (n: Names, id: string) => pseudoLabel(id, n.rooms) ?? (id ? n.devices.find(d => d.id === id)?.name ?? id : 'a device');
@@ -1208,6 +1248,7 @@ export function actionText(a: Action, n: Names): string {
     case 'repeat': return `${a.times} times: ${list(a.actions)}`;
     case 'run': return `run ${nm(n.automations, a.automation) || 'another automation'}`;
     case 'stop': return 'stop';
+    case 'announce': return announceWords(a, n);
   }
 }
 
@@ -1385,3 +1426,149 @@ export const EXAMPLES = [
   ['person', 'Everything off when the last person leaves'],
   ['timer', 'Once: the air conditioner off at 15:00 today'],
 ] as const;
+
+// -------------------------------------------------------- announcements ----
+
+/** The five daily prayers (sunrise is a time, not a prayer): what "every prayer time" means. */
+export const FIVE_PRAYERS: Prayer[] = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'];
+export const PRAYER_NAMES: Record<Prayer, string> = { fajr: 'Fajr', sunrise: 'Sunrise', dhuhr: 'Dhuhr', asr: 'Asr', maghrib: 'Maghrib', isha: 'Isha' };
+
+/**
+ * The choices a time picker offers: prayer times only while prayer times are on, or when the time already is one
+ * (it keeps working, and stays editable).
+ */
+export function rhythmChoices(prayerOn: boolean, cur?: Rhythm): Opt[] {
+  return prayerOn || cur?.kind === 'prayer' ? RHYTHMS : RHYTHMS.filter(o => !o.v.startsWith('prayer:'));
+}
+
+/** Is this trigger the prayer's own time (no offset)? A hub trigger for 'all' is every one of them. */
+const atPrayer = (t: Trigger, p: Prayer) => t.kind === 'time' && t.at.kind === 'prayer' && ((t.at.prayer as string) === 'all' || t.at.prayer === p) && !t.at.offsetMin;
+/** The five prayers that don't start it yet. */
+export const missingPrayers = (triggers: Trigger[]): Prayer[] => FIVE_PRAYERS.filter(p => !triggers.some(t => atPrayer(t, p)));
+/** "Every prayer time": a time trigger for each of the five that isn't there yet. */
+export function withEveryPrayer(triggers: Trigger[]): Trigger[] {
+  return [...triggers, ...missingPrayers(triggers).map((prayer): Trigger => ({ kind: 'time', at: { kind: 'prayer', prayer } }))];
+}
+
+/** The speakers an announcement can play on, as the hub marks them, that aren't hidden or archived. */
+export const announceSpeakers = <D extends Dev>(devices: D[]): D[] => devices.filter(d => d.canAnnounce && !d.hidden && !d.archived);
+/** A Kova speaker group (it stands for its speakers). */
+export const isSpeakerGroup = (d: Pick<Dev, 'adapter'> | undefined) => d?.adapter === 'groups';
+/** A speaker's announcement loudness, in % of the level asked for. */
+export const trimOf = (d: { announceTrim?: number } | undefined) => d?.announceTrim ?? 100;
+/** The volume a speaker plays a level at: the level × its loudness, at least 1% unless the level is 0. */
+export function calibratedVol(level: number, trim = 100): number {
+  if (!(level > 0)) return 0;
+  return Math.min(100, Math.max(1, Math.round(level * trim / 100)));
+}
+/** The level a target plays at, as the owner thinks of it: its own, else the step's. */
+export const targetLevel = (a: Pick<AnnounceAction, 'vol' | 'targets'>, id: string) => a.targets[id]?.vol ?? a.vol;
+
+/** The speakers behind a target: a group's members, or the speaker itself. */
+export function targetSpeakers<D extends Dev>(id: string, devices: D[], groups: { deviceId: string; members: string[] }[] = []): D[] {
+  const g = groups.find(x => x.deviceId === id);
+  if (g) return g.members.map(m => devices.find(d => d.id === m)).filter((d): d is D => !!d);
+  const d = devices.find(x => x.id === id);
+  return d && !isSpeakerGroup(d) ? [d] : [];
+}
+
+/** Players worth pausing while it plays: ones that can pause and aren't speakers it plays on (a Helix box, a TV). */
+export function pauseChoices<D extends Dev>(devices: D[], cur: string[] = []): D[] {
+  return devices.filter(d => cur.includes(d.id) || (has(d, 'pause') && !d.canAnnounce && !isSpeakerGroup(d) && !d.hidden && !d.archived));
+}
+
+export const SONG_KEY = 'song', URL_KEY = 'url';
+/** Which choice an announcement's media is: a Helix song, a web address, or the value itself (a source, clip or recording). */
+export function announceMediaKey(v: string | undefined): string {
+  if (!v) return '';
+  if (v.startsWith('Song: ')) return SONG_KEY;
+  if (/^https?:\/\//i.test(v)) return URL_KEY;
+  return v;
+}
+/** The media for a choice, keeping what was typed where the choice takes text. */
+export function announceMediaFromKey(k: string, prev?: string): string {
+  if (k === SONG_KEY) return prev?.startsWith('Song: ') ? prev : 'Song: ';
+  if (k === URL_KEY) return prev && /^https?:\/\//i.test(prev) ? prev : 'https://';
+  return k;
+}
+/** What plays, by name: a source as it is, a clip's and a recording's name, "Title (Helix)", a web address's file or host. */
+export function announceMediaName(v: string | undefined, n: { clips?: { id: string; name: string }[]; adhans?: { id: string; title: string }[] }): string {
+  if (!v) return '';
+  if (v.startsWith('clip:')) return n.clips?.find(c => `clip:${c.id}` === v || c.id === v)?.name ?? 'a clip (gone)';
+  if (v.startsWith('adhan:')) return n.adhans?.find(a => a.id === v)?.title ?? v.slice(6).replace(/^./, c => c.toUpperCase());
+  if (v.startsWith('Song: ')) return `${v.slice(6).trim() || '…'} (Helix)`;
+  if (/^https?:\/\//i.test(v)) {
+    try {
+      const u = new URL(v);
+      const last = u.pathname.split('/').filter(Boolean).pop();
+      return last ? decodeURIComponent(last) : u.host || v;
+    } catch { return v; }
+  }
+  return v;
+}
+
+/** What the announce editor checks, from the home. */
+export interface AnnounceHome {
+  devices: Dev[];
+  overlays: { id: string }[];
+  clips?: { id: string; name: string }[];
+}
+/** What plays, checked as it's typed. */
+export function announceMediaProblem(v: string | undefined, h: Pick<AnnounceHome, 'clips'>): string | undefined {
+  if (!v?.trim()) return 'Choose what to play';
+  if (v.startsWith('Song: ') && !v.slice(6).trim()) return 'Type the song’s title';
+  if (/^https?:\/\//i.test(v) && !/^https?:\/\/[^\s/]+\S*$/i.test(v)) return 'Use a whole http(s) address';
+  if (v.startsWith('clip:') && h.clips && !h.clips.some(c => `clip:${c.id}` === v)) return 'That clip is gone: choose another';
+  return undefined;
+}
+/** What's wrong with an announce step, as the hub would say (hub engine/automation-check.ts), or nothing. */
+export function announceProblem(a: AnnounceAction, h: AnnounceHome): string | undefined {
+  const m = announceMediaProblem(a.media, h);
+  if (m) return m;
+  for (const [k, v] of Object.entries(a.mediaFor ?? {})) {
+    const p = v === undefined ? undefined : announceMediaProblem(v, h);
+    if (p) return `${PRAYER_NAMES[k as Prayer] ?? k}: ${p.charAt(0).toLowerCase()}${p.slice(1)}`;
+  }
+  if (!(a.vol >= 0 && a.vol <= 100)) return 'The level is from 0 to 100%.';
+  const ids = Object.keys(a.targets);
+  if (!ids.length) return 'Add at least one speaker.';
+  for (const id of ids) {
+    const d = h.devices.find(x => x.id === id);
+    if (!d) return `${id} is gone: remove it.`;
+    if (!d.canAnnounce && !isSpeakerGroup(d)) return `${d.name ?? id} isn’t a speaker.`;
+    const t = a.targets[id]!;
+    if (t.vol != null && !(t.vol >= 0 && t.vol <= 100)) return `${d.name ?? id}: the level is from 0 to 100%.`;
+    if ((t.skipWhile ?? []).some(o => !h.overlays.some(x => x.id === o))) return `${d.name ?? id}: an overlay it skips for is gone.`;
+  }
+  if (ids.every(id => a.targets[id]!.off)) return 'Turn at least one speaker on.';
+  for (const id of a.pause ?? []) {
+    const d = h.devices.find(x => x.id === id);
+    if (!d) return `${id} is gone: take it out of Pause.`;
+    if (!has(d, 'pause')) return `${d.name ?? id} can’t pause.`;
+  }
+  if (a.maxSec != null && !(a.maxSec >= 5 && a.maxSec <= 1800)) return 'At most takes 5 seconds to 30 minutes.';
+  return undefined;
+}
+/** The first announce step with a problem, at any depth: checked before saving. */
+export function announceSaveProblem(l: Action[], h: AnnounceHome): string | undefined {
+  for (const a of l) {
+    const p = a.kind === 'announce' ? announceProblem(a, h)
+      : a.kind === 'if' ? announceSaveProblem(a.then ?? [], h) ?? announceSaveProblem(a.else ?? [], h)
+        : a.kind === 'repeat' ? announceSaveProblem(a.actions ?? [], h) : undefined;
+    if (p) return p;
+  }
+  return undefined;
+}
+
+/** An announce step in one line: "announce Beautiful adhan on 6 speakers at 15%, pausing Lounge box, then back to what they played". */
+export function announceWords(a: AnnounceAction, n: Names): string {
+  const what = a.media ? announceMediaName(a.media, n) : 'something (choose what to play)';
+  const fajr = a.mediaFor?.fajr ? ` (Fajr: ${announceMediaName(a.mediaFor.fajr, n)})` : '';
+  const size = (id: string) => n.speakerGroups?.find(g => g.deviceId === id)?.members.length ?? 1;
+  const ids = Object.keys(a.targets), on = ids.filter(id => !a.targets[id]!.off);
+  const all = ids.reduce((k, id) => k + size(id), 0), live = on.reduce((k, id) => k + size(id), 0);
+  const where = !ids.length ? 'on (add a speaker)' : !on.length ? 'on no speakers (turn one on)'
+    : all === 1 ? `on ${dn(n, on[0]!)}` : live === all ? `on ${all} speakers` : `on ${live} of ${all} speakers`;
+  const pause = a.pause?.length ? `, pausing ${a.pause.map(id => dn(n, id)).join(' and ')}` : '';
+  return `announce ${what}${fajr} ${where} at ${a.vol}%${pause}, then ${a.restore === false ? 'leave them idle' : 'back to what they played'}`;
+}

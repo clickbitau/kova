@@ -1,4 +1,4 @@
-import type { Adapter, AdapterContext, AdapterStatus } from './sdk.ts';
+import type { Adapter, AdapterContext, AdapterStatus, Clip } from './sdk.ts';
 import type { Capability, Cause, Command, CombinedDevice, Device, DeviceState } from '../model/types.ts';
 import type { Registry } from '../devices/registry.ts';
 import { FIELD_CAP } from '../util/describe.ts';
@@ -136,6 +136,45 @@ export class CombinedAdapter implements Adapter {
     // In order: switching on (and inputs) before playing, so a soundbar is awake when music starts.
     for (const m of ms) { const part = parts.get(m.id); if (part) await this.reg.command(m.id, part, via); }
     this.refresh();
+  }
+
+  // ---------------------------------------------------------- announcements --
+  // The member that plays (a soundbar's Cast side) takes the announcement; the one that switches (SmartThings) wakes it
+  // first when it was off. Putting it back is the playing member's, through its own integration.
+
+  private parts(device: Device): { media?: Device; power?: Device } {
+    const c = this.list().find(x => combinedDeviceId(x) === device.id);
+    const ms = c ? this.members(c) : [];
+    return { media: owner('media', ms), power: owner('on', ms) };
+  }
+
+  async snapshotPlayback(device: Device): Promise<unknown | null> {
+    const { media } = this.parts(device);
+    const a = media && this.reg.adapters.get(media.adapter);
+    // Without the playing member's own account, the registry puts it back by what Kova knows.
+    if (!media || !a?.snapshotPlayback || !a.restorePlayback) throw new Error('no exact account');
+    return { member: media.id, snap: await a.snapshotPlayback(media) };
+  }
+
+  async playClip(device: Device, clip: Clip, cause?: Cause): Promise<void> {
+    const { media, power } = this.parts(device);
+    if (!media) throw new Error(`${device.name} has nothing that plays`);
+    const via: Cause = { ...(cause ?? { kind: 'automation', label: 'Announcement' }), detail: `through ${device.name}` };
+    if (power && power.id !== media.id && !power.state.on) await this.reg.command(power.id, { on: true }, via, { quiet: true });
+    await this.reg.playClip(media.id, clip, media.state.vol ?? 0, via, { keepVol: true });
+    this.refresh();
+  }
+
+  async restorePlayback(device: Device, snap0: unknown | null): Promise<{ words: string }> {
+    const { media } = this.parts(device);
+    const snap = snap0 as { member: string; snap: unknown } | null;
+    if (!media) throw new Error(`${device.name} has nothing that plays`);
+    const a = this.reg.adapters.get(media.adapter);
+    if (!a?.restorePlayback) return { words: 'left as it is' };
+    const r = await a.restorePlayback(media, snap?.member === media.id ? snap.snap : null);
+    if (r.state) this.reg.setQuietly(media.id, r.state);
+    this.refresh();
+    return { words: r.words };
   }
 
   status(): AdapterStatus {

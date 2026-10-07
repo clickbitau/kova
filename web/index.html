@@ -302,6 +302,7 @@ document.write('<script src="/api/boot.js'+(t?"?token="+encodeURIComponent(t):""
 <sc-if value="{{ r.hasFields }}" hint-placeholder-val="{{ false }}"><div data-kova-afields style="display:flex;flex-wrap:wrap;gap:10px 12px;align-items:flex-start;padding-left:38px">
 <sc-for list="{{ r.fields }}" as="f" hint-placeholder-count="3">
 <sc-if value="{{ f.isSub }}" hint-placeholder-val="{{ false }}"><div style="flex:1 1 100%;font-size:11px;font-weight:800;color:#8a8781;text-transform:uppercase;letter-spacing:0.07em;margin-top:2px;margin-bottom:-4px">{{ f.label }}</div></sc-if>
+<sc-if value="{{ f.isCredit }}" hint-placeholder-val="{{ false }}"><span style="flex:1 1 100%;margin-top:-4px;font-size:12px;color:#a3a09a;line-height:1.5;overflow-wrap:anywhere">{{ f.text }} · <a href="{{ f.licenceUrl }}" target="_blank" rel="noopener">{{ f.licence }}</a> · <a href="{{ f.page }}" target="_blank" rel="noopener">Wikimedia Commons</a>{{ f.after }}</span></sc-if>
 <sc-if value="{{ f.isCtl }}" hint-placeholder-val="{{ false }}"><div data-kova-afield style="display:flex;flex-direction:column;gap:4px;flex:{{ f.flex }};min-width:{{ f.minw }};max-width:100%">
 <div style="display:flex;align-items:center;gap:4px;min-height:16px"><span style="font-size:11.5px;color:#8a8781;font-weight:600;flex:1">{{ f.label }} <span style="color:#6f6d69;font-weight:500">{{ f.unit }}</span></span><sc-if value="{{ f.removable }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ f.remove }}" aria-label="{{ f.removeLabel }}" title="{{ f.removeLabel }}" style="font:inherit;border:none;background:transparent;padding:0 2px;border-radius:5px;font-family:'Material Symbols Rounded';font-size:15px;color:#6f6d69;cursor:pointer;line-height:1" style-hover="color:#ff6b5e" style-focus-visible="outline:2px solid #f2b14c">close</button></sc-if></div>
 <sc-if value="{{ f.isSel }}" hint-placeholder-val="{{ false }}"><select value="{{ f.value }}" onChange="{{ f.set }}" aria-label="{{ f.aria }}" style="padding:9px 10px;border-radius:10px;background:#141518;border:1px solid rgba(255,255,255,0.09);color:#f1efea;font:inherit;font-size:13.5px;max-width:100%;min-width:0" style-focus="border-color:rgba(242,177,76,0.6);outline:none"><sc-for list="{{ f.options }}" as="o" hint-placeholder-count="5"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select></sc-if>
@@ -315,6 +316,8 @@ document.write('<script src="/api/boot.js'+(t?"?token="+encodeURIComponent(t):""
 <sc-if value="{{ f.isSeg }}" hint-placeholder-val="{{ false }}"><div role="group" aria-label="{{ f.label }}" style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ f.items }}" as="c" hint-placeholder-count="3"><button type="button" onClick="{{ c.pick }}" aria-pressed="{{ c.pressed }}" style="font:inherit;font-size:12.5px;font-weight:700;padding:7px 12px;border-radius:999px;cursor:pointer;background:{{ c.bg }};color:{{ c.fg }};border:1px solid {{ c.bd }}" style-focus-visible="outline:2px solid #f2b14c;outline-offset:1px">{{ c.label }}</button></sc-for></div></sc-if>
 <sc-if value="{{ f.isAdd }}" hint-placeholder-val="{{ false }}"><select value="" onChange="{{ f.set }}" aria-label="{{ f.aria }}" style="font:inherit;font-size:12.5px;font-weight:700;color:#f2b14c;background:transparent;border:1px dashed rgba(242,177,76,0.35);border-radius:10px;padding:8px 10px;cursor:pointer;max-width:100%" style-focus="border-color:#f2b14c;outline:none;background:rgba(242,177,76,0.06)"><option value="">{{ f.ph }}</option><sc-for list="{{ f.options }}" as="o" hint-placeholder-count="4"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select></sc-if>
 <sc-if value="{{ f.isNoteF }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;color:#a3a09a;line-height:1.45">{{ f.text }}</span></sc-if>
+<sc-if value="{{ f.isBtn }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ f.press }}" style="font:inherit;font-size:12.5px;font-weight:700;color:#d8d5cf;background:#141518;border:1px solid rgba(255,255,255,0.09);border-radius:10px;padding:8px 12px;cursor:pointer;display:flex;align-items:center;gap:6px;max-width:100%;text-align:left" style-hover="background:#232428" style-focus-visible="outline:2px solid #f2b14c;outline-offset:1px"><span style="font-family:'Material Symbols Rounded';font-size:16px;flex:none;color:#a3a09a">{{ f.icon }}</span><span style="min-width:0;overflow-wrap:anywhere">{{ f.text }}</span></button></sc-if>
+<sc-if value="{{ f.isFile }}" hint-placeholder-val="{{ false }}"><label style="position:relative;font-size:12.5px;font-weight:700;color:#f2b14c;border:1px dashed rgba(242,177,76,0.35);border-radius:10px;padding:8px 12px;cursor:pointer;display:flex;align-items:center;gap:6px;max-width:100%;opacity:{{ f.op }}" style-hover="background:rgba(242,177,76,0.06)"><span style="font-family:'Material Symbols Rounded';font-size:16px;flex:none;animation:{{ f.anim }}">{{ f.fileIcon }}</span><span style="min-width:0;overflow-wrap:anywhere">{{ f.text }}</span><input type="file" accept="{{ f.accept }}" onChange="{{ f.pick }}" aria-label="{{ f.aria }}" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none"></label></sc-if>
 <sc-if value="{{ f.hasHint }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;color:#6f6d69">{{ f.hint }}</span></sc-if>
 </div></sc-if>
 </sc-for>
@@ -474,7 +477,7 @@ document.write('<script src="/api/boot.js'+(t?"?token="+encodeURIComponent(t):""
 <div style="display:flex;gap:8px"><input type="password" value="{{ st.mkDraft }}" onInput="{{ st.mkSet }}" placeholder="{{ st.mkPlaceholder }}" aria-label="Google Maps API key" autocomplete="off" spellcheck="false" style="padding:9px 11px;border-radius:10px;background:#16171a;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13.5px;flex:1;min-width:0"><div onClick="{{ st.mkSave }}" role="button" style="padding:9px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;background:#2a2b2f">Save key</div></div>
 <span style="font-size:11.5px;color:#8a8781;line-height:1.5">Address search works without one (OpenStreetMap). With a key, Google suggests addresses as you type. It stays on the hub: this page only ever sees its last 4 characters. In Google Cloud, enable Places API (New), Geocoding API and Maps Static API for the key, and restrict it to those.</span></div>
 <div style="display:flex;gap:10px;flex-wrap:wrap"><label style="display:flex;flex-direction:column;gap:5px;flex:1 1 220px"><span style="font-size:12px;color:#8a8781">Timezone</span><select value="{{ st.tz }}" onChange="{{ st.setTz }}" style="padding:9px 11px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13.5px"><sc-for list="{{ st.tzOptions }}" as="o" hint-placeholder-count="5"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select></label>
-<label style="display:flex;flex-direction:column;gap:5px;flex:1 1 220px"><span style="font-size:12px;color:#8a8781">Prayer times</span><select value="{{ st.method }}" onChange="{{ st.setMethod }}" style="padding:9px 11px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13.5px"><sc-for list="{{ st.methodOptions }}" as="o" hint-placeholder-count="5"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select></label></div></div>
+<div style="display:flex;flex-direction:column;gap:5px;flex:1 1 220px;min-width:0"><span style="font-size:12px;color:#8a8781">Prayer times</span><div onClick="{{ st.openPrayer }}" role="button" style="padding:9px 11px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font-size:13.5px;display:flex;align-items:center;gap:8px;cursor:pointer;min-width:0" style-hover="background:#232428"><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ st.prayerLabel }}</span><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#6f6d69;flex:none">chevron_right</span></div></div></div></div>
 <div data-kova-rooms style="display:flex;flex-direction:column;gap:12px;padding:18px;border-radius:18px;background:#16171a"><div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:16px;font-weight:700">Rooms</span><span style="font-size:12.5px;color:#a3a09a;line-height:1.5">The rooms of your home, in the order Kova shows them. Open one to rename it, change its icon or delete it.</span></div><div style="display:flex;flex-direction:column"><sc-for list="{{ rm.rooms }}" as="ro" hint-placeholder-count="4"><div style="display:flex;align-items:center;gap:8px;padding:8px 2px;border-top:1px solid rgba(255,255,255,0.05)"><div onClick="{{ ro.edit }}" style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;cursor:pointer;padding:4px 0"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#f2b14c">{{ ro.icon }}</span><div style="display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font-size:14px;font-weight:600">{{ ro.name }}</span><span style="font-size:12px;color:#a3a09a">{{ ro.sub }}</span></div></div><div onClick="{{ ro.up }}" role="button" aria-label="Move up" style="width:32px;height:32px;flex:none;border-radius:10px;background:#1c1d20;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:{{ ro.upOp }}"><span style="font-family:'Material Symbols Rounded';font-size:18px">arrow_upward</span></div><div onClick="{{ ro.down }}" role="button" aria-label="Move down" style="width:32px;height:32px;flex:none;border-radius:10px;background:#1c1d20;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:{{ ro.downOp }}"><span style="font-family:'Material Symbols Rounded';font-size:18px">arrow_downward</span></div><div onClick="{{ ro.edit }}" role="button" aria-label="Edit room" style="width:32px;height:32px;flex:none;border-radius:10px;background:#1c1d20;display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:18px">edit</span></div></div></sc-for><span style="font-size:12.5px;color:#a3a09a">{{ rm.noRooms }}</span></div><div style="display:flex;gap:8px"><input value="{{ rm.newRoom }}" onInput="{{ rm.setNewRoom }}" placeholder="New room, e.g. Hallway" aria-label="New room" style="padding:9px 11px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13.5px;flex:1;min-width:0"><div onClick="{{ rm.addRoom }}" style="padding:9px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;background:#f2b14c;color:#1a1408">Add room</div></div><sc-if value="{{ rm.hasLoose }}" hint-placeholder-val="{{ false }}"><div onClick="{{ rm.goLoose }}" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;background:rgba(242,177,76,0.08);cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#f2b14c">help</span><span style="font-size:12.5px;flex:1;line-height:1.45">{{ rm.looseNote }}</span><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#6f6d69">chevron_right</span></div></sc-if><div style="display:flex;flex-direction:column;gap:4px;padding-top:8px"><div style="display:flex;align-items:center;gap:10px"><span style="font-size:13.5px;font-weight:700;flex:1">Groups of rooms</span><div onClick="{{ rm.newGroup }}" style="padding:9px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;background:#2a2b2f;padding:7px 12px;font-size:12.5px;background:#1c1d20">New group</div></div><span style="font-size:12px;color:#a3a09a;line-height:1.45">Like Upstairs or Bedrooms, so “turn off the upstairs lights” works in Ask Kova.</span><sc-for list="{{ rm.groups }}" as="gr" hint-placeholder-count="1"><div onClick="{{ gr.edit }}" style="display:flex;align-items:center;gap:12px;padding:12px 2px;border-top:1px solid rgba(255,255,255,0.05);cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#7cb8f0">select_all</span><div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:14px;font-weight:600">{{ gr.name }}</span><span style="font-size:12px;color:#a3a09a">{{ gr.rooms }}</span></div><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#6f6d69">chevron_right</span></div></sc-for><span style="font-size:12.5px;color:#8a8781">{{ rm.noGroups }}</span></div></div>
 <div style="display:flex;flex-direction:column;gap:12px;padding:18px;border-radius:18px;background:#16171a"><div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:16px;font-weight:700">People and presence</span><span style="font-size:12.5px;color:#a3a09a;line-height:1.5">Who lives here, whether they’re home, and what tells Kova.</span></div><div style="display:flex;flex-direction:column"><sc-for list="{{ st.people }}" as="pp" hint-placeholder-count="2"><div style="display:flex;align-items:center;gap:12px;padding:12px 2px;border-top:1px solid rgba(255,255,255,0.05)"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:{{ pp.fg }}">person</span><div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:14px;font-weight:600">{{ pp.name }} <span style="font-weight:500;color:{{ pp.fg }}">· {{ pp.state }}</span></span><span style="font-size:12px;color:#a3a09a">{{ pp.via }}</span></div><span onClick="{{ pp.rename }}" style="font-size:12.5px;font-weight:700;color:#d8d5cf;cursor:pointer">Rename</span><span onClick="{{ pp.remove }}" style="font-size:12.5px;font-weight:700;color:#ff6b5e;cursor:pointer">Remove</span></div></sc-for>
 <div onClick="{{ st.addPerson }}" style="display:flex;align-items:center;gap:12px;padding:12px 2px;border-top:1px solid rgba(255,255,255,0.05);cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#f2b14c">person_add</span><div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:14px;font-weight:600">Add a person</span><span style="font-size:12px;color:#a3a09a;line-height:1.4">Someone who lives here</span></div><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#6f6d69">chevron_right</span></div><div onClick="{{ st.presenceSetup }}" style="display:flex;align-items:center;gap:12px;padding:12px 2px;border-top:1px solid rgba(255,255,255,0.05);cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#7cb8f0">router</span><div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:14px;font-weight:600">How Kova knows who’s home</span><span style="font-size:12px;color:#a3a09a;line-height:1.4">Warden or your router, phones, network checks</span></div><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#6f6d69">chevron_right</span></div></div></div>
@@ -715,6 +718,8 @@ document.write('<script src="/api/boot.js'+(t?"?token="+encodeURIComponent(t):""
 <div onClick="{{ pl.toggle }}" style="width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:20px;font-variation-settings:'FILL' 1">{{ pl.playIcon }}</span></div>
 </div>
 </sc-for>
+<sc-if value="{{ annLoud.has }}" hint-placeholder-val="{{ true }}"><div onClick="{{ annLoud.go }}" role="button" style="display:flex;align-items:center;gap:14px;padding:13px 16px;border-top:1px solid rgba(255,255,255,0.05);cursor:pointer" style-hover="background:#1c1d21"><div style="width:36px;height:36px;flex:none;border-radius:10px;display:flex;align-items:center;justify-content:center;background:#232428;color:#d8d5cf"><span style="font-family:'Material Symbols Rounded';font-size:20px">tune</span></div><div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:14px;font-weight:700">Speaker loudness</span><span style="font-size:12px;color:#a3a09a;line-height:1.4">{{ annLoud.sub }}</span></div><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#6f6d69;flex:none">chevron_right</span></div></sc-if>
+<sc-if value="{{ annLoud.hasClips }}" hint-placeholder-val="{{ true }}"><div onClick="{{ annLoud.goClips }}" role="button" style="display:flex;align-items:center;gap:14px;padding:13px 16px;border-top:1px solid rgba(255,255,255,0.05);cursor:pointer" style-hover="background:#1c1d21"><div style="width:36px;height:36px;flex:none;border-radius:10px;display:flex;align-items:center;justify-content:center;background:#232428;color:#d8d5cf"><span style="font-family:'Material Symbols Rounded';font-size:20px">library_music</span></div><div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:14px;font-weight:700">Clips for announcements</span><span style="font-size:12px;color:#a3a09a;line-height:1.4">{{ annLoud.clipsSub }}</span></div><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#6f6d69;flex:none">chevron_right</span></div></sc-if>
 <div style="display:flex;align-items:center;gap:10px;padding:13px 16px;border-top:1px solid rgba(255,255,255,0.05);font-size:13px;color:#a3a09a"><span style="font-family:'Material Symbols Rounded';font-size:18px">movie</span>Plex at 10.10.10.101 is managed in Helix</div>
 </div>
 </div>
@@ -861,6 +866,9 @@ document.write('<script src="/api/boot.js'+(t?"?token="+encodeURIComponent(t):""
 <div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:13px;font-weight:600">Colour</span><div style="display:grid;grid-template-columns:repeat(8,1fr);gap:8px">
 <sc-for list="{{ dr.colors }}" as="c" hint-placeholder-count="8"><div onClick="{{ c.pick }}" style="aspect-ratio:1;border-radius:50%;background:{{ c.bg }};outline:{{ c.ring }};outline-offset:2px;cursor:pointer"></div></sc-for>
 </div></div>
+</sc-if>
+<sc-if value="{{ dr.canAnnounce }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:8px"><div style="display:flex;justify-content:space-between;gap:12px;font-size:13px;font-weight:600"><span>Announcement loudness</span><span style="color:#a3a09a">{{ dr.trimLabel }}</span></div><input type="range" min="20" max="200" step="5" value="{{ dr.trim }}" onChange="{{ dr.setTrim }}" aria-label="Announcement loudness" style="width:100%"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:4px 12px;flex-wrap:wrap;font-size:12px;color:#8a8781;line-height:1.45"><span style="flex:1 1 180px;min-width:0">{{ dr.trimNote }}</span><span onClick="{{ dr.openLoud }}" role="button" style="font-weight:700;color:#f2b14c;cursor:pointer;white-space:nowrap">Speaker loudness</span></div></div>
 </sc-if>
 <sc-if value="{{ dr.isPurifier }}" hint-placeholder-val="{{ false }}">
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div style="display:flex;flex-direction:column;gap:4px;padding:14px;border-radius:14px;background:#1c1d20"><span style="font-size:12px;color:#a3a09a">Air</span><span style="font-size:18px;font-weight:700;color:{{ dr.pAirFg }}">{{ dr.pAir }}</span><span style="font-size:11.5px;color:#8a8781">{{ dr.pPm }}</span></div>
@@ -1032,6 +1040,47 @@ document.write('<script src="/api/boot.js'+(t?"?token="+encodeURIComponent(t):""
 </div>
 </sc-if>
 
+<sc-if value="{{ sh.open }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ sh.close }}" style="position:fixed;inset:0;background:rgba(0,0,0,0.55)"></div>
+<div data-kova-sheet role="dialog" aria-label="{{ sh.title }}" style="position:fixed;top:0;right:0;bottom:0;width:min(480px,100vw);background:#141517;border-left:1px solid rgba(255,255,255,0.08);padding:24px;display:flex;flex-direction:column;gap:18px;overflow:auto;box-sizing:border-box">
+<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px"><div style="display:flex;align-items:center;gap:12px;min-width:0"><sc-if value="{{ sh.hasBack }}" hint-placeholder-val="{{ false }}"><div onClick="{{ sh.back }}" role="button" aria-label="Back" style="width:34px;height:34px;flex:none;border-radius:50%;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px">arrow_back</span></div></sc-if><div style="width:40px;height:40px;flex:none;border-radius:12px;background:#232428;display:flex;align-items:center;justify-content:center;color:#d8d5cf"><span style="font-family:'Material Symbols Rounded';font-size:21px">{{ sh.icon }}</span></div><div style="display:flex;flex-direction:column;gap:3px;min-width:0"><span style="font-size:12px;color:#a3a09a">{{ sh.kicker }}</span><span style="font-size:22px;font-weight:700;overflow-wrap:anywhere">{{ sh.title }}</span></div></div><div onClick="{{ sh.close }}" role="button" aria-label="Close" style="width:34px;height:34px;flex:none;border-radius:50%;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px">close</span></div></div>
+<span style="font-size:13px;color:#a3a09a;line-height:1.5;margin-top:-8px">{{ sh.intro }}</span>
+
+<sc-if value="{{ sh.isLoud }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:8px;padding:14px;border-radius:14px;background:#1c1d20"><div style="display:flex;justify-content:space-between;gap:12px;font-size:13px;font-weight:600"><span>Test at</span><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#a3a09a">{{ sh.testLabel }}</span></div><input type="range" min="5" max="100" step="5" value="{{ sh.test }}" onChange="{{ sh.setTest }}" aria-label="Test level" style="width:100%;margin:0"><span style="font-size:11.5px;color:#6f6d69;line-height:1.45">The level an announcement asks for. Each speaker plays it at that × its loudness.</span></div>
+<sc-for list="{{ sh.speakers }}" as="sp" hint-placeholder-count="3"><div style="display:flex;flex-direction:column;gap:10px;padding:14px;border-radius:14px;background:#1c1d20">
+<div style="display:flex;align-items:flex-start;flex-wrap:wrap;gap:4px 10px"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#7cb8f0;flex:none">{{ sp.icon }}</span><div style="display:flex;flex-direction:column;gap:2px;flex:1 1 110px;min-width:0"><span style="font-size:14px;font-weight:700;overflow-wrap:anywhere">{{ sp.name }}</span><span style="font-size:12px;color:#a3a09a;overflow-wrap:anywhere">{{ sp.room }}</span></div><span style="flex:none;margin-left:auto;font-size:12.5px;font-weight:700;color:#f7cb82;white-space:nowrap">{{ sp.plays }}</span></div>
+<div style="display:flex;flex-direction:column;gap:6px"><div style="display:flex;justify-content:space-between;gap:12px;font-size:12px;color:#8a8781"><span>Loudness</span><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#f1efea">{{ sp.trimLabel }}</span></div><input type="range" min="20" max="200" step="5" value="{{ sp.trim }}" onChange="{{ sp.setTrim }}" aria-label="{{ sp.aria }}" style="width:100%;margin:0"></div>
+<div style="display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap"><div onClick="{{ sp.test }}" role="button" style="padding:8px 14px;border-radius:10px;background:rgba(255,255,255,0.08);color:#f1efea;font-size:13px;font-weight:700;cursor:{{ sp.cursor }};opacity:{{ sp.btnOp }};display:flex;align-items:center;gap:6px;white-space:nowrap;flex:none"><span style="font-family:'Material Symbols Rounded';font-size:17px;animation:{{ sp.anim }}">{{ sp.btnIcon }}</span>{{ sp.btnLabel }}</div><span role="status" style="font-size:12.5px;color:{{ sp.msgFg }};line-height:1.4;flex:1 1 120px;min-width:0;overflow-wrap:anywhere">{{ sp.msg }}</span><sc-if value="{{ sp.changed }}" hint-placeholder-val="{{ false }}"><span onClick="{{ sp.reset }}" role="button" style="font-size:12.5px;font-weight:700;color:#a3a09a;cursor:pointer;white-space:nowrap">Back to 100%</span></sc-if></div>
+</div></sc-for>
+<sc-if value="{{ sh.noSpeakers }}" hint-placeholder-val="{{ false }}"><div style="border-radius:16px;padding:22px;border:1px dashed rgba(255,255,255,0.14);font-size:13px;color:#a3a09a;text-align:center;line-height:1.5">No speakers that can play announcements yet. Speakers from Google Cast, Sonos or AirPlay show up here.</div></sc-if>
+</sc-if>
+
+<sc-if value="{{ sh.isPrayer }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ sh.pr.toggle }}" role="switch" aria-checked="{{ sh.pr.onAria }}" aria-label="Prayer times" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;background:#1c1d20;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#f2b14c;flex:none">mosque</span><div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:14px;font-weight:600">Prayer times</span><span style="font-size:12px;color:#a3a09a;line-height:1.45">{{ sh.pr.onSub }}</span></div><div style="flex:none;width:36px;height:22px;border-radius:11px;padding:3px;background:{{ sh.pr.track }};box-sizing:border-box"><div style="width:16px;height:16px;border-radius:8px;background:#fff;transform:{{ sh.pr.knob }};transition:transform .2s"></div></div></div>
+<sc-if value="{{ sh.pr.on }}" hint-placeholder-val="{{ false }}">
+<sc-if value="{{ sh.pr.hasTimes }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;background:#1c1d20;border-radius:14px;overflow:hidden"><span style="padding:12px 14px 4px;font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">Today</span><sc-for list="{{ sh.pr.times }}" as="pt" hint-placeholder-count="6"><div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:1px solid rgba(255,255,255,0.05)"><span style="font-size:14px;font-weight:{{ pt.weight }};color:{{ pt.fg }};flex:1;min-width:0">{{ pt.name }}</span><span style="font-size:12px;color:{{ pt.tagFg }};text-align:right">{{ pt.tag }}</span><span style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:{{ pt.fg }};flex:none">{{ pt.at }}</span></div></sc-for></div></sc-if>
+<label style="display:flex;flex-direction:column;gap:6px;min-width:0"><span style="font-size:12px;font-weight:600;color:#a3a09a">Calculation method</span><select value="{{ sh.pr.method }}" onChange="{{ sh.pr.setMethod }}" style="padding:11px 14px;border-radius:12px;border:1px solid rgba(255,255,255,0.1);background:#16171a;color:#f1efea;font-family:Manrope,sans-serif;font-size:14px;outline:none;width:100%;min-width:0"><sc-for list="{{ sh.pr.methods }}" as="o" hint-placeholder-count="4"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select></label>
+<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:600;color:#a3a09a">Asr</span><div role="group" aria-label="Asr" style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ sh.pr.madhabs }}" as="c" hint-placeholder-count="2"><button type="button" onClick="{{ c.pick }}" aria-pressed="{{ c.pressed }}" style="font:inherit;font-size:12.5px;font-weight:700;padding:7px 12px;border-radius:999px;cursor:pointer;background:{{ c.bg }};color:{{ c.fg }};border:1px solid {{ c.bd }};text-align:left" style-focus-visible="outline:2px solid #f2b14c;outline-offset:1px">{{ c.label }}</button></sc-for></div></div>
+<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;font-weight:600;color:#a3a09a">Adjustments</span><span style="font-size:11.5px;color:#6f6d69;line-height:1.45">Minutes added to or taken from each time, to match a local timetable.</span><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px"><sc-for list="{{ sh.pr.adjust }}" as="aj" hint-placeholder-count="6"><label style="display:flex;flex-direction:column;gap:5px;min-width:0"><span style="font-size:11px;font-weight:600;color:#8a8781">{{ aj.name }}</span><input type="number" min="-30" max="30" step="1" value="{{ aj.value }}" onChange="{{ aj.set }}" onBlur="{{ aj.save }}" onKeyDown="{{ aj.key }}" style="padding:8px 10px;border-radius:9px;border:1px solid rgba(255,255,255,0.1);background:#16171a;color:#f1efea;font-family:Manrope,sans-serif;font-size:13px;outline:none;width:100%;min-width:0"></label></sc-for></div></div>
+<label style="display:flex;flex-direction:column;gap:6px;min-width:0"><span style="font-size:12px;font-weight:600;color:#a3a09a">Call to prayer for announcements</span><select value="{{ sh.pr.adhan }}" onChange="{{ sh.pr.setAdhan }}" style="padding:11px 14px;border-radius:12px;border:1px solid rgba(255,255,255,0.1);background:#16171a;color:#f1efea;font-family:Manrope,sans-serif;font-size:14px;outline:none;width:100%;min-width:0"><sc-for list="{{ sh.pr.adhanOpts }}" as="o" hint-placeholder-count="4"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select></label>
+<sc-for list="{{ sh.pr.adhanCredit }}" as="cr" hint-placeholder-count="0"><span style="font-size:12px;color:#a3a09a;line-height:1.5;overflow-wrap:anywhere;margin-top:-10px">{{ cr.text }} · <a href="{{ cr.licenceUrl }}" target="_blank" rel="noopener">{{ cr.licence }}</a> · <a href="{{ cr.page }}" target="_blank" rel="noopener">Wikimedia Commons</a>{{ cr.after }}</span></sc-for>
+<label style="display:flex;flex-direction:column;gap:6px;min-width:0"><span style="font-size:12px;font-weight:600;color:#a3a09a">At Fajr</span><select value="{{ sh.pr.fajr }}" onChange="{{ sh.pr.setFajr }}" style="padding:11px 14px;border-radius:12px;border:1px solid rgba(255,255,255,0.1);background:#16171a;color:#f1efea;font-family:Manrope,sans-serif;font-size:14px;outline:none;width:100%;min-width:0"><sc-for list="{{ sh.pr.fajrOpts }}" as="o" hint-placeholder-count="4"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select></label>
+<sc-for list="{{ sh.pr.fajrCredit }}" as="cr" hint-placeholder-count="0"><span style="font-size:12px;color:#a3a09a;line-height:1.5;overflow-wrap:anywhere;margin-top:-10px">{{ cr.text }} · <a href="{{ cr.licenceUrl }}" target="_blank" rel="noopener">{{ cr.licence }}</a> · <a href="{{ cr.page }}" target="_blank" rel="noopener">Wikimedia Commons</a>{{ cr.after }}</span></sc-for>
+</sc-if>
+</sc-if>
+
+<sc-if value="{{ sh.isClips }}" hint-placeholder-val="{{ false }}">
+<label style="position:relative;border:1.5px dashed rgba(255,255,255,0.16);border-radius:14px;padding:22px;display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer;text-align:center"><span style="font-family:'Material Symbols Rounded';font-size:30px;color:#f2b14c;animation:{{ sh.upAnim }}">{{ sh.upIcon }}</span><span style="font-size:14px;font-weight:600;overflow-wrap:anywhere">{{ sh.upLabel }}</span><span style="font-size:12px;color:#8a8781">{{ sh.upSub }}</span><input type="file" accept="{{ sh.accept }}" onChange="{{ sh.pick }}" aria-label="Upload a clip" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none"></label>
+<sc-if value="{{ sh.noClips }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;color:#a3a09a;line-height:1.5">No clips yet. One you upload can be picked in any announcement.</span></sc-if>
+<div style="display:flex;flex-direction:column;background:#1c1d20;border-radius:14px;overflow:hidden"><sc-for list="{{ sh.clips }}" as="c" hint-placeholder-count="2"><div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid rgba(255,255,255,0.05)"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#7cb8f0;flex:none">audio_file</span><div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:14px;font-weight:600;overflow-wrap:anywhere">{{ c.name }}</span><span style="font-size:12px;color:#a3a09a">{{ c.sub }}</span></div><div onClick="{{ c.rename }}" role="button" aria-label="Rename" title="Rename" style="width:32px;height:32px;flex:none;border-radius:10px;background:#141517;display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:18px">edit</span></div><div onClick="{{ c.remove }}" role="button" aria-label="Delete" title="Delete" style="width:32px;height:32px;flex:none;border-radius:10px;background:#141517;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#ff8a7e"><span style="font-family:'Material Symbols Rounded';font-size:18px">delete</span></div></div></sc-for></div>
+</sc-if>
+
+<sc-if value="{{ sh.hasErr }}" hint-placeholder-val="{{ false }}"><div role="alert" style="display:flex;gap:10px;padding:12px 14px;border-radius:12px;background:rgba(255,107,94,0.1);color:#ff6b5e;font-size:13px;line-height:1.5"><span style="font-family:'Material Symbols Rounded';font-size:19px;flex:none">error</span><span style="overflow-wrap:anywhere">{{ sh.err }}</span></div></sc-if>
+<sc-if value="{{ sh.showClipsLink }}" hint-placeholder-val="{{ false }}"><div onClick="{{ sh.goClips }}" role="button" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;background:#1c1d20;cursor:pointer" style-hover="background:#232428"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#a3a09a;flex:none">library_music</span><div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:14px;font-weight:600">Clips</span><span style="font-size:12px;color:#a3a09a;line-height:1.45">{{ sh.clipsSub }}</span></div><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#6f6d69;flex:none">chevron_right</span></div></sc-if>
+</div>
+</sc-if>
+
 <sc-if value="{{ toastOn }}" hint-placeholder-val="{{ false }}">
 <div data-kova-toast style="position:fixed;left:50%;bottom:28px;transform:translateX(-50%);display:flex;align-items:center;gap:16px;padding:12px 14px 12px 18px;border-radius:14px;background:#f1efea;color:#141517;font-size:14px;font-weight:600;box-shadow:0 10px 30px rgba(0,0,0,0.4)">
 <span>{{ toastText }}</span>
@@ -1046,7 +1095,7 @@ const KOVA_TOKEN=(()=>{try{return localStorage.getItem('kova_token')||''}catch(e
 async function api(method,path,body){
   const r=await fetch(path,{method,headers:{...(body!==undefined?{'content-type':'application/json'}:{}),...(KOVA_TOKEN?{authorization:'Bearer '+KOVA_TOKEN}:{})},body:body===undefined?undefined:JSON.stringify(body)});
   const j=await r.json().catch(()=>({}));
-  if(!r.ok)throw new Error(j.error||r.statusText);
+  if(!r.ok){const e=new Error(j.error||r.statusText);e.status=r.status;e.body=j;throw e}
   return j;
 }
 // Ask Kova: the engine line under the title, a reply's footer icon, and what a job is doing (mobile/src/logic/ask.ts).
@@ -1183,6 +1232,35 @@ const stampWordsC=(st,now)=>{if(!STAMP_RE.test(st||''))return st||'';const d=st.
   if(d===today)return`today at ${t}`;if(d===tom)return`tomorrow at ${t}`;const x=new Date(stampMs(st));return`${WDAY[x.getUTCDay()]} ${x.getUTCDate()} ${MONTH[x.getUTCMonth()]}${d.slice(0,4)!==today.slice(0,4)?' '+d.slice(0,4):''} at ${t}`};
 const cap1=s=>s?s[0].toUpperCase()+s.slice(1):s;
 const durW=s=>s>=3600&&s%3600===0?`${s/3600} h`:s>=60?`${Math.round(s/60)} min`:`${s} s`;
+// Prayer times (Integrations → Prayer times) and announcements (the automation step "announce"; hub services/prayer.ts, services/clips.ts).
+const PRAYER_NAMES={fajr:'Fajr',sunrise:'Sunrise',dhuhr:'Dhuhr',asr:'Asr',maghrib:'Maghrib',isha:'Isha'};
+const FIVE_PRAYERS=['fajr','dhuhr','asr','maghrib','isha'],PRAYER_TIMES=['fajr','sunrise','dhuhr','asr','maghrib','isha'];
+const PRAYER_METHODS=[['MuslimWorldLeague','Muslim World League'],['Egyptian','Egyptian General Authority'],['Karachi','University of Islamic Sciences, Karachi'],['UmmAlQura','Umm al-Qura, Makkah'],['Dubai','Dubai'],['MoonsightingCommittee','Moonsighting Committee'],['NorthAmerica','ISNA (North America)'],['Kuwait','Kuwait'],['Qatar','Qatar'],['Singapore','Singapore'],['Tehran','Tehran'],['Turkey','Diyanet (Turkey)']];
+const prayerOn=H=>!!(H&&H.prayer&&H.prayer.on);
+// The prayer settings as the snapshot has them (an older hub has only home.prayerMethod).
+const prayerOf=H=>{const p=(H&&H.prayer)||{};return{on:!!p.on,method:p.method||((H&&H.home)||{}).prayerMethod||'MuslimWorldLeague',methods:p.methods&&p.methods.length?p.methods:PRAYER_METHODS.map(([id,label])=>({id,label})),
+  madhab:p.madhab||'shafi',adjust:p.adjust||{},adhan:p.adhan||{},times:p.times||null,current:p.current||null,next:p.next||null}};
+// Rhythm pickers ([value,label] or {v,label}, prayer ones "prayer:…"): prayer times only while they're on, or the one already chosen.
+const rhythmKinds=(list,H,...keep)=>prayerOn(H)?list:list.filter(x=>{const v=Array.isArray(x)?x[0]:x.v;return!/^prayer:/.test(v)||keep.includes(v)});
+// The volume a speaker plays an announcement at: the level asked × its announcement loudness (100 = as asked).
+const annVol=(level,trim)=>!(level>0)?0:Math.max(1,Math.min(100,Math.round(level*(trim??100)/100)));
+const isSpkGroup=d=>!!d&&d.adapter==='groups';
+const clockIn=(ms,tz)=>{const o={hour:'2-digit',minute:'2-digit',hourCycle:'h23'};try{return new Date(ms).toLocaleTimeString('en-GB',{...o,timeZone:tz||undefined})}catch(e){return new Date(ms).toLocaleTimeString('en-GB',o)}};
+// The hub's clock now: this browser's, unless it's far from the snapshot's (a wrong clock), then the snapshot's.
+const hubNowMs=H=>{const t=H&&H.home&&H.home.now,d=t?Date.now()-t:0;return!t||(d>-6e4&&d<432e5)?Date.now():t};
+const untilW=ms=>{const m=Math.ceil(ms/6e4);return m<=0?'now':m<60?`in ${m} min`:`in ${Math.floor(m/60)} h${m%60?` ${m%60} min`:''}`};
+const CLIP_ACCEPT='audio/*,.mp3,.m4a,.aac,.wav,.flac,.ogg,.oga,.opus';
+const clipLen=ms=>{const s=Math.round(ms/1000);return`${Math.floor(s/60)}:${p2(s%60)}`};
+const clipSize=b=>b>=1048576?`${(b/1048576).toFixed(1)} MB`:`${Math.max(1,Math.round((b||0)/1024))} KB`;
+// What an announcement plays, by name: a source as it is, a clip's name, a recording's title, "Song (Helix)", a web address's file or host.
+const mediaName=(m,H)=>{if(!m)return'';
+  if(m.startsWith('clip:')){const c=((H&&H.clips)||[]).find(x=>x.id===m.slice(5));return c?c.name:'a clip that’s gone'}
+  if(m.startsWith('adhan:')){const a=((H&&H.adhans)||[]).find(x=>x.id===m);return a?a.title:`${cap1(m.slice(6).replace(/[-_]/g,' '))} adhan`}
+  if(/^song: /i.test(m))return`${m.slice(6)} (Helix)`;
+  if(/^https?:\/\//i.test(m)){try{const u=new URL(m),last=u.pathname.split('/').filter(Boolean).pop();return last?decodeURIComponent(last):u.host}catch(e){return m}}
+  return m};
+// A built-in recording's credit (CC BY-SA asks for it wherever it's offered): title · author · licence, and its Commons page.
+const adhanCredit=a=>({text:`${a.title} · ${a.author}`,licence:a.licence,licenceUrl:a.licenceUrl||a.page,page:a.page,after:a.ready===false?' · downloads the first time it plays':''});
 // The home's clock now: the snapshot's localNow, moved on by however long ago it came (at most 10 min, in case clocks disagree).
 const homeNow=H=>H.localNow?msStamp(stampMs(H.localNow)+Math.min(6e5,Math.max(0,Date.now()-((H.home&&H.home.now)||Date.now())))):msStamp(Date.now()-new Date().getTimezoneOffset()*6e4);
 // A one-time schedule's first suggestion: about an hour from now, on the quarter hour.
@@ -1302,7 +1380,36 @@ const PUSH_UI={insecure:['Notifications need HTTPS','Open Kova over https:// to 
 
 class Component extends DCLogic {
   state={hub:BOOT,conn:!!window.KOVA_BOOT,screen:this.props.startScreen??'home',room:null,drawer:null,tab:'simple',nameDraft:null,advanced:(this.props.depth??'Simple')==='Advanced',sel:'sunset',toast:null,undo:null,merging:false,merged:false,done:{},linked:{},q:'',camSel:null,push:pushBase(),mediaSel:null,actF:'all',inboxDone:{},iq:'',intF:'All',draft:'',chat:[{from:'kova',text:`Hi. ${BOOT.devices.filter(d=>isLight(d)&&d.state.on).length} lights are on and the home is in ${(BOOT.modes.find(m=>m.id===BOOT.current.modeId)||BOOT.modes[0]).name}. What do you need?`}],preview:null,pv:null,modeSel:null,igCat:null,igCfg:null,igPick:false,ig:null,igLoadErr:null,imp:null,impAutos:[],impFile:null,impKey:'',impPath:'',impBusy:null,impPct:0,impErr:null,impNeedKey:false,impNew:false,showCode:false};
-  componentDidMount(){this.loadAsk();this.connect();this._igLoad=this.loadInteg();this.loadImport();this.pushCheck();this.deepLink();this.autoKeys()}
+  componentDidMount(){this.loadAsk();this.connect();this._igLoad=this.loadInteg();this.loadImport();this.pushCheck();this.deepLink();this.autoKeys();
+    // The prayer card on Now counts down: redraw it every 30 s while it shows.
+    this._tick=setInterval(()=>{const st=this.state;if(st.screen==='home'&&prayerOn(st.hub)&&!document.hidden)this.setState({tick:Date.now()})},30000)}
+  // ---- announcements: Speaker loudness, Prayer times and Clips open as a panel from the right ({kind, back}) ----
+  openSheet(kind){this.setState({sh:{kind},drawer:null})}
+  // A speaker's announcement loudness: shown at once, saved when the slider rests (null: back to 100%).
+  setTrim(d,v){const id=d.id,val=v==null?100:v;this.setState(p=>({slTrim:{...(p.slTrim||{}),[id]:val}}));this._trimT=this._trimT||{};clearTimeout(this._trimT[id]);
+    this._trimT[id]=setTimeout(()=>this.devSettings(id,{announceTrim:val===100?null:val},`${d.name}: announcements at ${val}%`).then(r=>this.setState(p=>{const n={...(p.slTrim||{})};if(n[id]===val)delete n[id];
+      return r?{slTrim:n,hub:{...p.hub,devices:p.hub.devices.map(x=>x.id===id?{...x,announceTrim:val===100?undefined:val}:x)}}:{slTrim:n}})),400)}
+  // Play test: a short chime at the test level × the speaker's loudness, then it's put back (the hub answers once it's done).
+  testSpeaker(id,level){const put=v=>this.setState(p=>({slTest:{...(p.slTest||{}),[id]:v}}));put({st:'busy'});
+    api('POST',`/api/devices/${encodeURIComponent(id)}/announce-test`,{level}).then(r=>{put({st:'done',vol:r.vol});
+      setTimeout(()=>this.setState(p=>{const t=(p.slTest||{})[id];if(!t||t.st!=='done')return null;const n={...p.slTest};delete n[id];return{slTest:n}}),6000)}).catch(e=>put({st:'err',msg:e.message||String(e)}))}
+  // Clips: the file goes up as it is (POST /api/clips?name=…); the hub says what it can't take.
+  async uploadClip(file){if(!file)return null;const name=(file.name||'Clip').replace(/\.[^.]+$/,'').trim()||'Clip';
+    this.setState({clipBusy:file.name||name,clipErr:null});
+    try{const r=await fetch('/api/clips?name='+encodeURIComponent(name),{method:'POST',headers:{'content-type':file.type||'application/octet-stream',...(KOVA_TOKEN?{authorization:'Bearer '+KOVA_TOKEN}:{})},body:file});
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok)throw new Error(j.error||(r.status===413?'That file is too big: clips can be up to 15 MB':r.status===415?'Kova takes MP3, M4A/AAC, WAV, FLAC and Ogg clips':r.statusText||'The upload didn’t work'));
+      const c=j.clip;this.setState(p=>({clipBusy:null,hub:c?{...p.hub,clips:[...(p.hub.clips||[]).filter(x=>x.id!==c.id),c]}:p.hub}));this.toast(`${c?c.name:name} uploaded`);return c||null}
+    catch(e){this.setState({clipBusy:null,clipErr:e.message||String(e)});this.err(e);return null}}
+  renameClip(c){const v=window.prompt('Rename the clip',c.name);if(v==null||!v.trim()||v.trim()===c.name)return;
+    api('PATCH','/api/clips/'+encodeURIComponent(c.id),{name:v.trim()}).then(r=>{const n=r.clip||{...c,name:v.trim()};this.setState(p=>({clipErr:null,hub:{...p.hub,clips:(p.hub.clips||[]).map(x=>x.id===c.id?n:x)}}));this.toast(`Renamed to ${n.name}`)}).catch(e=>{this.setState({clipErr:e.message});this.err(e)})}
+  deleteClip(c){if(!window.confirm(`Delete ${c.name}?`))return;
+    api('DELETE','/api/clips/'+encodeURIComponent(c.id)).then(()=>{this.setState(p=>({clipErr:null,hub:{...p.hub,clips:(p.hub.clips||[]).filter(x=>x.id!==c.id)}}));this.toast(`${c.name} deleted`)})
+      .catch(e=>{const u=e.body&&e.body.usedBy;const m=e.status===409&&u&&u.length?`${c.name} is still used by ${lst(u)}: choose something else there first`:e.message||String(e);this.setState({clipErr:m});this.toast(m)})}
+  // Prayer times: PUT /api/prayer answers with the new settings (and today's times).
+  putPrayer(body,msg){return api('PUT','/api/prayer',body).then(r=>{const np=r&&r.prayer&&'on' in r.prayer?r.prayer:r&&'on' in r?r:null;
+      this.setState(st=>({prErr:null,hub:{...st.hub,prayer:np||{...(st.hub.prayer||{}),...body,adhan:{...((st.hub.prayer||{}).adhan||{}),...(body.adhan||{})},adjust:{...((st.hub.prayer||{}).adjust||{}),...(body.adjust||{})}}}}));if(msg)this.toast(msg)})
+    .catch(e=>{this.setState({prErr:e.message||String(e)});this.err(e)})}
   // The automation editor: Esc goes back (asking first when there are changes), Ctrl/⌘+S saves; leaving the page with changes asks too.
   autoKeys(){
     document.addEventListener('keydown',e=>{const k=this._aeKeys;if(!k||!this.state.ae||this.state.screen!=='autos')return;
@@ -1328,7 +1435,7 @@ class Component extends DCLogic {
     const SCREENS={customise:'rooms',more:'home'};const scr=SCREENS[page]||page;
     if(['home','modes','rooms','sensors','energy','security','media','activity','assistant','integrations','import','settings'].includes(scr))this.setState({screen:scr})}catch(e){}}
 
-  componentWillUnmount(){this._closed=true;try{this._ws&&this._ws.close()}catch(e){}this.stopLive(true)}
+  componentWillUnmount(){this._closed=true;clearInterval(this._tick);try{this._ws&&this._ws.close()}catch(e){}this.stopLive(true)}
   componentDidUpdate(){if(this._pc&&this.state.screen!=='security')this.stopLive();this.syncMap()}
   // ---- Settings → Home: the map (Leaflet and OpenStreetMap, loaded the first time it shows). Google's points never go on it. ----
   homePin(){const D=this.state.sd||{},loc=(this.state.hub.home||{}).location||{};return D.pin||(loc.latitude||loc.longitude?{latitude:loc.latitude,longitude:loc.longitude,provider:loc.provider,source:loc.source}:null)}
@@ -1720,7 +1827,7 @@ class Component extends DCLogic {
     const addState=stateOptions.some(o=>o[0]===s.addState)?s.addState:(stateOptions[0]||[''])[0];
     const put=(url,body,msg)=>api('PUT',url,body).then(r=>this.toast(msg,this.undoFn(r.undo))).catch(x=>this.err(x));
     const ed={
-      startKinds:[['sun:sunrise','Sunrise'],['sun:sunset','Sunset'],['sun:dawn','First light'],['sun:dusk','Dusk'],['prayer:fajr','Fajr'],['prayer:maghrib','Maghrib'],['prayer:isha','Isha'],['time','A clock time']].map(([v,label])=>({v,label})),
+      startKinds:rhythmKinds([['sun:sunrise','Sunrise'],['sun:sunset','Sunset'],['sun:dawn','First light'],['sun:dusk','Dusk'],['prayer:fajr','Fajr'],['prayer:maghrib','Maghrib'],['prayer:isha','Isha'],['time','A clock time']],H,ek,RK(cur)).map(([v,label])=>({v,label})),
       startKind:ek,isClock:ek==='time',hasOffset:ek!=='time',
       startAt:s.edStart?.at??(cur&&cur.kind==='time'?cur.at:'20:00'),startOffset:s.edStart?.offset??(cur&&cur.offsetMin||0),
       setStartKind:e=>this.setState(p=>({edStart:{...(p.edStart||{}),kind:e.target.value}})),
@@ -1873,9 +1980,15 @@ class Component extends DCLogic {
     const RUN=new Set(H.integrations.map(i=>i.id));
     const idle=Object.keys(s.igCfg||{}).filter(id=>!RUN.has(id)).map(id=>{const c=this.igItem(id)||{name:id,icon:'extension',kind:'Local'};return{id,name:c.name,icon:c.icon,kind:c.kind,devices:0,ok:false,note:c.apply==='restart'?'Starts when the hub restarts':'Not running · check its settings'}});
     const INTEG=[...H.integrations,...idle].map(i=>({name:i.name,icon:i.icon,sub:`${i.devices} device${i.devices===1?'':'s'}`,st:i.ok?'ok':'attention',kind:i.kind,note:i.note,open:()=>this.openInteg(i.id)}));
-    const integrations=INTEG.filter(i=>(!iq||(i.name+' '+i.sub).toLowerCase().includes(iq))&&(s.intF==='All'||(s.intF==='Needs attention'?i.st==='attention':i.kind===s.intF))).map(i=>({...i,status:i.note||(i.st==='ok'?'Connected':'Needs attention'),dot:i.st==='ok'?'#7fd4a0':'#f2b14c',stFg:i.st==='attention'?'#f2b14c':'#a3a09a',border:i.st==='attention'?'rgba(242,177,76,0.3)':'rgba(255,255,255,0.05)'}));
+    // Prayer times: part of Kova, off until the owner turns it on; its panel opens from here.
+    const PR=prayerOf(H),prMeth=(PR.methods.find(m=>m.id===PR.method)||{}).label||PR.method;
+    const PRAYER_IT={name:'Prayer times',icon:'mosque',sub:PR.on?prMeth:'Off',st:'ok',kind:'Local',dotC:PR.on?'#7fd4a0':'#6f6d69',open:()=>this.openSheet('prayer'),
+      note:PR.on?(PR.next?`On · ${PRAYER_NAMES[PR.next.prayer]||PR.next.prayer} at ${clockIn(PR.next.at,H.home.timezone)}`:'On'):'Off · open to turn on'};
+    const integrations=[...INTEG,PRAYER_IT].filter(i=>(!iq||(i.name+' '+i.sub).toLowerCase().includes(iq))&&(s.intF==='All'||(s.intF==='Needs attention'?i.st==='attention':i.kind===s.intF))).map(i=>({...i,status:i.note||(i.st==='ok'?'Connected':'Needs attention'),dot:i.dotC||(i.st==='ok'?'#7fd4a0':'#f2b14c'),stFg:i.st==='attention'?'#f2b14c':'#a3a09a',border:i.st==='attention'?'rgba(242,177,76,0.3)':'rgba(255,255,255,0.05)'}));
     return {isEnergy:s.screen==='energy',isSecurity:s.screen==='security',isMedia:s.screen==='media',isActivity:s.screen==='activity',push:(()=>{const [title,note,icon,btn]=PUSH_UI[s.push]||PUSH_UI.unsupported;const on=s.push==='on';return{title,note,icon,btn:btn||'',hasBtn:!!btn,iconBg:on?'rgba(127,212,160,0.15)':'rgba(255,255,255,0.06)',iconFg:on?'#7fd4a0':'#a3a09a',go:()=>this.pushGo()}})(),isAssistant:s.screen==='assistant',isIntegrations:s.screen==='integrations',
       sourceRows,editSources:!!s.editSources,toggleSources:()=>this.setState(p=>({editSources:!p.editSources})),sourcesLink:s.editSources?'Done':missingUrls?`Set stream addresses · ${missingUrls} missing`:'Edit stream addresses',
+      annLoud:(()=>{const n=(H.devices||[]).filter(d=>d.canAnnounce&&!d.archived).length,c=(H.clips||[]).length;return{has:n>0,sub:`${n} speaker${n===1?'':'s'} · one level sounds the same in every room`,go:()=>this.openSheet('loud'),
+        hasClips:true,clipsSub:c?`${c} clip${c===1?'':'s'}`:'Upload your own sounds',goClips:()=>this.openSheet('clips')}})(),
       upd:updUi(H,this),energyBars,energyStats,energyDevices,...env,camMain,camThumbs,tlRows,tlTabs,tlEmpty:!tlRows.length,tlEmptyText:cm?'Nothing seen yet. People, rings and motion show up here, with the picture from that moment.':'No cameras or sensors have noticed anything yet.',secRooms,secRoomsNone:!secRooms.length,sa,people,secEvents,mp,...musicUi,sources,players,mediaCount:`${pls.filter(d=>d.on).length} playing · ${pls.length} players`,
       noSecEvents:!secEvents.length,secSummary:`${cams.length} camera${cams.length===1?'':'s'} · ${H.people.length} ${H.people.length===1?'person':'people'}`,
       actFilters,activity,inbox,inboxEmpty:!inbox.length,inboxTitle:inbox.length?`Needs you · ${inbox.length}`:'Needs you',
@@ -1923,6 +2036,53 @@ class Component extends DCLogic {
       addInteg:()=>{if(!s.igCat)this.loadInteg();this.setState(p=>({igPick:!p.igPick}))}};
   }
 
+  // Announcements' panels: Speaker loudness, Prayer times and Clips (Speaker loudness and Prayer times lead to Clips, and back).
+  shVals(s,H,RN){
+    const S=s.sh;if(!S)return{sh:{open:false}};
+    const close=()=>kovaClose(()=>this.setState({sh:null}));
+    const CLIPS=H.clips||[];
+    const pill=(sel,pick,label)=>({label,pressed:sel?'true':'false',bg:sel?'rgba(242,177,76,0.16)':'#141518',fg:sel?'#f7cb82':'#d8d5cf',bd:sel?'rgba(242,177,76,0.55)':'rgba(255,255,255,0.09)',pick});
+    const base={open:true,close,hasBack:!!S.back,back:()=>this.setState({sh:{kind:S.back}}),goClips:()=>this.setState({sh:{kind:'clips',back:S.kind}}),
+      clipsSub:CLIPS.length?`${CLIPS.length} clip${CLIPS.length===1?'':'s'} · upload, rename or delete`:'Upload your own sounds for announcements',
+      isLoud:S.kind==='loud',isPrayer:S.kind==='prayer',isClips:S.kind==='clips',showClipsLink:S.kind==='loud',hasErr:false,err:'',pr:{on:false},speakers:[],clips:[]};
+    if(S.kind==='loud'){
+      const lvl=s.slLevel??20;
+      const SP=(H.devices||[]).filter(d=>d.canAnnounce&&!d.archived).sort((a,b)=>(RN[a.room]||'').localeCompare(RN[b.room]||'')||a.name.localeCompare(b.name));
+      const speakers=SP.map(d=>{const trim=(s.slTrim||{})[d.id]??d.announceTrim??100,t=(s.slTest||{})[d.id]||{},busy=t.st==='busy';
+        return{name:d.name,room:RN[d.room]||'',icon:ICON[d.type]||'speaker',plays:`plays at ${annVol(lvl,trim)}%`,trim:String(trim),trimLabel:trim+'%',aria:`${d.name}: announcement loudness`,
+          setTrim:e=>this.setTrim(d,+e.target.value),changed:trim!==100,reset:()=>this.setTrim(d,null),
+          test:()=>{if(!busy)this.testSpeaker(d.id,lvl)},btnLabel:busy?'Playing…':'Play test',btnIcon:busy?'progress_activity':t.st==='done'?'check':'play_arrow',anim:busy?'askspin 1s linear infinite':'none',
+          btnOp:busy?'0.7':'1',cursor:busy?'default':'pointer',msg:t.st==='done'?`Played at ${t.vol??annVol(lvl,trim)}%`:t.st==='err'?t.msg:'',msgFg:t.st==='err'?'#ff6b5e':'#7fd4a0'}});
+      return{sh:{...base,icon:'tune',kicker:'Announcements',title:'Speaker loudness',intro:'One level sounds the same everywhere: a speaker that sounds louder gets less.',
+        test:String(lvl),testLabel:lvl+'%',setTest:e=>this.setState({slLevel:+e.target.value}),speakers,noSpeakers:!SP.length}}}
+    if(S.kind==='prayer'){
+      const P=prayerOf(H),on=P.on,tz=(H.home||{}).timezone,D=s.prAdj||{},save=(body,msg)=>this.putPrayer(body,msg),ADH=H.adhans||[];
+      const times=on&&P.times?PRAYER_TIMES.filter(k=>P.times[k]!=null).map(k=>{const cur=!!P.current&&P.current.prayer===k&&P.current.at===P.times[k],nx=!!P.next&&P.next.prayer===k&&P.next.at===P.times[k];
+        return{name:PRAYER_NAMES[k],at:clockIn(P.times[k],tz),tag:cur?'Now':nx?untilW(P.next.at-hubNowMs(H)):'',tagFg:cur?'#f2b14c':'#a3a09a',fg:cur?'#f2b14c':'#f1efea',weight:cur?'700':'600'}}):[];
+      const methods=P.methods.map(m=>({v:m.id,label:m.label}));if(!methods.some(m=>m.v===P.method))methods.unshift({v:P.method,label:P.method});
+      const madhabs=[['shafi','Standard (Shafi‘i, Maliki, Hanbali)'],['hanafi','Hanafi (later)']].map(([v,l])=>pill(P.madhab===v,()=>{if(P.madhab!==v)save({madhab:v},`Asr: ${v==='hanafi'?'the Hanafi time':'the standard time'}`)},l));
+      const adjust=PRAYER_TIMES.map(k=>{const cur=P.adjust[k]||0,commit=()=>{if(D[k]===undefined)return;const n=Math.max(-30,Math.min(30,Math.round(Number(D[k])||0)));
+          this.setState(p=>{const x={...(p.prAdj||{})};delete x[k];return{prAdj:x}});if(n!==cur)save({adjust:{...P.adjust,[k]:n}},`${PRAYER_NAMES[k]}: ${n?`${n>0?'+':'−'}${Math.abs(n)} min`:'as calculated'}`)};
+        return{name:PRAYER_NAMES[k],value:D[k]??String(cur),set:e=>{const t=e.target.value;this.setState(p=>({prAdj:{...(p.prAdj||{}),[k]:t}}))},save:commit,key:e=>{if(e.key==='Enter')commit()}}});
+      const opts=(cur,first)=>{const o=[{v:'',label:first},...ADH.map(a=>({v:a.id,label:`${a.title} (built in)`})),...CLIPS.map(c=>({v:'clip:'+c.id,label:`Clip: ${c.name}`})),...(H.sources||[]).map(x=>({v:x.name,label:x.name}))];
+        if(cur&&!o.some(x=>x.v===cur))o.push({v:cur,label:cap1(mediaName(cur,H))});return o};
+      const credit=v=>{const a=ADH.find(x=>x.id===v);return a?[adhanCredit(a)]:[]};
+      const A=P.adhan.media||'',FJ=P.adhan.fajr||'';
+      return{sh:{...base,icon:'mosque',kicker:'Integrations',title:'Prayer times',intro:'The five daily prayers’ times for your home’s location: on Now, as triggers in automations, and the call to prayer for announcements.',
+        hasErr:!!s.prErr,err:s.prErr||'',showClipsLink:on,
+        pr:{on,onAria:on?'true':'false',track:on?'#f2b14c':'#35363a',knob:on?'translateX(14px)':'none',
+          onSub:on?'On. Turning it off hides the prayer options; schedules already set by a prayer time keep running.':'Off. Turn it on for prayer times on Now, in automations and in announcements.',
+          toggle:()=>save({on:!on},on?'Prayer times off: schedules set by a prayer time keep running':'Prayer times on'),
+          times,hasTimes:times.length>0,method:P.method,methods,setMethod:e=>save({method:e.target.value},'Prayer times recalculated'),madhabs,adjust,
+          adhan:A,adhanOpts:opts(A,'None: choose in each announcement'),setAdhan:e=>save({adhan:{media:e.target.value||null,fajr:FJ||null}},e.target.value?`Call to prayer: ${mediaName(e.target.value,H)}`:'No default call to prayer'),adhanCredit:credit(A),
+          fajr:FJ,fajrOpts:opts(FJ,'The same as the others'),setFajr:e=>save({adhan:{media:A||null,fajr:e.target.value||null}},e.target.value?`At Fajr: ${mediaName(e.target.value,H)}`:'Fajr plays the same call'),fajrCredit:credit(FJ)}}}}
+    const busy=s.clipBusy;
+    const clips=CLIPS.map(c=>({name:c.name,sub:[c.durationMs?clipLen(c.durationMs):'',c.bytes?clipSize(c.bytes):'',(c.ext||'').toUpperCase()].filter(Boolean).join(' · '),rename:()=>this.renameClip(c),remove:()=>this.deleteClip(c)}));
+    return{sh:{...base,icon:'library_music',kicker:'Announcements',title:'Clips',intro:'Your own sounds for announcements: a chime, a tune, a recorded message.',clips,noClips:!CLIPS.length,
+      upLabel:busy?`Uploading ${busy}…`:'Upload a clip',upSub:'MP3, M4A/AAC, WAV, FLAC or Ogg · up to 15 MB',upIcon:busy?'progress_activity':'upload_file',upAnim:busy?'askspin 1s linear infinite':'none',accept:CLIP_ACCEPT,
+      pick:e=>{const f=e.target.files&&e.target.files[0];e.target.value='';if(f&&!busy)this.uploadClip(f)},hasErr:!!s.clipErr,err:s.clipErr||''}};
+  }
+
   // Kova's own automations: the list (scheduled, automations, done), suggestions, Home Assistant ones to convert, and the editor (when / only if / then).
   kovaAutoVals(s,H,devs,RN){
     const RAW=Object.fromEntries((H.devices||[]).map(d=>[d.id,{...d,zoneNames:d.zoneNames}]));
@@ -1960,6 +2120,14 @@ class Component extends DCLogic {
     const defaultOnce=()=>onceDefault(nowSt);
     const people=H.people||[],modes=H.modes||[],overlays=H.overlays||[];
     const peopleName=id=>(people.find(p=>p.id===id)||{}).name||id;
+    // Announcements: the speakers (canAnnounce), Kova's speaker groups (a group stands for its speakers), and what can pause.
+    const grpOf=id=>(H.speakerGroups||[]).find(g=>g.deviceId===id||'group_'+g.id===id);
+    const grpMembers=id=>{const g=grpOf(id);return g?(g.members||[]).map(m=>RAW[m]).filter(Boolean):[]};
+    const trimOf=id=>(RAW[id]||{}).announceTrim??100;
+    const SPEAKERS=ALL.filter(d=>d.canAnnounce&&!d.hidden&&!d.archived),SPK_GROUPS=ALL.filter(d=>isSpkGroup(d)&&!d.archived);
+    const PAUSERS=ALL.filter(d=>hasCap(d,'pause')&&!d.canAnnounce&&!isSpkGroup(d)&&!d.archived);
+    // How many speakers a list of targets reaches: a group counts as its speakers, each speaker once.
+    const spkCount=l=>new Set(l.flatMap(([id])=>isSpkGroup(RAW[id])&&grpMembers(id).length?grpMembers(id).map(d=>d.id):[id])).size;
     // ----------------------------------------------------------- words
     const MATCH_WORD={motion:v=>v?'detecting motion':'clear of motion',open:v=>v?'open':'closed',on:v=>v?'on':'off',online:v=>v?'online':'offline',playing:v=>v?'playing':'not playing',muted:v=>v?'muted':'not muted',hvac:v=>`on ${(HVAC.find(h=>h[0]===v)||[0,v])[1].toLowerCase()}`,activity:v=>(VAC_ACT.find(x=>x[0]===v)||[0,v])[1],mode:v=>`on ${v}`};
     const matchW=(m,id)=>{m=m||{};const parts=[];for(const k of ['motion','open'])if(m[k]!==undefined)parts.push(MATCH_WORD[k](m[k]));if(m.input)parts.push(`on ${inputWord(RAW[id],m.input)}`);else if(m.on!==undefined)parts.push(MATCH_WORD.on(m.on));
@@ -1968,7 +2136,7 @@ class Component extends DCLogic {
     const readUnit=f=>(NUM_READ.find(x=>x[0]===f)||[0,0,''])[2];
     const rangeW=(a,b,f)=>{const u=readUnit(f),x=v=>`${v}${u&&u!=='°C'?' '+u:u}`;return a!=null&&b!=null?`between ${x(a)} and ${x(b)}`:a!=null?`above ${x(a)}`:b!=null?`below ${x(b)}`:'…'};
     const SUN={sunrise:'sunrise',sunset:'sunset',dawn:'first light',dusk:'dusk'};
-    const rhW=r=>!r?'…':r.kind==='time'?r.at:`${r.offsetMin?`${Math.abs(r.offsetMin)} min ${r.offsetMin<0?'before':'after'} `:''}${r.kind==='sun'?SUN[r.event]||r.event:cap1(r.prayer)}`;
+    const rhW=r=>!r?'…':r.kind==='time'?r.at:`${r.offsetMin?`${Math.abs(r.offsetMin)} min ${r.offsetMin<0?'before':'after'} `:''}${r.kind==='sun'?SUN[r.event]||r.event:r.prayer==='all'?'every prayer time':PRAYER_NAMES[r.prayer]||cap1(r.prayer)}`;
     const daysW=d=>!d||!d.length||d.length===7?'':d.length===5&&[1,2,3,4,5].every(x=>d.includes(x))?'on weekdays':d.length===2&&d.includes(0)&&d.includes(6)?'at weekends':`on ${d.slice().sort().map(x=>WDAY[x]).join(', ')}`;
     const forW=sec=>sec?` for ${durW(sec)}`:'';
     const ONW={vacuum:['cleans','docks'],internet:['internet allowed','internet paused']};
@@ -2014,7 +2182,12 @@ class Component extends DCLogic {
       case 'repeat':return`${a.times||'?'} times: ${(a.actions||[]).map(actW).join('; ')||'nothing'}`;
       case 'ramp':return`ease ${readName(a.field)} ${a.from!=null?`from ${a.from} `:''}to ${a.to} over ${durW(a.overSec||0)}: ${Object.keys(a.targets||{}).map(nm).join(', ')||'…'}`;
       case 'run':return`run ${((H.automations||[]).find(x=>x.id===a.automation)||{}).name||a.automation||'…'}`;
-      case 'stop':return'stop';default:return a.kind}};
+      case 'stop':return'stop';
+      case 'announce':{const ts=Object.entries(a.targets||{}),all=spkCount(ts),on=spkCount(ts.filter(([,t])=>!(t&&t.off)));
+        const where=!all?'no speakers yet':all===1&&on===1?nm(ts[0][0]):on===all?`${all} speakers`:`${on} of ${all} speakers`;
+        const fj=a.mediaFor&&a.mediaFor.fajr?` (Fajr: ${mediaName(a.mediaFor.fajr,H)})`:'';
+        return`announce ${a.media?mediaName(a.media,H):'…'}${fj} on ${where} at ${a.vol??0}%${(a.pause||[]).length?`, pausing ${lst(a.pause.map(nm))}`:''}, then ${a.restore===false?'leave them idle':'back to what they played'}`}
+      default:return a.kind}};
     const oneTimeOf=a=>(a.triggers||[]).length>0&&a.triggers.every(t=>t.kind==='once');
     // A one-time schedule's name: what, and when ("Lamp on at 50%, tomorrow at 07:00").
     const autoWhat=a=>{const x=(a.actions||[])[0];return!x?'Reminder':x.kind==='notify'?`Remind: ${x.message||'…'}`:cap1(actW(x))};
@@ -2117,12 +2290,19 @@ class Component extends DCLogic {
       // "+ Add …": a select whose first line is the prompt; picking adds.
       add:(label,options,pick,o={})=>({...base,isAdd:true,label:'',aria:label,ph:label,options,set:e=>{if(e.target.value)pick(e.target.value)},...o}),
       sub:(label,o={})=>({isSub:true,label,...o}),
+      // A small button beside the fields ("Clips…", "Speaker loudness…").
+      btn:(text,press,o={})=>({...base,isBtn:true,text,press,icon:o.icon||'chevron_right',...o}),
+      // Upload a file: a button that opens the file picker.
+      file:(text,pick,o={})=>({...base,isFile:true,text,aria:text,accept:CLIP_ACCEPT,op:o.busy?'0.6':'1',fileIcon:o.busy?'progress_activity':'upload',anim:o.busy?'askspin 1s linear infinite':'none',
+        pick:e=>{const f=e.target.files&&e.target.files[0];e.target.value='';if(f&&!o.busy)pick(f)},...o}),
+      // A built-in recording's credit, with its licence and Commons page linked.
+      credit:(a,o={})=>({isCredit:true,...adhanCredit(a),...o}),
       note:(text,o={})=>({...base,isNoteF:true,text,flex:'1 1 100%',...o})};
     const rm=(f,fn,what)=>({...f,removable:true,remove:fn,removeLabel:`Remove ${what||f.label||'this'}`});
     const RH=[['time','At a clock time'],['sun:sunrise','Sunrise'],['sun:sunset','Sunset'],['sun:dawn','First light'],['sun:dusk','Dusk'],['prayer:fajr','Fajr'],['prayer:sunrise','Shuruq (sunrise)'],['prayer:dhuhr','Dhuhr'],['prayer:asr','Asr'],['prayer:maghrib','Maghrib'],['prayer:isha','Isha']];
     const rk=r=>!r?'time':r.kind==='time'?'time':`${r.kind}:${r.kind==='sun'?r.event:r.prayer}`;
     const mkR=(k,at,off)=>{const [kind,name]=k.split(':');return kind==='time'?{kind:'time',at:at||'21:00'}:kind==='sun'?{kind:'sun',event:name,...(off?{offsetMin:off}:{})}:{kind:'prayer',prayer:name,...(off?{offsetMin:off}:{})}};
-    const rhythmFields=(label,r,set)=>{const k=rk(r);return[F.sel(label,k,opts(RH),v=>set(mkR(v,r&&r.kind==='time'?r.at:'21:00',r&&r.offsetMin))),
+    const rhythmFields=(label,r,set)=>{const k=rk(r);return[F.sel(label,k,opts(rhythmKinds(k==='prayer:all'?[...RH,['prayer:all','Every prayer time']]:RH,H,k)),v=>set(mkR(v,r&&r.kind==='time'?r.at:'21:00',r&&r.offsetMin))),
       k==='time'?F.time('Time',r&&r.at||'21:00',v=>set({kind:'time',at:v})):F.num('Offset',r&&r.offsetMin||0,v=>set({...r,offsetMin:Math.round(v||0)||undefined}),'min',{step:5,hasHint:true,hint:'− before, + after'})]};
     const dayChips=(days,set)=>F.chips('Days',['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((l,i)=>{const on=!days||!days.length||days.includes(i);return{label:l,on:!!(days&&days.length&&on),
       toggle:()=>{let d=days&&days.length?days.slice():[0,1,2,3,4,5,6];d=d.includes(i)?d.filter(x=>x!==i):[...d,i].sort();set(d.length===7||!d.length?undefined:d)}}}),{hasHint:true,hint:days&&days.length?daysW(days):'Every day: pick days to limit it'});
@@ -2211,10 +2391,26 @@ class Component extends DCLogic {
           if(mode==='custom')out.push(F.text('Name',v,set,'Source or playlist name'));
           return out}
         default:return[F.text(human(k),v==null?'':String(v),set)]}};
+    // ------------------------------------------- what an announcement plays
+    // A source, an uploaded clip, a built-in call to prayer (while prayer times are on), a Helix song, or a web address.
+    const CLIPS=H.clips||[],ADHANS=prayerOn(H)?(H.adhans||[]):[];
+    const mediaMode=v=>v==null||v===''?'':SOURCES.includes(v)?'src:'+v:/^(clip|adhan):/.test(v)?v:/^song: /i.test(v)?'song':/^https?:/i.test(v)?'url':'other';
+    const mediaOpts=(v,first)=>{const m=mediaMode(v),o=[{v:'',label:first||'Choose what to play…'},...SOURCES.map(n=>({v:'src:'+n,label:n})),...CLIPS.map(c=>({v:'clip:'+c.id,label:`Clip: ${c.name}`})),
+        ...ADHANS.map(a=>({v:a.id,label:`Adhan: ${a.title}`})),...(MUSIC.length||m==='song'?[{v:'song',label:'A Helix song…'}]:[]),{v:'url',label:'A web address…'}];
+      if(m&&!o.some(x=>x.v===m))o.splice(1,0,{v:m,label:m==='other'?`${v} (not one of your sources)`:m.startsWith('adhan:')?`Adhan: ${mediaName(v,H)}`:cap1(mediaName(v,H))});return o};
+    const mediaPick=(x,cur,set)=>set(x===''?undefined:x.startsWith('src:')?x.slice(4):x==='song'?(/^song: /i.test(cur||'')?cur:'Song: '):x==='url'?(/^https?:/i.test(cur||'')?cur:'https://'):x==='other'?cur:x);
+    const mediaErr=v=>{const m=mediaMode(v);return!m?'Choose what to play':m==='song'&&!v.slice(6).trim()?'Type the song’s title':m==='url'&&!/^https?:\/\/[^\s/]{2,}/i.test(v)?'Type the whole web address':
+      m.startsWith('clip:')&&!CLIPS.some(c=>'clip:'+c.id===v)?'That clip is gone: choose another':m==='other'?`“${v}” isn’t one of your sources`:''};
+    const mediaFields=(label,v,set,o={})=>{const m=mediaMode(v),ad=m.startsWith('adhan:')?(H.adhans||[]).find(x=>x.id===v):null;
+      return[F.sel(label,m,mediaOpts(v,o.first),x=>mediaPick(x,v,set),{wide:true}),
+        ...(m==='song'?[F.text('Song',v.slice(6),t=>set('Song: '+t),'Its title, as in Helix')]:[]),
+        ...(m==='url'?[F.text('Web address',v,t=>set(t.trim()),'https://… a sound file or a stream')]:[]),
+        ...(o.upload?[F.file(s.clipBusy?`Uploading ${s.clipBusy}…`:'Upload a clip…',f=>this.uploadClip(f).then(c=>{if(c)set('clip:'+c.id)}),{busy:!!s.clipBusy}),F.btn('Clips',()=>this.openSheet('clips'),{icon:'library_music'})]:[]),
+        ...(ad?[F.credit(ad)]:[])]};
     // ------------------------------------------------------------- kinds
     const T_KINDS=[['device','A device changes','toggle_on'],['numeric','A reading crosses a value','speed'],['event','A device event','notifications_active'],['room','Something happens in a room','sensors'],['time','A time of day','schedule'],['once','Once, at a date and time','event'],['every','Every few minutes','update'],['presence','Someone comes or goes','person_pin_circle'],['mode','A mode starts','routine'],['overlay','An overlay starts or ends','layers'],['hub','Kova starts','power_settings_new']];
     const C_KINDS=[['device','A device is…','toggle_on'],['numeric','A reading is…','speed'],['time','The time or day','schedule'],['presence','Who’s home','home'],['mode','The mode','routine'],['overlay','An overlay is on or off','layers'],['room','Activity in a room','sensor_occupied'],['all','All of these','checklist'],['any','Any of these','call_split'],['not','None of these','block']];
-    const A_KINDS=[['set','Set devices','tune'],['delay','Wait a while','hourglass_top'],['wait','Wait until…','pending'],['notify','Send a notification','notifications'],['overlay','Start or end an overlay','layers'],['if','If … otherwise …','alt_route'],['repeat','Repeat','repeat'],['ramp','Ease a value over time','trending_up'],['run','Run another automation','play_circle'],['stop','Stop here','stop_circle']];
+    const A_KINDS=[['set','Set devices','tune'],['delay','Wait a while','hourglass_top'],['wait','Wait until…','pending'],['notify','Send a notification','notifications'],['overlay','Start or end an overlay','layers'],['if','If … otherwise …','alt_route'],['repeat','Repeat','repeat'],['ramp','Ease a value over time','trending_up'],['run','Run another automation','play_circle'],['announce','Announce over the speakers','campaign'],['stop','Stop here','stop_circle']];
     const A_QUICK=A_KINDS.filter(k=>['set','notify','overlay','delay'].includes(k[0]));
     const kindIcon=(l,k)=>(l.find(x=>x[0]===k)||[0,0,'help'])[2];
     const firstReading=id=>((readingsOf(RAW[id]||{})[0])||['temp'])[0];
@@ -2247,7 +2443,8 @@ class Component extends DCLogic {
     const NEW_A={set:()=>({kind:'set',targets:firstAct?{[firstAct]:defaultCmd(firstAct)}:{}}),delay:()=>({kind:'delay',seconds:300}),
       ramp:o=>({kind:'ramp',targets:o&&o.targets?Object.fromEntries(Object.keys(o.targets).filter(k=>!isZoneTarget(k)).map(k=>[k,{}])):firstAct?{[firstAct]:{}}:{},field:'bri',to:100,overSec:1800,stepSec:60}),
       wait:()=>({kind:'wait',until:NEW_C.device(),timeoutSec:600}),notify:()=>({kind:'notify',message:''}),overlay:()=>({kind:'overlay',overlay:(overlays[0]||{}).id,op:'start'}),
-      if:()=>({kind:'if',conditions:[NEW_C.device()],then:[],else:[]}),repeat:()=>({kind:'repeat',times:2,actions:[]}),run:()=>({kind:'run',automation:(AUTOS.find(x=>x.id!==E.id)||{}).id}),stop:()=>({kind:'stop'})};
+      if:()=>({kind:'if',conditions:[NEW_C.device()],then:[],else:[]}),repeat:()=>({kind:'repeat',times:2,actions:[]}),run:()=>({kind:'run',automation:(AUTOS.find(x=>x.id!==E.id)||{}).id}),stop:()=>({kind:'stop'}),
+      announce:()=>({kind:'announce',media:prayerOn(H)&&(H.prayer.adhan||{}).media||'',vol:20,targets:Object.fromEntries(SPEAKERS.map(d=>[d.id,{}])),pause:[],restore:true})};
     // ----------------------------------------------------------- checks
     // The hub checks everything again on save (automation-check.ts); these catch the usual slips as you go.
     const nonEmpty=l=>Array.isArray(l)&&l.length>0;
@@ -2275,7 +2472,14 @@ class Component extends DCLogic {
       case 'overlay':return!a.overlay?'Choose an overlay':'';
       case 'if':return!nonEmpty(a.conditions)?'“If” needs at least one condition':!nonEmpty(a.then)&&!nonEmpty(a.else)?'Add a step to do':'';
       case 'repeat':return!(a.times>=1&&a.times<=100)?'Repeat 1 to 100 times':!nonEmpty(a.actions)?'Add a step to repeat':'';
-      case 'run':return!a.automation?'Choose an automation':'';default:return''}};
+      case 'run':return!a.automation?'Choose an automation':'';
+      case 'announce':{const ts=Object.entries(a.targets||{}),fjE=a.mediaFor&&a.mediaFor.fajr!==undefined?mediaErr(a.mediaFor.fajr):'';
+        const bad=ts.find(([id])=>!(RAW[id]&&(RAW[id].canAnnounce||isSpkGroup(RAW[id])))),gone=ts.some(([,t])=>((t&&t.skipWhile)||[]).some(o=>!overlays.some(x=>x.id===o)));
+        return mediaErr(a.media)||(fjE?`At Fajr: ${fjE.charAt(0).toLowerCase()}${fjE.slice(1)}`:'')||(!(a.vol>=0&&a.vol<=100)?'A level from 0 to 100%':'')||(!ts.length?'Add at least one speaker':'')
+          ||(bad?`${RAW[bad[0]]?`${RAW[bad[0]].name} can’t play announcements`:'A speaker is gone'}: remove it`:'')||(ts.every(([,t])=>t&&t.off)?'Turn at least one speaker on':'')
+          ||(ts.some(([,t])=>t&&t.vol!=null&&!(t.vol>=0&&t.vol<=100))?'A speaker’s own level is 0 to 100%':'')||(gone?'An overlay under “Skip while” is gone: untick it':'')
+          ||((a.pause||[]).some(id=>!RAW[id]||!hasCap(RAW[id],'pause'))?'Something to pause is gone or can’t pause: untick it':'')||(a.maxSec!=null&&!(a.maxSec>=5&&a.maxSec<=1800)?'At most 5 seconds to 30 minutes':'')}
+      default:return''}};
     const errs=[];
     const note=(where,e)=>{if(e)errs.push(`${where}: ${e}`);return e};
     // ------------------------------------------------------------- rows
@@ -2368,11 +2572,39 @@ class Component extends DCLogic {
       case 'repeat':return[F.num('Times',a.times,v=>set('times',v==null?undefined:Math.round(v)),'×',{min:1,max:100,step:1})];
       case 'run':return[F.sel('Automation',a.automation,AUTOS.filter(x=>x.id!==E.id).map(x=>({v:x.id,label:x.name})),v=>set('automation',v),{wide:true}),F.note('Runs its steps; its triggers and conditions are skipped.')];
       case 'stop':return[F.note('Nothing after this runs.')];
+      case 'announce':{const fj=!!a.mediaFor&&a.mediaFor.fajr!==undefined,pz=uniq([...PAUSERS.map(d=>d.id),...(a.pause||[])]);
+        return[...mediaFields('Play',a.media,v=>set('media',v),{upload:true}),
+          ...(prayerOn(H)||fj?[F.sub(''),F.seg('Fajr plays',fj?'own':'same',[['same','The same'],['own','Its own']],v=>edit(x=>{const y=get(x,p);if(v==='own')y.mediaFor={...(y.mediaFor||{}),fajr:prayerOf(H).adhan.fajr||''};else if(y.mediaFor){delete y.mediaFor.fajr;if(!Object.keys(y.mediaFor).length)delete y.mediaFor}}),{hasHint:true,hint:'When Fajr’s time starts it'}),
+            ...(fj?mediaFields('At Fajr',a.mediaFor.fajr,v=>edit(x=>{const y=get(x,p);y.mediaFor={...(y.mediaFor||{}),fajr:v??''}})):[])]:[]),
+          F.sub(''),F.range('Level',a.vol??20,v=>set('vol',v),{min:0,max:100,unit:'%',hasHint:true,hint:'Each speaker plays it × its loudness'}),
+          F.btn('Speaker loudness',()=>this.openSheet('loud'),{icon:'tune'}),
+          ...(pz.length?[F.chips('Pause during it',pz.map(id=>{const on=(a.pause||[]).includes(id);return{label:RAW[id]?devLabel(RAW[id]):`${id} (gone)`,on,toggle:()=>set('pause',on?a.pause.filter(x=>x!==id):[...(a.pause||[]),id])}}),{hasHint:true,hint:'Films and shows pause, then carry on after'})]:[]),
+          F.seg('Afterwards',a.restore!==false,[[true,'Put everything back'],[false,'Leave speakers idle']],v=>set('restore',v)),F.sub(''),
+          ...durFields('At most',a.maxSec,v=>set('maxSec',v),key+'.max',{hasHint:true,hint:'Default 7 min'})]}
       default:return[]}};
+    // An announcement's speakers: every one a row, on or off for now, at the level it really plays (the step's or its own × its loudness).
+    const announceBlocks=(R,a,p,rails)=>{const inner=[...rails,rail(RAIL.target)],T=a.targets||{};R.push(lane(inner,'Speakers','speaker','#7cb8f0'));
+      Object.entries(T).forEach(([id,t0])=>{const t=t0||{},d=RAW[id],tp=[...p,'targets',id],grp=isSpkGroup(d),off=!!t.off,lvl=t.vol??a.vol??0,ms=grp?grpMembers(id):[],name=d?d.name:id;
+        const edT=fn=>edit(x=>{const y=get(x,tp)||{};fn(y);get(x,[...p,'targets'])[id]=y});
+        const words=!d?'Not found: remove it':off?`${RN[d.room]?RN[d.room]+' · ':''}off for now: left out`:grp?`Speaker group · ${ms.length} speaker${ms.length===1?'':'s'}`:`${RN[d.room]?RN[d.room]+' · ':''}plays at ${annVol(lvl,trimOf(id))}% · loudness ${trimOf(id)}%`;
+        const sw=t.skipWhile||[],ovs=[...overlays.map(o=>({id:o.id,label:o.name})),...sw.filter(o=>!overlays.some(x=>x.id===o)).map(o=>({id:o,label:`${o} (gone)`}))];
+        const fields=[F.seg('',off?'off':'on',[['on','Announce here'],['off','Off for now']],v=>edT(y=>{if(v==='off')y.off=true;else delete y.off}),{aria:`${name}: on or off`})];
+        if(d&&!off){fields.push(F.num('Own level',t.vol,v=>edT(y=>{if(v==null)delete y.vol;else y.vol=Math.round(v)}),'%',{min:0,max:100,step:5,width:'84px',hasHint:true,hint:`Blank: ${a.vol??0}%`}));
+          if(grp)fields.push(F.note(ms.length?ms.map(m=>`${m.name} ${annVol(lvl,trimOf(m.id))}%`).join(' · '):'No speakers in this group yet.'));
+          // "Skip while": the overlays chosen, each one tap off; "+ Skip while…" for the rest.
+          const setSw=l=>edT(y=>{if(l.length)y.skipWhile=l;else delete y.skipWhile});
+          if(sw.length)fields.push(F.chips('Skip while',ovs.filter(o=>sw.includes(o.id)).map(o=>({label:`${o.label} ×`,on:true,toggle:()=>setSw(sw.filter(x=>x!==o.id))})),{flex:'0 1 auto',hasHint:true,hint:'Left out while any of these is on'}));
+          const ovFree=ovs.filter(o=>!sw.includes(o.id));if(ovFree.length)fields.push(F.add(sw.length?'+ or while…':'+ Skip while…',ovFree.map(o=>({v:o.id,label:o.label})),v=>setSw([...sw,v])))}
+        R.push(block(inner,{icon:grp?'speaker_group':'speaker',title:name,words,fields,remove:()=>delAt(tp),removeLabel:`Remove ${name}`,
+          extra:{bg:off?'#151619':'#18191c',bd:'rgba(255,255,255,0.05)',iconBg:off?'#232428':'rgba(124,184,240,0.13)',iconFg:off?'#6f6d69':'#7cb8f0'}}))});
+      if(!Object.keys(T).length)R.push(noteRow(inner,'No speakers yet.'));
+      const free=[...SPEAKERS.filter(d=>!(d.id in T)).map(d=>({v:d.id,label:devLabel(d)})),...SPK_GROUPS.filter(d=>!(d.id in T)).map(d=>({v:d.id,label:`${d.name} (speaker group)`}))];
+      if(free.length)R.push(addRow(inner,'+ Add a speaker',free,v=>setAt([...p,'targets',v],{})))};
     const actBlocks=(R,list,p,rails,kinds)=>list.forEach((a,i)=>{const pp=[...p,i];const e=note(`Step ${i+1}`,actErr(a));
       R.push(block(rails,{icon:kindIcon(A_KINDS,a.kind),tag:rails.length?'':String(i+1),kindOptions:opts(kinds),kind:a.kind,kindLabel:'Kind of step',words:a.kind==='set'||a.kind==='if'||a.kind==='repeat'?'':actW(a),err:e,
         extra:{setKind:ev=>setAt(pp,kindSwap(null,a,ev.target.value,{...NEW_A,ramp:()=>NEW_A.ramp(a.kind==='set'?a:null)}))},fields:actFields(a,pp),up:()=>moveAt(pp,-1),down:()=>moveAt(pp,1),remove:()=>delAt(pp),removeLabel:`Remove step`}));
       if(a.kind==='set'||a.kind==='ramp')targetBlocks(R,a,pp,rails);
+      if(a.kind==='announce')announceBlocks(R,a,pp,rails);
       if(a.kind==='wait'){const r=[...rails,rail(RAIL.wait)];R.push(lane(r,'Until','pending','#7fd4a0'));if(a.until)condBlock(R,a.until,[...pp,'until'],r,'',{fixed:true,where:`Step ${i+1}`})}
       if(a.kind==='if'){const r=[...rails,rail(RAIL.if)];
         R.push(lane(r,'If','alt_route','#f2b14c'));(a.conditions||[]).forEach((c,j)=>condBlock(R,c,[...pp,'conditions',j],r,j?'and':'',{where:`Step ${i+1}`}));R.push(addRow(r,'+ And…',opts(C_KINDS),k=>pushAt([...pp,'conditions'],NEW_C[k]())));
@@ -2384,7 +2616,11 @@ class Component extends DCLogic {
       rows.when.push(block([],QUICK?{icon:'event',title:'Once, at',fields:trigFields(t,p),err:e}:{icon:kindIcon(T_KINDS,t.kind),tag:i?'or':'',kindOptions:opts(T_KINDS),kind:t.kind,kindLabel:'Kind of trigger',words:t.kind==='once'?'':trigW(t),err:e,
         extra:{setKind:ev=>setAt(p,kindSwap(null,t,ev.target.value,NEW_T))},fields:trigFields(t,p),up:()=>moveAt(p,-1),down:()=>moveAt(p,1),remove:()=>delAt(p),removeLabel:'Remove trigger'}))});
     if(!(A.triggers||[]).length){note('When','Add at least one trigger: what starts it');rows.when.push(noteRow([],'Nothing starts it yet. Add a trigger.'))}
-    if(!QUICK)rows.when.push(addRow([],'+ Add a trigger',opts(T_KINDS),k=>pushAt(['triggers'],NEW_T[k]())));
+    // "Every prayer time" (while prayer times are on): the five daily prayers' times, as time triggers, adding the ones not there yet.
+    const isPrT=(t,pr)=>t.kind==='time'&&t.at&&t.at.kind==='prayer'&&(t.at.prayer===pr||t.at.prayer==='all')&&!t.at.offsetMin&&!(t.days&&t.days.length);
+    const prMissing=FIVE_PRAYERS.filter(pr=>!(A.triggers||[]).some(t=>isPrT(t,pr)));
+    const T_ADD=[...opts(T_KINDS),...(prayerOn(H)&&prMissing.length?[{v:'__prayers',label:prMissing.length===5?'Every prayer time (adds the five)':`Every prayer time (adds ${lst(prMissing.map(x=>PRAYER_NAMES[x]))})`}]:[])];
+    if(!QUICK)rows.when.push(addRow([],'+ Add a trigger',T_ADD,k=>k==='__prayers'?edit(a=>{a.triggers=a.triggers||[];for(const pr of FIVE_PRAYERS)if(!a.triggers.some(t=>isPrT(t,pr)))a.triggers.push({kind:'time',at:{kind:'prayer',prayer:pr}})}):pushAt(['triggers'],NEW_T[k]())));
     // Only if
     if(!(A.conditions||[]).length)rows.if.push(noteRow([],'Always: no conditions.'));
     (A.conditions||[]).forEach((c,i)=>condBlock(rows.if,c,['conditions',i],[],i?'and':''));
@@ -2443,7 +2679,7 @@ class Component extends DCLogic {
     const draft=(k,v)=>this.setState(p=>({sd:{...(p.sd||{}),[k]:v}}));
     let zones=[];try{zones=Intl.supportedValuesOf('timeZone')}catch(e){zones=[hm.timezone]}
     if(hm.timezone&&!zones.includes(hm.timezone))zones=[hm.timezone,...zones];
-    const METHODS=[['MuslimWorldLeague','Muslim World League'],['Egyptian','Egyptian General Authority'],['Karachi','University of Islamic Sciences, Karachi'],['UmmAlQura','Umm al-Qura, Makkah'],['Dubai','Dubai'],['MoonsightingCommittee','Moonsighting Committee'],['NorthAmerica','ISNA (North America)'],['Kuwait','Kuwait'],['Qatar','Qatar'],['Singapore','Singapore'],['Tehran','Tehran'],['Turkey','Diyanet (Turkey)']];
+    // Prayer times have their own panel (Integrations → Prayer times); Settings shows where they stand and opens it.
     // The pin: a draft (pasted, searched, dragged, this browser's) until it's saved, else the saved point.
     const pin=this.homePin(),R=D.radius??loc.radiusM??150,hasPin=!!pin&&(!!pin.latitude||!!pin.longitude);
     const dirty=!!D.pin||(D.radius!==undefined&&D.radius!==(loc.radiusM??150));
@@ -2496,7 +2732,7 @@ class Component extends DCLogic {
         api('PUT','/api/home',body).then(r=>{this.setState(p=>({sd:{...(p.sd||{}),pin:undefined,radius:undefined,radiusImg:undefined,addr:undefined}}));this.toast(r.timezone?`Location saved. Timezone is now ${r.timezone.replace(/_/g,' ')}`:P?'Location saved: sun, prayer times, the weather and arriving home follow it':`Circle saved: ${R} m`,this.undoFn(r.undo))}).catch(x=>this.err(x))},
       here:()=>{if(!navigator.geolocation){this.toast('This browser can’t share its location');return}navigator.geolocation.getCurrentPosition(p=>{draft('pin',{latitude:Math.round(p.coords.latitude*1e6)/1e6,longitude:Math.round(p.coords.longitude*1e6)/1e6,source:'phone',address:null,label:'This browser’s location'});this.toast(p.coords.accuracy>100?`Only accurate to ${Math.round(p.coords.accuracy)} m: drag the pin onto the house`:'Check the pin, then Save location')},()=>this.toast('The browser didn’t share its location'),{enableHighAccuracy:true,timeout:15000})},
       tz:hm.timezone||'',tzOptions:zones.map(z=>({v:z,label:z.replace(/_/g,' ')})),setTz:e=>put({timezone:e.target.value},`Timezone: ${e.target.value.replace(/_/g,' ')}`),
-      method:hm.prayerMethod||'MuslimWorldLeague',methodOptions:METHODS.map(([v,label])=>({v,label})),setMethod:e=>put({prayerMethod:e.target.value},'Prayer times recalculated'),
+      prayerLabel:(()=>{const P=prayerOf(H);return P.on?`On · ${(P.methods.find(m=>m.id===P.method)||{}).label||P.method}`:'Off'})(),openPrayer:()=>this.openSheet('prayer'),
       people,hasPeople:people.length>0,addPerson:()=>{const v=window.prompt('Who lives here?');if(!v||!v.trim())return;api('POST','/api/people',{name:v.trim()}).then(r=>this.toast(`${v.trim()} added`,this.undoFn(r.undo))).catch(x=>this.err(x))},
       presenceSetup:openSetup('presence'),
       doorTrack:hm.pauseForDoorbell!==false?'#f2b14c':'#35363a',doorKnob:hm.pauseForDoorbell!==false?'translateX(14px)':'none',
@@ -2642,7 +2878,7 @@ class Component extends DCLogic {
     const rkey=r=>!r||r.kind==='time'?'time':r.kind==='sun'?'sun:'+r.event:'prayer:'+r.prayer;
     const rdraft=(r,dflt)=>({k:rkey(r),at:r&&r.kind==='time'?r.at:dflt,off:String((r&&r.offsetMin)||0)});
     const rmake=x=>{const [kind,nm]=x.k.split(':'),off=Math.round(Number(x.off)||0);return kind==='time'?{kind:'time',at:x.at||'20:00'}:kind==='sun'?{kind:'sun',event:nm,...(off?{offsetMin:off}:{})}:{kind:'prayer',prayer:nm,...(off?{offsetMin:off}:{})}};
-    const rview=(key)=>{const x=B[key];return{kinds:RKINDS,k:x.k,isClock:x.k==='time',noClock:x.k!=='time',at:x.at,off:x.off,setK:e=>this.bxSet({[key]:{...x,k:e.target.value}}),setAt:e=>this.bxSet({[key]:{...x,at:e.target.value}}),setOff:e=>this.bxSet({[key]:{...x,off:e.target.value}})}};
+    const rview=(key)=>{const x=B[key];return{kinds:rhythmKinds(RKINDS,H,x.k,B.origR&&B.origR[key]),k:x.k,isClock:x.k==='time',noClock:x.k!=='time',at:x.at,off:x.off,setK:e=>this.bxSet({[key]:{...x,k:e.target.value}}),setAt:e=>this.bxSet({[key]:{...x,at:e.target.value}}),setOff:e=>this.bxSet({[key]:{...x,off:e.target.value}})}};
     // Devices a mode, overlay or moment can set, and what to: the same choices as the mode editor.
     // With a room's air conditioner zone among them ("Lounge · AC zone", the target "zone:lounge").
     const ZP=zonePseudos(H),pick=id=>devs[id]||ZP[id];
@@ -2704,9 +2940,9 @@ class Component extends DCLogic {
           this.bxRun(()=>MO?api('PUT','/api/moments/'+MO.id,body):api('POST','/api/moments',body),MO?`${nm} saved`:`${nm} added to your day`)},
         del:()=>MO&&this.bxSet({err:null,confirm:{text:`Delete the moment ${MO.label}?`,yes:'Delete moment',run:()=>this.bxRun(()=>api('DELETE','/api/moments/'+MO.id),`${MO.label} deleted`)}})})}
     // Openers, for Modes.
-    const openOverlay=o=>this.openBx({kind:'overlay',id:o.id,name:o.name,icon:o.icon,endK:o.ends?o.ends.kind:'manual',endAt:rdraft(o.ends&&o.ends.kind==='time'?o.ends.at:null,'23:00'),endDev:o.ends&&o.ends.kind==='device_off'?o.ends.device:'',allOff:!!o.allOff,
+    const openOverlay=o=>this.openBx({kind:'overlay',id:o.id,name:o.name,icon:o.icon,endK:o.ends?o.ends.kind:'manual',endAt:rdraft(o.ends&&o.ends.kind==='time'?o.ends.at:null,'23:00'),origR:{endAt:rkey(o.ends&&o.ends.kind==='time'?o.ends.at:null)},endDev:o.ends&&o.ends.kind==='device_off'?o.ends.device:'',allOff:!!o.allOff,
       targets:Object.fromEntries((o.targets||[]).filter(t=>!t.missing).map(t=>[t.deviceId,t.target])),tl:Object.fromEntries((o.targets||[]).map(t=>[t.deviceId,t.label]))});
-    const openMoment=mo=>this.openBx({kind:'moment',id:mo.id,name:mo.label,what:mo.what,at:rdraft(mo.at,'21:00'),targets:Object.fromEntries((mo.targets||[]).filter(t=>!t.missing).map(t=>[t.deviceId,t.target])),tl:Object.fromEntries((mo.targets||[]).map(t=>[t.deviceId,t.label]))});
+    const openMoment=mo=>this.openBx({kind:'moment',id:mo.id,name:mo.label,what:mo.what,at:rdraft(mo.at,'21:00'),origR:{at:rkey(mo.at)},targets:Object.fromEntries((mo.targets||[]).filter(t=>!t.missing).map(t=>[t.deviceId,t.target])),tl:Object.fromEntries((mo.targets||[]).map(t=>[t.deviceId,t.label]))});
     const SM=this.modeById(s.modeSel||H.current.modeId);
     const mx={newMode:()=>this.openBx({kind:'mode',name:'',icon:'routine',color:'#c9a0f0',start:rdraft(null,'18:00'),copyFrom:''}),
       editMode:()=>this.openBx({kind:'mode',id:SM.id,name:SM.name,icon:SM.icon,color:SM.color}),
@@ -2795,6 +3031,9 @@ class Component extends DCLogic {
         saveName:()=>this.devSettings(D.id,{name:(s.nameDraft||'').trim()||null},(s.nameDraft||'').trim()?`Renamed to ${(s.nameDraft||'').trim()}`:'Name cleared').then(()=>this.setState({nameDraft:null})),
         renamed:!!D.original&&D.original.name!==D.name,origNote:D.original?`${D.integ||'The integration'} calls it “${D.original.name}”. Clear the name to use that again.`:'',
         roomId:D.room,roomOptions:[...H.rooms,{id:WHOLE_HOME,name:'Whole home'},{id:'unassigned',name:'No room'},...(H.rooms.some(r=>r.id===D.room)||D.room==='unassigned'||D.room===WHOLE_HOME?[]:[{id:D.room,name:RN[D.room]||D.room}])].map(r=>({v:r.id,label:r.name})),setRoom:e=>{const v=e.target.value;this.devSettings(D.id,{room:v},v==='unassigned'?'Now in no room':v===WHOLE_HOME?'Now serves the whole home':`Moved to ${RN[v]||v}`)},
+        // Speakers: how loud announcements play here (Speaker loudness has them all side by side).
+        canAnnounce:!!D.canAnnounce,...(D.canAnnounce?(()=>{const tr=(s.slTrim||{})[D.id]??D.announceTrim??100;return{trim:String(tr),trimLabel:tr+'%',setTrim:e=>this.setTrim(D,+e.target.value),
+          trimNote:`An announcement at 20% plays here at ${annVol(20,tr)}%.`,openLoud:()=>this.openSheet('loud')}})():{}),
         toggleHidden:()=>this.devSettings(D.id,{hidden:!D.hidden},D.hidden?'Shown in lists again':'Hidden from lists'),hidTrack:D.hidden?'#f2b14c':'#35363a',hidKnob:D.hidden?'translateX(14px)':'none',
         ...this.climateView(D),...this.purifierView(D),...this.routerView(D),...this.combinedView(D),...this.watchView(D,H,RN),facts:[['State',st],['Integration',D.integ],['Room',RN[D.room]||(D.room===WHOLE_HOME?'Whole home':D.room)],isSens(D)?['Last reported',(()=>{const v=(H.sensors||[]).find(x=>x.id===D.id);return v&&v.seenAt?minsAgo(v.seenAt):'Not yet'})()]:['Last changed',D.why.now]].map(([k,v])=>({k,v})),usedIn,usedNone:usedIn.length?'':'Not used by any mode, overlay or behaviour yet',
         code:JSON.stringify({id:D.id,address:D.eid,type:D.type,capabilities:D.capabilities,state:D.state,integration:D.integ,room:D.room},null,2)}}
@@ -2818,6 +3057,10 @@ class Component extends DCLogic {
     const openDev=id=>()=>id&&this.setState({drawer:id,tab:'simple',nameDraft:null});
     const gl={cards:[
         ...(O?[{icon:O.icon,color:'#f2b14c',label:'Outside',value:`${O.temp}° ${O.text.toLowerCase()}`,sub:[O.high!=null?`${O.high}° / ${O.low}° today`:'',O.rain||'',O.rain?'':O.uvMax!=null&&O.uvMax>=6?`UV ${Math.round(O.uvMax)} at midday`:'',O.wind!=null&&O.wind>=30?`windy, ${O.wind} km/h`:''].filter(Boolean).join(' · '),open:()=>{},cursor:'default'}]:[]),
+        // Prayer times (when they're on): the one now and the next, counting down (redrawn every 30 s).
+        ...(()=>{const P=prayerOf(H),nx=P.next,cu=P.current;if(!P.on||!nx)return[];
+          return[{icon:'mosque',color:'#c79bf2',label:'Prayer times',value:`${cu&&PRAYER_NAMES[cu.prayer]?PRAYER_NAMES[cu.prayer]+' · ':''}${PRAYER_NAMES[nx.prayer]||nx.prayer} ${untilW(nx.at-hubNowMs(H))}`,
+            sub:`${PRAYER_NAMES[nx.prayer]||nx.prayer} at ${clockIn(nx.at,H.home.timezone)}`,open:()=>this.openSheet('prayer'),cursor:'pointer'}]})(),
         ...((G.inside||[]).length?[{icon:'thermostat',color:'#7cb8f0',label:'Inside',value:G.inside.length===1?`${G.inside[0].temp}°`:`${Math.min(...G.inside.map(x=>x.temp))}–${Math.max(...G.inside.map(x=>x.temp))}°`,sub:G.inside.map(x=>`${x.name} ${x.temp}°${x.humidity!=null?` ${x.humidity}%`:''}`).join(' · '),open:openDev(G.inside[0].device),cursor:'pointer'}]:[]),
         ...((G.air||[]).length?[{icon:'air',color:({1:'#7fd4a0',2:'#dcd27e',3:'#f2b14c',4:'#ff6b5e'})[G.air[0].level]||'#a3a09a',label:'Air',value:G.air[0].label,sub:G.air.length>1?G.air.map(a=>`${a.name}: ${a.label.toLowerCase()}`).join(' · '):G.air[0].name,open:openDev(G.air[0].device),cursor:'pointer'}]:[])],
       alerts:(H.insights||[]).map(i=>{const [c,bg,bd]=LV[i.level]||LV.info;return{icon:i.icon,color:c,bg,border:bd,title:i.title,detail:i.detail||'',canOpen:!!i.device,open:openDev(i.device),
@@ -2825,7 +3068,7 @@ class Component extends DCLogic {
         // "That's expected": hidden for as long as it stays exactly so; a change, or its coming back later, shows again.
         expected:()=>api('POST',`/api/insights/${encodeURIComponent(i.id)}/snooze`,{untilItChanges:true}).then(()=>this.toast('Hidden while it stays like this',()=>api('DELETE',`/api/insights/${encodeURIComponent(i.id)}/snooze`).catch(x=>this.err(x)))).catch(x=>this.err(x))}}),
       hasAlerts:(H.insights||[]).length>0};
-    return {...this.kovaAutoVals(s,H,devs,RN),...this.settingsVals(s,H),...this.voiceVals(s,H),...this.basicsVals(s,H,devs,RN),gl,isSettings:s.screen==='settings',combineIdeas,bs,bsOpen:()=>{this.setState({bs:{open:true}});this.loadBrowsers()},nav,isHome:s.screen==='home',isRooms:s.screen==='rooms',isSensors:s.screen==='sensors',isAutos:s.screen==='autos',isImport:s.screen==='import',isDev:s.screen==='dev'&&adv,
+    return {...this.kovaAutoVals(s,H,devs,RN),...this.settingsVals(s,H),...this.voiceVals(s,H),...this.shVals(s,H,RN),...this.basicsVals(s,H,devs,RN),gl,isSettings:s.screen==='settings',combineIdeas,bs,bsOpen:()=>{this.setState({bs:{open:true}});this.loadBrowsers()},nav,isHome:s.screen==='home',isRooms:s.screen==='rooms',isSensors:s.screen==='sensors',isAutos:s.screen==='autos',isImport:s.screen==='import',isDev:s.screen==='dev'&&adv,
       homeName:H.home.name,hubTitle:hubOk?(H.demo?'Demo home':'Hub connected'):'Can’t reach the hub',hubSub:hubOk?(H.demo?'Virtual devices · safe to play with':`${list.filter(d=>!isSens(d)).length} devices · ${(H.sensors||[]).length} sensors · all local`):'Reconnecting…',hubDot:hubOk?'#7fd4a0':'#ff6b5e',
       showWxChip:!(H.glance&&H.glance.outside),weatherIcon:w?w.icon:'cloud_off',weatherTemp:w?`${w.temp}°`:'—',weatherText:w?w.text:'No weather',
       avatars:(home.length?home:H.people).slice(0,3).map((p,i)=>({initial:p.name[0],ml:i?'-8px':'0px',op:p.home?1:0.4})),

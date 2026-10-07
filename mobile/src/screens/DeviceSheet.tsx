@@ -18,6 +18,8 @@ import { T } from '../ui/Text';
 import { CameraStill } from './SecurityScreen';
 import { SensorReadings, WatchSettings } from './SensorPanel';
 import { isSensor } from '../logic/sensors';
+import { calibratedVol, trimOf } from '../logic/automations';
+import { LOUDNESS_MAX, LOUDNESS_MIN, loudnessBody, loudnessWords, snapLoudness } from '../logic/media';
 
 const TEMPS: [number, string, string][] = [[2200, '#ffb56b', 'Candle'], [2700, '#ffc98a', 'Warm'], [3000, '#ffd9a8', 'Soft'], [4000, '#fff1dc', 'Neutral'], [5000, '#f4f7ff', 'Daylight']];
 /** Inputs a TV with `input` can switch to. The one it's on is marked when the TV can say (through SmartThings). */
@@ -261,6 +263,17 @@ export function DeviceSheet() {
               </View>
             </View>,
           )}
+          {D.canAnnounce ? block('loud', 'Announcement loudness',
+            <View style={{ gap: SP[2] }}>
+              <Slider value={trimOf(D)} min={LOUDNESS_MIN} max={LOUDNESS_MAX} color={C.blue} onColor={C.onBlue} icon="campaign" label="Announcement loudness"
+                onRelease={v => { const n = snapLoudness(v); void settings(loudnessBody(n), `${D.name}: announcements ${loudnessWords(n)}`); }} />
+              <T v="footnote" color={C.stone2}>{`A 20% announcement plays at ${calibratedVol(20, trimOf(D))}% here. A speaker that sounds louder than the rest gets less.`}</T>
+              <Press onPress={() => { close(); nav.navigate('SpeakerLoudness'); }} label="Speaker loudness: every speaker, with a test" style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2], alignSelf: 'flex-start', minHeight: 36 }}>
+                <Icon name="tune" size={17} color={C.amber} />
+                <T v="labelSm" color={C.amber}>Speaker loudness</T>
+              </Press>
+            </View>,
+          ) : null}
           {has(D, 'pause') && D.on && !(has(D, 'queue') && D.track) ? (
             <View style={{ flexDirection: 'row', gap: SP[2] }}>
               <View style={{ flex: 1 }}><Button kind="blue" full icon={D.paused ? 'play_arrow' : 'pause'} label={D.paused ? 'Play' : 'Pause'} onPress={() => send(D.id, { paused: !D.paused })} /></View>

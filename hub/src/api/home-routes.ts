@@ -1,3 +1,4 @@
+import { canAnnounce } from '../engine/announce.ts';
 import type { FastifyInstance } from 'fastify';
 import type { Hub } from '../hub.ts';
 import { LOCATION_SOURCES, ROOM_ICONS, UNASSIGNED_ROOM, WHOLE_HOME, type HomeConfig, type HomeLocation, type LocationSource } from '../model/types.ts';
@@ -154,7 +155,7 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
   // zoneRooms: ducted units, the rooms each zone serves ({ "1": ["lounge"], "5": ["office", "guest"] }; a room id alone
   // is one room; [] or null clears that zone). Merged by zone, like zoneNames.
   // archived: out of every list, the assistant and alerts, and modes leave it alone, until it's restored.
-  app.patch<{ Params: { id: string }; Body: { name?: string | null; room?: string | null; hidden?: boolean; archived?: boolean; favourite?: boolean; watts?: number | null; zoneNames?: Record<string, string | null>; zoneRooms?: Record<string, string | string[] | null> | null; outdoor?: boolean | null; alerts?: AlertPrefs | null } }>('/api/devices/:id/settings', async (req, reply) => {
+  app.patch<{ Params: { id: string }; Body: { name?: string | null; room?: string | null; hidden?: boolean; archived?: boolean; favourite?: boolean; watts?: number | null; zoneNames?: Record<string, string | null>; zoneRooms?: Record<string, string | string[] | null> | null; outdoor?: boolean | null; alerts?: AlertPrefs | null; announceTrim?: number | null } }>('/api/devices/:id/settings', async (req, reply) => {
     const d = hub.reg.get(req.params.id);
     if (!d) return bad(reply, 'Unknown device', 404);
     const b = req.body ?? {};
@@ -163,6 +164,11 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
     if (b.archived !== undefined && typeof b.archived !== 'boolean') return bad(reply, 'archived must be true or false');
     if (b.name !== undefined && b.name !== null && !text(b.name)) return bad(reply, 'Give it a name');
     if (b.watts != null && !(typeof b.watts === 'number' && b.watts >= 0 && b.watts <= 10_000)) return bad(reply, 'watts must be 0–10000');
+    // A speaker's announcement loudness, in % of the level asked for.
+    if (b.announceTrim !== undefined) {
+      if (!canAnnounce(d)) return bad(reply, `${d.name} isn’t a speaker Kova announces on`);
+      if (b.announceTrim !== null && !(typeof b.announceTrim === 'number' && Number.isFinite(b.announceTrim) && b.announceTrim >= 20 && b.announceTrim <= 200)) return bad(reply, 'Announcement loudness is 20–200 %');
+    }
     // Cameras and sensors: inside or outside, and when their events alert.
     const watched = isCamera(d) || isSensor(d);
     if (b.outdoor !== undefined && b.outdoor !== null && typeof b.outdoor !== 'boolean') return bad(reply, 'outdoor must be true, false or null');
@@ -199,6 +205,7 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
       if (b.hidden !== undefined) { if (b.hidden) s.hidden = true; else delete s.hidden; }
       if (b.archived !== undefined) { if (b.archived) s.archived = true; else delete s.archived; }
       if (b.watts !== undefined) { if (b.watts == null) delete s.watts; else s.watts = Math.round(b.watts); }
+      if (b.announceTrim !== undefined) { const t = b.announceTrim == null ? 100 : Math.round(b.announceTrim); if (t === 100) delete s.announceTrim; else s.announceTrim = t; }
       if (b.outdoor !== undefined) { if (b.outdoor == null) delete s.outdoor; else s.outdoor = b.outdoor; }
       // Alerts merge by kind: a choice sets it, null clears it (back to the room's or Kova's).
       if (alerts === null) delete s.alerts;

@@ -157,6 +157,12 @@ export interface DeviceSettings {
   /** Zones Kova linked to rooms by itself because the zone's name plainly is the room's, by zone, with the name it matched:
    *  once done for a name, never redone, so a link the owner removes stays removed. */
   zoneRoomsAuto?: Record<string, string>;
+  /**
+   * Speakers: how loud announcements play here, in % of the level asked for (100 = as asked). A speaker that sounds
+   * louder than the rest at the same volume gets less (a soundbar at 60 plays "15%" at 9%), so one level sounds the
+   * same in every room. 20–200.
+   */
+  announceTrim?: number;
 }
 
 /**
@@ -244,7 +250,11 @@ export interface PersonState {
 export type Rhythm =
   | { kind: 'time'; at: string }
   | { kind: 'sun'; event: 'sunrise' | 'sunset' | 'dawn' | 'dusk'; offsetMin?: number }
-  | { kind: 'prayer'; prayer: 'fajr' | 'sunrise' | 'dhuhr' | 'asr' | 'maghrib' | 'isha'; offsetMin?: number };
+  | { kind: 'prayer'; prayer: PrayerName; offsetMin?: number };
+
+export type PrayerName = 'fajr' | 'sunrise' | 'dhuhr' | 'asr' | 'maghrib' | 'isha';
+/** The five daily prayers (sunrise is a time, not a prayer): what "every prayer" means. */
+export const FIVE_PRAYERS: PrayerName[] = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'];
 
 // ------------------------------------------------------------------ modes --
 
@@ -391,7 +401,47 @@ export type Action =
   /** Run another automation's actions (its triggers and conditions are skipped). */
   | { kind: 'run'; automation: string }
   /** Stop here. */
-  | { kind: 'stop' };
+  | { kind: 'stop' }
+  /**
+   * Play something on speakers over whatever they play, then put them back: each speaker's volume, and what it was
+   * playing (at the place where the speaker allows), or idle again. Players in `pause` (a Helix box's film) are paused
+   * while it plays and carry on after.
+   */
+  | AnnounceAction;
+
+/**
+ * What an announcement plays: a source's name (the home's `sources`), an http(s) URL, a clip kept on the hub
+ * ("clip:<id>", see services/clips.ts) or a Helix song ("Song: <title>").
+ */
+export type AnnounceMedia = string;
+
+/** One speaker of an announcement. */
+export interface AnnounceTarget {
+  /** The level the owner thinks of (0–100); it plays at this × the speaker's announcement loudness. Unset: the step's. */
+  vol?: number;
+  /** Dropped from this automation for now (kept in the list, so it's one tap back). */
+  off?: boolean;
+  /** Left out while any of these overlays is on ("the guest room speaker while Guests is on"). */
+  skipWhile?: string[];
+}
+
+export interface AnnounceAction {
+  kind: 'announce';
+  /** What plays. Unset only while it's still to be chosen (Ask Kova asks): the automation stays off until then. */
+  media?: AnnounceMedia;
+  /** Another clip for a particular prayer, when a prayer time started it (Fajr's call differs). */
+  mediaFor?: Partial<Record<PrayerName, AnnounceMedia>>;
+  /** The level for every speaker, as the owner thinks of it (0–100); a target's own vol wins. */
+  vol: number;
+  /** Speakers by device id. A Kova speaker group stands for its speakers: each gets its own loudness. */
+  targets: Record<string, AnnounceTarget>;
+  /** Players (a Helix box) paused while it plays. */
+  pause?: string[];
+  /** Put the speakers back as they were afterwards (default true). Off: volumes go back, but nothing resumes. */
+  restore: boolean;
+  /** The longest it may take before Kova puts everything back, in seconds (default 420). */
+  maxSec?: number;
+}
 
 /**
  * When it starts again while still running (waiting or in a delay): ignore the new start (single),
@@ -476,6 +526,8 @@ export interface HomeConfig {
   latitude: number;
   longitude: number;
   prayerMethod?: string;
+  /** Prayer times (Integrations → Prayer times): off unless the owner turns it on, or the home already used them. */
+  prayer?: PrayerSettings;
   rooms: Room[];
   people: Person[];
   modes: Mode[];
@@ -512,6 +564,20 @@ export interface HomeConfig {
  * someone is ('rooms', asking on the phones when nobody is anywhere).
  */
 export interface RoomClimateSettings { coolTo?: number; heatTo?: number; fromElsewhere?: 'off' | 'rooms' }
+
+/**
+ * Prayer times as an opt-in part of Kova. While off, prayer options don't show (the Now card, prayer triggers in the
+ * editors and Ask Kova, the adhan choices); schedules already set by a prayer time keep running either way.
+ */
+export interface PrayerSettings {
+  on: boolean;
+  /** Asr: the standard (Shafi'i, Maliki, Hanbali) time, or the later Hanafi one. */
+  madhab?: 'shafi' | 'hanafi';
+  /** Minutes added to (or taken from) each time, as a local mosque's timetable has them. */
+  adjust?: Partial<Record<PrayerName, number>>;
+  /** The call to prayer announcements play by default, and Fajr's own (announce media, see AnnounceMedia). */
+  adhan?: { media?: string; fajr?: string };
+}
 
 /** How camera and sensor alerts behave across the home. */
 export interface SecuritySettings {

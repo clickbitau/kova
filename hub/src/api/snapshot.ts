@@ -15,6 +15,10 @@ import { roomOutdoor } from '../util/sensors.ts';
 import { engineInfo, loadSettings } from '../assistant/ai.ts';
 import { hasZones, suggestZoneRooms, zoneCommandWords, type ZoneCommand } from '../util/zones.ts';
 import { SEASON_LABEL } from '../engine/room-climate.ts';
+import { canAnnounce, trimOf } from '../engine/announce.ts';
+import { BUILTIN_ADHANS } from '../services/adhans.ts';
+import { prayerView } from '../services/prayer.ts';
+import { clipView } from './announce-routes.ts';
 
 const FEED_ICON: Record<string, string> = { mode: 'routine', run: 'bolt', presence: 'person_pin_circle', state: 'lightbulb', system: 'info', skip: 'event_busy' };
 
@@ -104,7 +108,7 @@ export function snapshot(hub: Hub) {
   });
   const findings = checker.findings();
   // Each part of an automation in words, for lists and the editor's summary.
-  const words = { reg, cfg, now };
+  const words = { reg, cfg, now, clipName: (id: string) => hub.clips.get(id)?.name };
   const tgt = (id: string, cmd: object) => { const d = reg.get(id); return d ? targetLabel(d, cmd) : pseudoLabel(id, cfg.rooms, cmd) ?? id; };
   const autoWords = (a: Pick<import('../model/types.ts').Automation, 'triggers' | 'conditions' | 'actions'>) => ({
     triggerLabels: a.triggers.map(t => triggerWords(t, words)),
@@ -208,7 +212,7 @@ export function snapshot(hub: Hub) {
     // `watts` / `typicalWatts`: what a device with no meter draws while on, the owner's figure and Kova's (Energy page).
     // `kind`: device (something to control), sensor (only reports) or camera. Sensors stay here so ids keep working.
     // `live` (cameras): whether the apps can play its live video (its integration streams it over WebRTC).
-    devices: reg.list().map(d => ({ ...d, kind: kindOf(d), why: engine.why(d.id), usedIn: engine.usedIn(d.id), ...wattsSetting(d, cfg.devices?.[d.id]?.watts), ...zoneSettings(d, cfg), ...liveSetting(reg, d) })),
+    devices: reg.list().map(d => ({ ...d, kind: kindOf(d), why: engine.why(d.id), usedIn: engine.usedIn(d.id), ...wattsSetting(d, cfg.devices?.[d.id]?.watts), ...zoneSettings(d, cfg), ...liveSetting(reg, d), ...(canAnnounce(d) ? { canAnnounce: true, announceTrim: trimOf(cfg, d.id) } : {}) })),
     modes,
     current: {
       modeId: mn.mode.id, since: mn.since, until: mn.until, untilLabel: clock(mn.until, tz), nextId: mn.next.id,
@@ -238,6 +242,11 @@ export function snapshot(hub: Hub) {
     overlays: cfg.overlays.map(o => ({ id: o.id, name: o.name, icon: o.icon, endsLabel: o.endsLabel, ends: o.ends, allOff: !!o.allOff, targets: targetList(o.targets) })),
     moments: cfg.moments.map(mo => ({ id: mo.id, label: mo.label, what: mo.what, at: mo.at, atLabel: rhythmLabel(mo.at), targets: targetList(mo.targets) })),
     sources: cfg.sources,
+    // Audio kept on the hub for announcements, and (with prayer times on) the call-to-prayer recordings Kova offers.
+    clips: hub.clips.all().map(clipView),
+    adhans: cfg.prayer?.on ? BUILTIN_ADHANS.map(a => ({ id: a.id, title: a.title, author: a.author, licence: a.licence, licenceUrl: a.licenceUrl, page: a.page, durationMs: a.durationMs, format: a.format, ready: hub.adhans.ready(a) })) : [],
+    // Prayer times (an integration of their own, off unless turned on): the settings, today's times and the waqt now.
+    prayer: prayerView(cfg, now),
     // Helix music any speaker can play: Shuffle all, Loved, each playlist (empty until Helix is paired).
     music: hub.music?.cached() ?? [],
     update: hub.updates?.status() ?? null,

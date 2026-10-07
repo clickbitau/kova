@@ -35,9 +35,11 @@ const withTimeout = (ms: number) => {
   return { signal: c.signal, done: () => clearTimeout(t) };
 };
 
-/** JSON over HTTP to the hub, with its token. Errors carry the hub's own message. */
+/** JSON over HTTP to the hub, with its token (or a file, sent as it is). Errors carry the hub's own message. */
 export async function call<T = unknown>(cfg: HubConfig, method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, body?: unknown, timeoutMs = 12_000): Promise<T> {
   const t = withTimeout(timeoutMs);
+  // A file (an uploaded clip) goes as it is, with its own type.
+  const raw = typeof Blob !== 'undefined' && body instanceof Blob ? body : null;
   try {
     const res = await fetch(hubUrl(cfg, path), {
       method,
@@ -45,9 +47,9 @@ export async function call<T = unknown>(cfg: HubConfig, method: 'GET' | 'POST' |
       headers: {
         accept: 'application/json',
         ...(cfg.token ? { authorization: `Bearer ${cfg.token}` } : {}),
-        ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
+        ...(raw ? { 'content-type': raw.type || 'application/octet-stream' } : body !== undefined ? { 'content-type': 'application/json' } : {}),
       },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body: raw ?? (body !== undefined ? JSON.stringify(body) : undefined),
     });
     const text = await res.text();
     let json: unknown = null;

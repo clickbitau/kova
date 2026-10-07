@@ -63,7 +63,22 @@ export interface Adapter {
   liveView?: LiveView;
   /** Optional: a still image from a camera (e.g. of its latest event). */
   snapshot?(device: Device): Promise<Snapshot>;
+  /**
+   * Optional, for announcements (engine/announce.ts): what a speaker plays now, exactly enough to put it back (a queue
+   * and the place in it, the stream it was on). Null when it plays nothing. Kept in memory only, so anything goes.
+   */
+  snapshotPlayback?(device: Device): Promise<unknown | null>;
+  /** Optional: play a short clip once, on this speaker alone (out of any group, not as a radio stream). */
+  playClip?(device: Device, clip: Clip, cause?: Cause): Promise<void | DeviceState>;
+  /**
+   * Optional: put back what snapshotPlayback saw (null: it played nothing; leave it idle as it was before). Says
+   * in words what it did ("resumed Loved at 1:23"), with the state when it knows it.
+   */
+  restorePlayback?(device: Device, snap: unknown | null): Promise<{ words: string; state?: DeviceState }>;
 }
+
+/** A short piece of audio for a speaker to play once (an announcement). The URL needs no headers. */
+export interface Clip { url: string; title: string; contentType: string; durationMs?: number }
 
 /** WebRTC signalling for cameras whose cloud or device speaks WebRTC to the browser directly. */
 export interface LiveView {

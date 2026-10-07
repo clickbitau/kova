@@ -5,9 +5,9 @@ import { usePreventRemove, useRoute, type NavigationAction, type RouteProp } fro
 import { C, F, R, SP, alpha } from '../theme';
 import { useHub, useSnap } from '../state/hub';
 import { useNav, type Stack } from '../navigation';
-import type { Command, Device, Room, RoomStatus } from '../api/types';
+import type { Adhan, Clip, Command, Device, PrayerView, Room, RoomStatus, SpeakerGroup } from '../api/types';
 import {
-  ACTION_KINDS, CONDITION_KINDS, DAYS, DAY_NAMES, FIELD_UNIT, KIND_ICON, MONTH_NAMES, PRESENCE_EVENTS, RAMP_FIELDS, RESULT, RHYTHMS, RUN_MODES, STATION_KEY, TITLE_KEY, TRIGGER_KINDS,
+  ACTION_KINDS, CONDITION_KINDS, DAYS, DAY_NAMES, FIELD_UNIT, KIND_ICON, MONTH_NAMES, PRESENCE_EVENTS, RAMP_FIELDS, RESULT, RUN_MODES, STATION_KEY, TITLE_KEY, TRIGGER_KINDS,
   addMinutes, actionText, automationsOf, bodyOf, canMove, canRamp, canSet, carryCommand, changeActionKind, changeKind, clockOf, conditionText, ctxOf, dateOf, dayOn,
   deviceLabel, deviceSections, draftOf, draftSummary, duplicateAt, EVENTS, eventsFor, extrasOf, fieldDefault, fieldsFor, firstCommand, freeFields, isGroup, isOneTime, labelOf,
   localNowOf, matchFields, mediaChoices, mediaFromKey, mediaKey, minToSec, monthGrid, moveAt, newAction, newCondition, newTrigger, onceAt, onceChips, onceProblem, onceState, onceWords,
@@ -16,7 +16,12 @@ import {
   withMatch, withOffset, zonesOf, ACTIVE_MIN, roomEventsFor, roomNote, roomOptions, roomProblem, withinProblem, readingRooms, readingSourceLabel, roomReadingsFor, zoneTargets, ROOM_FIELDS,
   type Action, type AutomationRun, type CmdField, type Condition, type Ctx, type Draft, type MusicItem, type Names, type Opt, type Path, type RampField, type RunAnswer, type Rhythm,
   type StateMatch, type TargetInfo, type Trigger, type Unit,
+  SONG_KEY, URL_KEY, announceMediaFromKey, announceMediaKey, announceMediaName, announceProblem, announceSaveProblem, announceSpeakers, calibratedVol,
+  isSpeakerGroup, missingPrayers, pauseChoices, rhythmChoices, targetLevel, targetSpeakers, trimOf, withEveryPrayer, type AnnounceAction, type AnnounceTarget,
 } from '../logic/automations';
+import { prayerOn } from '../logic/prayer';
+import { CLIP_TYPES, clipFileProblem, clipName } from '../logic/media';
+import { AdhanCredit } from './PrayerTimesScreen';
 import { EV_ICON } from '../logic/sensors';
 import { Icon } from '../ui/Icon';
 import { Button, IconWell, Pill, Press, Segmented, Sheet, Switch } from '../ui/kit';
@@ -37,11 +42,14 @@ type Picker =
   | { type: 'device'; title: string; value?: string; only?: Only; groups?: boolean; zones?: boolean; readings?: boolean; onPick: (v: string) => void }
   | { type: 'time'; title: string; value: string; onPick: (v: string) => void }
   | { type: 'datetime'; title: string; value: string; onPick: (v: string) => void }
-  | { type: 'menu'; title: string; items: { icon: string; label: string; danger?: boolean; disabled?: boolean; run: () => void }[] };
+  | { type: 'menu'; title: string; items: { icon: string; label: string; danger?: boolean; disabled?: boolean; run: () => void }[] }
+  /** What an announcement plays: sources, clips (and uploading one), the built-in calls to prayer, a song, a web address. */
+  | { type: 'media'; title: string; value?: string; onPick: (v: string) => void; same?: string };
 
 interface Home {
   devices: Device[]; rooms: Room[]; roomStatus?: Record<string, RoomStatus>; people: { id: string; name: string }[]; modes: { id: string; name: string }[]; overlays: { id: string; name: string }[];
   automations: { id: string; name: string }[]; sources: { name: string }[]; music: MusicItem[]; now: string;
+  speakerGroups: SpeakerGroup[]; clips: Clip[]; adhans: Adhan[]; prayer?: PrayerView; prayerOn: boolean;
 }
 
 interface Ed {
@@ -186,10 +194,11 @@ function TimeChoice({ value, onChange, label }: { value: string; onChange: (v: s
 
 /** A clock time, a sun time or a prayer time, with minutes before or after for the moving ones. */
 function RhythmField({ value, onChange, label }: { value: Rhythm | undefined; onChange: (r: Rhythm) => void; label: string }) {
+  const { home } = useEd();
   const r = value ?? { kind: 'time', at: '21:00' };
   return (
     <View style={{ gap: 8 }}>
-      <Select label={label} value={rhythmKey(r)} options={RHYTHMS} onChange={k => onChange(rhythmFromKey(k, r))} icon={r.kind === 'time' ? 'schedule' : r.kind === 'sun' ? 'wb_twilight' : 'mosque'} />
+      <Select label={label} value={rhythmKey(r)} options={rhythmChoices(home.prayerOn, r)} onChange={k => onChange(rhythmFromKey(k, r))} icon={r.kind === 'time' ? 'schedule' : r.kind === 'sun' ? 'wb_twilight' : 'mosque'} />
       {r.kind === 'time'
         ? <TimeChoice label={label} value={r.at} onChange={at => onChange({ kind: 'time', at })} />
         : <Num label="Minutes after (minus for before)" value={r.offsetMin ?? 0} step={5} min={-240} max={240} unit={(r.offsetMin ?? 0) < 0 ? 'min before' : 'min after'} onChange={v => onChange(withOffset(r, v ?? 0))} />}
@@ -830,12 +839,232 @@ function ActionPart({ a, path, index, tag }: { a: Action; path: Path; index: num
     </>); if (!a.actions.length) problem = 'Add something to repeat.'; break;
     case 'run': body = <Field label="Automation" note="Runs its steps; its triggers and conditions are skipped."><Select label="Automation" value={a.automation} options={withCurrent(home.automations.filter(x => x.id !== self).map(x => ({ v: x.id, label: x.name })), a.automation)} onChange={v => f('automation', v)} /></Field>; if (!a.automation) problem = 'Choose the automation to run.'; break;
     case 'stop': body = <T v="footnote" color={C.stone}>Nothing after this runs.</T>; break;
+    case 'announce': body = <AnnounceEditor a={a} path={path} />; problem = announceProblem(a, home); break;
   }
   return (
     <Part path={path} index={index} tag={tag} what="action" kind={a.kind} kinds={ACTION_KINDS} words={actionText(a, names).replace(/^./, c => c.toUpperCase())} problem={problem}
       onKind={k => set(path, changeActionKind(a, newAction(k as Action['kind'], ctx)))}>
       {body}
     </Part>
+  );
+}
+
+// ------------------------------------------------------------ announce ---
+
+/** What plays (the main pick, or Fajr's own): the choice, and a box for a song title or a web address. */
+function AnnounceMedia({ value, onChange, label, same }: { value: string | undefined; onChange: (v: string | undefined) => void; label: string; same?: string }) {
+  const { pick, home, names } = useEd();
+  const k = announceMediaKey(value);
+  const adhan = value?.startsWith('adhan:') ? home.adhans.find(x => x.id === value) : undefined;
+  const text = value ? announceMediaName(value, names) : same ?? 'Choose what to play';
+  return (
+    <View style={{ gap: 8 }}>
+      <Choice label={label} icon={value?.startsWith('adhan:') ? 'mosque' : value?.startsWith('clip:') ? 'graphic_eq' : 'campaign'} text={text} muted={!value && !same}
+        onPress={() => pick({ type: 'media', title: label, value, same, onPick: v => onChange(v || undefined) })} />
+      {k === SONG_KEY ? <TextBox label="Song title" value={(value ?? '').slice(6)} placeholder="A song’s title, from Helix" onChange={v => onChange(`Song: ${v}`)} /> : null}
+      {k === URL_KEY ? <TextBox label="Web address" value={value ?? ''} placeholder="https://… an MP3 or a stream" onChange={v => onChange(v)} /> : null}
+      {adhan ? <AdhanCredit a={adhan} /> : null}
+    </View>
+  );
+}
+
+/** One speaker of an announcement: on or off (one tap), what it plays at, its own level, and when it's left out. */
+function SpeakerTarget({ a, id, path }: { a: AnnounceAction; id: string; path: Path }) {
+  const { set, remove, home } = useEd();
+  const t: AnnounceTarget = a.targets[id] ?? {};
+  const d = home.devices.find(x => x.id === id);
+  const group = isSpeakerGroup(d);
+  const members = targetSpeakers(id, home.devices, home.speakerGroups);
+  const level = targetLevel(a, id);
+  const put = (p: Partial<AnnounceTarget>) => {
+    const n: Record<string, unknown> = { ...t, ...p };
+    for (const key of Object.keys(n)) if (n[key] === undefined || n[key] === false || (Array.isArray(n[key]) && !(n[key] as unknown[]).length)) delete n[key];
+    set([...path, 'targets', id], n);
+  };
+  const on = !t.off;
+  // Its own level and when it's left out fold away under one line saying what's set, so the list stays short.
+  const [more, setMore] = useState(false);
+  const skips = home.overlays.filter(o => (t.skipWhile ?? []).includes(o.id)).map(o => o.name);
+  const extra = [t.vol != null ? `own level ${t.vol}%` : 'the level for all', skips.length ? `skips while ${skips.join(' or ')}` : ''].filter(Boolean).join(' · ');
+  const room = home.rooms.find(r => r.id === d?.room)?.name;
+  const sub = !on ? 'Left out for now: switch it back on any time'
+    : group ? `${members.length} speaker${members.length === 1 ? '' : 's'}${room ? ` · ${room}` : ''}`
+      : `${room ? `${room} · ` : ''}plays at ${calibratedVol(level, trimOf(d))}% · loudness ${trimOf(d)}%`;
+  return (
+    <View style={{ gap: 10, padding: 10, borderRadius: R.sm + 2, backgroundColor: C.card, borderWidth: 1, borderColor: C.edge, opacity: on ? 1 : 0.7 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <IconWell icon={group ? 'speaker_group' : 'speaker'} color={on ? C.blue : C.stone} bg={on ? undefined : C.control} size={34} />
+        <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
+          <T v="headline" size={14.5} numberOfLines={2} color={d ? C.bone : C.stone}>{d?.name ?? `${id} (missing)`}</T>
+          <T v="footnote" color={on ? C.stone : C.stone2}>{sub}</T>
+        </View>
+        <Switch on={on} label={`${d?.name ?? id} plays it`} color={C.blue} onChange={v => { animateLayout(); put({ off: !v }); }} />
+      </View>
+      {on && group && members.length ? (
+        <View style={{ gap: 4, paddingLeft: 44 }}>
+          {members.map(m => <T key={m.id} v="footnote" color={C.stone}>{`${m.name} · plays at ${calibratedVol(level, trimOf(m))}%`}</T>)}
+        </View>
+      ) : null}
+      {on ? (
+        <Press onPress={() => { animateLayout(); setMore(m => !m); }} haptic="select" selected={more} label={`Level and skipping for ${d?.name ?? id}: ${extra}`}
+          style={{ minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Icon name="tune" size={16} color={C.stone} />
+          <T v="footnote" color={C.bone2} style={{ flex: 1, minWidth: 0 }}>{extra.charAt(0).toUpperCase() + extra.slice(1)}</T>
+          <Icon name={more ? 'expand_less' : 'expand_more'} size={18} color={C.stone2} />
+        </Press>
+      ) : null}
+      {on && more ? (
+        <Field label="Own level" note={t.vol == null ? `Empty: the level for all (${a.vol}%)` : undefined}>
+          <Num label={`${d?.name ?? id} own level`} optional min={0} max={100} step={5} unit="%" value={t.vol} onChange={v => put({ vol: v })} />
+        </Field>
+      ) : null}
+      {on && more && home.overlays.length ? (
+        <Field label="Skip while" note="Left out while any of these is on.">
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+            {home.overlays.map(o => <Pill key={o.id} label={o.name} icon="layers" on={(t.skipWhile ?? []).includes(o.id)} onPress={() => put({ skipWhile: toggleIn(t.skipWhile, o.id) })} />)}
+          </View>
+        </Field>
+      ) : null}
+      {!on || more ? <Press onPress={() => { animateLayout(); remove([...path, 'targets', id]); }} haptic="select" label={`Remove ${d?.name ?? id} from the list`} style={{ minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start' }}>
+        <Icon name="close" size={16} color={C.stone} />
+        <T v="footnote" color={C.stone}>Remove from the list</T>
+      </Press> : null}
+    </View>
+  );
+}
+
+/** The announce step: what plays (and Fajr's own), the level, every speaker, what pauses, and what happens after. */
+function AnnounceEditor({ a, path }: { a: AnnounceAction; path: Path }) {
+  const { set, pick, home } = useEd();
+  const f = (k: string, v: unknown) => set([...path, k], v);
+  const ids = Object.keys(a.targets);
+  const free = [...announceSpeakers(home.devices), ...home.devices.filter(d => isSpeakerGroup(d) && !d.hidden && !d.archived)].filter(d => !(d.id in a.targets));
+  const players = pauseChoices(home.devices, a.pause);
+  const fajrOwn = a.mediaFor?.fajr !== undefined;
+  const add = () => pick({
+    type: 'list', title: 'Add a speaker', options: free.map(d => ({ v: d.id, label: deviceLabel(d.id, home.devices, home.rooms) })),
+    note: free.length ? undefined : 'Every speaker is in the list already.', onPick: v => { animateLayout(); set([...path, 'targets', v], {}); },
+  });
+  return (
+    <View style={{ gap: 12 }}>
+      <Field label="What to play"><AnnounceMedia label="What to play" value={a.media} onChange={v => f('media', v ?? '')} /></Field>
+      {home.prayerOn || fajrOwn ? (
+        <Field label="Fajr plays" note="When Fajr’s time starts it.">
+          <Segs label="Fajr plays" value={fajrOwn ? 'own' : 'same'} options={[{ v: 'same', label: 'The same' }, { v: 'own', label: 'Its own' }]}
+            onChange={v => f('mediaFor', v === 'own' ? { ...(a.mediaFor ?? {}), fajr: home.prayer?.adhan.fajr ?? '' } : undefined)} />
+          {fajrOwn ? <AnnounceMedia label="Fajr plays" value={a.mediaFor?.fajr || undefined} onChange={v => f('mediaFor', { ...(a.mediaFor ?? {}), fajr: v ?? '' })} /> : null}
+        </Field>
+      ) : null}
+      <Field label="Level for every speaker" note="Each speaker plays it at this × its loudness, so it sounds the same everywhere.">
+        <Num label="Level" min={0} max={100} step={5} unit="%" value={a.vol} onChange={v => f('vol', v ?? 0)} />
+      </Field>
+      <Field label={`Speakers · ${ids.filter(id => !a.targets[id]!.off).length} of ${ids.length} on`}>
+        <View style={{ gap: 8 }}>
+          {ids.map(id => <SpeakerTarget key={id} a={a} id={id} path={path} />)}
+          {free.length ? <AddButton text="Add a speaker" onPress={add} /> : null}
+          {!ids.length && !free.length ? <Hint tone="amber" text="No speakers yet. Kova finds Google Cast and Sonos speakers by itself." /> : null}
+        </View>
+      </Field>
+      {players.length ? (
+        <Field label="Pause during it" note="They carry on after.">
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+            {players.map(d => <Pill key={d.id} icon="pause" label={d.name} on={(a.pause ?? []).includes(d.id)} onPress={() => f('pause', toggleIn(a.pause, d.id))} />)}
+          </View>
+        </Field>
+      ) : null}
+      <Field label="Afterwards" note={a.restore === false ? 'Leave speakers idle: volumes go back; nothing starts playing again.' : 'Put everything back: each speaker’s volume, and what it was playing, carries on where it can.'}>
+        <Segs label="Afterwards" value={a.restore === false ? 'idle' : 'back'} options={[{ v: 'back', label: 'Put back' }, { v: 'idle', label: 'Leave idle' }]} onChange={v => f('restore', v === 'back')} />
+      </Field>
+      <Field label="At most" note="Default 7 min. Then Kova puts everything back, even if it’s still playing.">
+        <Duration label="At most" optional min={5} seconds={a.maxSec} onChange={sec => f('maxSec', sec)} />
+      </Field>
+    </View>
+  );
+}
+
+/** Asks the browser for an audio file (Kova on the web). On a phone there's no file picker without a store build. */
+const canUpload = Platform.OS === 'web' && typeof document !== 'undefined';
+function pickAudioFile(): Promise<File | null> {
+  return new Promise(resolve => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = CLIP_TYPES;
+    input.onchange = () => resolve(input.files?.[0] ?? null);
+    input.click();
+  });
+}
+
+function MediaSheet({ p, close }: { p: Extract<Picker, { type: 'media' }>; close: () => void }) {
+  const { home } = useEd();
+  const { api, say, refresh } = useHub();
+  const [busy, setBusy] = useState(false);
+  const choose = (v: string) => { p.onPick(v); close(); };
+  const key = announceMediaKey(p.value);
+  const row = (v: string, label: string, icon: string, sub?: string, extra?: ReactNode) => {
+    const on = v === (p.value ? key : '');
+    return (
+      <View key={v || 'same'} style={{ borderRadius: R.sm + 2, backgroundColor: on ? C.amberTint : 'transparent' }}>
+        <Press haptic="select" label={label} selected={on} onPress={() => choose(announceMediaFromKey(v, p.value))}
+          style={{ minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, paddingHorizontal: 12 }}>
+          <Icon name={icon} size={18} color={on ? C.amber : C.stone} />
+          <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
+            <T v="body" weight={on ? 700 : 500} color={on ? C.amber : C.bone}>{label}</T>
+            {sub ? <T v="footnote" color={C.stone}>{sub}</T> : null}
+          </View>
+          {on ? <Icon name="check" size={20} color={C.amber} /> : null}
+        </Press>
+        {extra ? <View style={{ paddingLeft: 40, paddingRight: 12, paddingBottom: 6 }}>{extra}</View> : null}
+      </View>
+    );
+  };
+  const upload = async () => {
+    if (busy) return;
+    const file = await pickAudioFile();
+    if (!file) return;
+    const bad = clipFileProblem(file);
+    if (bad) { say(bad, { error: true }); return; }
+    setBusy(true);
+    try {
+      const r = await api<{ clip: Clip }>('POST', `/api/clips?name=${encodeURIComponent(clipName(file.name))}`, file, 120_000);
+      await refresh();
+      say(`${r.clip.name} uploaded`);
+      choose(`clip:${r.clip.id}`);
+    } catch (e) { say((e as Error).message, { error: true }); }
+    finally { setBusy(false); }
+  };
+  const mins = (ms?: number) => ms ? (ms >= 60000 ? `${Math.round(ms / 6000) / 10} min` : `${Math.round(ms / 1000)} s`) : '';
+  return (
+    <View style={{ gap: 12 }}>
+      <T v="heading">{p.title}</T>
+      {p.same ? <View style={{ gap: 2 }}>{row('', p.same, 'sync')}</View> : null}
+      {home.prayerOn && home.adhans.length ? (
+        <View style={{ gap: 2 }}>
+          <Label>Call to prayer</Label>
+          {home.adhans.map(x => row(x.id, x.title, 'mosque', [mins(x.durationMs), x.ready ? '' : 'Downloads the first time it plays'].filter(Boolean).join(' · '), <AdhanCredit a={x} />))}
+        </View>
+      ) : null}
+      <View style={{ gap: 2 }}>
+        <Label>Your clips</Label>
+        {home.clips.map(c => row(`clip:${c.id}`, c.name, 'graphic_eq', mins(c.durationMs)))}
+        {canUpload ? (
+          <Press onPress={() => void upload()} haptic="select" label="Upload a clip" style={{ minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, paddingHorizontal: 12 }}>
+            <Icon name="backup" size={18} color={C.amber} />
+            <T v="body" weight={600} color={C.amber} style={{ flex: 1, minWidth: 0 }}>{busy ? 'Uploading…' : 'Upload a clip…'}</T>
+          </Press>
+        ) : <T v="footnote" color={C.stone2} style={{ paddingHorizontal: 12 }}>{`${home.clips.length ? '' : 'No clips yet. '}Upload one from Kova in a browser (MP3, M4A, WAV, FLAC or Ogg, up to 15 MB).`}</T>}
+      </View>
+      {home.sources.length ? (
+        <View style={{ gap: 2 }}>
+          <Label>Sources</Label>
+          {home.sources.map(x => row(x.name, x.name, 'radio'))}
+        </View>
+      ) : null}
+      <View style={{ gap: 2 }}>
+        <Label>Something else</Label>
+        {home.music.length ? row(SONG_KEY, 'A song from Helix…', 'music_note') : null}
+        {row(URL_KEY, 'A web address…', 'link', 'An MP3 or a stream on the web')}
+      </View>
+    </View>
   );
 }
 
@@ -1177,9 +1406,12 @@ export function AutomationEditor() {
   useEffect(() => { if (firstMark.current) { firstMark.current = false; return; } void load(); }, [runMark, load]);
 
   const music = useMemo(() => (s.music ?? []) as MusicItem[], [s.music]);
-  const home = useMemo<Home>(() => ({ devices: s.devices, rooms: s.rooms, roomStatus: s.roomStatus, people: s.people, modes: s.modes, overlays: s.overlays, automations: all, sources: s.sources, music, now }), [s.devices, s.rooms, s.roomStatus, s.people, s.modes, s.overlays, all, s.sources, music, now]);
-  const names = useMemo<Names>(() => ({ devices: home.devices, rooms: home.rooms, people: home.people, modes: home.modes, overlays: home.overlays, automations: home.automations, now }), [home, now]);
-  const ctx = useMemo(() => ctxOf({ ...home, self: id }), [home, id]);
+  const home = useMemo<Home>(() => ({
+    devices: s.devices, rooms: s.rooms, roomStatus: s.roomStatus, people: s.people, modes: s.modes, overlays: s.overlays, automations: all, sources: s.sources, music, now,
+    speakerGroups: s.speakerGroups ?? [], clips: s.clips ?? [], adhans: s.adhans ?? [], prayer: s.prayer, prayerOn: prayerOn(s),
+  }), [s, all, music, now]);
+  const names = useMemo<Names>(() => ({ devices: home.devices, rooms: home.rooms, people: home.people, modes: home.modes, overlays: home.overlays, automations: home.automations, now, clips: home.clips, adhans: home.adhans, speakerGroups: home.speakerGroups }), [home, now]);
+  const ctx = useMemo(() => ctxOf({ ...home, self: id, prayer: home.prayer }), [home, id]);
   const ed = useMemo<Ed>(() => ({
     draft, home, ctx, names, self: id,
     set: (p, v) => { setDraft(d => setAt(d, p, v)); setErr(null); },
@@ -1222,6 +1454,8 @@ export function AutomationEditor() {
     if (!body.actions.length) return fail('Add at least one step: what it does');
     const late = onceProblem(body, now);
     if (late) return fail(late);
+    const spoken = announceSaveProblem(body.actions, home);
+    if (spoken) return fail(spoken);
     setBusy('save');
     try {
       const r = id
@@ -1324,6 +1558,13 @@ export function AutomationEditor() {
                 <SectionHead title="When" icon="bolt" color={C.amber} sub={oneTime ? 'Once, at this date and time' : draft.triggers.length > 1 ? 'Any one of these starts it' : 'What starts it'} />
                 {draft.triggers.map((t, i) => <TriggerPart key={i} t={t} path={['triggers', i]} index={i} />)}
                 <AddButton text={draft.triggers.length ? 'Add another trigger' : 'Add a trigger'} onPress={() => setPick({ type: 'list', title: 'Add a trigger', options: TRIGGER_KINDS, onPick: k => { animateLayout(); ed.push(['triggers'], newTrigger(k as Trigger['kind'], ctx)); } })} />
+                {home.prayerOn && !oneTime && missingPrayers(draft.triggers).length ? (
+                  <Press onPress={() => { animateLayout(); haptic.select(); ed.set(['triggers'], withEveryPrayer(draft.triggers)); }} label="Every prayer time: add Fajr, Dhuhr, Asr, Maghrib and Isha"
+                    style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: R.sm + 2, backgroundColor: C.control }}>
+                    <Icon name="mosque" size={18} color={C.green} />
+                    <T v="labelSm" color={C.bone2} style={{ flexShrink: 1 }}>{missingPrayers(draft.triggers).length === 5 ? 'Every prayer time' : `Every prayer time (add ${missingPrayers(draft.triggers).length} more)`}</T>
+                  </Press>
+                ) : null}
                 {late ? <Hint tone="red" icon="error" text={late} /> : null}
 
                 {more || draft.conditions.length ? (
@@ -1376,7 +1617,8 @@ export function AutomationEditor() {
             : pick?.type === 'menu' ? <MenuSheet p={pick} close={() => setPick(null)} />
               : pick?.type === 'device' ? <DeviceSheet key={pick.title + pick.value} p={pick} close={() => setPick(null)} />
                 : pick?.type === 'time' ? <TimeSheet key={pick.value} p={pick} close={() => setPick(null)} />
-                  : pick?.type === 'datetime' ? <DateTimeSheet key={pick.value} p={pick} close={() => setPick(null)} /> : null}
+                  : pick?.type === 'datetime' ? <DateTimeSheet key={pick.value} p={pick} close={() => setPick(null)} />
+                    : pick?.type === 'media' ? <MediaSheet p={pick} close={() => setPick(null)} /> : null}
         </Sheet>
         <Confirm open={!!guard} title="Leave without saving?" text={fresh ? 'This won’t be added.' : 'Your changes to this automation will be lost.'} yes="Discard changes" no="Keep editing" danger
           onClose={() => setGuard(null)} onYes={() => { const a = guard; setGuard(null); if (a) setExit(a); }} />

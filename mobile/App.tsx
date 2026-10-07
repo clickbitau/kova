@@ -39,6 +39,8 @@ import { AutomationEditor } from './src/screens/AutomationEditor';
 import { CustomiseScreen } from './src/screens/CustomiseScreen';
 import { EnergyScreen } from './src/screens/EnergyScreen';
 import { MediaScreen } from './src/screens/MediaScreen';
+import { SpeakerLoudnessScreen } from './src/screens/SpeakerLoudnessScreen';
+import { PrayerTimesScreen } from './src/screens/PrayerTimesScreen';
 import { DeviceSheet } from './src/screens/DeviceSheet';
 import { Button, Empty, Mark, ToastHost } from './src/ui/kit';
 import { NowSkeleton } from './src/screens/NowScreen';
@@ -132,6 +134,8 @@ function Home() {
           <Stack.Screen name="Customise" component={CustomiseScreen} />
           <Stack.Screen name="Energy" component={EnergyScreen} />
           <Stack.Screen name="Media" component={MediaScreen} />
+          <Stack.Screen name="SpeakerLoudness" component={SpeakerLoudnessScreen} />
+          <Stack.Screen name="PrayerTimes" component={PrayerTimesScreen} />
         </Stack.Navigator>
         <DeviceSheet />
       </NavigationContainer>

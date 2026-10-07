@@ -10,6 +10,7 @@ import { resolveRhythm } from '../rhythms/rhythms.ts';
 import { addDays, atLocal, localDate, localHour, stampAt, stampWords } from '../util/time.ts';
 import { pseudoLabel } from '../util/describe.ts';
 import { roomReading } from '../util/zones.ts';
+import { announceWords, type Announcer } from './announce.ts';
 
 // Automations: when (any trigger), if (all conditions), then (actions in order), with a run mode for when one
 // starts while still running, and a step-by-step history of each run.
@@ -169,7 +170,7 @@ export function upgradeAutomation(raw: Record<string, unknown>): Automation {
 
 class Cancelled extends Error {}
 
-interface Live { run: AutomationRun; cancelled: boolean; wake?: () => void }
+interface Live { run: AutomationRun; cancelled: boolean; wake?: () => void; /** What started it (a prayer's time picks its own announcement). */ trigger?: Trigger }
 interface Timer { at: number; fn: () => void }
 interface Waiter { cond: Condition; resolve: (ok: boolean) => void; until: number | null; live: Live }
 
@@ -223,6 +224,8 @@ const LOOP_LIMIT = 30;
 export class Automations {
   /** Push notifications; set once the notifier is up. */
   notify: ((n: Notification) => Promise<unknown>) | null = null;
+  /** Announcements over the speakers (engine/announce.ts); set by the hub. */
+  announcer: Announcer | null = null;
   private timers: Timer[] = [];
   private waiters: Waiter[] = [];
   private live = new Map<string, Live[]>();
@@ -304,7 +307,7 @@ export class Automations {
         if (tr.kind === 'time') {
           for (const date of new Set([localDate(from, cfg.timezone), localDate(t, cfg.timezone)])) {
             const at = resolveRhythm(tr.at, date, cfg);
-            if (at != null && at > from && at <= t && (!tr.days?.length || tr.days.includes(dayOf(date)))) void this.start(a, `It’s ${timeWords(tr)}`);
+            if (at != null && at > from && at <= t && (!tr.days?.length || tr.days.includes(dayOf(date)))) void this.start(a, `It’s ${timeWords(tr)}`, tr);
           }
         } else if (tr.kind === 'once' && !tr.firedAt) {
           const at = onceDue(tr, cfg.timezone);
@@ -421,7 +424,7 @@ export class Automations {
   // ------------------------------------------------------------------- runs --
 
   /** Started by a trigger: check its conditions, then run as its mode says. */
-  async start(a: Automation, why: string): Promise<AutomationRun | null> {
+  async start(a: Automation, why: string, trigger?: Trigger): Promise<AutomationRun | null> {
     const t = this.now();
     const recent = (this.starts.get(a.id) ?? []).filter(x => x > t - 60_000);
     recent.push(t);
@@ -436,17 +439,17 @@ export class Automations {
       this.record({ id: randomUUID(), automation: a.id, at: t, why, result: 'skipped', detail: why2[0], steps: [], endedAt: t });
       return null;
     }
-    return this.runNow(a, why);
+    return this.runNow(a, why, 0, trigger);
   }
 
   /** Run its actions now (Run now, or "run another automation"): conditions are the caller's business. */
-  async runNow(a: Automation, why: string, depth = 0): Promise<AutomationRun | null> {
+  async runNow(a: Automation, why: string, depth = 0, trigger?: Trigger): Promise<AutomationRun | null> {
     const busy = this.live.get(a.id) ?? [];
     if (busy.length && a.mode === 'single') return null;
     if (busy.length && a.mode === 'restart') for (const l of busy) this.cancel(l);
     const go = async (): Promise<AutomationRun> => {
       const run: AutomationRun = { id: randomUUID(), automation: a.id, at: this.now(), why, result: 'running', steps: [] };
-      const live: Live = { run, cancelled: false };
+      const live: Live = { run, cancelled: false, ...(trigger ? { trigger } : {}) };
       this.live.set(a.id, [...(this.live.get(a.id) ?? []), live]);
       this.record(run);
       try {
@@ -558,6 +561,14 @@ export class Automations {
           break;
         }
         case 'stop': step('Stop'); return 'stop';
+        case 'announce': {
+          if (!this.announcer) { step('Announce', false, 'announcements aren’t set up on this hub'); break; }
+          const r = await this.announcer.run(x, { cause, trigger: live.trigger, overlay: this.engine.overlayId(), wait: (ms, done) => this.waitUntil(ms, done, live) });
+          for (const l of r.lines) step(l.text, l.ok, l.detail);
+          if (r.played.length) this.store.append({ kind: 'run', device: null, feed: 'auto', what: `${a.name}: announced on ${r.played.map(id => this.reg.get(id)?.name ?? id).join(', ')} · ${live.run.why}`, data: { automation: a.id, changed: r.played, failed: r.failed }, cause });
+          if (live.cancelled) throw new Cancelled();
+          break;
+        }
       }
     }
   }
@@ -567,6 +578,26 @@ export class Automations {
       const timer: Timer = { at: this.now() + ms, fn: () => { live.wake = undefined; resolve(); } };
       this.timers.push(timer);
       live.wake = () => { this.timers = this.timers.filter(x => x !== timer); reject(new Cancelled()); };
+    });
+  }
+
+  /** At most `ms` on the engine's clock, or until `done()` holds when a device changes. Rejects when the run is cancelled. */
+  private waitUntil(ms: number, done: () => boolean, live: Live): Promise<void> {
+    return new Promise((resolve, reject) => {
+      let over = false;
+      const end = (ok: boolean) => {
+        if (over) return;
+        over = true;
+        this.timers = this.timers.filter(x => x !== timer);
+        this.reg.off('change', check);
+        live.wake = undefined;
+        if (ok) resolve(); else reject(new Cancelled());
+      };
+      const check = () => { if (done()) end(true); };
+      const timer: Timer = { at: this.now() + ms, fn: () => end(true) };
+      this.timers.push(timer);
+      this.reg.on('change', check);
+      live.wake = () => end(false);
     });
   }
 
@@ -710,7 +741,7 @@ export function condWords(c: Condition, x: Pick<CondCtx, 'reg' | 'cfg'>): string
 }
 
 /** An action in words, one line (nested steps summarised). */
-export function actionWords(a: Action, x: Pick<CondCtx, 'reg' | 'cfg'>, targetText: (id: string, cmd: object) => string): string {
+export function actionWords(a: Action, x: Pick<CondCtx, 'reg' | 'cfg'> & { clipName?: (id: string) => string | undefined }, targetText: (id: string, cmd: object) => string): string {
   switch (a.kind) {
     case 'set': return Object.entries(a.targets).map(([id, cmd]) => targetText(id, cmd)).join(', ');
     case 'delay': return `Wait ${durWords(a.seconds)}`;
@@ -722,6 +753,7 @@ export function actionWords(a: Action, x: Pick<CondCtx, 'reg' | 'cfg'>, targetTe
     case 'repeat': return `${a.times}×: ${a.actions.map(k => actionWords(k, x, targetText)).join('; ')}`;
     case 'run': return `Run ${x.cfg.automations?.find(o => o.id === a.automation)?.name ?? a.automation}`;
     case 'stop': return 'Stop';
+    case 'announce': return announceWords(a, id => x.reg.get(id)?.name ?? id, x.clipName);
   }
 }
 

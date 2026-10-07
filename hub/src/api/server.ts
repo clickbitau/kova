@@ -36,6 +36,7 @@ import { SetupError, type IntegrationsManager } from '../integrations-store.ts';
 import type { HaImport } from '../import/ha-scan.ts';
 import { registerImportRoutes } from './import-routes.ts';
 import { registerHomeRoutes } from './home-routes.ts';
+import { registerAnnounceRoutes } from './announce-routes.ts';
 import { registerSecurityRoutes } from './security-routes.ts';
 import { registerLanAppRoutes } from './lan-apps-routes.ts';
 import { registerAppLinkRoutes } from './app-link.ts';
@@ -166,6 +167,8 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
       if (req.method === 'GET' && (path === '/api/app/manifest' || path.startsWith('/api/app/assets/'))) return;
       // A doorbell picture for Helix to fetch: its random key is the credential (services/screen-notices.ts).
       if (req.method === 'GET' && path.startsWith('/api/snap/')) return;
+      // Announcement audio for the speakers, which can't send a token: a clip's random id is its key (announce-routes.ts).
+      if ((req.method === 'GET' || req.method === 'HEAD') && path.startsWith('/api/clip/')) return;
       if (opts.token && tokenOk(req, opts.token)) return;
       // Signing a browser in (no key yet): ask for a code, and wait for it to be approved.
       if ((req.method === 'POST' && path === '/api/login/start') || (req.method === 'GET' && path.startsWith('/api/login/poll/'))) return;
@@ -558,6 +561,7 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
   registerEditRoutes(app, hub);
   registerImportRoutes(app, opts.haImport, hub);
   registerHomeRoutes(app, hub);
+  registerAnnounceRoutes(app, hub, () => { const a = app.server.address(); return typeof a === 'object' && a ? a.port : Number(process.env.KOVA_PORT ?? 8140); });
   registerSecurityRoutes(app, hub);
   registerLanAppRoutes(app, { integrations: opts.integrations, helixLink: opts.helixLink, ...opts.lanApps });
   if (opts.otaDir) registerAppUpdateRoutes(app, new AppUpdates(opts.otaDir));
@@ -635,6 +639,9 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
   // API keys are write-only: GET reports hasKey, never the key. Cameras are never shared, whatever is sent.
   const ai = new AiAssistant(hub.engine, hub.reg, hub.config, hub.store, { ...opts.ai, jev });
   ai.music = () => hub.music?.cached() ?? [];
+  ai.clips = () => hub.clips.all();
+  ai.clipName = id => hub.clips.get(id)?.name;
+  ai.mediaProblem = m => hub.mediaProblem(m);
   app.get('/api/assistant/settings', async () => publicSettings(loadSettings(hub.store)));
   app.put<{ Body: SettingsPatch }>('/api/assistant/settings', async (req, reply) => {
     try { const out = publicSettings(saveSettings(hub.store, req.body ?? {})); hub.emit('changed'); return out; } catch (e) { return fail(reply, e); }

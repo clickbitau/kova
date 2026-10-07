@@ -1,4 +1,5 @@
-import type { Action, Automation, Command, Condition, Device, HomeConfig, NumericField, RoomEventKind, RunMode, StateMatch, Trigger } from '../model/types.ts';
+import { FIVE_PRAYERS, type Action, type AnnounceTarget, type Automation, type Command, type Condition, type Device, type HomeConfig, type NumericField, type PrayerName, type RoomEventKind, type RunMode, type StateMatch, type Trigger } from '../model/types.ts';
+import { announceTarget, DEFAULT_ANNOUNCE_LEVEL } from './announce.ts';
 import { cleanTarget, isRhythmShape, rhythm } from './validate.ts';
 import { FIELD_CAP, PSEUDO_TARGET } from '../util/describe.ts';
 import { cleanZoneCommand } from '../util/zones.ts';
@@ -14,6 +15,8 @@ export interface CheckCtx {
   self?: string;
   /** Now, for one-time schedules ("in 20 minutes", and refusing a time that has passed). Default: the clock. */
   now?: number;
+  /** What's wrong with an announcement's media ("That clip isn’t on the hub"), or null when it can play. Unset: any string. */
+  media?(m: string): string | null;
 }
 
 const FIELDS: NumericField[] = ['temp', 'target', 'power', 'energy', 'battery', 'bri', 'vol', 'grid', 'load', 'humidity', 'lux', 'pm25'];
@@ -39,7 +42,7 @@ const fail = (m: string, fix?: string): never => { throw new CheckError(m, fix);
 const show = (v: unknown): string => JSON.stringify(v)?.replace(/"([a-zA-Z_]\w*)":/g, '$1:').replace(/"/g, "'") ?? String(v);
 const TRIGGER_KINDS = 'time, device, numeric, event, room, every, presence, mode, overlay, hub, once';
 const CONDITION_KINDS = 'device, numeric, time, presence, mode, overlay, room, all, any, not';
-const STEP_KINDS = 'set, ramp, delay, wait, notify, overlay, if, repeat, run, stop';
+const STEP_KINDS = 'set, ramp, delay, wait, notify, overlay, if, repeat, run, stop, announce';
 const TIME_FIX = "{kind:'time', at:'07:30'}, or a sun or prayer time inside it: {kind:'time', at:{kind:'sun', event:'sunset', offsetMin:-15}}";
 const obj = (v: unknown, what: string): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : fail(`${what} isn’t valid`));
 const list = (v: unknown, what: string): unknown[] => (v === undefined ? [] : Array.isArray(v) ? v : fail(`${what} must be a list`));
@@ -333,8 +336,81 @@ export function checkAction(v: unknown, x: CheckCtx, depth = 0): Action {
       return { kind: 'run', automation: String(a.automation) };
     }
     case 'stop': return { kind: 'stop' };
+    case 'announce': return checkAnnounce(a, x);
     default: return fail(`Unknown kind of step ${String(a.kind)}`, `Step kinds are ${STEP_KINDS}, e.g. {kind:'set', targets:{lamp:{on:true, bri:40}}} or {kind:'notify', message:'…'}.`);
   }
+}
+
+const PRAYERS: PrayerName[] = ['fajr', 'sunrise', 'dhuhr', 'asr', 'maghrib', 'isha'];
+
+function announceMedia(v: unknown, x: CheckCtx, what: string): string | undefined {
+  if (v === undefined || v === null || v === '') return undefined;
+  if (typeof v !== 'string') return fail(`${what} must be the name of a source, a clip or a link`);
+  const m = v.trim().slice(0, 500);
+  const bad = x.media?.(m);
+  if (bad) fail(`${what}: ${bad}`);
+  return m;
+}
+
+/** An announcement: what plays, on which speakers at what level, what pauses, and putting it all back. */
+function checkAnnounce(a: Record<string, unknown>, x: CheckCtx): Action {
+  const media = announceMedia(a.media, x, 'What to play');
+  const mf = a.mediaFor === undefined || a.mediaFor === null ? {} : obj(a.mediaFor, 'Audio for a prayer');
+  const mediaFor: Partial<Record<PrayerName, string>> = {};
+  for (const [k, v] of Object.entries(mf)) {
+    if (!PRAYERS.includes(k as PrayerName)) fail(`${k} isn’t a prayer (${PRAYERS.join(', ')})`);
+    const m = announceMedia(v, x, `Audio for ${k}`);
+    if (m && m !== media) mediaFor[k as PrayerName] = m;
+  }
+  const t0 = obj(a.targets, 'Speakers');
+  const targets: Record<string, AnnounceTarget> = {};
+  for (const [id, raw] of Object.entries(t0)) {
+    const d = x.device(id) ?? fail(`Unknown device ${id}`, `targets are keyed by speaker ids from the Devices list (type media, can volume); ${id} isn't one`);
+    if (!announceTarget(d)) fail(`${d.name} isn’t a speaker Kova can announce on`, `Use speakers (type media with volume) or a speaker group as targets; put TVs and Helix boxes in pause instead`);
+    const t = raw === true || raw === null || raw === undefined ? {} : typeof raw === 'number' ? { vol: raw } : obj(raw, `${d.name}`);
+    const vol = numOrUndef((t as Record<string, unknown>).vol, `${d.name}: level`, 0, 100);
+    const skip = list((t as Record<string, unknown>).skipWhile, `${d.name}: skip while`).map(String);
+    for (const o of skip) if (!x.cfg.overlays.some(y => y.id === o)) fail(`Unknown overlay ${o}`);
+    targets[id] = { ...(vol !== undefined ? { vol: Math.round(vol) } : {}), ...((t as Record<string, unknown>).off === true ? { off: true } : {}), ...(skip.length ? { skipWhile: [...new Set(skip)] } : {}) };
+  }
+  if (!Object.keys(targets).length) fail('Choose at least one speaker', `targets:{<speaker id>:{}, …} — every speaker the announcement plays on`);
+  if (Object.values(targets).every(t => t.off)) fail('Every speaker is switched off: switch one on');
+  const tv = Object.values(targets).map(t => t.vol).filter((v): v is number => v !== undefined);
+  const vol = numOrUndef(a.vol, 'Level', 0, 100) ?? (tv.length && tv.every(v => v === tv[0]) ? tv[0]! : DEFAULT_ANNOUNCE_LEVEL);
+  // A target's own level that is the step's level is the step's.
+  for (const t of Object.values(targets)) if (t.vol === Math.round(vol)) delete t.vol;
+  const pause = [...new Set(list(a.pause, 'Pause').map(String))];
+  for (const id of pause) {
+    const d = x.device(id) ?? fail(`Unknown device ${id} (pause)`);
+    if (!d.capabilities.includes('pause')) fail(`${d.name} can’t pause`);
+  }
+  const maxSec = numOrUndef(a.maxSec, 'At most', 5, 1800);
+  return {
+    kind: 'announce', ...(media ? { media } : {}), ...(Object.keys(mediaFor).length ? { mediaFor } : {}), vol: Math.round(vol), targets,
+    ...(pause.length ? { pause } : {}), restore: a.restore !== false, ...(maxSec ? { maxSec: Math.round(maxSec) } : {}),
+  };
+}
+
+/** "Every prayer": {kind:'time', at:{kind:'prayer', prayer:'all'}} (or a bare {kind:'prayer', prayer:'all'}) is the five. */
+function expandPrayers(list0: unknown[]): unknown[] {
+  return list0.flatMap(v => {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return [v];
+    const t = v as Record<string, unknown>;
+    const at = t.kind === 'time' && t.at && typeof t.at === 'object' ? t.at as Record<string, unknown> : t.kind === 'prayer' ? t : null;
+    if (!at || at.kind !== 'prayer' || !['all', 'every', 'each', 'five', 'all five', 'every prayer'].includes(String(at.prayer).toLowerCase())) return [v];
+    const off = at.offsetMin ?? at.offset;
+    return FIVE_PRAYERS.map(p => ({ kind: 'time', at: { kind: 'prayer', prayer: p, ...(off !== undefined ? { offsetMin: off } : {}) }, ...(t.days !== undefined ? { days: t.days } : {}) }));
+  });
+}
+
+/** Does an automation start on, or wait for, a prayer time anywhere? */
+export function usesPrayer(a: Pick<Automation, 'triggers' | 'conditions' | 'actions'>): boolean {
+  return JSON.stringify([a.triggers, a.conditions, a.actions]).includes('"kind":"prayer"');
+}
+
+/** Announce steps (anywhere, nested too) still waiting for their audio. */
+export function announceWithoutMedia(actions: Action[]): boolean {
+  return actions.some(x => x.kind === 'announce' ? !x.media : x.kind === 'if' ? announceWithoutMedia(x.then) || announceWithoutMedia(x.else ?? []) : x.kind === 'repeat' ? announceWithoutMedia(x.actions) : false);
 }
 
 /** A whole automation from the editor, cleaned. */
@@ -343,7 +419,9 @@ export function checkAutomation(v: unknown, x: CheckCtx): Omit<Automation, 'id'>
   const name = typeof b.name === 'string' ? b.name.trim() : '';
   if (!name) fail('An automation needs a name');
   if (name.length > 80) fail('Keep the name under 80 characters');
-  const triggers = list(b.triggers, 'Triggers').map(t => checkTrigger(t, x));
+  const triggers = expandPrayers(list(b.triggers, 'Triggers')).map(t => checkTrigger(t, x));
+  // The same trigger twice (the five prayers added twice) is once.
+  for (let i = triggers.length - 1; i >= 0; i--) if (triggers.findIndex(t => JSON.stringify(t) === JSON.stringify(triggers[i])) < i) triggers.splice(i, 1);
   if (!triggers.length) fail('Add at least one trigger: what starts it', `Give when:[…], e.g. when:[${TIME_FIX.split(', or')[0]}]`);
   if (triggers.length > 20) fail('Up to 20 triggers');
   // A one-time schedule switched on has to have a time still to come; a time moved later goes off again.
@@ -359,5 +437,7 @@ export function checkAutomation(v: unknown, x: CheckCtx): Omit<Automation, 'id'>
   const mode = b.mode === undefined ? 'single' : MODES.includes(b.mode as RunMode) ? b.mode as RunMode : fail(`${b.mode} isn’t a run mode`);
   const description = typeof b.description === 'string' && b.description.trim() ? b.description.trim().slice(0, 300) : undefined;
   const origin = b.origin && typeof b.origin === 'object' ? b.origin as Automation['origin'] : undefined;
-  return { name, ...(description ? { description } : {}), enabled: b.enabled !== false, triggers, conditions, actions, mode, ...(origin ? { origin } : {}) };
+  // An announcement whose audio isn't chosen yet (Ask Kova asks which) is kept, switched off until it is.
+  const enabled = b.enabled !== false && !announceWithoutMedia(actions);
+  return { name, ...(description ? { description } : {}), enabled, triggers, conditions, actions, mode, ...(origin ? { origin } : {}) };
 }

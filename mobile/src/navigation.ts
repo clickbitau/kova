@@ -29,6 +29,10 @@ export type Stack = {
   HomeLocation: undefined;
   Energy: undefined;
   Media: undefined;
+  /** Media → Speaker loudness: each speaker's announcement loudness, with a test. */
+  SpeakerLoudness: undefined;
+  /** Integrations → Prayer times: on or off, how they're worked out, the call to prayer. */
+  PrayerTimes: undefined;
   /** More → Integrations: what's connected, and adding one. */
   Integrations: undefined;
   /** Add integration: the catalog, minus what's set up. */

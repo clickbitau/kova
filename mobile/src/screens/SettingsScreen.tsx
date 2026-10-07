@@ -4,6 +4,7 @@ import { C, F, R, SP } from '../theme';
 import { useHub, useSnap } from '../state/hub';
 import { useNav } from '../navigation';
 import { methodName, PRAYER_METHODS, searchZones, timezones, zoneLabel } from '../logic/settings';
+import { prayerSub } from '../logic/prayer';
 import { Group, Row, Sheet, SwitchRow } from '../ui/kit';
 import { cleanName } from '../logic/customise';
 import { FieldWithButton } from './DeviceSheet';
@@ -40,7 +41,9 @@ export function SettingsScreen() {
           sub={loc && (loc.latitude || loc.longitude) ? `${s.home.address ? `${s.home.address} · ` : ''}${loc.latitude.toFixed(5)}, ${loc.longitude.toFixed(5)} · ${loc.radiusM ?? 150} m circle` : 'Not set: paste from Google Maps, search the address, or use this phone. Sun and prayer times need it.'}
           onPress={() => nav.navigate('HomeLocation')} />
         <Row icon="schedule" iconFg={C.blue} title="Timezone" sub={zoneLabel(s.home.timezone)} onPress={() => { setQ(''); setPick('tz'); }} />
-        <Row icon="mosque" iconFg={C.green} title="Prayer times" sub={methodName(s.home.prayerMethod)} onPress={() => setPick('method')} />
+        {s.prayer
+          ? <Row icon="mosque" iconFg={s.prayer.on ? C.green : C.stone} title="Prayer times" sub={prayerSub(s.prayer)} onPress={() => nav.navigate('PrayerTimes')} />
+          : <Row icon="mosque" iconFg={C.green} title="Prayer times" sub={methodName(s.home.prayerMethod)} onPress={() => setPick('method')} />}
         <Row icon="meeting_room" title="Rooms, people and devices" sub="Rooms and groups of rooms, people, devices, favourites, archived" onPress={() => nav.navigate('Customise')} />
       </Group>
       <Group title="Behaviours">

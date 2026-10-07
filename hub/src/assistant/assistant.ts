@@ -93,6 +93,41 @@ const OVERLAY_PHRASES: Record<string, RegExp> = {
 };
 const ARRIVED = /\b(im|i am|we re|were|we are) (home|back)\b|\bback home\b/;
 
+/**
+ * Words that may sit around an overlay's name in a short, direct command ("start movie mode", "we have guests",
+ * "guests are here", "the movie is over"). Anything else left over means the message is about more than that.
+ */
+const OVERLAY_FILLER = new Set(['start', 'begin', 'end', 'stop', 'finish', 'cancel', 'over', 'turn', 'switch', 'put', 'activate', 'enable', 'disable', 'deactivate', 'on', 'off',
+  'the', 'a', 'an', 'our', 'my', 'some', 'mode', 'scene', 'time', 'now', 'please', 'kova', 'hey', 'ok', 'okay', 'its', 'it', 'is', 'lets', 'let', 'us', 'go', 'we', 'were', 're', 'are', 'have', 'got', 'i', 'im', 'am',
+  'coming', 'here', 'arrived', 'staying', 'over', 'for', 'tonight', 'night', 'just', 'out', 'yes', 'thanks', 'thank', 'you']);
+
+/** "every day", "every prayer", "each morning": a schedule. (Not "every light", "everything": those are direct.) */
+const EVERY = /\b(every|each)\s+(?!(lights?|lamps?|speakers?|devices?|one|thing|room|tv|plug|switch(es)?)\b)\w+/;
+/** Words that make a message a rule, a condition or an explanation rather than a direct command. */
+const CONDITIONAL = /\b(if|when|whenever|unless|until|during|while|whilst|after|before|then|once|as soon as|in case|because|cause|so that|since|otherwise|except|instead|accordingly|should|must|make sure|so it|so they|so we|so i|rather than|depending)\b/;
+/** Two commands joined ("turn off the lamp and play jazz"). */
+const TWO_COMMANDS = /\b(and|then|also|plus)\s+(also\s+)?(turn|switch|put|set|dim|brighten|play|pause|resume|start|stop|end|open|close|lock|unlock|make|cool|heat|watch|shuffle)\b/;
+/** Longer than this (in words), a message is for the AI: the built-in parser only takes short, direct commands. */
+export const DIRECT_MAX_WORDS = 12;
+
+/**
+ * Why a message isn't a short, direct command, or null when it is. Long messages, several sentences or clauses,
+ * conditions ("if", "when", "every", "during", "in case") and explanations ("because", "so that", "should") go to the
+ * AI: the built-in parser would grab one word from them ("guests" from a long instruction) and do the wrong thing.
+ * A question that starts with its question word ("when is sunset?") isn't a condition.
+ */
+export function notDirect(q: string): string | null {
+  const t = norm(q);
+  const words = t ? t.split(' ') : [];
+  if (words.length > DIRECT_MAX_WORDS) return 'long';
+  // Several sentences, or clauses after a semicolon or a dash, or a list of three or more parts.
+  if (/[.!?;]\s+\S/.test(q.trim().replace(/[.!?]+$/, '')) || /\s[–—-]\s/.test(q) || (q.match(/,/g) ?? []).length >= 2) return 'clauses';
+  const body = t.replace(/^(when|whens|what|whats|is|are|how|who|which|why|anything)\b.*$/, m => m.replace(/^\w+/, ''));
+  if (CONDITIONAL.test(body) || EVERY.test(body)) return 'condition';
+  if (TWO_COMMANDS.test(t)) return 'two commands';
+  return null;
+}
+
 export class Assistant {
   /** Helix music on speakers ("play Bangla Collection on shuffle in the kitchen"), once Helix is set up. */
   music: HelixMusic | null = null;
@@ -113,7 +148,7 @@ export class Assistant {
 
   /** Devices a phrase refers to: a learned label, a room (optionally + device), a device, or everything. */
   private resolve(phrase: string): { devices: Device[]; label: string } | { unknown: string } | null {
-    const raw = norm(phrase).replace(/^(the|all the|all|my)\s+/, '').trim();
+    const raw = norm(phrase).replace(/^(the|all the|all|my|every)\s+/, '').trim();
     const wantsSpeakers = /\b(speakers?|music|audio)\b/.test(raw);
     const p = raw.replace(/\s+(lights?|speakers?|music|audio)$/, '').trim();
     const kind = (ds: Device[]) => ds.filter(d => wantsSpeakers ? isPlayer(d) : isLight(d));
@@ -291,17 +326,23 @@ export class Assistant {
     const raw = q.toLowerCase().trim().replace(/[.!?]+$/, '');
     const c = this.config.get();
 
+    // "downstairs is lounge, kitchen and laundry": every part has to be a room, or it's not a definition.
     const learn = raw.match(/^([a-z]+) (?:is|means|are) (.+)$/);
-    if (learn) {
-      const rooms = learn[2].split(/\s*(?:,|\band\b|&)\s*/).map(norm).filter(Boolean)
-        .map(s => this.rooms().find(r => norm(r.name) === s || norm(r.name).startsWith(s))).filter((r): r is NonNullable<typeof r> => !!r);
-      if (rooms.length) return { kind: 'learn', name: learn[1], rooms: rooms.map(r => r.id), roomNames: rooms.map(r => r.name) };
+    if (learn && !/^(it|this|that|there|what|who|which|where|when|why|how|everything|everyone|nothing|guests?|visitors?)$/.test(learn[1]) && learn[2].split(' ').length <= 12) {
+      const parts = learn[2].split(/\s*(?:,|\band\b|&)\s*/).map(x => norm(x).replace(/^the\s+/, '')).filter(Boolean);
+      const rooms = parts.map(s => this.rooms().find(r => norm(r.name) === s || (s.length > 2 && norm(r.name).startsWith(s))));
+      if (parts.length && rooms.every(r => !!r)) {
+        const rs = rooms as NonNullable<typeof rooms[number]>[];
+        return { kind: 'learn', name: learn[1], rooms: rs.map(r => r.id), roomNames: rs.map(r => r.name) };
+      }
     }
     // A change for later ("lights off at 9pm", "in 20 minutes", "tomorrow morning") is a one-time schedule, not
     // something to do now: left to the AI, which makes one. Questions about the plan ("what's on tonight") stay here.
     if (LATER.test(raw) && !/^(what|whats|what's|when|is|are|anything)\b/.test(raw)) return null;
     // A message that is only a greeting — "hey turn the lights on" still parses as a command.
     if (/^(hi+|hello+|hey+|yo|hiya|howdy|morning|good (morning|afternoon|evening))( there)?( kova)?$/.test(t)) return { kind: 'greeting' };
+    // Only short, direct commands and questions from here: anything longer, conditional or explained is the AI's.
+    if (notDirect(q)) return null;
     // "is the garage door open?", "is the front door closed"
     const ct = t.match(/^(?:is|are) (?:the |my )?(.+?) (open|closed|shut)$/);
     if (ct) {
@@ -413,9 +454,14 @@ export class Assistant {
         if (title) return { kind: 'music', words: title, shuffle: shuffle || !!st, station: !!st, label: at?.label ?? (devices.length === 1 ? this.speakerLabel(devices[0]) : 'the speakers'), devices: devices.map(d => d.id) };
       }
     }
-    if (ARRIVED.test(t) && this.engine.overlay?.id === 'away') return { kind: 'overlay', id: 'away', name: 'Away', end: true };
-    const ov = c.overlays.find(o => new RegExp(`\\b${norm(o.name)}\\b`).test(t)) ?? c.overlays.find(o => OVERLAY_PHRASES[o.id]?.test(t));
-    if (ov) return { kind: 'overlay', id: ov.id, name: ov.name, end: /\b(end|stop|finish|cancel|over)\b/.test(t) };
+    // An overlay only from a message about nothing else: its name or phrase, and the words around such a command.
+    const onlyAbout = (re: RegExp) => { const rest = t.replace(re, ' ').split(' ').filter(w => w && !OVERLAY_FILLER.has(w)); return rest.length === 0; };
+    if (ARRIVED.test(t) && this.engine.overlay?.id === 'away' && onlyAbout(new RegExp(ARRIVED.source, 'g'))) return { kind: 'overlay', id: 'away', name: 'Away', end: true };
+    const byName = (o: Overlay) => new RegExp(`\\b${norm(o.name)}\\b`, 'g');
+    const byPhrase = (o: Overlay) => OVERLAY_PHRASES[o.id] ? new RegExp(OVERLAY_PHRASES[o.id]!.source, 'g') : null;
+    const ov = c.overlays.find(o => byName(o).test(t) && onlyAbout(byName(o)))
+      ?? c.overlays.find(o => { const re = byPhrase(o); return !!re && re.test(t) && onlyAbout(new RegExp(re.source, 'g')); });
+    if (ov) return { kind: 'overlay', id: ov.id, name: ov.name, end: /\b(end|stop|finish|cancel|off|disable|deactivate)\b|\b(is|its|s) over\b/.test(t) };
     // "what's on", "which lights are on", "what lights are on in the kitchen" — only a generic
     // listing question, not "what mode is the helix box on" (that's about a specific device).
     if (/^whats? (is )?(on|running)|^what is (on|running)|anything (is )?(on|running)|which lights|what.*\b(lights?|devices?|speakers?)\b.*\b(on|running)\b/.test(t)) return { kind: 'whatsOn' };
@@ -460,6 +506,7 @@ export class Assistant {
   async ask(q: string): Promise<AskReply> {
     const i = this.parse(q);
     const reply = (text: string, source: Source, extra: Partial<AskReply> = {}): AskReply => ({ text, source, actions: [], understood: true, ...extra });
+    if (!i && notDirect(q)) return reply('That’s more than the built-in assistant takes on: it does short, direct commands. For a rule like that, make an automation (Automations → New), or turn on an AI engine in Ask Kova settings and ask again.', 'Built-in · nothing left your home', { understood: false });
     if (!i && LATER.test(q.toLowerCase())) return reply('That’s for later, so it needs a one-time schedule: make one in Automations → Schedule once, or turn on an AI engine in Ask Kova settings and ask again.', 'Built-in · nothing left your home', { understood: false });
     if (!i) return reply('I didn’t catch that. I can switch rooms and devices, set brightness (“lamp to 30%”), start Movie or Away, tell you why something is on, what’s happening tonight, and who’s home.', 'Built-in · nothing left your home', { understood: false });
     const tz = this.config.get().timezone;

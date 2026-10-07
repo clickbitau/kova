@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import type { Adapter, AdapterContext, DeviceInfo, Queue, QueueOptions } from '../adapters/sdk.ts';
+import type { Adapter, AdapterContext, Clip, DeviceInfo, Queue, QueueOptions } from '../adapters/sdk.ts';
 import type { Cause, Command, Device, DeviceSettings, DeviceState, Targets } from '../model/types.ts';
 import type { Store } from '../store/db.ts';
 import { CAPS, changeSentence, fitCommand, PSEUDO_TARGET, typeMatch } from '../util/describe.ts';
@@ -23,6 +23,12 @@ function same(a: unknown, b: unknown): boolean {
   if (ka.length !== kb.length) return false;
   return ka.every(k => same((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
 }
+
+/** What a speaker was doing before an announcement: its state, and its integration's exact account when it has one. */
+export interface PlaybackSnap { state: DeviceState; exact?: unknown | null; hasExact?: boolean }
+
+/** Seconds as "1:23". */
+export const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
 export interface ChangeEvent { device: Device; prev: DeviceState; patch: Command; cause: Cause }
 export interface DeviceEvent { device: Device; type: string; data: Record<string, unknown> }
@@ -75,6 +81,10 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
   /** Whether a source loops (set by the hub from the home's sources). */
   sourceLoops: (name: string) => boolean = () => false;
 
+  /** Announcements playing now, by title → URL: a speaker without its own clip support plays them as a source. */
+  private clipSources = new Map<string, string>();
+  private srcUrl(name: string): string | undefined { return this.clipSources.get(name) ?? this.sourceUrl(name); }
+
   constructor(private store: Store, private sourceUrl: (name: string) => string | undefined = () => undefined, private settings: () => Record<string, DeviceSettings> = () => ({})) {
     super();
     this.saved = store.get<Record<string, DeviceState>>('deviceState') ?? {};
@@ -112,7 +122,7 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
       announce: infos => this.announce(a, infos),
       report: (id, state) => this.report(id, state),
       event: (id, type, data = {}) => this.deviceEvent(id, type, data),
-      sourceUrl: this.sourceUrl,
+      sourceUrl: name => this.srcUrl(name),
       sourceLoops: name => this.sourceLoops(name),
       queueFor: (media, opts) => this.queues ? this.queues(media, opts ?? {}) : Promise.resolve(null),
       derive: (id, state) => { const d = this.devices.get(id); if (!d) return; const patch = this.diff(d, state); if (!Object.keys(patch).length) return; d.state = { ...d.state, ...patch }; this.emit('measure'); },
@@ -216,7 +226,7 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
   async command(id: string, cmd: Command, cause: Cause, opts: { quiet?: boolean } = {}): Promise<Command> {
     const d = this.devices.get(id);
     if (!d) throw new Error(`Unknown device ${id}`);
-    if (typeof cmd.media === 'string' && !d.capabilities.includes('queue') && !d.capabilities.includes('library') && !this.sourceUrl(cmd.media) && this.isMusic?.(cmd.media)) {
+    if (typeof cmd.media === 'string' && !d.capabilities.includes('queue') && !d.capabilities.includes('library') && !this.srcUrl(cmd.media) && this.isMusic?.(cmd.media)) {
       throw new Error(`${d.name} can’t play Helix music yet (Google Cast, Sonos and AirPlay speakers can)`);
     }
     const patch = this.diff(d, fitCommand(d, cmd));
@@ -365,6 +375,89 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
     if (log && log.from === input && Date.now() - log.at < INPUT_SETTLE_MS && log.by !== 'remote') return;
     this.recordInput(d.id, input, { kind: 'device', label: d.integration }, before);
   }
+
+  // ------------------------------------------------------------ announcements --
+
+  /** What a speaker is doing now, to put back after an announcement (engine/announce.ts). */
+  async snapshotPlayback(id: string): Promise<PlaybackSnap> {
+    const d = this.devices.get(id);
+    if (!d) throw new Error(`Unknown device ${id}`);
+    const { on, media, vol, paused, shuffle, input, track, muted } = d.state;
+    const state: DeviceState = { on: !!on, media: media ?? null, ...(typeof vol === 'number' ? { vol } : {}), paused: !!paused, shuffle: !!shuffle, ...(input ? { input } : {}), ...(track ? { track } : {}), ...(muted !== undefined ? { muted } : {}) };
+    const a = this.adapters.get(d.adapter);
+    if (!a?.snapshotPlayback) return { state };
+    // The integration's own account, when it can give one; if asking fails, Kova still puts back what it knows.
+    try { return { state, exact: await a.snapshotPlayback(d), hasExact: true }; } catch { return { state }; }
+  }
+
+  /** Play an announcement clip on a speaker at a volume: through its integration's own clip support, else as a source. */
+  async playClip(id: string, clip: Clip, vol: number, cause: Cause, o: { keepVol?: boolean } = {}): Promise<void> {
+    const d = this.devices.get(id);
+    if (!d) throw new Error(`Unknown device ${id}`);
+    const a = this.adapters.get(d.adapter);
+    if (!a) throw new Error(`No adapter ${d.adapter} for ${id}`);
+    if (!a.playClip) {
+      this.clipSources.set(clip.title, clip.url);
+      await this.command(id, { on: true, media: clip.title, ...(o.keepVol ? {} : { vol }), paused: false }, cause, { quiet: true });
+      return;
+    }
+    if (!o.keepVol && d.capabilities.includes('volume')) await this.command(id, { vol }, cause, { quiet: true });
+    const did = await a.playClip(d, clip, cause);
+    const patch = this.diff(d, { on: true, media: clip.title, paused: false, ...(did ?? {}) });
+    if (Object.keys(patch).length) this.apply(d, patch, cause, true);
+  }
+
+  /**
+   * Put a speaker back as `snap` says: its volume, then (when `resume`) what it played, at the place where its
+   * integration allows, else started again by name; idle or off when it was. Resolves with what it did, in words.
+   */
+  async restorePlayback(id: string, snap: PlaybackSnap, cause: Cause, resume = true): Promise<string> {
+    const d = this.devices.get(id);
+    if (!d) throw new Error(`Unknown device ${id}`);
+    const s = snap.state;
+    const a = this.adapters.get(d.adapter);
+    const q = { quiet: true };
+    if (typeof s.vol === 'number' && d.state.vol !== s.vol) await this.command(id, { vol: s.vol }, cause, q);
+    const was = s.on && typeof s.media === 'string' && s.media !== '';
+    if (resume && snap.hasExact && a?.restorePlayback && (snap.exact != null || !was)) {
+      const r = await a.restorePlayback(d, snap.exact ?? null);
+      const patch = this.diff(d, r.state ?? (snap.exact == null ? { on: s.on, media: null, paused: false, track: null } : {}));
+      if (Object.keys(patch).length) this.apply(d, patch, cause, true);
+      await this.inputBack(d, s, cause);
+      return r.words;
+    }
+    if (!was || !resume) {
+      if (d.state.on || d.state.media) await this.command(id, s.on ? { media: null } : { on: false, media: null }, cause, q);
+      await this.inputBack(d, s, cause);
+      return was ? `left idle (it was playing ${s.media})` : s.on ? 'idle again' : 'off again';
+    }
+    // Started again by name: a source (a live stream picks up where it is now), Helix music, a title on a TV.
+    const media = s.media as string;
+    if (this.sourceUrl(media) || this.isMusic?.(media) || d.capabilities.includes('library')) {
+      await this.command(id, { on: true, media, ...(s.shuffle ? { shuffle: true } : {}) }, cause, q);
+      if (s.paused && d.capabilities.includes('pause')) await this.command(id, { paused: true }, cause, q);
+      await this.inputBack(d, s, cause);
+      return `${media} again${this.sourceUrl(media) ? '' : ' (from the start)'}${s.paused ? ', paused' : ''}`;
+    }
+    await this.command(id, { media: null }, cause, q);
+    throw new Error(`couldn’t carry on with “${media}” (it was playing from another app)`);
+  }
+
+  /** A soundbar back on the input it was on (Cast switches it to Wi-Fi to play). */
+  private async inputBack(d: Device, s: DeviceState, cause: Cause): Promise<void> {
+    if (s.input && d.capabilities.includes('input') && d.state.input !== s.input) await this.command(d.id, { input: s.input }, cause, { quiet: true }).catch(() => {});
+  }
+
+  /** A device's state as its integration now says, with no Activity entry (a member put back after an announcement). */
+  setQuietly(id: string, state: DeviceState): void {
+    const d = this.devices.get(id);
+    if (!d) return;
+    const patch = this.diff(d, state);
+    if (Object.keys(patch).length) this.apply(d, patch, { kind: 'system', label: 'Announcement' }, true);
+  }
+
+  /** The clip a speaker played as a source is no longer needed by that name. */
+  clipDone(title: string): void { this.clipSources.delete(title); }
 
   /** A momentary event from a device (camera saw a person, doorbell rang). */
   deviceEvent(id: string, type: string, data: Record<string, unknown> = {}): void {

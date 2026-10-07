@@ -2,8 +2,12 @@
   "//": "The Kova app's version (docs/VERSIONING.md). store: the X.Y.0 a store binary on this train carries (app.json version). version: what runs, store or over the air (X.Y.Z, PATCH only). train: the native runtime (app.json runtimeVersion). history: newest first; an over-the-air release adds an entry.",
   "train": "kova-mobile-0.2",
   "store": "0.2.0",
-  "version": "0.2.32",
+  "version": "0.2.33",
   "history": [
+    {
+      "version": "0.2.33",
+      "title": "Announcements that play over what speakers are doing and then put them back, speaker loudness so one level sounds the same in every room, and prayer times as an opt-in integration with the waqt on Now"
+    },
     {
       "version": "0.2.32",
       "title": "Watch live plays the camera right where its picture was: live, with the time, sound off until you turn it on, full screen, and a clear reason when it can’t stream"

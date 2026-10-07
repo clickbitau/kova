@@ -20,6 +20,11 @@ import { Security, type SecurityOptions } from './services/security.ts';
 import { suggestZoneRooms } from './util/zones.ts';
 import { Maps, type MapsOptions } from './services/maps.ts';
 import { RoomClimate, outsideFrom } from './engine/room-climate.ts';
+import { join } from 'node:path';
+import { Clips } from './services/clips.ts';
+import { Adhans, builtinAdhan } from './services/adhans.ts';
+import { Announcer, CHIME_MEDIA } from './engine/announce.ts';
+import { migratePrayer } from './services/prayer.ts';
 
 export interface HubOptions {
   dbPath: string;
@@ -36,6 +41,10 @@ export interface HubOptions {
   security?: SecurityOptions;
   /** For tests: what the address search and pasted Google Maps links fetch with, and how. */
   maps?: Partial<Omit<MapsOptions, 'store' | 'near'>>;
+  /** The data folder: uploaded clips and downloaded recordings live in `clips/` under it. None: no clips. */
+  dataDir?: string;
+  /** For tests: how the built-in recordings are downloaded. */
+  fetch?: typeof fetch;
 }
 
 /** Wires the hub's parts together. One per home. */
@@ -81,6 +90,24 @@ export class Hub extends EventEmitter<{ changed: [] }> {
   readonly roomClimate: RoomClimate;
   /** Updating the hub itself (services/updates.ts); null without an updater set up (tests, Docker). */
   updates: Updates | null = null;
+  /** Audio clips kept on the hub for announcements (services/clips.ts). */
+  readonly clips: Clips;
+  /** The call-to-prayer recordings from Wikimedia Commons, downloaded on first use (services/adhans.ts). */
+  readonly adhans: Adhans;
+  /** Announcements over the speakers (engine/announce.ts). */
+  readonly announcer: Announcer;
+  /** The hub's address as a speaker at `host` reaches it ("http://10.0.0.2:8140"); set by the API server. */
+  lanBase: (host?: string) => string | null = () => null;
+
+  /** What's wrong with an announcement's media, or null when it can play (for the automation checker). */
+  mediaProblem(m: string): string | null {
+    if (m === CHIME_MEDIA) return null;
+    if (m.startsWith('clip:')) return this.clips.get(m.slice(5)) ? null : 'that clip isn’t on the hub';
+    if (m.startsWith('adhan:')) return builtinAdhan(m) ? null : 'Kova doesn’t know that recording';
+    if (/^https?:\/\//i.test(m)) return /^https?:\/\/\S+$/i.test(m) ? null : 'that link isn’t valid';
+    if (/^song: \S/i.test(m)) return this.music ? null : 'Helix music isn’t set up';
+    return this.config.get().sources.some(s => s.name === m) ? null : `there’s no source called “${m}” (use a source’s name, a clip, a recording or a link)`;
+  }
   /** Which media players sit on which TV (and soundbar), for suggested automations. Helix's screens once it's linked. */
   screens: () => Screen[] = () => [];
   /** What already knows whether a person is home without their phone's location (Warden, the router…); [] when only the phone can. */
@@ -102,6 +129,7 @@ export class Hub extends EventEmitter<{ changed: [] }> {
     super();
     this.store = new Store(opts.dbPath, opts.now);
     this.config = new ConfigStore(this.store, opts.initialConfig);
+    migratePrayer(this.config);
     this.reg = new Registry(this.store, name => this.config.get().sources.find(s => s.name === name)?.url, () => this.config.get().devices ?? {});
     this.reg.sourceLoops = name => !!this.config.get().sources.find(s => s.name === name)?.loop;
     this.config.on('changed', () => this.reg.reapplySettings());
@@ -111,6 +139,11 @@ export class Hub extends EventEmitter<{ changed: [] }> {
     this.config.on('changed', () => this.combined.sync());
     this.config.on('changed', () => this.linkNamedZones());
     this.engine = new Engine(this.store, this.reg, this.config, opts.now);
+    const clipDir = opts.dataDir ? join(opts.dataDir, 'clips') : null;
+    this.clips = new Clips(clipDir);
+    this.adhans = new Adhans(clipDir, { fetch: opts.fetch });
+    this.announcer = new Announcer(this.reg, this.config, { clips: this.clips, adhans: this.adhans, base: host => this.lanBase(host), now: () => this.engine.now() });
+    this.engine.automations.announcer = this.announcer;
     this.checker = new Checker(this.engine, this.store, this.config, () => this.reg.devices);
     this.assistant = new Assistant(this.engine, this.reg, this.config);
     this.maps = new Maps({ now: opts.now, ...opts.maps, store: this.store, near: () => { const c = this.config.get(); return c.latitude || c.longitude ? { latitude: c.latitude, longitude: c.longitude } : null; } });

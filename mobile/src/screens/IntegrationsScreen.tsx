@@ -6,7 +6,8 @@ import { useIntegrationSetup } from '../state/integrations';
 import { useNav } from '../navigation';
 import { addable, entries, type Entry } from '../logic/integrations';
 import { Icon } from '../ui/Icon';
-import { Button, Card, Empty, Group, IconButton, IconWell, Press, Segmented, Skeleton, Tag } from '../ui/kit';
+import { Button, Card, Empty, Group, IconButton, IconWell, Press, Row, Segmented, Skeleton, Tag } from '../ui/kit';
+import { prayerSub } from '../logic/prayer';
 import { Appear, animateLayout } from '../ui/motion';
 import { Screen } from '../ui/Screen';
 import { T } from '../ui/Text';
@@ -92,6 +93,15 @@ export function IntegrationsScreen() {
             <Appear index={1}>
               <Group title={`Connected · ${fine.length}`}>
                 {fine.map((e, i) => <EntryRow key={e.id} e={e} first={i === 0} onPress={() => open(e.id)} />)}
+              </Group>
+            </Appear>
+          ) : null}
+          {s.prayer ? (
+            <Appear index={2}>
+              <Group title="Built in">
+                <Row first icon="mosque" iconFg={s.prayer.on ? C.green : C.stone} title="Prayer times" sub={prayerSub(s.prayer)}
+                  right={<View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2] }}><Tag text={s.prayer.on ? 'On' : 'Off'} color={s.prayer.on ? C.green : C.stone} /><Icon name="chevron_right" size={20} color={C.stone2} /></View>}
+                  onPress={() => nav.navigate('PrayerTimes')} />
               </Group>
             </Appear>
           ) : null}

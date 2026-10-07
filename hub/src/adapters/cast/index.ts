@@ -1,6 +1,7 @@
 import mdns from 'multicast-dns';
 import { findCastGroups } from '../../services/lan-find.ts';
-import type { Adapter, AdapterContext, AdapterStatus, Queue, QueueTrack } from '../sdk.ts';
+import type { Adapter, AdapterContext, AdapterStatus, Clip, Queue, QueueTrack } from '../sdk.ts';
+import { mmss } from '../../devices/registry.ts';
 import type { Command, Device, DeviceState, Track } from '../../model/types.ts';
 import { CastChannel, NS, type CastMessage } from './channel.ts';
 
@@ -74,6 +75,10 @@ class Receiver {
   paused = false;
   /** Called when the song changes or the queue ends. */
   onTrack?: () => void;
+  /** The stream or recording it plays (play()), to start it again after an announcement. */
+  stream: { url: string; title: string; loop: boolean } | null = null;
+  /** An announcement clip playing (playClip()): when it finishes, the speaker is idle again. */
+  clip: string | null = null;
 
   constructor(readonly ep: CastEndpoint, o: CastOptions) {
     this.ch = new CastChannel({ host: ep.host, port: ep.port, insecure: o.insecure, timeoutMs: o.timeoutMs });
@@ -120,6 +125,23 @@ class Receiver {
     if (r.data.type === 'LOAD_FAILED' || r.data.type === 'LOAD_CANCELLED' || r.data.type === 'INVALID_REQUEST') throw new Error(`${this.ep.name} couldn't play ${title}`);
     this.media = title;
     this.queue = null;
+    this.stream = { url, title, loop };
+    this.clip = null;
+  }
+
+  /** Play an announcement once, buffered (not as a live stream), with its title. */
+  async playClip(clip: Clip): Promise<void> {
+    const transport = await this.receiverApp();
+    const r = await this.ch.request(NS.media, transport, {
+      type: 'LOAD', autoplay: true,
+      media: { contentId: clip.url, contentType: clip.contentType, streamType: 'BUFFERED', ...(clip.durationMs ? { duration: clip.durationMs / 1000 } : {}), metadata: { metadataType: 0, title: clip.title } },
+    });
+    if (r.data.type === 'LOAD_FAILED' || r.data.type === 'LOAD_CANCELLED' || r.data.type === 'INVALID_REQUEST') throw new Error(`${this.ep.name} couldn't play ${clip.title}`);
+    this.media = clip.title;
+    this.queue = null;
+    this.stream = null;
+    this.clip = clip.title;
+    this.paused = false;
   }
 
   /** Play a queue from `start` (at `position` seconds into that song): the next CAST_WINDOW songs go to the speaker. */
@@ -133,6 +155,8 @@ class Receiver {
     });
     if (r.data.type === 'LOAD_FAILED' || r.data.type === 'LOAD_CANCELLED' || r.data.type === 'INVALID_REQUEST') throw new Error(`${this.ep.name} couldn't play ${q.label}`);
     this.media = q.label;
+    this.stream = null;
+    this.clip = null;
     this.queue = { q, index: start, from: start, to, position, session: (r.data.status as MediaStatus[] | undefined)?.[0]?.mediaSessionId };
     this.onTrack?.();
   }
@@ -140,6 +164,13 @@ class Receiver {
   /** What the speaker says it's playing: follow the queue, and add more songs before it runs out. */
   private onStatus(st: MediaStatus | undefined): void {
     if (st?.playerState) this.paused = st.playerState === 'PAUSED';
+    // An announcement that played to its end (or couldn't play): the speaker is idle again.
+    if (this.clip && st?.playerState === 'IDLE' && (st.idleReason === 'FINISHED' || st.idleReason === 'ERROR')) {
+      this.clip = null;
+      this.media = null;
+      this.onTrack?.();
+      return;
+    }
     const qu = this.queue;
     if (!st || !qu) return;
     if (st.mediaSessionId) qu.session = st.mediaSessionId;
@@ -223,6 +254,8 @@ class Receiver {
     if (app && !app.isIdleScreen) await this.ch.request(NS.receiver, 'receiver-0', { type: 'STOP', sessionId: app.sessionId });
     this.media = null;
     this.queue = null;
+    this.stream = null;
+    this.clip = null;
   }
 
   async volume(level: number, muted?: boolean): Promise<void> {
@@ -567,6 +600,76 @@ export class CastAdapter implements Adapter {
       // Only the song: on, media and shuffle come from the command that started it (reported first, they'd read as changed at the speaker).
       this.ctx.report(this.kovaId(id), r.queue ? { track: r.track } : { track: null, ...(r.media ? {} : { on: false, media: null, shuffle: false }) });
     }
+  }
+
+  // ---------------------------------------------------------- announcements --
+
+  /** Restores in progress for a Cast group: its speakers share one, so the group starts again once. */
+  private restoring = new Map<string, Promise<void>>();
+
+  /**
+   * What a speaker plays, to put back after an announcement: Kova's queue and the place in it (asked of the speaker
+   * now), or the stream it was on. Something another app cast (Spotify, YouTube) can't be taken back: it says so.
+   */
+  async snapshotPlayback(device: Device): Promise<unknown | null> {
+    const id = this.speakerId(device);
+    const r = this.receivers.get(id);
+    if (!r) return null;
+    const gid = this.viaGroup.get(id);
+    const src = (gid && this.receivers.get(gid)) || r;
+    const { app } = await src.status();
+    if (!app || app.isIdleScreen || this.silenced.has(id)) return null;
+    if (app.appId !== DEFAULT_RECEIVER) return { other: true };
+    await src.refreshQueue();
+    if (src.queue) return { via: gid, paused: src.paused, queue: { q: src.queue.q, index: src.queue.index, position: src.queue.position } };
+    if (src.stream) return { via: gid, paused: src.paused, stream: { ...src.stream } };
+    return { other: true };
+  }
+
+  /** An announcement on this speaker alone: out of any group it was playing in. */
+  async playClip(device: Device, clip: Clip): Promise<DeviceState> {
+    const id = this.speakerId(device);
+    const r = this.receivers.get(id);
+    if (!r) throw new Error(`${device.name} isn’t reachable`);
+    this.viaGroup.delete(id);
+    this.silenced.delete(id);
+    await r.playClip(clip);
+    return { on: true, media: clip.title, paused: false, track: null, shuffle: false };
+  }
+
+  async restorePlayback(device: Device, snap0: unknown | null): Promise<{ words: string; state?: DeviceState }> {
+    const id = this.speakerId(device);
+    const r = this.receivers.get(id);
+    if (!r) throw new Error(`${device.name} isn’t reachable`);
+    const snap = snap0 as null | { other?: boolean; via?: string; paused?: boolean; queue?: { q: Queue; index: number; position: number }; stream?: { url: string; title: string; loop: boolean } };
+    if (!snap) {
+      if (r.clip || r.media) await r.stop().catch(() => {});
+      return { words: 'idle again', state: { on: false, media: null, paused: false, track: null, shuffle: false } };
+    }
+    if (snap.other) {
+      if (r.clip) await r.stop().catch(() => {});
+      throw new Error('it was casting from another app (Spotify, YouTube…), which Kova can’t take back');
+    }
+    const target = (snap.via && this.receivers.get(snap.via)) || r;
+    const key = target.ep.id;
+    let job = this.restoring.get(key);
+    if (!job) {
+      job = (async () => {
+        if (snap.queue) await target.playQueue(snap.queue.q, snap.queue.index, snap.queue.position);
+        else if (snap.stream) await target.play(snap.stream.url, snap.stream.title, snap.stream.loop);
+        if (snap.paused) await target.setPaused(true).catch(() => {});
+      })();
+      this.restoring.set(key, job);
+      const done = () => setTimeout(() => this.restoring.delete(key), 5000).unref?.();
+      job.then(done, done);
+    }
+    await job;
+    if (snap.via) { this.viaGroup.set(id, snap.via); r.media = target.media; r.clip = null; }
+    const pos = snap.queue?.position ?? 0;
+    const words = snap.queue
+      ? `resumed ${snap.queue.q.label}${snap.queue.q.tracks[snap.queue.index] ? ` (${snap.queue.q.tracks[snap.queue.index]!.title}${pos >= 1 ? ` at ${mmss(pos)}` : ''})` : ''}${snap.paused ? ', paused' : ''}`
+      : `back to ${snap.stream!.title}${snap.paused ? ', paused' : ''}`;
+    return { words, state: { on: true, media: target.media, paused: !!snap.paused, track: target.track, shuffle: target.queue ? target.queue.q.shuffle : false } };
   }
 
   /** Cast groups Kova can use for synced playback, with their member device ids. */

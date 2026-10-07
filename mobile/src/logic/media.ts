@@ -91,3 +91,22 @@ export function sourceSub(s: MediaSource): { text: string; missing: boolean } {
 
 /** The toast after the Repeats / Plays once switch. */
 export const loopDone = (s: Pick<MediaSource, 'name'>, loop: boolean) => loop ? `${s.name} repeats until you stop it` : `${s.name} plays once`;
+
+/** Announcement loudness: 20–200 % of the level asked for, in steps of 5 (100 = as asked). */
+export const LOUDNESS_MIN = 20, LOUDNESS_MAX = 200, LOUDNESS_STEP = 5;
+export const snapLoudness = (n: number) => Math.max(LOUDNESS_MIN, Math.min(LOUDNESS_MAX, Math.round(n / LOUDNESS_STEP) * LOUDNESS_STEP));
+/** What PATCH /api/devices/:id/settings takes: null puts it back to 100. */
+export const loudnessBody = (n: number) => ({ announceTrim: snapLoudness(n) === 100 ? null : snapLoudness(n) });
+/** A loudness in words: "as asked", "70% (quieter)", "130% (louder)". */
+export const loudnessWords = (trim: number) => trim === 100 ? 'as asked' : `${trim}% (${trim < 100 ? 'quieter' : 'louder'})`;
+/** The kinds of file a clip can be (the hub's list), and the most it takes. */
+export const CLIP_TYPES = 'audio/mpeg,audio/mp4,audio/aac,audio/x-m4a,audio/wav,audio/x-wav,audio/flac,audio/ogg,.mp3,.m4a,.aac,.wav,.flac,.ogg,.oga';
+export const CLIP_MAX_BYTES = 15 * 1024 * 1024;
+/** A clip's name from its file name: "Doorbell chime.mp3" → "Doorbell chime". */
+export const clipName = (file: string) => file.replace(/\.[a-z0-9]{2,4}$/i, '').replace(/[_]+/g, ' ').trim() || 'Clip';
+/** Checked before uploading: the hub says the same (400/413/415). */
+export function clipFileProblem(f: { name: string; size: number }): string | null {
+  if (!/\.(mp3|m4a|aac|wav|flac|ogg|oga)$/i.test(f.name)) return 'Use an MP3, M4A, AAC, WAV, FLAC or Ogg file';
+  if (f.size > CLIP_MAX_BYTES) return 'That file is over 15 MB';
+  return null;
+}
