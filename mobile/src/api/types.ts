@@ -207,6 +207,8 @@ export interface Snapshot {
   music?: { name: string; kind: 'all' | 'loved' | 'playlist'; icon: string; tracks?: number }[];
   findings: Finding[];
   activity: ActivityRow[];
+  /** The engine Ask Kova hands what the built-in parser can't do to (hubs from 0.7.53). */
+  assistant?: { kind: 'builtin' | 'local' | 'cloud'; label: string; model?: string; ready?: boolean };
   integrations: Integration[];
   /** The hub's own software updates (null when the hub has no updater). */
   update?: HubUpdate | null;
@@ -227,6 +229,10 @@ export interface AskReply {
   actions: { label: string; action: unknown }[];
   undo?: string;
   understood: boolean;
+  /** Which engine answered (hubs from 0.7.53). */
+  engine?: 'builtin' | 'local' | 'cloud';
+  /** Set by the app: this is about a request that didn't get its answer (logic/ask.ts). */
+  failed?: boolean;
 }
 
 export interface Glance {

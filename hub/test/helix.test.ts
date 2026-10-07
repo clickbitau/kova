@@ -176,6 +176,8 @@ test('Helix: pair with a code, boxes are TVs, play by name, pause for the doorbe
     assert.equal(t.hub.reg.list().filter(x => x.adapter === 'helix').length, 1);
     const adapter = t.hub.reg.adapters.get('helix') as HelixAdapter;
     await waitFor('live', () => adapter.following && hx.s.streams.length === 1);
+    // The status is set once the catch-up after "hello" finishes (a moment later on a busy machine).
+    await waitFor('live status', () => /· live/.test(adapter.status().note ?? ''));
     assert.match(adapter.status().note ?? '', /1 box · live/);
     assert.deepEqual({ on: t.dev(id).on, vol: t.dev(id).vol, muted: t.dev(id).muted }, { on: false, vol: 40, muted: false });
 

@@ -235,10 +235,10 @@ export class Engine extends EventEmitter<{ changed: [] }> {
     return this.registerUndo(async () => { await this.reg.command(id, prev, { kind: 'undo', label: 'Undo' }); });
   }
 
-  async applyMany(targets: Targets, cause: Cause): Promise<{ undo: string; changed: string[] }> {
-    const { changed, prev } = await this.reg.applyTargets(targets, cause);
+  async applyMany(targets: Targets, cause: Cause): Promise<{ undo: string; changed: string[]; failed: { id: string; error: string }[] }> {
+    const { changed, prev, failed } = await this.reg.applyTargets(targets, cause);
     if (changed.length) this.store.append({ kind: 'run', device: null, feed: cause.kind === 'user' || cause.kind === 'assistant' ? 'device' : 'auto', what: `${cause.label} · ${plural(changed.length, 'device')} changed`, data: { changed }, cause });
-    return { changed, undo: this.registerUndo(async () => { await this.reg.applyTargets(prev, { kind: 'undo', label: 'Undo' }); }) };
+    return { changed, failed, undo: this.registerUndo(async () => { await this.reg.applyTargets(prev, { kind: 'undo', label: 'Undo' }); }) };
   }
 
   private onChange(e: ChangeEvent): void {

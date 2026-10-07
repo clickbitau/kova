@@ -6,13 +6,14 @@ import { timingSafeEqual } from 'node:crypto';
 import { Sessions } from '../services/sessions.ts';
 import type { Hub } from '../hub.ts';
 import type { Cause, Command } from '../model/types.ts';
-import type { AskAction } from '../assistant/assistant.ts';
+import type { AskAction, AskReply } from '../assistant/assistant.ts';
 import { VirtualAdapter } from '../adapters/virtual.ts';
 import { MatterAdapter } from '../adapters/matter.ts';
 import { HomeKitControllerAdapter } from '../adapters/homekit-controller.ts';
 import { snapshot } from './snapshot.ts';
 import { registerEditRoutes } from './edit-routes.ts';
-import { AiAssistant, loadSettings, publicSettings, saveSettings, requestLog, learnedPhrases, forgetPhrase, memoryList, forgetMemory, convoAdd, type AiOptions, type SettingsPatch } from '../assistant/ai.ts';
+import { AiAssistant, loadSettings, publicSettings, saveSettings, requestLog, learnedPhrases, forgetPhrase, memoryList, forgetMemory, convoAdd, convoRecent, engineInfo, type AiOptions, type SettingsPatch } from '../assistant/ai.ts';
+import { AskJobs, type AskJob } from '../assistant/ask-jobs.ts';
 import { isLight, isPlayer } from '../util/describe.ts';
 import type { HomeKitBridge } from '../bridges/homekit.ts';
 import type { MatterBridge } from '../bridges/matter-bridge.ts';
@@ -624,7 +625,7 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
   ai.music = () => hub.music?.cached() ?? [];
   app.get('/api/assistant/settings', async () => publicSettings(loadSettings(hub.store)));
   app.put<{ Body: SettingsPatch }>('/api/assistant/settings', async (req, reply) => {
-    try { return publicSettings(saveSettings(hub.store, req.body ?? {})); } catch (e) { return fail(reply, e); }
+    try { const out = publicSettings(saveSettings(hub.store, req.body ?? {})); hub.emit('changed'); return out; } catch (e) { return fail(reply, e); }
   });
 
   // What the AI has been asked (full text + tools it ran), and the phrases it learned — the raw material for new built-in intents.
@@ -637,17 +638,49 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
   app.delete<{ Params: { i: string } }>('/api/assistant/memory/:i', async (req, reply) =>
     forgetMemory(hub.store, Number(req.params.i)) ? { ok: true } : reply.code(404).send({ error: 'No such memory' }));
 
-  app.post<{ Body: { text: string } }>('/api/ask', async req => {
+  // POST /api/ask { text }: the built-in parser answers at once. What goes on to an AI engine can take a minute or
+  // more, so a client that sends `job: true` gets { job } straight away and follows it (GET /api/ask/jobs/:id, see
+  // assistant/ask-jobs.ts); without it the request waits for the answer, as older apps expect.
+  const jobs = new AskJobs();
+  app.addHook('onClose', async () => jobs.close());
+  const jobView = (j: AskJob) => ({ id: j.id, text: j.text, status: j.status, engine: j.engine, steps: j.steps, started: j.started, rev: j.rev, ...(j.finished ? { finished: j.finished } : {}), ...(j.reply ? { reply: j.reply } : {}) });
+  const remember = (text: string, out: AskReply, asked: number, job?: string) => {
+    // Keep the exchange so follow-ups — "yes", "the second one", "do it" — still land, and a phone that was away
+    // finds the answer (GET /api/ask/history).
+    convoAdd(hub.store, 'user', text, { ts: asked, job });
+    convoAdd(hub.store, 'assistant', out.text, { job, source: out.source, engine: out.engine, undo: out.undo, failed: out.understood === false && out.engine !== 'builtin' ? true : undefined });
+  };
+  app.post<{ Body: { text: string; job?: boolean } }>('/api/ask', async req => {
     const text = String(req.body?.text ?? '');
+    const asked = Date.now();
     const r = await hub.assistant.ask(text);
     const settings = loadSettings(hub.store);
-    // Only what the built-in parser couldn't handle goes to an AI engine.
-    const out = !r.understood && settings.engine !== 'builtin' && text.trim() ? await ai.ask(text, settings) : r;
     if (!r.understood && settings.engine === 'builtin' && text.trim()) ai.logRequest('builtin', text, r.text, [], false); // parser gap: remember it
-    // Keep the exchange so follow-ups — "yes", "the second one", "do it" — still land.
-    if (text.trim()) { convoAdd(hub.store, 'user', text); convoAdd(hub.store, 'assistant', out.text); }
+    // Only what the built-in parser couldn't handle goes to an AI engine.
+    if (r.understood || settings.engine === 'builtin' || !text.trim()) {
+      const out: AskReply = { ...r, engine: r.engine ?? 'builtin' };
+      if (text.trim()) remember(text, out, asked);
+      return out;
+    }
+    if (req.body?.job === true) {
+      const info = engineInfo(settings);
+      const job = jobs.start(text, { kind: info.kind, label: info.label }, progress => ai.ask(text, settings, undefined, { onSteps: progress }), j => { if (j.reply) remember(text, j.reply, asked, j.id); });
+      return { job: jobView(job) };
+    }
+    const out = await ai.ask(text, settings);
+    remember(text, out, asked);
     return out;
   });
+  // Follow a job: comes back as soon as it changes past `rev` (a step, the answer), or after `wait` seconds (≤ 25).
+  app.get<{ Params: { id: string }; Querystring: { rev?: string; wait?: string } }>('/api/ask/jobs/:id', async (req, reply) => {
+    const rev = Number(req.query.rev ?? 0) || 0;
+    const wait = Math.max(0, Math.min(25, Number(req.query.wait ?? 0) || 0)) * 1000;
+    const j = await jobs.wait(req.params.id, rev, wait);
+    if (!j) return reply.code(404).send({ error: 'The hub restarted before it finished that request. Some of it may have been done — check, then ask again.', code: 'job-gone' });
+    return jobView(j);
+  });
+  // The conversation so far (8 hours), with each reply's source and undo, and anything still being worked on.
+  app.get('/api/ask/history', async () => ({ turns: convoRecent(hub.store), jobs: jobs.running().map(jobView), engine: engineInfo(loadSettings(hub.store)) }));
   // What Kova understood, as chips, without running anything (for the live preview while typing).
   app.post<{ Body: { text: string } }>('/api/ask/parse', async req => {
     const i = hub.assistant.parse(String(req.body?.text ?? ''));
