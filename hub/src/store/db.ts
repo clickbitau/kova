@@ -28,6 +28,8 @@ export type NewLogEntry = Omit<LogEntry, 'id' | 'ts'> & { ts?: number };
 /** The hub's single SQLite file: the event log plus a small key/value store. */
 export class Store {
   readonly db: DatabaseSync;
+  /** How many entries of each kind were added since the hub started: a cheap "has this changed?" for caches. */
+  private added = new Map<string, number>();
 
   constructor(path: string, private now: () => number = Date.now) {
     if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
@@ -46,6 +48,7 @@ export class Store {
       );
       CREATE INDEX IF NOT EXISTS events_ts ON events(ts);
       CREATE INDEX IF NOT EXISTS events_device ON events(device, ts);
+      CREATE INDEX IF NOT EXISTS events_kind ON events(kind, ts);
       CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     `);
   }
@@ -54,6 +57,7 @@ export class Store {
     const ts = e.ts ?? this.now();
     const r = this.db.prepare('INSERT INTO events (ts, kind, device, feed, what, data, cause) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .run(ts, e.kind, e.device, e.feed, e.what, JSON.stringify(e.data), JSON.stringify(e.cause));
+    this.added.set(e.kind, (this.added.get(e.kind) ?? 0) + 1);
     return { ...e, ts, id: Number(r.lastInsertRowid) };
   }
 
@@ -74,6 +78,9 @@ export class Store {
   lastStateChange(device: string): LogEntry | undefined {
     return this.rows("SELECT * FROM events WHERE kind = 'state' AND device = ? ORDER BY ts DESC, id DESC LIMIT 1", device)[0];
   }
+
+  /** Entries of this kind added since the hub started (changes whenever one is). */
+  addedOf(kind: string): number { return this.added.get(kind) ?? 0; }
 
   between(from: number, to: number, kind?: string): LogEntry[] {
     return kind

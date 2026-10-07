@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
+import type { WebSocket } from '@fastify/websocket';
 import { timingSafeEqual } from 'node:crypto';
 import { Sessions } from '../services/sessions.ts';
 import type { Hub } from '../hub.ts';
@@ -132,7 +133,7 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
 
   // Browsers signed in with a code from someone already signed in (services/sessions.ts).
   const sessions = new Sessions(hub.store);
-  app.post('/api/login/start', async (req, reply) => { reply.header('cache-control', 'no-store'); return sessions.start(req.headers['user-agent']); });
+  app.post<{ Body: { name?: string } | undefined }>('/api/login/start', async (req, reply) => { reply.header('cache-control', 'no-store'); return sessions.start(req.headers['user-agent'], req.body?.name); });
   app.get<{ Params: { id: string } }>('/api/login/poll/:id', async (req, reply) => { reply.header('cache-control', 'no-store'); return sessions.poll(req.params.id); });
   app.post<{ Body: { code?: string } }>('/api/login/approve', async (req, reply) => {
     const ok = sessions.approve(String(req.body?.code ?? ''), sessions.check(keyOf(req))?.name ?? 'Kova app');
@@ -695,7 +696,7 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
   });
 
   // ------------------------------------------------------------ realtime --
-  const clients = new Set<{ send: (s: string) => void }>();
+  const clients = new Set<WebSocket>();
   let pending: NodeJS.Timeout | null = null;
   hub.on('changed', () => {
     if (pending || !clients.size) return;
@@ -705,12 +706,26 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
       for (const c of clients) c.send(msg);
     }, 80);
   });
-  // Keep the UI's clock and "now" line moving even when nothing changes.
+  // Keep the UI's clock and "now" line moving even when nothing changes. This is also the socket's heartbeat: a
+  // client hears from the hub at least every 30 s, so one that hasn't for longer knows its socket is dead (the
+  // phone app reconnects then, see mobile/src/logic/link.ts).
   const heartbeat = setInterval(() => { if (clients.size) hub.emit('changed'); }, 30_000);
-  app.addHook('onClose', async () => clearInterval(heartbeat));
+  // And the other way: a phone that went to sleep or off the network never says goodbye. A client that hasn't
+  // answered the last ping is dropped, so the hub stops building snapshots for it.
+  const alive = new WeakMap<WebSocket, boolean>();
+  const pinger = setInterval(() => {
+    for (const c of clients) {
+      if (alive.get(c) === false) { clients.delete(c); c.terminate(); continue; }
+      alive.set(c, false);
+      try { c.ping(); } catch { /* closing anyway */ }
+    }
+  }, 30_000);
+  app.addHook('onClose', async () => { clearInterval(heartbeat); clearInterval(pinger); });
 
   app.get('/api/ws', { websocket: true }, socket => {
     clients.add(socket);
+    alive.set(socket, true);
+    socket.on('pong', () => alive.set(socket, true));
     socket.send(JSON.stringify({ type: 'state', data: snapshot(hub) }));
     socket.on('close', () => clients.delete(socket));
   });

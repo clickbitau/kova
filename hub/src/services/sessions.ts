@@ -26,6 +26,13 @@ export function deviceName(ua = ''): string {
   return os ? `${browser} on ${os}` : browser;
 }
 
+/** A name a device gave itself: plain text, short, or nothing. */
+function cleanName(name: unknown): string | null {
+  if (typeof name !== 'string') return null;
+  const n = name.replace(/[\u0000-\u001f]/g, ' ').replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 40).trim();
+  return n || null;
+}
+
 export class Sessions {
   private pending: Pending[] = [];
   private seenWrite = 0;
@@ -49,14 +56,17 @@ export class Sessions {
     return s;
   }
 
-  /** A browser asks to sign in: a code to show, and an id to wait on. */
-  start(ua?: string): { id: string; code: string; expiresAt: number } {
+  /**
+   * A browser (or the phone app, signing in again) asks to sign in: a code to show, and an id to wait on.
+   * `name` is what it calls itself ("Kova app on iPhone"); without one it's named from its user agent.
+   */
+  start(ua?: string, name?: unknown): { id: string; code: string; expiresAt: number } {
     const t = this.now();
     this.pending = this.pending.filter(p => p.until > t);
     if (this.pending.length >= MAX_PENDING) this.pending.shift();
     const raw = randomBytes(8);
     const code = Array.from(raw, b => ALPHABET[b % ALPHABET.length]).join('');
-    const p: Pending = { id: randomUUID(), code: `${code.slice(0, 4)}-${code.slice(4)}`, name: deviceName(ua), until: t + CODE_MS };
+    const p: Pending = { id: randomUUID(), code: `${code.slice(0, 4)}-${code.slice(4)}`, name: cleanName(name) ?? deviceName(ua), until: t + CODE_MS };
     this.pending.push(p);
     return { id: p.id, code: p.code, expiresAt: p.until };
   }
