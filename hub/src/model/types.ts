@@ -554,6 +554,12 @@ export interface HomeConfig {
   favourites?: string[];
   /** Speakers the owner grouped to play together (any brands). Each group is a device of its own. */
   speakerGroups?: SpeakerGroup[];
+  /**
+   * Speaker groups' timing (engine/group-sync.ts), by group id: for each part played alongside the group's main part,
+   * how many ms earlier (+) or later (−) it plays, −1000…+1000 in 10 ms steps. A part is a member (its device id) or
+   * a native group Kova plays as one stream ("cast:<id>", "sonos:group"). Unset parts play at 0.
+   */
+  groupOffsets?: Record<string, Record<string, number>>;
   /** Devices reached through several integrations, shown as one. */
   combined?: CombinedDevice[];
   /** Pause what's playing on players that can pause (a Helix box) when the doorbell rings. Default on. */

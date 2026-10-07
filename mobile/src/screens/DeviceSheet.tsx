@@ -12,6 +12,7 @@ import { AIR, combinedOf, devs, FAN_SPEEDS, filterNote, has, HVAC, ICON, iconOf,
 import { arcPath, clampTarget, TARGET_MAX, TARGET_MIN } from '../logic/climate';
 import { servesLine, snapOpen, suggestionsBody, toggleRoom, visibleZones, zoneRoomsBody, zoneRoomViews, roomWords } from '../logic/zones';
 import { combineChoices, placeChoices, placeName } from '../logic/customise';
+import { groupHow } from '../logic/group-sync';
 import { Icon } from '../ui/Icon';
 import { Button, Card, Chips, Group, IconButton, Notice, IconWell, Pill, HScroll, Press, Row, Section, Segmented, Sheet, Slider, Stat, Switch, SwitchRow, Tag } from '../ui/kit';
 import { T } from '../ui/Text';
@@ -316,15 +317,16 @@ export function DeviceSheet() {
           {group ? (
             <Card style={{ padding: SP[4], gap: SP[3] }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3] }}>
-                <IconWell icon={group.sync === 'perfect' ? 'graphic_eq' : 'sync'} color={group.sync === 'perfect' ? C.green : C.amber} size={36} />
+                <IconWell icon={group.sync === 'perfect' ? 'graphic_eq' : 'sync'} color={group.sync === 'perfect' ? C.green : group.sync === 'hybrid' ? C.blue : C.amber} size={36} />
                 <View style={{ flex: 1, gap: 2 }}>
                   <T v="headline" size={14}>{`Plays on ${group.members.length} speakers`}</T>
-                  <T v="footnote" color={C.stone}>{group.sync === 'perfect' ? `In perfect sync through “${group.castGroup}”` : 'They start together'}</T>
+                  <T v="footnote" color={C.stone}>{groupHow(group)}</T>
                 </View>
               </View>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
                 {group.members.map(m => <Tag key={m} text={snap.devices.find(x => x.id === m)?.name ?? m} color={C.blue} />)}
               </View>
+              <Button kind="secondary" icon="graphic_eq" label="Timing and sync test" onPress={() => { close(); nav.navigate('GroupSync', { id: group.id }); }} />
             </Card>
           ) : null}
         </View>

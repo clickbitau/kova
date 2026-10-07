@@ -10,6 +10,7 @@ import { Checker } from './engine/findings.ts';
 import { Assistant } from './assistant/assistant.ts';
 import type { Adapter } from './adapters/sdk.ts';
 import { SpeakerGroupsAdapter } from './adapters/groups.ts';
+import { GroupSync, type GroupSyncOptions } from './engine/group-sync.ts';
 import { CombinedAdapter } from './adapters/combined.ts';
 import type { HomeConfig } from './model/types.ts';
 import type { Weather } from './services/weather.ts';
@@ -45,6 +46,8 @@ export interface HubOptions {
   dataDir?: string;
   /** For tests: how the built-in recordings are downloaded. */
   fetch?: typeof fetch;
+  /** For tests: speaker groups' timing (how often drift is checked, the sync test's length). */
+  groupSync?: Omit<GroupSyncOptions, 'base'>;
 }
 
 /** Wires the hub's parts together. One per home. */
@@ -74,6 +77,8 @@ export class Hub extends EventEmitter<{ changed: [] }> {
   readonly energy: Energy;
   /** Speaker groups made in Kova (they're devices of their own). */
   readonly groups: SpeakerGroupsAdapter;
+  /** Timing across a speaker group's parts: native groups, speakers played alongside, the sync test (engine/group-sync.ts). */
+  readonly groupSync: GroupSync;
   /** What Kova notices: the home at a glance, and alerts and warnings (services/insights.ts). */
   readonly insights: Insights;
   /** Devices reached through several integrations, shown as one (adapters/combined.ts). */
@@ -135,6 +140,9 @@ export class Hub extends EventEmitter<{ changed: [] }> {
     this.config.on('changed', () => this.reg.reapplySettings());
     this.groups = new SpeakerGroupsAdapter(this.reg, () => this.config.get().speakerGroups ?? []);
     this.config.on('changed', () => this.groups.sync());
+    this.groupSync = new GroupSync(this.reg, this.config, this.store, { base: host => this.lanBase(host), ...opts.groupSync });
+    this.groups.timing = this.groupSync;
+    this.groupSync.on('changed', () => this.emit('changed'));
     this.combined = new CombinedAdapter(this.reg, () => this.config.get().combined ?? []);
     this.config.on('changed', () => this.combined.sync());
     this.config.on('changed', () => this.linkNamedZones());
@@ -147,6 +155,7 @@ export class Hub extends EventEmitter<{ changed: [] }> {
     this.checker = new Checker(this.engine, this.store, this.config, () => this.reg.devices, t => this.reg.expandTargets(t));
     this.assistant = new Assistant(this.engine, this.reg, this.config);
     this.assistant.learner = this.checker.learner;
+    this.assistant.groupSync = this.groupSync;
     this.maps = new Maps({ now: opts.now, ...opts.maps, store: this.store, near: () => { const c = this.config.get(); return c.latitude || c.longitude ? { latitude: c.latitude, longitude: c.longitude } : null; } });
     this.energy = new Energy(this.store, this.reg, () => this.config.get().timezone, opts.now, () => this.config.get().devices ?? {});
     this._demo = !!opts.demo;
@@ -249,6 +258,7 @@ export class Hub extends EventEmitter<{ changed: [] }> {
   }
 
   async stop(): Promise<void> {
+    this.groupSync.stop();
     await this.security.stop();
     this.sensors.flush();
     if (this.placeTimer) clearInterval(this.placeTimer);

@@ -119,6 +119,11 @@ export const ROUTES: Record<string, Rule> = {
   'POST /api/speaker-groups': r('home'),
   'PUT /api/speaker-groups/:id': r('home'),
   'DELETE /api/speaker-groups/:id': r('home'),
+  // A group's timing: adults (and the owner) tune it; children and guests don't.
+  'GET /api/speaker-groups/:id/sync': r('home'),
+  'PUT /api/speaker-groups/:id/offsets': r('home'),
+  'POST /api/speaker-groups/:id/sync-test': r('home'),
+  'DELETE /api/speaker-groups/:id/sync-test': r('home'),
   'POST /api/combined': r('home'),
   'PUT /api/combined/:id': r('home'),
   'DELETE /api/combined/:id': r('home'),

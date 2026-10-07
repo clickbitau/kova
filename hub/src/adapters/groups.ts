@@ -1,13 +1,15 @@
 import type { Adapter, AdapterContext, AdapterStatus } from './sdk.ts';
 import type { Cause, Command, Device, DeviceState, SpeakerGroup } from '../model/types.ts';
 import type { Registry } from '../devices/registry.ts';
+import type { GroupSync } from '../engine/group-sync.ts';
 
 // Speaker groups the owner makes in Kova: any speakers, any brands, played as one.
 // Each group is a Kova device (type media), so it works everywhere a speaker does: tiles,
-// modes, moments, the assistant, the Apple Home and Matter bridges. A command to the group
-// goes to every member in the same instant. When the members are exactly a Cast group made
-// in Google Home, the Cast adapter plays through that group: perfect sync. Otherwise the
-// speakers start together but aren't sample-locked (different brands can't be).
+// modes, moments, the assistant, the Apple Home and Matter bridges. Playing something goes
+// through engine/group-sync.ts: members that make up a native group (a Cast group made in
+// Google Home, Sonos speakers) play through it, sample-locked; the rest play alongside, each
+// started at its moment (its learned start delay and the owner's offset) and kept in time.
+// Other commands (volume, pause, next song, stop) go to every member in the same instant.
 
 export const groupDeviceId = (g: SpeakerGroup) => `group_${g.id}`;
 
@@ -19,6 +21,9 @@ export class SpeakerGroupsAdapter implements Adapter {
   private ctx?: AdapterContext;
   private announced = new Set<string>();
   private onChange = () => this.refresh();
+
+  /** Timing across the group's parts (set by the hub). */
+  timing: GroupSync | null = null;
 
   constructor(private reg: Registry, private groups: () => SpeakerGroup[]) {}
 
@@ -87,6 +92,15 @@ export class SpeakerGroupsAdapter implements Adapter {
     const ms = this.members(g);
     if (!ms.length) throw new Error(`${g.name} has no speakers`);
     const via: Cause = { ...(cause ?? { kind: 'user', label: 'You' }), detail: `through ${g.name}` };
+    // Something to play: each part at its moment, kept in time while it plays.
+    if (typeof cmd.media === 'string' && cmd.media && this.timing) {
+      const r = await this.timing.play(g, cmd, via);
+      this.refresh();
+      const bad = r.filter(x => x.result.status === 'rejected');
+      if (r.length && bad.length === r.length) throw (bad[0]!.result as PromiseRejectedResult).reason;
+      return;
+    }
+    if (cmd.on === false || cmd.media === null) this.timing?.end(g.id);
     // Same instant for every member, so the Cast adapter can batch them into a Cast group.
     const results = await Promise.allSettled(ms.map(d => this.reg.command(d.id, cmd, via)));
     this.refresh();

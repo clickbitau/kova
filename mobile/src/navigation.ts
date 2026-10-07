@@ -33,6 +33,8 @@ export type Stack = {
   Media: undefined;
   /** Media → Speaker loudness: each speaker's announcement loudness, with a test. */
   SpeakerLoudness: undefined;
+  /** A speaker group's timing: how it plays, a timing slider per speaker played alongside, the sync test. */
+  GroupSync: { id: string };
   /** Integrations → Prayer times: on or off, how they're worked out, the call to prayer. */
   PrayerTimes: undefined;
   /** More → Integrations: what's connected, and adding one. */

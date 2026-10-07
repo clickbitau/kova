@@ -84,6 +84,11 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
   /** Announcements playing now, by title → URL: a speaker without its own clip support plays them as a source. */
   private clipSources = new Map<string, string>();
   private srcUrl(name: string): string | undefined { return this.clipSources.get(name) ?? this.sourceUrl(name); }
+  /** A stream or recording's URL by name (a source, or an announcement playing now): what adapters play as a stream. */
+  streamUrl(name: string): string | undefined { return this.srcUrl(name); }
+
+  /** Queues Kova makes itself (the speaker groups' sync test), by media name, ahead of Helix music. */
+  readonly ownQueues = new Map<string, (opts: QueueOptions) => Promise<Queue | null>>();
 
   constructor(private store: Store, private sourceUrl: (name: string) => string | undefined = () => undefined, private settings: () => Record<string, DeviceSettings> = () => ({})) {
     super();
@@ -124,7 +129,7 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
       event: (id, type, data = {}) => this.deviceEvent(id, type, data),
       sourceUrl: name => this.srcUrl(name),
       sourceLoops: name => this.sourceLoops(name),
-      queueFor: (media, opts) => this.queues ? this.queues(media, opts ?? {}) : Promise.resolve(null),
+      queueFor: (media, opts) => this.ownQueues.get(media)?.(opts ?? {}) ?? (this.queues ? this.queues(media, opts ?? {}) : Promise.resolve(null)),
       derive: (id, state) => { const d = this.devices.get(id); if (!d) return; const patch = this.diff(d, state); if (!Object.keys(patch).length) return; d.state = { ...d.state, ...patch }; this.emit('measure'); },
       peer: id => this.adapters.get(id),
       known: id => this.devices.has(id) || id in this.saved,

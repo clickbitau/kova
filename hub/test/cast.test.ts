@@ -11,7 +11,7 @@ import { encodeMessage, decodeMessage, NS } from '../src/adapters/cast/channel.t
 /** A fake Cast receiver: enough of receiver, media and multizone to drive the adapter. */
 function fakeCast(name: string, members: string[] = []) {
   const log: { ns: string; type: string; data: Record<string, unknown> }[] = [];
-  const st = { app: null as null | { appId: string; sessionId: string; transportId: string }, level: 0.3, muted: false, url: '', paused: false };
+  const st = { app: null as null | { appId: string; sessionId: string; transportId: string }, level: 0.3, muted: false, url: '', paused: false, time: 0 };
   const server = net.createServer(sock => {
     let buf = Buffer.alloc(0);
     const reply = (m: { source: string; namespace: string; data: Record<string, unknown> }) =>
@@ -34,9 +34,10 @@ function fakeCast(name: string, members: string[] = []) {
           st.url = String((type === 'LOAD' ? m.data.media as { contentId: string } : (m.data.items as { media: { contentId: string } }[])[0].media).contentId);
           st.paused = false;
           reply({ source: 'web-1', namespace: NS.media, data: { type: 'MEDIA_STATUS', requestId: rid, status: [{ mediaSessionId: 7, playerState: 'PLAYING' }] } });
-        } else if (m.namespace === NS.media && (type === 'GET_STATUS' || type === 'PAUSE' || type === 'PLAY')) {
-          if (type !== 'GET_STATUS') { assert.equal(m.data.mediaSessionId, 7); st.paused = type === 'PAUSE'; }
-          reply({ source: 'web-1', namespace: NS.media, data: { type: 'MEDIA_STATUS', requestId: rid, status: st.app ? [{ mediaSessionId: 7, playerState: st.paused ? 'PAUSED' : 'PLAYING' }] : [] } });
+        } else if (m.namespace === NS.media && (type === 'GET_STATUS' || type === 'PAUSE' || type === 'PLAY' || type === 'SEEK' || type === 'QUEUE_UPDATE')) {
+          if (type === 'PAUSE' || type === 'PLAY') { assert.equal(m.data.mediaSessionId, 7); st.paused = type === 'PAUSE'; }
+          if (type === 'SEEK') st.time = Number(m.data.currentTime);
+          reply({ source: 'web-1', namespace: NS.media, data: { type: 'MEDIA_STATUS', requestId: rid, status: st.app ? [{ mediaSessionId: 7, playerState: st.paused ? 'PAUSED' : 'PLAYING', currentTime: st.time }] : [] } });
         } else if (m.namespace === NS.multizone) {
           reply({ source: 'receiver-0', namespace: NS.multizone, data: { type: 'MULTIZONE_STATUS', requestId: rid, status: { devices: members.map(id => ({ deviceId: id, name: id })) } } });
         }
@@ -276,5 +277,41 @@ test('Cast: a speaker group that moved (another VLAN, no mDNS) is found again at
   } finally {
     await reg.stop();
     for (const f of [a, b, g]) f.server.close();
+  }
+});
+
+test('Cast: a group plus a speaker outside it, at once: the Cast group plays as one, the other on its own; positions and moves', async () => {
+  const a = fakeCast('Kitchen speaker'), b = fakeCast('Dining speaker'), c = fakeCast('Office speaker');
+  const g = fakeCast('Home speakers', ['aaaa0000-0000-0000-0000-000000000001', 'bbbb0000-0000-0000-0000-000000000002']);
+  const ep = async (f: ReturnType<typeof fakeCast>, id: string, model: string) => ({ id, name: f.name, model, host: '127.0.0.1', port: await listen(f) });
+  const reg = new Registry(new Store(':memory:'));
+  reg.queues = async () => ({ label: 'Loved', shuffle: false, tracks: [1, 2, 3].map(i => ({ id: `t${i}`, title: `Song ${i}`, url: `http://helix/${i}.flac`, contentType: 'audio/flac', durationMs: 180_000 })) });
+  const cast = new CastAdapter({
+    discover: false, insecure: true, pollMs: 0, batchMs: 20,
+    endpoints: [await ep(a, 'aaaa0000000000000000000000000001', 'Nest Audio'), await ep(b, 'bbbb0000000000000000000000000002', 'Nest Audio'), await ep(c, 'cccc0000000000000000000000000003', 'Nest Audio'), await ep(g, 'dddd0000000000000000000000000004', 'Google Cast Group')],
+  });
+  await reg.addAdapter(cast);
+  try {
+    assert.deepEqual(cast.nativeGroups().map(n => [n.via, n.name, n.members.sort()]), [['cast', 'Home speakers', ['cast_aaaa0000000000000000000000000001', 'cast_bbbb0000000000000000000000000002']]]);
+    const you = { kind: 'user' as const, label: 'You' };
+    await reg.applyTargets({ cast_aaaa0000000000000000000000000001: { on: true, media: 'Loved' }, cast_bbbb0000000000000000000000000002: { on: true, media: 'Loved' }, cast_cccc0000000000000000000000000003: { on: true, media: 'Loved' } }, you);
+    const qloads = (f: ReturnType<typeof fakeCast>) => f.log.filter(l => l.type === 'QUEUE_LOAD').length;
+    assert.deepEqual([qloads(g), qloads(a), qloads(b), qloads(c)], [1, 0, 0, 1], 'not three separate speakers: the group, and the office alone');
+    // A group's speaker answers with the group's place.
+    g.st.time = 42.25;
+    const pos = await cast.playbackPosition(reg.get('cast_aaaa0000000000000000000000000001')!);
+    assert.equal(pos!.positionMs, 42_250);
+    assert.equal(pos!.durationMs, 180_000);
+    assert.equal(pos!.playing, true);
+    assert.ok(Math.abs(pos!.at - Date.now()) < 1000);
+    // Moving the office: a seek in the same song, a jump to the next.
+    await cast.syncTo(reg.get('cast_cccc0000000000000000000000000003')!, { index: 0, positionMs: 42_500 });
+    assert.equal(c.log.find(l => l.type === 'SEEK')!.data.currentTime, 42.5);
+    await cast.syncTo(reg.get('cast_cccc0000000000000000000000000003')!, { index: 1, positionMs: 0 });
+    assert.deepEqual([c.log.find(l => l.type === 'QUEUE_UPDATE')!.data.jump, c.log.find(l => l.type === 'QUEUE_UPDATE')!.data.currentTime], [1, 0]);
+    assert.equal(g.log.filter(l => l.type === 'SEEK').length, 0, 'the group is left alone');
+  } finally {
+    await reg.stop();
+    for (const f of [a, b, c, g]) f.server.close();
   }
 });

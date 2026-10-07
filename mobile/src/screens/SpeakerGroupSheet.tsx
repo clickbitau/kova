@@ -4,11 +4,14 @@ import { C, F, R, SP, alpha } from '../theme';
 import { useHub } from '../state/hub';
 import { ICON } from '../logic/devices';
 import { cleanName, groupBody, groupDraftError, groupSyncNote, speakerChoices, type GroupDraft } from '../logic/customise';
+import { draftSyncNote } from '../logic/group-sync';
+import { combinedOf } from '../logic/devices';
+import { useNav } from '../navigation';
 import { Icon } from '../ui/Icon';
 import { Button, Card, HScroll, IconWell, Pill, Press, Section, Sheet } from '../ui/kit';
 import { T } from '../ui/Text';
 
-const TONE = { muted: C.stone, green: C.green, amber: C.amber } as const;
+const TONE = { muted: C.stone, green: C.green, amber: C.amber, blue: C.blue } as const;
 
 /** A text box the way the app draws them: card surface, hairline edge, amber edge while typing. */
 export function TextField({ value, onChange, placeholder, label, onSubmit, autoFocus, keyboard }: { value: string; onChange: (v: string) => void; placeholder?: string; label: string; onSubmit?: () => void; autoFocus?: boolean; keyboard?: 'default' | 'number-pad' | 'url' }) {
@@ -40,15 +43,19 @@ export function SheetHead({ kicker, title, icon, color = C.bone }: { kicker: str
  */
 export function SpeakerGroupSheet({ id, onClose }: { id: string | null; onClose: () => void }) {
   const { snap, act } = useHub();
+  const nav = useNav();
   const G = id && id !== 'new' ? snap?.speakerGroups.find(g => g.id === id) : undefined;
   const [d, setD] = useState<GroupDraft>({ name: '', members: [], room: '' });
   useEffect(() => { if (id) setD(G ? { name: G.name, members: [...G.members], room: G.room ?? '' } : { name: '', members: [], room: '' }); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!snap) return null;
   const rooms = snap.rooms;
   const rn = (r: string) => rooms.find(x => x.id === r)?.name ?? 'No room';
-  const choices = speakerChoices(snap.devices, rooms);
+  // Hidden speakers (a combined soundbar's Cast side) only when they're in the group already.
+  const choices = speakerChoices(snap.devices.filter(x => !x.hidden || d.members.includes(x.id)), rooms);
   const chosen = choices.filter(c => d.members.includes(c.id));
-  const note = groupSyncNote(chosen, d.members, G);
+  // Hubs from 0.7.63 say what can play as one stream: the note names what's native-synced and what plays alongside.
+  const note = snap.nativeGroups ? draftSyncNote(chosen, snap.nativeGroups, combinedOf(snap), snap.devices) : groupSyncNote(chosen, d.members, G);
+  const tunable = !!G && (G.parts?.length ?? 0) > 1;
   const err = groupDraftError(d);
   const toggle = (m: string) => setD(x => ({ ...x, members: x.members.includes(m) ? x.members.filter(y => y !== m) : [...x.members, m] }));
   const save = async () => {
@@ -104,6 +111,7 @@ export function SpeakerGroupSheet({ id, onClose }: { id: string | null; onClose:
           <T v="footnote" color={C.stone}>{note.text}</T>
         </View>
       </Card>
+      {tunable ? <Button full kind="secondary" icon="graphic_eq" label="Timing and sync test" onPress={() => { onClose(); nav.navigate('GroupSync', { id: G!.id }); }} /> : null}
       <View style={{ gap: SP[2] }}>
         <Button full kind={err ? 'secondary' : 'primary'} icon={err ? undefined : G ? 'check' : 'add'} label={err ?? (G ? 'Save' : 'Make the group')} onPress={err ? undefined : save} />
         {G ? <Button full kind="danger" icon="delete" label="Delete group" onPress={remove} /> : null}
