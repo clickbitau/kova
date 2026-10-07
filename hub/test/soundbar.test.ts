@@ -7,12 +7,16 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Store } from '../src/store/db.ts';
 import { Registry } from '../src/devices/registry.ts';
-import { SmartThingsAdapter, createSmartThingsApp, exchangeSmartThingsCode, fromStInput, fromTvSource, isSoundbar, smartThingsAuthUrl, toStInput, toTvSource } from '../src/adapters/smartthings.ts';
+import { SmartThingsAdapter, barSoundFrom, createSmartThingsApp, exchangeSmartThingsCode, fromStInput, fromTvSource, isSoundbar, smartThingsAuthUrl, toBarSource, toStInput, toTvSource } from '../src/adapters/smartthings.ts';
 
 const you = { kind: 'user' as const, label: 'You' };
 
-/** SmartThings: a Q930B soundbar and a fridge, its status, commands, and OAuth that replaces the refresh token on every use. */
-async function fakeSmartThings() {
+/**
+ * SmartThings: a soundbar and a fridge, its status, commands, and OAuth that replaces the refresh token on every use.
+ * `audioOnly`: a bar that reports its input through samsungvd.audioInputSource only (no mediaInputSource commands),
+ * listing its own input ids, and switches through the OCF soundFrom resource.
+ */
+async function fakeSmartThings(o: { audioOnly?: boolean } = {}) {
   const bar = { switch: 'off', volume: 12, mute: 'unmuted', input: 'digital' };
   const tv = { input: 'dtv' };
   const commands: any[] = [];
@@ -36,7 +40,7 @@ async function fakeSmartThings() {
       if (req.headers.authorization !== `Bearer ${access}`) return send(401, { error: { message: 'token expired' } });
       if (u.pathname === '/v1/devices') {
         return send(200, { items: [
-          { deviceId: '6f1c2d3e-aaaa-bbbb-cccc-1234567890ab', label: 'Soundbar Q930B', name: 'Samsung Soundbar', ocf: { deviceType: 'oic.d.networkaudio', modelNumber: 'HW-Q930B|0000' }, components: [{ id: 'main', capabilities: [{ id: 'switch' }, { id: 'audioVolume' }, { id: 'audioMute' }, { id: 'mediaInputSource' }, { id: 'execute' }] }] },
+          { deviceId: '6f1c2d3e-aaaa-bbbb-cccc-1234567890ab', label: 'Soundbar Q930B', name: 'Samsung Soundbar', ocf: { deviceType: 'oic.d.networkaudio', modelNumber: 'HW-Q930B|0000' }, components: [{ id: 'main', capabilities: [{ id: 'switch' }, { id: 'audioVolume' }, { id: 'audioMute' }, { id: o.audioOnly ? 'samsungvd.audioInputSource' : 'mediaInputSource' }, { id: 'execute' }] }] },
           { deviceId: 'fridge-1', label: 'Fridge', components: [{ id: 'main', capabilities: [{ id: 'switch' }] }] },
           { deviceId: 'tv-s90d', label: '65" S90D', ocf: { deviceType: 'oic.d.tv', modelNumber: 'QA65S90DAWXXY|20240101' }, components: [{ id: 'main', capabilities: [{ id: 'switch' }, { id: 'samsungvd.mediaInputSource' }, { id: 'tvChannel' }] }] },
         ] });
@@ -50,7 +54,8 @@ async function fakeSmartThings() {
         return send(200, { results: [] });
       }
       if (/\/status$/.test(u.pathname)) {
-        return send(200, { components: { main: { switch: { switch: { value: bar.switch } }, audioVolume: { volume: { value: bar.volume } }, audioMute: { mute: { value: bar.mute } }, mediaInputSource: { inputSource: { value: bar.input } } } } });
+        const inputs = o.audioOnly ? { 'samsungvd.audioInputSource': { inputSource: { value: bar.input }, supportedInputSources: { value: ['D.IN', 'HDMI 1', 'bluetooth', 'wifi'] } } } : { mediaInputSource: { inputSource: { value: bar.input } } };
+        return send(200, { components: { main: { switch: { switch: { value: bar.switch } }, audioVolume: { volume: { value: bar.volume } }, audioMute: { mute: { value: bar.mute } }, ...inputs } } });
       }
       if (/\/commands$/.test(u.pathname) && req.method === 'POST') {
         const j = JSON.parse(body);
@@ -62,6 +67,10 @@ async function fakeSmartThings() {
           if (c.command === 'volumeDown') bar.volume -= 1;
           if (c.capability === 'audioMute') bar.mute = c.command === 'mute' ? 'muted' : 'unmuted';
           if (c.command === 'setInputSource') bar.input = c.arguments[0];
+          if (c.capability === 'execute' && c.arguments?.[0] === '/sec/networkaudio/soundFrom') {
+            const ct = c.arguments[1]['x.com.samsung.networkaudio.soundFrom'].connectionType;
+            bar.input = ct === 'HDMI 1' ? 'HDMI 1' : ct === 'HDMI 2' ? 'HDMI 2' : 'D.IN';
+          }
         }
         return send(200, { results: j.commands.map(() => ({ status: 'ACCEPTED' })) });
       }
@@ -77,7 +86,7 @@ test('Samsung soundbar through SmartThings: found on the account, read, and powe
   const st = await fakeSmartThings();
   const dir = mkdtempSync(join(tmpdir(), 'kova-st-'));
   const reg = new Registry(new Store(':memory:'));
-  const adapter = new SmartThingsAdapter({ clientId: 'cid', clientSecret: 'secret', refreshToken: 'r1', storageDir: dir, apiUrl: `${st.url}/v1`, tokenUrl: `${st.url}/oauth/token`, pollSec: 0, rooms: { 'Soundbar Q930B': 'lounge' } });
+  const adapter = new SmartThingsAdapter({ clientId: 'cid', clientSecret: 'secret', refreshToken: 'r1', storageDir: dir, apiUrl: `${st.url}/v1`, tokenUrl: `${st.url}/oauth/token`, pollSec: 0, settleMs: 100, rooms: { 'Soundbar Q930B': 'lounge' } });
   try {
     await reg.addAdapter(adapter);
     // Only the soundbar, in its room, with what it can do; its state read back (eARC/optical is "tv").
@@ -98,10 +107,15 @@ test('Samsung soundbar through SmartThings: found on the account, read, and powe
     // On and to its HDMI in, in one call, on first.
     await reg.command(id, { on: true, input: 'hdmi1' }, you);
     assert.deepEqual(st.commands.splice(0).map(c => [c.capability, c.command, ...(c.arguments ?? [])]), [['switch', 'on'], ['mediaInputSource', 'setInputSource', 'HDMI1']]);
-    // Volume, a step up (read back), mute.
+    // Volume, a step up (shown at once, and read back a moment later), mute.
     await reg.command(id, { vol: 20 }, you);
     await reg.command(id, { volStep: 1 }, you);
     assert.equal(reg.get(id)!.state.vol, 21);
+    st.bar.volume = 23; // the bar went further than one step
+    for (let i = 0; i < 100 && reg.get(id)!.state.vol !== 23; i++) await new Promise(r => setTimeout(r, 20));
+    assert.equal(reg.get(id)!.state.vol, 23, 'read back after the step');
+    st.bar.volume = 21;
+    await adapter['poll']();
     await reg.command(id, { muted: true }, you);
     // Sound mode and night mode through the soundbar's execute capability.
     await reg.command(id, { sound: 'surround', night: true }, you);
@@ -138,9 +152,42 @@ test('SmartThings linking, inputs and what counts as a soundbar', async () => {
     assert.equal(st.tokens[0].code, 'abc');
   } finally { await st.close(); }
   assert.deepEqual(['tv', 'hdmi1', 'hdmi2', 'bluetooth', 'wifi'].map(toStInput), ['digital', 'HDMI1', 'HDMI2', 'bluetooth', 'wifi']);
-  assert.deepEqual(['digital', 'HDMI1', 'arc', 'BLUETOOTH', 'usb'].map(fromStInput), ['tv', 'hdmi1', 'tv', 'bluetooth', 'usb']);
+  assert.deepEqual(['digital', 'HDMI1', 'HDMI 2', 'D.IN', 'arc', 'BLUETOOTH', 'usb'].map(fromStInput), ['tv', 'hdmi1', 'hdmi2', 'tv', 'tv', 'bluetooth', 'usb']);
   assert.equal(isSoundbar({ deviceId: 'x', label: 'Lounge speaker', components: [{ id: 'main', capabilities: [{ id: 'switch' }] }] }), false);
   assert.equal(isSoundbar({ deviceId: 'x', label: 'Samsung HW-Q930B', components: [{ id: 'main', capabilities: [{ id: 'audioVolume' }] }] }), true);
+  assert.equal(isSoundbar({ deviceId: 'y', label: 'Living room bar', ocf: { deviceType: 'oic.d.networkaudio' }, components: [{ id: 'main', capabilities: [{ id: 'audioVolume' }] }] }), true);
+  // Kova's input names as the bar's own ids, from the ones it lists.
+  assert.equal(toBarSource('tv', ['digital', 'HDMI1', 'bluetooth', 'wifi']), 'digital');
+  assert.equal(toBarSource('hdmi1', ['digital', 'HDMI1', 'bluetooth', 'wifi']), 'HDMI1');
+  assert.equal(toBarSource('tv', ['D.IN', 'HDMI1']), 'D.IN');
+  assert.equal(toBarSource('hdmi2', ['HDMI 2', 'optical']), 'HDMI 2');
+  assert.equal(toBarSource('hdmi2', []), 'HDMI2', 'nothing listed: the usual id');
+  assert.equal(barSoundFrom('wifi'), null);
+});
+
+test('A soundbar that only reports its input (samsungvd.audioInputSource) is switched the way Samsung’s app does it', async () => {
+  const st = await fakeSmartThings({ audioOnly: true });
+  const reg = new Registry(new Store(':memory:'));
+  const adapter = new SmartThingsAdapter({ token: 'a0', storageDir: mkdtempSync(join(tmpdir(), 'kova-st-')), apiUrl: `${st.url}/v1`, pollSec: 0 });
+  try {
+    await reg.addAdapter(adapter);
+    const id = 'soundbar_6f1c2d3eaaaa';
+    await reg.command(id, { on: true, input: 'hdmi1' }, you);
+    assert.deepEqual(st.commands.splice(0).map(c => [c.capability, c.command, ...(c.arguments ?? [])]), [
+      ['switch', 'on'],
+      ['execute', 'execute', '/sec/networkaudio/soundFrom', { 'x.com.samsung.networkaudio.soundFrom': { groupName: '', duid: '', deviceType: 4, sbMode: 3, di: '', ip: '', name: 'External Device', connectionType: 'HDMI 1', mac: '', status: 0 } }],
+    ]);
+    await adapter['poll']();
+    assert.equal(reg.get(id)!.state.input, 'hdmi1');
+    await reg.command(id, { input: 'tv' }, you);
+    await adapter['poll']();
+    assert.equal(reg.get(id)!.state.input, 'tv');
+    // An input it can't be switched to that way: said, not sent.
+    await assert.rejects(reg.command(id, { input: 'wifi' }, you), /can’t be switched to wifi/);
+  } finally {
+    await reg.stop();
+    await st.close();
+  }
 });
 
 test('SmartThings sets and reads a Samsung TV’s source, for the Samsung TV adapter', async () => {

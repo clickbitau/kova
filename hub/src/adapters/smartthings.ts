@@ -41,6 +41,8 @@ export interface SmartThingsOptions {
   apiUrl?: string;
   tokenUrl?: string;
   timeoutMs?: number;
+  /** How long after a volume step the bar is read back (it's shown a step on at once). Default 1.5 s. */
+  settleMs?: number;
 }
 
 interface StDevice { deviceId: string; label?: string; name?: string; manufacturerName?: string; ocf?: { deviceType?: string; modelNumber?: string }; components?: { id: string; capabilities?: { id: string }[] }[] }
@@ -50,6 +52,8 @@ type Status = Record<string, Record<string, { value?: unknown }>>;
 const TO_ST: Record<string, string> = { tv: 'digital', hdmi1: 'HDMI1', hdmi2: 'HDMI2', bluetooth: 'bluetooth', wifi: 'wifi' };
 export function toStInput(input: string): string { return TO_ST[input] ?? input; }
 export function fromStInput(v: string): string {
+  const hdmi = /^hdmi\s*([1-4])$/i.exec(v.trim());
+  if (hdmi) return `hdmi${hdmi[1]}`;
   const hit = Object.entries(TO_ST).find(([, st]) => st.toLowerCase() === v.toLowerCase());
   return hit ? hit[0] : /^(arc|earc|optical|d\.in)$/i.test(v) ? 'tv' : v.toLowerCase();
 }
@@ -223,7 +227,12 @@ export async function exchangeSmartThingsCode(o: { code: string; clientId: strin
   return { refreshToken: j.refresh_token };
 }
 
-interface Bar { id: string; st: string; name: string; model?: string; sound: string | null; night: boolean | null }
+interface Bar {
+  id: string; st: string; name: string; model?: string;
+  /** Its SmartThings capabilities, and the input ids it lists (supportedInputSources), to pick the right command and name. */
+  caps: Set<string>; inputs: string[];
+  sound: string | null; night: boolean | null;
+}
 /** A Samsung TV on the account. Announced as its own device (it can be combined with the same TV on another adapter). */
 interface StTv { id: string; st: string; label: string; model: string; caps: Set<string> }
 /** A sensor the account exposes: the TV's light and sound (baby crying, dog barking) sensors and the like. */
@@ -239,6 +248,28 @@ export function isTv(d: StDevice): boolean {
 export function isSensor(d: StDevice): boolean {
   const caps = new Set((d.components ?? []).find(c => c.id === 'main')?.capabilities?.map(c => c.id) ?? []);
   return (caps.has('illuminanceMeasurement') || caps.has('soundDetection') || caps.has('samsungvd.soundDetection')) && !isTv(d) && !isSoundbar(d);
+}
+
+/** A soundbar input by Kova's name (tv, hdmi1, hdmi2, bluetooth, wifi) as the bar's own id, from the ids it lists. */
+export function toBarSource(input: string, supported: string[]): string {
+  const m = /^hdmi([1-4])$/.exec(input);
+  const want = m ? [`HDMI${m[1]}`, `HDMI ${m[1]}`]
+    : input === 'tv' ? ['digital', 'd.in', 'optical', 'earc', 'arc', 'tv']
+    : input === 'bluetooth' ? ['bluetooth', 'bt']
+    : [input];
+  for (const w of want) { const hit = supported.find(x => x.toLowerCase() === w.toLowerCase()); if (hit) return hit; }
+  return toStInput(input);
+}
+
+/**
+ * The OCF soundFrom body for a soundbar that doesn't take mediaInputSource commands (only samsungvd.audioInputSource,
+ * which reads the input but can't set it): /sec/networkaudio/soundFrom, the way Samsung's own app switches it.
+ */
+export function barSoundFrom(input: string): Record<string, unknown> | null {
+  const sb: Record<string, [number, string]> = { tv: [25, 'D-IN/TV ARC'], hdmi1: [3, 'HDMI 1'], hdmi2: [21, 'HDMI 2'] };
+  const m = sb[input];
+  if (!m) return null;
+  return { groupName: '', duid: '', deviceType: 4, sbMode: m[0], di: '', ip: '', name: 'External Device', connectionType: m[1], mac: '', status: 0 };
 }
 
 /** A soundbar's state from its SmartThings status: playback and the track it reports too. */
@@ -334,7 +365,10 @@ export class SmartThingsAdapter implements Adapter {
     const found = items.filter(d => want ? want.has(d.deviceId) : isSoundbar(d));
     for (const d of found) {
       const id = this.kovaId(d);
-      if (!this.bars.has(id)) this.bars.set(id, { id, st: d.deviceId, name: d.label || d.name || 'Soundbar', model: d.ocf?.modelNumber?.split('|')[0], sound: null, night: null });
+      if (!this.bars.has(id)) this.bars.set(id, {
+        id, st: d.deviceId, name: d.label || d.name || 'Soundbar', model: d.ocf?.modelNumber?.split('|')[0],
+        caps: new Set((d.components ?? []).find(c => c.id === 'main')?.capabilities?.map(c => c.id) ?? []), inputs: [], sound: null, night: null,
+      });
     }
     for (const d of items.filter(isSensor)) {
       if (!this.sensors.has(d.deviceId)) {
@@ -374,7 +408,7 @@ export class SmartThingsAdapter implements Adapter {
       mkdirSync(this.o.storageDir, { recursive: true });
       const data = JSON.stringify({
         tvs: this.tvs.map(t => ({ ...t, caps: [...t.caps] })),
-        bars: [...this.bars.values()],
+        bars: [...this.bars.values()].map(b => ({ ...b, caps: [...b.caps] })),
         sensors: [...this.sensors.values()],
       });
       const tmp = this.devicesFile + '.tmp';
@@ -385,9 +419,10 @@ export class SmartThingsAdapter implements Adapter {
 
   /** Announce the last-discovered devices again; the poll marks them offline until the link works. */
   private restore(): void {
-    let c: { tvs?: (Omit<StTv, 'caps'> & { caps: string[] })[]; bars?: Bar[]; sensors?: StSensor[] };
+    let c: { tvs?: (Omit<StTv, 'caps'> & { caps: string[] })[]; bars?: (Omit<Bar, 'caps' | 'inputs'> & { caps?: string[]; inputs?: string[] })[]; sensors?: StSensor[] };
     try { c = JSON.parse(readFileSync(this.devicesFile, 'utf8')); } catch { return; }
-    for (const b of c.bars ?? []) this.bars.set(b.id, b);
+    // A bar kept by a Kova from before capabilities were kept: assumed to take mediaInputSource, as Kova always sent.
+    for (const b of c.bars ?? []) this.bars.set(b.id, { ...b, caps: new Set(b.caps ?? ['mediaInputSource']), inputs: b.inputs ?? [] });
     this.tvs = (c.tvs ?? []).map(t => ({ ...t, caps: new Set(t.caps ?? []) }));
     for (const s of c.sensors ?? []) this.sensors.set(s.st, s);
     if (this.tvs.length || this.bars.size || this.sensors.size) this.announceAll();
@@ -399,7 +434,10 @@ export class SmartThingsAdapter implements Adapter {
 
   private async read(b: Bar): Promise<DeviceState> {
     const st = await this.api<{ components?: Record<string, Status> }>('GET', `/devices/${encodeURIComponent(b.st)}/status`);
-    const s = soundbarState(st.components?.main);
+    const main = st.components?.main ?? {};
+    const sup = main['mediaInputSource']?.supportedInputSources?.value ?? main['samsungvd.audioInputSource']?.supportedInputSources?.value;
+    if (Array.isArray(sup)) b.inputs = sup.map(String);
+    const s = soundbarState(main);
     // Sound mode and night mode can't be read back: what Kova last set.
     if (b.sound) s.sound = b.sound;
     if (b.night !== null) s.night = b.night;
@@ -453,7 +491,14 @@ export class SmartThingsAdapter implements Adapter {
     const exec = (path: string, body: Record<string, unknown>) => c('execute', 'execute', [path, body]);
     // On first, so the rest lands on a soundbar that's listening.
     if (cmd.on === true) c('switch', 'on');
-    if (cmd.input) c('mediaInputSource', 'setInputSource', [toStInput(cmd.input)]);
+    if (cmd.input) {
+      if (b.caps.has('mediaInputSource') || !b.caps.has('samsungvd.audioInputSource')) c('mediaInputSource', 'setInputSource', [toBarSource(cmd.input, b.inputs)]);
+      else {
+        const sf = barSoundFrom(cmd.input);
+        if (!sf) throw new Error(`${b.name} can’t be switched to ${cmd.input} from Kova`);
+        exec('/sec/networkaudio/soundFrom', { 'x.com.samsung.networkaudio.soundFrom': sf });
+      }
+    }
     if (cmd.vol != null) c('audioVolume', 'setVolume', [Math.max(0, Math.min(100, Math.round(cmd.vol)))]);
     if (cmd.volStep) c('audioVolume', cmd.volStep > 0 ? 'volumeUp' : 'volumeDown');
     if (cmd.muted !== undefined) c('audioMute', cmd.muted ? 'mute' : 'unmute');
@@ -464,8 +509,12 @@ export class SmartThingsAdapter implements Adapter {
     await this.api('POST', `/devices/${encodeURIComponent(b.st)}/commands`, { commands });
     if (cmd.sound) b.sound = cmd.sound;
     if (cmd.night !== undefined) b.night = cmd.night;
-    // A volume step lands somewhere Kova can only read: read it, and the rest, back.
+    // A volume step lands where the bar says: shown a step on straight away (Helix's on-screen volume reads it), and
+    // read back a moment later to be sure.
     if (cmd.volStep) {
+      const was = typeof d.state.vol === 'number' ? d.state.vol : null;
+      setTimeout(() => void this.read(b).then(s => this.ctx?.report(b.id, s)).catch(() => {}), this.o.settleMs ?? 1500).unref?.();
+      if (was != null) return { vol: Math.max(0, Math.min(100, was + (cmd.volStep > 0 ? 1 : -1))) };
       const now = await this.read(b).catch(() => null);
       if (now?.vol != null) return { vol: now.vol };
     }

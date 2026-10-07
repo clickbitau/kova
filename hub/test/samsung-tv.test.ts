@@ -96,7 +96,7 @@ const until = async (what: string, ok: () => boolean, ms = 3000) => {
 
 const opts = (f: Awaited<ReturnType<typeof fakeTv>>, storageDir: string, extra: Partial<SamsungTvOptions> = {}): SamsungTvOptions => ({
   tvs: [{ host: '127.0.0.1', room: 'lounge', id: 'lounge_tv' }], storageDir, pollMs: 0, ports: f.ports, secure: !!CERT,
-  wol: f.wol, keyDelayMs: 0, pairTimeoutMs: 2000, timeoutMs: 1000, ...extra,
+  wol: f.wol, keyDelayMs: 0, pairTimeoutMs: 2000, timeoutMs: 1000, inputCheckMs: 10, ...extra,
 });
 const you = { kind: 'user' as const, label: 'You' };
 
@@ -208,10 +208,12 @@ test('Samsung TV: input presses the HDMI / TV key every time, and refuses while 
 class StStub {
   id = 'smartthings'; name = 'SmartThings'; icon = 'speaker'; kind = 'Cloud' as const;
   input = 'hdmi1'; asked: { model?: string; input: string }[] = []; fail = false;
+  /** How many source changes the TV takes without acting on them (a TV just woken). */
+  ignore = 0;
   async start() {} async stop() {} status() { return { ok: true }; } async command() {}
   hasTv(tv: { model?: string }) { return tv.model === 'QA55S90DAWXXY'; }
   async tvInput() { return this.input; }
-  async setTvInput(tv: { model?: string }, input: string) { if (this.fail) throw new Error('SmartThings is down'); this.asked.push({ model: tv.model, input }); this.input = input; return true; }
+  async setTvInput(tv: { model?: string }, input: string) { if (this.fail) throw new Error('SmartThings is down'); this.asked.push({ model: tv.model, input }); if (this.ignore > 0) this.ignore--; else this.input = input; return true; }
   power: boolean[] = [];
   async setTvPower(_tv: { model?: string }, on: boolean) { if (this.fail) throw new Error('SmartThings is down'); this.power.push(on); return true; }
 }
@@ -289,6 +291,29 @@ test('Samsung TV: with SmartThings, the source is switched directly and read bac
     await reg.command('lounge_tv', { input: 'tv' }, you);
     await until('KEY_TV', () => f.tv.keys.length === 1);
     assert.deepEqual(f.tv.keys, ['KEY_TV']);
+  } finally { await reg.stop(); f.close(); }
+});
+
+test('Samsung TV: a source change the TV took but didn’t act on is checked and asked again; one it never makes goes to the remote key', { timeout: 15_000 }, async () => {
+  const f = await fakeTv();
+  const reg = new Registry(new Store(':memory:'));
+  const st = new StStub();
+  await reg.addAdapter(st as never);
+  const a = new SamsungTvAdapter(opts(f, mkdtempSync(join(tmpdir(), 'tv-'))));
+  try {
+    await reg.addAdapter(a);
+    st.ignore = 1;
+    await reg.command('lounge_tv', { input: 'hdmi2' }, you);
+    assert.deepEqual(st.asked.map(x => x.input), ['hdmi2', 'hdmi2'], 'asked again after checking');
+    assert.equal(st.input, 'hdmi2');
+    assert.deepEqual(f.tv.keys, []);
+    assert.equal(reg.get('lounge_tv')!.state.input, 'hdmi2');
+    // It never switches: the remote's own key, and Kova doesn't claim to know the source.
+    st.ignore = 5; st.asked = [];
+    await reg.command('lounge_tv', { input: 'hdmi3' }, you);
+    assert.equal(st.asked.length, 2);
+    await until('KEY_HDMI3', () => f.tv.keys.length === 1);
+    assert.deepEqual(f.tv.keys, ['KEY_HDMI3']);
   } finally { await reg.stop(); f.close(); }
 });
 
