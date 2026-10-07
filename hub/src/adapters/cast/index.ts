@@ -37,6 +37,9 @@ interface Pending { device: Device; cmd: Command; resolve: (did?: DeviceState) =
 const isGroupModel = (md: string) => /cast group/i.test(md);
 const contentType = (url: string) => /\.m3u8(\?|$)/i.test(url) ? 'application/x-mpegURL' : /\.aac(\?|$)/i.test(url) ? 'audio/aac' : /\.(mp4|m4a)(\?|$)/i.test(url) ? 'audio/mp4' : 'audio/mpeg';
 
+/** Every Cast speaker, display and group plays FLAC (up to 96 kHz / 24-bit), so Helix's songs go as they are, untranscoded. */
+export const CAST_FORMAT = 'flac' as const;
+
 /** How many songs a Cast queue holds ahead at once; more are added as it plays (stream URLs stay short-lived on the speaker). */
 export const CAST_WINDOW = 20;
 
@@ -433,7 +436,7 @@ export class CastAdapter implements Adapter {
       const media = key.slice(0, key.lastIndexOf('\0'));
       const url = this.ctx!.sourceUrl(media);
       // Not a radio source: maybe music (Helix), which plays as a queue of songs.
-      const queue = url ? null : this.ctx!.queueFor(media, { shuffle: !!ps[0].cmd.shuffle });
+      const queue = url ? null : this.ctx!.queueFor(media, { shuffle: !!ps[0].cmd.shuffle, format: CAST_FORMAT });
       const start = async (r: Receiver) => {
         if (url) return r.play(url, media, !!this.ctx!.sourceLoops?.(media));
         const q = await queue;
@@ -470,7 +473,7 @@ export class CastAdapter implements Adapter {
         for (const p of ps) if (p.cmd.vol != null) await this.receivers.get(this.speakerId(p.device))!.volume(p.cmd.vol / 100);
         const shuffle = ps.find(p => p.cmd.shuffle !== undefined)?.cmd.shuffle;
         if (shuffle !== undefined && r.queue && shuffle !== r.queue.q.shuffle) {
-          const q = await this.ctx!.queueFor(r.queue.q.label, { shuffle });
+          const q = await this.ctx!.queueFor(r.queue.q.label, { shuffle, format: CAST_FORMAT });
           if (q) await r.reorder(q);
         }
         const skip = ps.find(p => p.cmd.skip)?.cmd.skip;

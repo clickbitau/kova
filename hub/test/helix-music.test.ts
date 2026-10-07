@@ -5,7 +5,7 @@ import net from 'node:net';
 import type { AddressInfo } from 'node:net';
 import { Store } from '../src/store/db.ts';
 import { Registry } from '../src/devices/registry.ts';
-import { HelixMusic, shuffled } from '../src/services/helix-music.ts';
+import { HelixMusic, PlayCounter, shuffled } from '../src/services/helix-music.ts';
 import { CastAdapter, CAST_WINDOW } from '../src/adapters/cast/index.ts';
 import { SonosAdapter } from '../src/adapters/sonos.ts';
 import { AirPlayAdapter, OWNTONE_WINDOW } from '../src/adapters/airplay.ts';
@@ -25,8 +25,13 @@ const track = (n: number, o: Record<string, unknown> = {}) => ({
   durationMs: 200_000 + n, hasFile: true, codec: n === 3 ? 'mp3' : 'flac', loved: n <= 3, ...o,
 });
 
-/** Helix Server's music routes, as far as Kova uses them. */
-async function fakeHelix(n = 60, o: { modern?: boolean } = {}) {
+/**
+ * Helix Server's music routes, as far as Kova uses them. `modern`: signs song and cover URLs. `profile`: the profile
+ * Kova must send on every call (query or X-Helix-Profile); `locked` answers 403 for it. `noFile`: songs Helix has no
+ * file for (play-url 404s them); `broken`: songs play-url fails on (500). `music: false`: Helix has music turned off.
+ */
+async function fakeHelix(n = 60, o: { modern?: boolean; profile?: string; locked?: boolean; noFile?: number[]; broken?: number[]; music?: boolean } = {}) {
+  const profile = o.profile ?? 'default';
   const lib = Array.from({ length: n }, (_, i) => track(i + 1));
   const seen: string[] = [];
   const played: { id: string; body: any }[] = [];
@@ -38,7 +43,12 @@ async function fakeHelix(n = 60, o: { modern?: boolean } = {}) {
     const send = (code: number, j: unknown) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(j)); };
     seen.push(`${req.method} ${u.pathname}${u.search}`);
     if (req.headers.authorization !== `Bearer ${TOKEN}`) return send(401, { error: 'unauthorized' });
+    // Kova says who it is (its version) and which profile it acts as, on every call.
+    assert.match(String(req.headers['x-helix-client']), /^kova\/\d+\.\d+\.\d+$/);
+    assert.equal(req.headers['x-helix-profile'], profile);
+    if (o.locked) return send(403, { error: `profile ${profile} is locked` });
     const p = u.pathname;
+    if (p === '/v1/client/features') return send(200, { players: { enabled: true, music: o.music !== false, notices: true, devices: true } });
     if (req.method === 'POST') {
       const chunks: Buffer[] = [];
       req.on('data', c => chunks.push(c));
@@ -47,6 +57,8 @@ async function fakeHelix(n = 60, o: { modern?: boolean } = {}) {
         // An older Helix has neither route: Go's mux answers a plain-text 404.
         if (!o.modern) { res.writeHead(404, { 'content-type': 'text/plain' }); res.end('404 page not found'); return; }
         const pu = /^\/v1\/items\/([^/]+)\/play-url$/.exec(p);
+        if (pu && o.noFile?.includes(Number(pu[1].slice(1)))) { signed.push({ id: pu[1], body }); return send(404, { error: 'this song has no file' }); }
+        if (pu && o.broken?.includes(Number(pu[1].slice(1)))) { signed.push({ id: pu[1], body }); return send(500, { error: 'transcoder fell over' }); }
         // Covers come with the song for even songs; the rest are signed through /v1/art-urls.
         if (pu) { signed.push({ id: pu[1], body }); return send(200, { url: `${base}/v1/play/${pu[1]}?sig=abc${pu[1]}`, path: `/v1/play/${pu[1]}?sig=abc${pu[1]}`, expiresAt: '2026-10-01T09:00:00Z', format: body.format, maxRate: body.maxRate, ...(Number(pu[1].slice(1)) % 2 ? {} : { artUrl: `/v1/images/p${pu[1].slice(1)}?w=600&sig=art${pu[1]}` }) }); }
         if (p === '/v1/art-urls') { artSigned.push(...body.urls); return send(200, { urls: body.urls.map((u: string) => `${u}&sig=batch`) }); }
@@ -56,7 +68,7 @@ async function fakeHelix(n = 60, o: { modern?: boolean } = {}) {
       });
       return;
     }
-    assert.equal(u.searchParams.get('profile'), 'default');
+    assert.equal(u.searchParams.get('profile'), profile);
     if (p === '/v1/playlists') return send(200, { playlists: [{ id: 'pl1', title: 'Bangla Collection', kind: 'music', tracks: 4 }, { id: 'pl2', title: 'Movies to watch', kind: 'video' }] });
     if (p === '/v1/playlists/pl1') return send(200, { playlist: { id: 'pl1', title: 'Bangla Collection' }, tracks: [lib[4], lib[5], { ...track(99), hasFile: false, streamable: false }, lib[6], lib[4]] });
     if (p === '/v1/music/tracks') {
@@ -313,13 +325,13 @@ test('Cast group: two speakers play one queue through their Cast group, and both
 });
 
 /** A Sonos speaker with a queue: AddURIToQueue, x-rincon-queue, Seek, Next/Previous, GetPositionInfo. */
-function fakeSonos() {
-  const st = { state: 'STOPPED', vol: 20, queue: [] as { uri: string; title: string }[], track: 1, uri: '', calls: [] as string[] };
+function fakeSonos(swGen?: number) {
+  const st = { state: 'STOPPED', vol: 20, queue: [] as { uri: string; title: string; type: string }[], track: 1, uri: '', calls: [] as string[] };
   const server = http.createServer((req, res) => {
     let body = '';
     req.on('data', c => (body += c));
     req.on('end', () => {
-      if (req.url === '/xml/device_description.xml') { res.end('<root><device><UDN>uuid:RINCON_ABC123</UDN><roomName>Living Room</roomName><displayName>Era 100</displayName></device></root>'); return; }
+      if (req.url === '/xml/device_description.xml') { res.end(`<root><device><UDN>uuid:RINCON_ABC123</UDN><roomName>Living Room</roomName><displayName>Era 100</displayName>${swGen ? `<swGen>${swGen}</swGen>` : ''}</device></root>`); return; }
       const action = String(req.headers.soapaction).split('#')[1].replace('"', '');
       st.calls.push(action);
       const arg = (n: string) => body.match(new RegExp(`<${n}>([\\s\\S]*?)</${n}>`))?.[1] ?? '';
@@ -328,7 +340,7 @@ function fakeSonos() {
       if (action === 'Play') st.state = 'PLAYING';
       if (action === 'Pause' || action === 'Stop') st.state = 'PAUSED_PLAYBACK';
       if (action === 'RemoveAllTracksFromQueue') st.queue = [];
-      if (action === 'AddURIToQueue') st.queue.push({ uri: un(arg('EnqueuedURI')), title: un(arg('EnqueuedURIMetaData')).match(/<dc:title>([^<]*)</)?.[1] ?? '' });
+      if (action === 'AddURIToQueue') st.queue.push({ uri: un(arg('EnqueuedURI')), title: un(arg('EnqueuedURIMetaData')).match(/<dc:title>([^<]*)</)?.[1] ?? '', type: un(arg('EnqueuedURIMetaData')).match(/protocolInfo="http-get:\*:([^:]*):/)?.[1] ?? '' });
       if (action === 'SetAVTransportURI') st.uri = un(arg('CurrentURI'));
       if (action === 'Seek' && arg('Unit') === 'TRACK_NR') st.track = Number(arg('Target'));
       if (action === 'Next') st.track++;
@@ -381,6 +393,28 @@ test('Sonos: Helix music plays from the speaker’s own queue, with titles; next
     await reg.stop();
     sonos.server.close();
     await h.close();
+  }
+});
+
+test('Sonos: an S2 speaker gets FLAC (the file as it is); an S1 speaker, or one that doesn’t say, AAC', { timeout: 20_000 }, async () => {
+  for (const [gen, format, type] of [[2, 'flac', 'audio/flac'], [1, 'aac', 'audio/aac'], [undefined, 'aac', 'audio/aac']] as const) {
+    const h = await fakeHelix(10, { modern: true });
+    const music = new HelixMusic(() => ({ url: h.url, token: TOKEN }), { random: seq() });
+    const sonos = fakeSonos(gen);
+    await new Promise<void>(r => sonos.server.listen(0, '127.0.0.1', r));
+    const reg = new Registry(new Store(':memory:'));
+    reg.queues = (m, o) => music.queueFor(m, o);
+    const adapter = new SonosAdapter({ hosts: [`127.0.0.1:${(sonos.server.address() as AddressInfo).port}`], discover: false, pollMs: 0 });
+    try {
+      await reg.addAdapter(adapter);
+      await reg.command('sonos_abc123', { on: true, media: 'Bangla Collection' }, you);
+      assert.ok(h.signed.length > 0 && h.signed.every(x => x.body.format === format), `swGen ${gen}: ${JSON.stringify(h.signed.map(x => x.body.format))}`);
+      assert.ok(sonos.st.queue.every(q => q.type === type && !q.uri.includes('token=')), JSON.stringify(sonos.st.queue));
+    } finally {
+      await reg.stop();
+      sonos.server.close();
+      await h.close();
+    }
   }
 });
 
@@ -571,7 +605,7 @@ test('Ask: “play Bangla Collection on shuffle in the kitchen”, next song, wh
   }
 });
 
-test('Current Helix: speakers get signed song URLs with no token, a window at a time; Shuffle all is Helix’s own shuffle; plays are counted', { timeout: 30_000 }, async () => {
+test('Current Helix: speakers get signed song URLs with no token, a window at a time, as FLAC on Cast; Shuffle all is Helix’s own shuffle; songs skipped part-way aren’t counted', { timeout: 30_000 }, async () => {
   const { testHub } = await import('./helpers.ts');
   const h = await fakeHelix(60, { modern: true });
   const music = new HelixMusic(() => ({ url: h.url, token: TOKEN }), { random: seq() });
@@ -588,12 +622,14 @@ test('Current Helix: speakers get signed song URLs with no token, a window at a 
     assert.ok(!h.seen.some(x => x.includes('offset=2000')));
     assert.equal(kitchen.titles()[0], 'Song 60');
     assert.equal(t.dev('cast_k1').shuffle, true);
-    // Only the songs the speaker holds were signed, as AAC at 48 kHz; no token reaches the speaker.
+    // Only the songs the speaker holds were signed, as FLAC up to 48 kHz (Cast plays it: the file as it is, no
+    // transcoding); no token reaches the speaker. An MP3 original goes as MP3.
     assert.equal(h.signed.length, CAST_WINDOW);
-    assert.deepEqual(h.signed[0].body, { format: 'aac', maxRate: 48000, ttl: 21600, profile: 'default' });
+    assert.deepEqual(h.signed[0].body, { format: 'flac', maxRate: 48000, ttl: 21600, profile: 'default' });
     const first = kitchen.st.items[0].media;
     assert.equal(first.contentId, `${h.url}/v1/play/t60?sig=abct60`);
-    assert.equal(first.contentType, 'audio/aac');
+    assert.equal(first.contentType, 'audio/flac');
+    assert.equal(kitchen.st.items.find(i => i.media.contentId.includes('/t3?'))?.media.contentType ?? 'audio/mpeg', 'audio/mpeg');
     assert.ok(kitchen.st.items.every(i => !i.media.contentId.includes('token=')));
     // Covers are signed too: with the song where Helix sends one, the rest in one batch (at the size Kova shows).
     const covers = kitchen.st.items.map(i => i.media.metadata.images?.[0]?.url ?? '');
@@ -607,10 +643,10 @@ test('Current Helix: speakers get signed song URLs with no token, a window at a 
     await until('topped up', () => kitchen.st.items.length === CAST_WINDOW * 2);
     assert.equal(h.signed.length, CAST_WINDOW * 2);
     assert.ok(kitchen.st.items.every(i => !i.media.contentId.includes('token=') && !(i.media.metadata.images?.[0]?.url ?? '').includes('token=')));
-    // Each song the speaker started counts as played in Helix, under the speaker's name.
-    await until('plays counted', () => h.played.length >= CAST_WINDOW - 2);
-    assert.deepEqual({ id: h.played[0].id, player: h.played[0].body.player, profile: h.played[0].body.profileId }, { id: 't60', player: 'Kitchen speaker', profile: 'default' });
-    // …and quietly: songs changing aren't Activity entries.
+    // Songs that only started (the speaker moved straight on) aren't played: Helix counts finished songs only.
+    await new Promise(r => setTimeout(r, 100));
+    assert.deepEqual(h.played, []);
+    // …and songs changing are quiet: songs changing aren't Activity entries.
     const songs = t.hub.store.feed(100).filter(e => e.device === 'cast_k1' && e.cause.kind === 'device' && (e.data.patch as { track?: unknown } | undefined)?.track);
     assert.deepEqual(songs.map(e => e.what), []);
   } finally {
@@ -618,4 +654,112 @@ test('Current Helix: speakers get signed song URLs with no token, a window at a 
     kitchen.server.close();
     await h.close();
   }
+});
+
+test('Plays: a song counts once a speaker played 85% of it (paused time left out), under the speaker’s name, with its length; a skipped one doesn’t', () => {
+  let now = 1_000_000;
+  const counted: { id: string; player: string; durationMs?: number }[] = [];
+  const plays = new PlayCounter((id, player, durationMs) => counted.push({ id, player, durationMs }), () => now);
+  const speaker = (track: { id: string; durationMs?: number } | null, extra: Record<string, unknown> = {}) => ({ id: 'cast_k1', name: 'Kitchen speaker', state: { on: true, track: track ? { title: 'x', ...track } : null, ...extra } });
+  const a = { id: 'helix:a', durationMs: 200_000 }, b = { id: 'helix:b', durationMs: 200_000 }, c = { id: 'helix:c', durationMs: 100_000 };
+  plays.seen(speaker(a));
+  now += 120_000;
+  plays.seen(speaker(a, { paused: true }));
+  now += 600_000; // paused for 10 minutes: not playing time
+  plays.seen(speaker(a, { paused: false }));
+  now += 40_000; // 160 s of 200 s = 80%: not yet
+  plays.seen(speaker(b));
+  assert.equal(counted.length, 0, 'skipped at 80%');
+  now += 190_000;
+  plays.seen(speaker(c));
+  assert.deepEqual(counted, [{ id: 'helix:b', player: 'Kitchen speaker', durationMs: 200_000 }]);
+  now += 99_000;
+  plays.seen({ id: 'cast_k1', name: 'Kitchen speaker', state: { on: false, track: null } });
+  assert.deepEqual(counted.map(x => x.id), ['helix:b', 'helix:c'], 'the last song, played to the end, counts when the speaker stops');
+  // A song without a length can't be judged: not counted.
+  plays.seen(speaker({ id: 'helix:d' }));
+  now += 999_000;
+  plays.seen(speaker(null));
+  assert.equal(counted.length, 2);
+});
+
+test('Plays: POST played carries the profile, the speaker’s name, when, and the song’s length', async () => {
+  const h = await fakeHelix(5, { modern: true, profile: 'kids' });
+  const music = new HelixMusic(() => ({ url: h.url, token: TOKEN, musicProfile: 'kids' }), { now: () => Date.parse('2026-10-07T10:00:00Z') });
+  try {
+    await music.played('helix:t2', 'Kitchen speaker', 201_234.4);
+    assert.deepEqual(h.played, [{ id: 't2', body: { profileId: 'kids', player: 'Kitchen speaker', playedAt: '2026-10-07T10:00:00.000Z', durationMs: 201_234 } }]);
+  } finally { await h.close(); }
+});
+
+test('Signing: a song with no file is skipped and the window stays full; a song Helix fails to sign is left out, never sent with the token', async () => {
+  const h = await fakeHelix(30, { modern: true, noFile: [2, 3, 13], broken: [15] });
+  const music = new HelixMusic(() => ({ url: h.url, token: TOKEN }), { random: seq() });
+  try {
+    // Most played is t1, t2, t3 (t4 never played); Helix has no file for t2 and t3.
+    const most = (await music.queueFor('Most played', { format: 'flac' }))!;
+    await most.prepare!(0, 3);
+    assert.deepEqual(most.tracks.map(t => t.id), ['helix:t1'], 'the songs with no file are out of the queue');
+    assert.ok(most.tracks.every(t => !t.url.includes('token=')));
+    // Recently added, newest first: songs 16, 15, 14, 13, 12 are at 14–18. 15 fails, 13 has no file: 11 and 10 move up.
+    const q = (await music.queueFor('Recently added', { format: 'flac' }))!;
+    await q.prepare!(14, 19);
+    assert.deepEqual(q.tracks.slice(14, 19).map(t => t.id), ['helix:t16', 'helix:t14', 'helix:t12', 'helix:t11', 'helix:t10']);
+    assert.ok(q.tracks.slice(14, 19).every(t => !t.url.includes('token=') && t.contentType === 'audio/flac'), q.tracks.slice(14, 19).map(t => t.url).join('\n'));
+    // The failing one was tried twice before it was left out.
+    assert.equal(h.signed.filter(x => x.id === 't15').length, 2);
+  } finally { await h.close(); }
+});
+
+test('Signing: a signed URL is reused while it lasts (another queue, another speaker of the same format) and asked for again before it runs out', async () => {
+  let now = Date.parse('2026-10-07T10:00:00Z');
+  const h = await fakeHelix(10, { modern: true });
+  const music = new HelixMusic(() => ({ url: h.url, token: TOKEN }), { random: seq(), now: () => now });
+  try {
+    const a = (await music.queueFor('Loved', { format: 'flac' }))!;
+    await a.prepare!(0, 3);
+    assert.equal(h.signed.length, 3);
+    // An AAC speaker in the same group: the same songs in the same order, its own URLs.
+    const aac = (await music.queueFor('Loved', { format: 'aac' }))!;
+    assert.deepEqual(aac.tracks.map(t => t.id), a.tracks.map(t => t.id));
+    await aac.prepare!(0, 3);
+    assert.equal(h.signed.length, 6);
+    assert.deepEqual(h.signed.slice(3).map(x => x.body.format), ['aac', 'aac', 'aac']);
+    assert.equal(aac.tracks[0].contentType, 'audio/aac');
+    assert.notEqual(a.tracks[0], aac.tracks[0], 'each format has its own copy of the songs');
+    // Loved again an hour later (a new queue): the URLs still last, so nothing is signed again.
+    now += 3_600_000;
+    const again = (await music.queueFor('Loved', { format: 'flac' }))!;
+    await again.prepare!(0, 3);
+    assert.equal(h.signed.length, 6);
+    assert.equal(again.tracks[0].url, a.tracks[0].url);
+    // Near the end of the six hours: signed afresh, even on the queue that has them.
+    now += 5.5 * 3_600_000;
+    await a.prepare!(0, 3);
+    assert.equal(h.signed.length, 9);
+  } finally { await h.close(); }
+});
+
+test('Profiles: every call is for the profile set in Kova; a locked one is said plainly; music turned off in Helix offers none', async () => {
+  const h = await fakeHelix(10, { modern: true, profile: 'kids' });
+  const music = new HelixMusic(() => ({ url: h.url, token: TOKEN, musicProfile: 'kids' }), { random: seq() });
+  try {
+    assert.equal((await music.catalog()).length, 4);
+    const q = (await music.queueFor('Bangla Collection', { format: 'flac' }))!;
+    await q.prepare!(0, 2);
+    assert.ok(h.signed.every(x => x.body.profile === 'kids'));
+    assert.ok(h.seen.filter(x => x.startsWith('GET ')).every(x => x.includes('profile=kids')), h.seen.join('\n'));
+  } finally { await h.close(); }
+  const locked = await fakeHelix(5, { modern: true, profile: 'kids', locked: true });
+  const m2 = new HelixMusic(() => ({ url: locked.url, token: TOKEN, musicProfile: 'kids' }));
+  try {
+    await assert.rejects(m2.queueFor('Loved'), /profile “kids” is locked/);
+    assert.match(m2.problem() ?? '', /locked/);
+  } finally { await locked.close(); }
+  const off = await fakeHelix(5, { modern: true, music: false });
+  const m3 = new HelixMusic(() => ({ url: off.url, token: TOKEN }));
+  try {
+    assert.deepEqual(await m3.catalog(), []);
+    assert.equal(m3.isMusic('Loved'), false);
+  } finally { await off.close(); }
 });
