@@ -5,6 +5,8 @@ import { groupDeviceId } from '../adapters/groups.ts';
 import { combinedDeviceId } from '../adapters/combined.ts';
 import { isPlayer } from '../util/describe.ts';
 import { slug } from '../tools/import-ha.ts';
+import { cleanAlerts, isCamera, isSensor } from '../util/sensors.ts';
+import type { AlertPrefs } from '../model/types.ts';
 
 // Customising the home: its name, rooms, people, favourites, and each device's name, room and
 // visibility. Settings live in the home config (so every phone sees the same), and every change
@@ -108,13 +110,19 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
   });
 
   // ---------------------------------------------------------------- devices --
-  app.patch<{ Params: { id: string }; Body: { name?: string | null; room?: string | null; hidden?: boolean; favourite?: boolean; watts?: number | null; zoneNames?: Record<string, string | null> } }>('/api/devices/:id/settings', async (req, reply) => {
+  app.patch<{ Params: { id: string }; Body: { name?: string | null; room?: string | null; hidden?: boolean; favourite?: boolean; watts?: number | null; zoneNames?: Record<string, string | null>; outdoor?: boolean | null; alerts?: AlertPrefs | null } }>('/api/devices/:id/settings', async (req, reply) => {
     const d = hub.reg.get(req.params.id);
     if (!d) return bad(reply, 'Unknown device', 404);
     const b = req.body ?? {};
     if (b.room != null && !hub.config.get().rooms.some(r => r.id === b.room)) return bad(reply, 'Unknown room');
     if (b.name !== undefined && b.name !== null && !text(b.name)) return bad(reply, 'Give it a name');
     if (b.watts != null && !(typeof b.watts === 'number' && b.watts >= 0 && b.watts <= 10_000)) return bad(reply, 'watts must be 0–10000');
+    // Cameras and sensors: inside or outside, and when their events alert.
+    const watched = isCamera(d) || isSensor(d);
+    if (b.outdoor !== undefined && b.outdoor !== null && typeof b.outdoor !== 'boolean') return bad(reply, 'outdoor must be true, false or null');
+    if ((b.outdoor != null || b.alerts) && !watched) return bad(reply, `${d.name} isn’t a camera or sensor`);
+    let alerts: AlertPrefs | null | undefined;
+    if (b.alerts !== undefined) { try { alerts = b.alerts === null ? null : cleanAlerts(b.alerts); } catch (e) { return bad(reply, (e as Error).message); } }
     if (b.zoneNames !== undefined) {
       if (!d.capabilities.includes('zones')) return bad(reply, `${d.name} has no zones`);
       if (!b.zoneNames || typeof b.zoneNames !== 'object' || Object.keys(b.zoneNames).some(n => !/^[1-9]\d?$/.test(n))) return bad(reply, 'zoneNames is { "1": "Living", … }');
@@ -126,6 +134,15 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
       if (b.room !== undefined) { if (!b.room || b.room === orig.room) delete s.room; else s.room = b.room; }
       if (b.hidden !== undefined) { if (b.hidden) s.hidden = true; else delete s.hidden; }
       if (b.watts !== undefined) { if (b.watts == null) delete s.watts; else s.watts = Math.round(b.watts); }
+      if (b.outdoor !== undefined) { if (b.outdoor == null) delete s.outdoor; else s.outdoor = b.outdoor; }
+      // Alerts merge by kind: a choice sets it, null clears it (back to the room's or Kova's).
+      if (alerts === null) delete s.alerts;
+      else if (alerts) {
+        const raw = b.alerts as Record<string, unknown>;
+        const merged: AlertPrefs = { ...(s.alerts ?? {}), ...alerts };
+        for (const [k, v] of Object.entries(raw)) if (v === null || v === '') delete merged[k as keyof AlertPrefs];
+        if (Object.keys(merged).length) s.alerts = merged; else delete s.alerts;
+      }
       // Zone names merge: a name sets it, null or "" clears it.
       if (b.zoneNames) {
         const z = { ...(s.zoneNames ?? {}) };
@@ -168,13 +185,20 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
     return edit(c => { c.rooms = ids.map(id => c.rooms.find(r => r.id === id)!); });
   });
 
-  app.put<{ Params: { id: string }; Body: { name?: string; icon?: string } }>('/api/rooms/:id', async (req, reply) => {
+  app.put<{ Params: { id: string }; Body: { name?: string; icon?: string; outdoor?: boolean | null } }>('/api/rooms/:id', async (req, reply) => {
     if (!hub.config.get().rooms.some(r => r.id === req.params.id)) return bad(reply, 'Unknown room', 404);
     const name = req.body?.name === undefined ? undefined : text(req.body.name, 40);
     if (name === '') return bad(reply, 'Give the room a name');
     const icon = req.body?.icon;
     if (icon !== undefined && !ROOM_ICONS.includes(icon)) return bad(reply, 'Unknown icon');
-    return edit(c => { const r = c.rooms.find(x => x.id === req.params.id)!; if (name) r.name = name; if (icon) r.icon = icon; });
+    const outdoor = req.body?.outdoor;
+    if (outdoor !== undefined && outdoor !== null && typeof outdoor !== 'boolean') return bad(reply, 'outdoor must be true, false or null');
+    return edit(c => {
+      const r = c.rooms.find(x => x.id === req.params.id)!;
+      if (name) r.name = name; if (icon) r.icon = icon;
+      // Outside the living space (a porch, the yard): its cameras' and sensors' events aren't someone inside.
+      if (outdoor === null) delete r.outdoor; else if (outdoor !== undefined) r.outdoor = outdoor;
+    });
   });
 
   // Devices still in the room move to `moveTo`; without it, a room with devices can't be deleted.

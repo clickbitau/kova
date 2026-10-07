@@ -9,6 +9,7 @@ import { resolveRhythm, rhythmLabel } from '../rhythms/rhythms.ts';
 import { clock, localDate } from '../util/time.ts';
 import { isLight, isPlayer, targetLabel } from '../util/describe.ts';
 import { Automations } from './automations.ts';
+import { RoomActivity } from './rooms.ts';
 
 export interface ActiveOverlay {
   id: string;
@@ -44,6 +45,8 @@ export class Engine extends EventEmitter<{ changed: [] }> {
 
   /** When / if / then rules, with run modes and history (engine/automations.ts). */
   readonly automations: Automations;
+  /** What's happening in each room, from its cameras and sensors (engine/rooms.ts). */
+  readonly rooms: RoomActivity;
 
   constructor(private store: Store, private reg: Registry, private config: ConfigStore, readonly now: () => number = Date.now) {
     super();
@@ -54,6 +57,7 @@ export class Engine extends EventEmitter<{ changed: [] }> {
     reg.on('devices', () => { this.planner.invalidate(); this.emit('changed'); });
     reg.on('change', e => this.onChange(e));
     reg.on('event', e => void this.onDeviceEvent(e));
+    this.rooms = new RoomActivity(store, reg, config, now);
     this.automations = new Automations(reg, config, store, {
       get modeId() { return self.modeId; },
       overlayId: () => this.overlay?.id ?? null,
@@ -61,7 +65,9 @@ export class Engine extends EventEmitter<{ changed: [] }> {
       startOverlay: (id, by) => this.startOverlay(id, by),
       endOverlay: () => this.endOverlay('user'),
       emitChanged: () => this.emit('changed'),
+      roomActive: (room, withinMin) => this.rooms.active(room, withinMin),
     }, now);
+    this.rooms.on('activity', ev => { this.automations.roomEvent(ev); this.emit('changed'); });
   }
 
   get cfg() { return this.config.get(); }
@@ -252,17 +258,19 @@ export class Engine extends EventEmitter<{ changed: [] }> {
 
   private async onDeviceEvent(e: DeviceEvent): Promise<void> {
     const labels: Record<string, string> = {
-      person: 'saw a person', ring: 'rang', motion: 'detected motion',
+      person: 'saw a person', ring: 'rang', motion: 'detected motion', vehicle: 'saw a vehicle', animal: 'saw an animal', package: 'saw a package', sound: 'heard a sound',
       'internet-down': 'is down', 'internet-up': 'is back', 'internet-failover': 'switched to the backup connection', 'new-device': 'saw a new device join', threat: 'blocked an attack',
       'video-started': 'started playing', 'music-started': 'started playing', paused: 'paused', resumed: 'carried on playing', stopped: 'stopped',
       ended: 'played to the end', 'screen-asleep': 'went to sleep', 'screen-shutdown': 'shut down', 'screen-awake': 'woke up',
     };
     const title = typeof e.data?.title === 'string' && e.data.title && /started$/.test(e.type) ? ` ${e.data.title}` : '';
-    this.store.append({
+    const entry = this.store.append({
       kind: 'device_event', device: e.device.id, feed: 'people',
       what: `${e.device.name} ${labels[e.type] ?? e.type}${title}`,
       data: { type: e.type, ...e.data }, cause: { kind: 'device', label: e.device.integration },
     });
+    // A camera's person, motion or ring is something happening in its room.
+    this.rooms.fromDeviceEvent(e, entry);
     const hits = this.cfg.lightTheWay.triggers.filter(t => 'device' in t.on && t.on.device === e.device.id && t.on.event === e.type);
     for (const t of hits) await this.lightTheWay(t);
     // "Movie starts when the lounge Helix plays a film."

@@ -15,10 +15,16 @@ export type Rhythm = { kind: 'time'; at: string } | { kind: 'sun'; event: SunEve
 /** What to set each device (or every matching device: "type:light", "room:lounge") to. */
 export type Targets = Record<string, Command>;
 
+/** What a room's cameras and sensors notice (hub engine/rooms.ts). */
+export type RoomEvent = 'person' | 'motion' | 'ring' | 'vehicle' | 'animal' | 'package' | 'sound' | 'opened' | 'closed';
+export const ROOM_EVENT_WORDS: Record<RoomEvent, string> = { motion: 'motion (or a person)', person: 'a person', ring: 'the doorbell', opened: 'a door or window opens', closed: 'a door or window closes', package: 'a package', vehicle: 'a vehicle', animal: 'an animal', sound: 'a sound' };
+
 export type Trigger =
   | { kind: 'device'; device: string; to?: StateMatch; from?: StateMatch; forSec?: number }
   | { kind: 'numeric'; device: string; field: NumericField; above?: number; below?: number; forSec?: number }
   | { kind: 'event'; device: string; event: string }
+  /** Anything a camera or sensor in the room notices; motion includes a person seen. */
+  | { kind: 'room'; room: string; event: RoomEvent }
   | { kind: 'time'; at: Rhythm; days?: number[] }
   | { kind: 'every'; minutes: number }
   | { kind: 'presence'; event: 'arrives' | 'leaves' | 'first-arrives' | 'last-leaves'; person?: string }
@@ -35,6 +41,8 @@ export type Condition =
   | { kind: 'presence'; who: string; home: boolean }
   | { kind: 'mode'; modes: string[] }
   | { kind: 'overlay'; overlay?: string; active: boolean }
+  /** A room had activity in the last withinMin minutes (default 10), or not. */
+  | { kind: 'room'; room: string; active: boolean; withinMin?: number }
   | { kind: 'all' | 'any' | 'not'; conditions: Condition[] };
 
 export type RampField = 'bri' | 'vol' | 'target';
@@ -851,6 +859,8 @@ export interface Ctx {
   rampField?: RampField;
   mode?: string;
   overlay?: string;
+  /** The home's first room, for room triggers and conditions. */
+  room?: string;
   /** Another automation, for "run another automation". */
   other?: string;
   /** The home's clock, for "once". */
@@ -862,6 +872,7 @@ export function newTrigger(kind: Trigger['kind'], c: Ctx): Trigger {
     case 'device': return { kind, device: c.device ?? '', to: { on: true } };
     case 'numeric': return { kind, device: c.device ?? '', field: 'temp', above: 28 };
     case 'event': return { kind, device: c.device ?? '', event: 'person' };
+    case 'room': return { kind, room: c.room ?? '', event: 'motion' };
     case 'time': return { kind, at: { kind: 'time', at: '21:00' } };
     case 'once': return onceAt(c.now ? addMinutes(c.now, 60) : '');
     case 'every': return { kind, minutes: 15 };
@@ -880,6 +891,7 @@ export function newCondition(kind: Condition['kind'], c: Ctx): Condition {
     case 'presence': return { kind, who: 'anyone', home: true };
     case 'mode': return { kind, modes: c.mode ? [c.mode] : [] };
     case 'overlay': return { kind, active: true };
+    case 'room': return { kind, room: c.room ?? '', active: true, withinMin: 10 };
     case 'any': case 'all': case 'not': return { kind, conditions: [newCondition('device', c)] };
   }
 }
@@ -1027,6 +1039,7 @@ export function triggerText(t: Trigger, n: Names): string {
     case 'mode': return `${nm(n.modes, t.mode) || 'a mode'} starts`;
     case 'overlay': return `${nm(n.overlays, t.overlay) || 'an overlay'} ${t.event === 'ends' ? 'ends' : 'starts'}`;
     case 'hub': return 'Kova starts';
+    case 'room': return `${ROOM_EVENT_WORDS[t.event] ?? t.event} in ${nm(n.rooms, t.room) || 'a room'}`;
   }
 }
 
@@ -1041,6 +1054,7 @@ export function conditionText(c: Condition, n: Names): string {
     case 'all': return c.conditions.map(k => conditionText(k, n)).join(' and ') || 'all of (nothing yet)';
     case 'any': return c.conditions.length > 1 ? `either ${c.conditions.map(k => conditionText(k, n)).join(' or ')}` : c.conditions.map(k => conditionText(k, n)).join('') || 'any of (nothing yet)';
     case 'not': return `not (${c.conditions.map(k => conditionText(k, n)).join(' or ') || 'nothing yet'})`;
+    case 'room': return `${c.active === false ? 'all still' : 'activity'} in ${nm(n.rooms, c.room) || 'a room'}${c.active === false ? '' : ` in the last ${c.withinMin ?? 10} min`}`;
   }
 }
 

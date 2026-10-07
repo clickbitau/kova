@@ -4,6 +4,8 @@ import type { ChangeEvent, DeviceEvent, InputChange, Registry } from '../devices
 import type { Store } from '../store/db.ts';
 import type { ConfigStore } from './config.ts';
 import type { Notification } from '../services/notify.ts';
+import type { RoomEvent } from './rooms.ts';
+import { ACTIVE_MIN } from './rooms.ts';
 import { resolveRhythm } from '../rhythms/rhythms.ts';
 import { addDays, atLocal, localDate, localHour, stampAt, stampWords } from '../util/time.ts';
 import { pseudoLabel } from '../util/describe.ts';
@@ -22,6 +24,8 @@ export interface EngineView {
   startOverlay(id: string, by: Cause): Promise<unknown>;
   endOverlay(): Promise<void>;
   emitChanged(): void;
+  /** A room had activity (a person, motion, a door) in the last so many minutes, or a motion sensor there says so now. */
+  roomActive?(room: string, withinMin?: number): boolean;
 }
 
 // ------------------------------------------------------------------ matching --
@@ -43,6 +47,8 @@ export function matches(s: DeviceState, m: StateMatch, input?: InputChange): boo
   if (m.playing !== undefined && (!!s.on && !s.paused && s.media !== null) !== m.playing) return false;
   if (m.muted !== undefined && !!s.muted !== m.muted) return false;
   if (m.mode !== undefined && s.mode !== m.mode) return false;
+  if (m.motion !== undefined && !!s.motion !== m.motion) return false;
+  if (m.open !== undefined && !!s.open !== m.open) return false;
   return true;
 }
 
@@ -101,6 +107,12 @@ export function holds(c: Condition, x: CondCtx, why: string[] = []): boolean {
       const on = c.overlay ? cur === c.overlay : cur != null;
       return ok(on === c.active, () => `${c.overlay ? x.cfg.overlays.find(o => o.id === c.overlay)?.name ?? c.overlay : 'an overlay'} is ${c.active ? 'off' : 'on'}`);
     }
+    case 'room': {
+      const within = c.withinMin ?? ACTIVE_MIN;
+      const on = x.engine.roomActive?.(c.room, within) ?? false;
+      const rn = x.cfg.rooms.find(r => r.id === c.room)?.name ?? c.room;
+      return ok(on === c.active, () => c.active ? `no activity in ${rn} in the last ${within} min` : `there was activity in ${rn} in the last ${within} min`);
+    }
     case 'all': return c.conditions.every(k => holds(k, x, why));
     case 'any': { const w: string[] = []; return ok(c.conditions.some(k => holds(k, x, w)), () => `none of: ${w.join('; ')}`); }
     case 'not': return ok(!c.conditions.every(k => holds(k, x, [])), () => 'the “not” held');
@@ -109,7 +121,7 @@ export function holds(c: Condition, x: CondCtx, why: string[] = []): boolean {
 
 // ------------------------------------------------------------------ words --
 
-const FIELD: Record<NumericField, string> = { temp: 'temperature', target: 'set temperature', power: 'power', energy: 'energy today', battery: 'battery', bri: 'brightness', vol: 'volume', grid: 'grid power', load: 'home power', humidity: 'humidity', lux: 'light level' };
+const FIELD: Record<NumericField, string> = { temp: 'temperature', target: 'set temperature', power: 'power', energy: 'energy today', battery: 'battery', bri: 'brightness', vol: 'volume', grid: 'grid power', load: 'home power', humidity: 'humidity', lux: 'light level', pm25: 'PM2.5' };
 const INPUTS: Record<string, string> = { tv: 'TV', hdmi1: 'HDMI 1', hdmi2: 'HDMI 2', hdmi3: 'HDMI 3', hdmi4: 'HDMI 4', bluetooth: 'Bluetooth', wifi: 'Wi-Fi' };
 export function matchText(m: StateMatch): string {
   const parts = [
@@ -119,6 +131,7 @@ export function matchText(m: StateMatch): string {
     m.hvac ? `on ${m.hvac}` : '', m.activity ? m.activity : '', m.muted !== undefined ? (m.muted ? 'muted' : 'not muted') : '', m.mode ? `on ${m.mode}` : '',
     m.inputBy ? `switched by ${m.inputBy === 'helix-auto' ? 'Helix' : m.inputBy}` : '',
     m.inputByPerson !== undefined ? (m.inputByPerson ? 'switched by someone' : 'not switched by anyone') : '',
+    m.motion !== undefined ? (m.motion ? 'detecting motion' : 'clear of motion') : '', m.open !== undefined ? (m.open ? 'open' : 'closed') : '',
   ].filter(Boolean);
   return parts.join(' and ') || 'anything';
 }
@@ -334,6 +347,28 @@ export class Automations {
     for (const a of this.enabled()) {
       if (a.triggers.some(t => t.kind === 'event' && t.device === e.device.id && t.event === e.type)) void this.start(a, `${e.device.name}: ${EVENT_WORDS[e.type] ?? e.type}`);
     }
+  }
+
+  /** When each room trigger last fired: motion sensors and cameras repeat themselves within seconds. */
+  private roomFired = new Map<string, number>();
+
+  /** Something happened in a room (engine/rooms.ts): "motion in the lounge", "a person at the front door". */
+  roomEvent(ev: RoomEvent): void {
+    const t = this.now();
+    const room = this.config.get().rooms.find(r => r.id === ev.room)?.name ?? ev.room;
+    for (const a of this.enabled()) {
+      a.triggers.forEach((tr, i) => {
+        if (tr.kind !== 'room' || tr.room !== ev.room) return;
+        // "Motion" is anything moving: a motion sensor, a camera's motion, or a person it saw.
+        const hit = tr.event === ev.kind || (tr.event === 'motion' && ev.kind === 'person');
+        if (!hit) return;
+        const key = `${a.id}:${i}`;
+        if (t - (this.roomFired.get(key) ?? -Infinity) < ROOM_REFIRE_MS) return;
+        this.roomFired.set(key, t);
+        void this.start(a, `${cap(ROOM_EVENT_TEXT[ev.kind])} in ${room}`);
+      });
+    }
+    this.checkWaiters();
   }
 
   /** Someone arrived or left. `anyBefore` is whether anyone was home before it. */
@@ -562,8 +597,16 @@ export class Automations {
 
 // ------------------------------------------------------------------ words --
 
+/** A room trigger won't start the same automation again this soon (a motion sensor repeats itself). */
+const ROOM_REFIRE_MS = 30_000;
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+/** A room event in words, for "… in the Lounge". */
+export const ROOM_EVENT_TEXT: Record<string, string> = {
+  person: 'a person', motion: 'motion', ring: 'the doorbell', vehicle: 'a vehicle', animal: 'an animal', package: 'a package', sound: 'a sound', opened: 'a door or window opened', closed: 'a door or window closed',
+};
+
 export const EVENT_WORDS: Record<string, string> = {
-  person: 'saw a person', ring: 'rang', motion: 'detected motion', 'video-started': 'started a video', 'music-started': 'started music',
+  person: 'saw a person', ring: 'rang', motion: 'detected motion', vehicle: 'saw a vehicle', animal: 'saw an animal', package: 'saw a package', sound: 'heard a sound', 'video-started': 'started a video', 'music-started': 'started music',
   paused: 'paused', resumed: 'carried on', stopped: 'stopped', ended: 'played to the end',
   'screen-asleep': 'screen went to sleep', 'screen-shutdown': 'shut down', 'screen-awake': 'screen woke up',
   'internet-down': 'internet down', 'internet-up': 'internet back', 'new-device': 'new device joined',
@@ -602,6 +645,7 @@ export function triggerWords(t: Trigger, x: Pick<CondCtx, 'reg' | 'cfg'> & { now
     case 'device': return `${n(t.device)} ${t.to ? `turns ${matchText(t.to)}` : `stops being ${matchText(t.from ?? {})}`}${t.to && t.from ? ` from ${matchText(t.from)}` : ''}${forW(t.forSec)}`;
     case 'numeric': return `${n(t.device)} ${FIELD[t.field]} goes ${rangeText(t.above, t.below)}${forW(t.forSec)}`;
     case 'event': return `${n(t.device)} ${EVENT_WORDS[t.event] ?? t.event}`;
+    case 'room': return `${cap(ROOM_EVENT_TEXT[t.event] ?? t.event)} in ${x.cfg.rooms.find(r => r.id === t.room)?.name ?? t.room}`;
     case 'time': return `At ${timeWords(t)}`;
     case 'every': return `Every ${durWords(t.minutes * 60)}`;
     case 'presence': {
@@ -629,6 +673,10 @@ export function condWords(c: Condition, x: Pick<CondCtx, 'reg' | 'cfg'>): string
     case 'presence': return c.who === 'anyone' ? (c.home ? 'someone’s home' : 'nobody’s home') : c.who === 'no-one' ? (c.home ? 'nobody’s home' : 'someone’s home') : `${x.cfg.people.find(p => p.id === c.who)?.name ?? c.who} is ${c.home ? 'home' : 'out'}`;
     case 'mode': return `in ${c.modes.map(m => x.cfg.modes.find(y => y.id === m)?.name ?? m).join(' or ')}`;
     case 'overlay': return `${c.overlay ? x.cfg.overlays.find(o => o.id === c.overlay)?.name ?? c.overlay : 'an overlay'} is ${c.active ? 'on' : 'off'}`;
+    case 'room': {
+      const rn = x.cfg.rooms.find(r => r.id === c.room)?.name ?? c.room, m = c.withinMin ?? ACTIVE_MIN;
+      return c.active ? `there’s been activity in ${rn} in the last ${m} min` : `no activity in ${rn} for ${m} min`;
+    }
     case 'all': return c.conditions.map(k => condWords(k, x)).join(' and ');
     case 'any': return c.conditions.map(k => condWords(k, x)).join(' or ');
     case 'not': return `not (${c.conditions.map(k => condWords(k, x)).join(' and ')})`;

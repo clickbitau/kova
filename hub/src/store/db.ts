@@ -88,6 +88,21 @@ export class Store {
       : this.rows('SELECT * FROM events WHERE ts >= ? AND ts < ? ORDER BY ts, id', from, to);
   }
 
+  /**
+   * Entries of some kinds, newest first: for some devices only, from `since` (inclusive) to `until` (exclusive).
+   * Room timelines read camera events and sensor changes through this.
+   */
+  query(o: { kinds: string[]; devices?: string[]; since?: number; until?: number; limit?: number; /** A fixed SQL condition (never user input). */ where?: string }): LogEntry[] {
+    if (!o.kinds.length || (o.devices && !o.devices.length)) return [];
+    const where = [`kind IN (${o.kinds.map(() => '?').join(', ')})`];
+    const args: (string | number)[] = [...o.kinds];
+    if (o.devices) { where.push(`device IN (${o.devices.map(() => '?').join(', ')})`); args.push(...o.devices); }
+    if (o.since != null) { where.push('ts >= ?'); args.push(o.since); }
+    if (o.until != null) { where.push('ts < ?'); args.push(o.until); }
+    if (o.where) where.push(`(${o.where})`);
+    return this.rows(`SELECT * FROM events WHERE ${where.join(' AND ')} ORDER BY ts DESC, id DESC LIMIT ?`, ...args, Math.max(1, Math.min(5000, o.limit ?? 200)));
+  }
+
   /** Last entry of a kind before an instant (e.g. presence before a mode started). */
   lastBefore(kind: string, ts: number, device?: string): LogEntry | undefined {
     return device

@@ -63,6 +63,10 @@ export interface DeviceState {
   humidity?: number | null;
   /** Light level in lux where a device senses it. */
   lux?: number | null;
+  /** Motion or occupancy sensors: someone (or something) is moving there now. */
+  motion?: boolean | null;
+  /** Door and window contact sensors: open (true) or closed (false). */
+  open?: boolean | null;
   fanSpeed?: FanSpeed | null;
   /** Air purifiers (the `purifier` capability): fan speed 1…fanLevelMax (setting one switches to manual), the air as the
    * purifier rates it (1 good … 4 very poor) and its PM2.5 reading, filter life left in %, and its display and child lock. */
@@ -107,9 +111,20 @@ export interface Device {
   original?: { name: string; room: string };
 }
 
+/** When an alert about a camera or sensor event goes to phones: always, only while nobody's home, or never. */
+export type AlertWhen = 'always' | 'away' | 'never';
+/** Something a camera saw or a sensor noticed in a room. */
+export type RoomEventKind = 'person' | 'motion' | 'ring' | 'vehicle' | 'animal' | 'package' | 'sound' | 'opened' | 'closed';
+/** Per kind of event, when to alert (unset kinds use the room's, then Kova's defaults). */
+export type AlertPrefs = Partial<Record<RoomEventKind, AlertWhen>>;
+
 /** What the owner changed about a device: a better name, the right room, or hidden from lists. */
 export interface DeviceSettings {
   name?: string; room?: string; hidden?: boolean;
+  /** Cameras and sensors: it looks at (or sits) outside, not inside the home. Unset: from the room, and doorbells are outside. */
+  outdoor?: boolean;
+  /** Cameras and sensors: when their events alert phones. */
+  alerts?: AlertPrefs;
   /** What it draws while on, in W, for the Energy page (devices with no meter). */
   watts?: number;
   /** Ducted air conditioners: what the owner calls each zone, by zone number ("1": "Living"). */
@@ -144,6 +159,8 @@ export interface Room {
   id: string;
   name: string;
   icon: string;
+  /** Outside the living space (a porch, a yard, the garage): what happens there isn't someone inside. Unset: from its icon. */
+  outdoor?: boolean;
 }
 
 /** Material Symbols icons a room can have — offered wherever a room is made or renamed. */
@@ -156,7 +173,8 @@ export interface Person {
   detail: string;
 }
 
-export type PresenceSourceKind = 'warden' | 'router' | 'ping' | 'app' | 'phone' | 'manual' | 'other';
+/** `camera`: an indoor camera saw someone moving (a weak hint that someone's in, never who). */
+export type PresenceSourceKind = 'warden' | 'router' | 'ping' | 'app' | 'phone' | 'manual' | 'camera' | 'other';
 
 /** One signal that helped decide whether someone is home. */
 export interface PresenceEvidence {
@@ -269,10 +287,14 @@ export interface StateMatch {
   playing?: boolean;
   muted?: boolean;
   mode?: string;
+  /** Motion sensors: detecting motion now (true) or clear (false). */
+  motion?: boolean;
+  /** Contact sensors: open (true) or closed (false). */
+  open?: boolean;
 }
 
 /** A device reading a number can be compared on. */
-export type NumericField = 'temp' | 'target' | 'power' | 'energy' | 'battery' | 'bri' | 'vol' | 'grid' | 'load' | 'humidity' | 'lux';
+export type NumericField = 'temp' | 'target' | 'power' | 'energy' | 'battery' | 'bri' | 'vol' | 'grid' | 'load' | 'humidity' | 'lux' | 'pm25';
 
 /** What starts an automation. Any one of an automation's triggers starts it. */
 export type Trigger =
@@ -282,6 +304,8 @@ export type Trigger =
   | { kind: 'numeric'; device: string; field: NumericField; above?: number; below?: number; forSec?: number }
   /** A momentary device event: a camera seeing a person, a doorbell ring, a player starting a film. */
   | { kind: 'event'; device: string; event: string }
+  /** Something happening in a room, from any camera or sensor there: a person, motion, the doorbell, a door opening. */
+  | { kind: 'room'; room: string; event: RoomEventKind }
   /** A time of day (a clock time, sun or prayer time, with an offset), on the given days (0 = Sunday; all when empty). */
   | { kind: 'time'; at: Rhythm; days?: number[] }
   /** Every so many minutes, from local midnight. */
@@ -310,6 +334,8 @@ export type Condition =
   | { kind: 'mode'; modes: string[] }
   /** An overlay (or any overlay, when none is named) is on, or not. */
   | { kind: 'overlay'; overlay?: string; active: boolean }
+  /** A room had activity (a person, motion, a door) in the last `withinMin` minutes (default 10), or not. */
+  | { kind: 'room'; room: string; active: boolean; withinMin?: number }
   | { kind: 'all' | 'any' | 'not'; conditions: Condition[] };
 
 /** What an automation does, in order. */
@@ -422,6 +448,18 @@ export interface HomeConfig {
   pauseForDoorbell?: boolean;
   /** When / if / then rules the owner made (or took from a suggestion). */
   automations?: Automation[];
+  /** Camera and sensor alerts: quiet hours, how long between alerts, and per-room choices. */
+  security?: SecuritySettings;
+}
+
+/** How camera and sensor alerts behave across the home. */
+export interface SecuritySettings {
+  /** No alerts between these local times ("22:30" to "07:00"), except the doorbell and anything while nobody's home. */
+  quiet?: { from: string; to: string } | null;
+  /** Minutes before the same kind of alert from the same room again. Default 5. */
+  cooldownMin?: number;
+  /** Per room: when its events alert (a camera's own choices win). */
+  rooms?: Record<string, AlertPrefs>;
 }
 
 export interface SpeakerGroup { id: string; name: string; room?: string; members: string[] }

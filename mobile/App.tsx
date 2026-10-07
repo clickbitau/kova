@@ -26,6 +26,7 @@ import { ActivityScreen } from './src/screens/ActivityScreen';
 import { ThisPhoneScreen } from './src/screens/ThisPhoneScreen';
 import { WebScreen } from './src/screens/WebScreen';
 import { CameraScreen } from './src/screens/CameraScreen';
+import { SensorsScreen } from './src/screens/SensorsScreen';
 import { IntegrationAddScreen, IntegrationsScreen } from './src/screens/IntegrationsScreen';
 import { IntegrationScreen } from './src/screens/IntegrationScreen';
 import { AutomationsScreen } from './src/screens/AutomationsScreen';
@@ -88,7 +89,8 @@ function Home() {
     if (!last || !snap) return;
     const data = last.notification.request.content.data as { url?: string } | undefined;
     const r = routeFor(last.actionIdentifier === 'lights-off' ? '/phone.html?do=lights-off' : data?.url);
-    if (r.cam) nav.current?.navigate('Web', { title: snap.devices.find(d => d.id === r.cam)?.name ?? 'Camera', path: `/phone.html?embed=1&cam=${encodeURIComponent(r.cam)}` });
+    // A camera alert opens the camera: what it saw (the picture from that moment) and Watch live.
+    if (r.cam) nav.current?.navigate(snap.devices.some(d => d.id === r.cam) ? 'Camera' : 'Web', snap.devices.some(d => d.id === r.cam) ? { id: r.cam } as never : { title: 'Camera', path: `/phone.html?embed=1&cam=${encodeURIComponent(r.cam)}` } as never);
     else if (r.lightsOff) void api<{ changed: string[]; undo: string }>('POST', '/api/lights/off').then(x => say(`${x.changed.length} lights off`, { undo: x.undo })).catch(() => {});
     else if (r.page && NATIVE_PAGES[r.page]) nav.current?.navigate(NATIVE_PAGES[r.page]);
     else if (r.setup) nav.current?.navigate('Integration', { id: r.setup });
@@ -113,6 +115,7 @@ function Home() {
           <Stack.Screen name="IntegrationAdd" component={IntegrationAddScreen} />
           <Stack.Screen name="Integration" component={IntegrationScreen} />
           <Stack.Screen name="Camera" component={CameraScreen} />
+          <Stack.Screen name="Sensors" component={SensorsScreen} />
           <Stack.Screen name="Web" component={WebScreen} />
           <Stack.Screen name="Automations" component={AutomationsScreen} />
           <Stack.Screen name="Browsers" component={BrowsersScreen} />

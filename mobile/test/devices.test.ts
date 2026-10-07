@@ -61,7 +61,7 @@ test('an air conditioner: mode, target and the room; a tap switches it', () => {
 test('devices by room, filtered and searched; hidden ones only on request', () => {
   const rooms = [{ id: 'lounge', name: 'Lounge', icon: 'weekend' }, { id: 'kitchen', name: 'Kitchen', icon: 'kitchen' }];
   const g = groupDevices(Object.values(all), rooms, {});
-  assert.deepEqual(g.map(x => x.name), ['Lounge', 'Kitchen', 'office', 'front', 'Other']);
+  assert.deepEqual(g.map(x => x.name), ['Lounge', 'Kitchen', 'office', 'front'], 'the internet sensor (no room) is on Sensors, not here');
   assert.deepEqual(g[0].devices.map(x => x.id), ['box', 'ceiling', 'lamp']);
   assert.equal(g[0].lightsOn, 1);
   assert.deepEqual(groupDevices(Object.values(all), rooms, { type: 'lights' }).flatMap(x => x.devices.map(y => y.id)), ['ceiling', 'lamp']);

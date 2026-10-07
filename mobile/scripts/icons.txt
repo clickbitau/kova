@@ -26,3 +26,5 @@ auto_fix_high travel_explore content_paste open_in_new warning extension lan sci
 login computer smartphone tablet
 mosque
 brightness_6
+# Sensors, room activity and camera events
+trending_up trending_down trending_flat battery_alert directions_car pets package_2 humidity_percentage

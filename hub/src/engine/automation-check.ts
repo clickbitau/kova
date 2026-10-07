@@ -1,4 +1,4 @@
-import type { Action, Automation, Command, Condition, Device, HomeConfig, NumericField, RunMode, StateMatch, Trigger } from '../model/types.ts';
+import type { Action, Automation, Command, Condition, Device, HomeConfig, NumericField, RoomEventKind, RunMode, StateMatch, Trigger } from '../model/types.ts';
 import { cleanTarget, rhythm } from './validate.ts';
 import { FIELD_CAP, PSEUDO_TARGET } from '../util/describe.ts';
 import { LOCAL_STAMP, localStamp, stampAt } from '../util/time.ts';
@@ -15,7 +15,9 @@ export interface CheckCtx {
   now?: number;
 }
 
-const FIELDS: NumericField[] = ['temp', 'target', 'power', 'energy', 'battery', 'bri', 'vol', 'grid', 'load', 'humidity', 'lux'];
+const FIELDS: NumericField[] = ['temp', 'target', 'power', 'energy', 'battery', 'bri', 'vol', 'grid', 'load', 'humidity', 'lux', 'pm25'];
+/** What a room trigger can start on. */
+export const ROOM_EVENTS: RoomEventKind[] = ['person', 'motion', 'ring', 'vehicle', 'animal', 'package', 'sound', 'opened', 'closed'];
 /** Readings a ramp can ease between values. */
 const RAMPABLE: NumericField[] = ['bri', 'vol', 'target'];
 const DEVICE_TYPES = ['light', 'dimmer', 'fan', 'media', 'tv', 'plug', 'camera', 'sensor', 'vacuum', 'internet', 'climate'];
@@ -46,7 +48,7 @@ function device(x: CheckCtx, id: unknown, role: string): string {
 
 function stateMatch(v: unknown, what: string): StateMatch {
   const m = obj(v, what), out: StateMatch = {};
-  for (const k of ['on', 'online', 'playing', 'muted'] as const) if (typeof m[k] === 'boolean') out[k] = m[k] as boolean;
+  for (const k of ['on', 'online', 'playing', 'muted', 'motion', 'open'] as const) if (typeof m[k] === 'boolean') out[k] = m[k] as boolean;
   if (typeof m.input === 'string' && m.input) out.input = m.input;
   if (typeof m.hvac === 'string') out.hvac = HVAC.includes(m.hvac) ? m.hvac as StateMatch['hvac'] : fail(`${m.hvac} isn’t a climate mode`);
   if (typeof m.activity === 'string') out.activity = ACTIVITY.includes(m.activity) ? m.activity as StateMatch['activity'] : fail(`${m.activity} isn’t a vacuum activity`);
@@ -76,6 +78,11 @@ export function checkTrigger(v: unknown, x: CheckCtx): Trigger {
     case 'event': {
       if (typeof t.event !== 'string' || !t.event.trim()) fail('Choose the event');
       return { kind: 'event', device: device(x, t.device, 'the trigger'), event: (t.event as string).trim() };
+    }
+    case 'room': {
+      if (!x.cfg.rooms.some(r => r.id === t.room)) fail(t.room ? `Unknown room ${t.room}` : 'Choose the room');
+      if (!ROOM_EVENTS.includes(t.event as RoomEventKind)) fail(`Choose what happens in the room (${ROOM_EVENTS.join(', ')})`);
+      return { kind: 'room', room: String(t.room), event: t.event as RoomEventKind };
     }
     case 'time': {
       const at = rhythm(t.at) ?? fail('That time isn’t valid — use "HH:MM", a sun event like "sunset", or a prayer like "isha"');
@@ -147,6 +154,11 @@ export function checkCondition(v: unknown, x: CheckCtx, depth = 0): Condition {
     case 'overlay': {
       if (c.overlay && !x.cfg.overlays.some(o => o.id === c.overlay)) fail(`Unknown overlay ${c.overlay}`);
       return { kind: 'overlay', ...(c.overlay ? { overlay: String(c.overlay) } : {}), active: c.active !== false };
+    }
+    case 'room': {
+      if (!x.cfg.rooms.some(r => r.id === c.room)) fail(c.room ? `Unknown room ${c.room}` : 'Choose the room');
+      const withinMin = numOrUndef(c.withinMin, 'Within … minutes', 1, 24 * 60);
+      return { kind: 'room', room: String(c.room), active: c.active !== false, ...(withinMin ? { withinMin: Math.round(withinMin) } : {}) };
     }
     case 'all': case 'any': case 'not': {
       const cs = list(c.conditions, 'Conditions').map(k => checkCondition(k, x, depth + 1));

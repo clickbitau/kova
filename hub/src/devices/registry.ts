@@ -3,12 +3,14 @@ import type { Adapter, AdapterContext, DeviceInfo, Queue, QueueOptions } from '.
 import type { Cause, Command, Device, DeviceSettings, DeviceState, Targets } from '../model/types.ts';
 import type { Store } from '../store/db.ts';
 import { CAPS, changeSentence, fitCommand, PSEUDO_TARGET, typeMatch } from '../util/describe.ts';
+import { isSensor } from '../util/sensors.ts';
 
 /**
  * Readings that update silently: they're not "changes" anyone made. A vacuum's
- * activity rides along with `on`, which is what gets logged.
+ * activity rides along with `on`, which is what gets logged. A room's temperature,
+ * humidity, light and air are readings too, whichever device senses them.
  */
-const MEASUREMENTS = new Set(['online', 'power', 'energy', 'grid', 'load', 'battery', 'activity']);
+const MEASUREMENTS = new Set(['online', 'power', 'energy', 'grid', 'load', 'battery', 'activity', 'temp', 'humidity', 'lux', 'pm25', 'airQuality', 'filterLife']);
 
 /** Value equality for state fields: objects (extras, zones, track) compare by content, not reference. */
 function same(a: unknown, b: unknown): boolean {
@@ -47,7 +49,7 @@ const INPUT_SETTLE_MS = 20_000;
  * Holds every device and its live state. All changes go through here so each
  * one is written to the event log with its cause.
  */
-export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [DeviceEvent]; devices: []; measure: []; sent: [SentEvent]; reading: [ChangeEvent] }> {
+export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [DeviceEvent]; devices: []; measure: []; sent: [SentEvent]; reading: [ChangeEvent]; seen: [Device] }> {
   readonly devices = new Map<string, Device>();
   readonly adapters = new Map<string, Adapter>();
 
@@ -276,8 +278,12 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
     d.state = { ...d.state, ...patch };
     this.persist();
     const direct = cause.kind === 'user' || cause.kind === 'device' || cause.kind === 'assistant' || cause.kind === 'undo';
+    // A sensor's motion comes and goes all day: kept in the log (room activity, timelines), not the Activity feed.
+    // A door or window opening is worth seeing there, with the comings and goings.
+    const sensor = isSensor(d);
+    const feed = sensor ? ('open' in patch ? 'people' : null) : direct && !quiet ? 'device' : null;
     this.store.append({
-      kind: 'state', device: d.id, feed: direct && !quiet ? 'device' : null,
+      kind: 'state', device: d.id, feed,
       what: changeSentence(d, prev, patch), data: { patch, prev }, cause,
     });
     this.emit('change', { device: d, prev, patch, cause });
@@ -288,6 +294,8 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
   private report(id: string, state: DeviceState): void {
     const d = this.devices.get(id);
     if (!d) return;
+    // It spoke, even if nothing changed (a sensor's "last reported").
+    this.emit('seen', d);
     const patch = this.diff(d, state);
     if (!Object.keys(patch).length) return;
     if (typeof patch.input === 'string' && patch.input) this.inputReadBack(d, patch.input);
@@ -316,7 +324,8 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
       this.emit('measure');
       return;
     }
-    this.apply(d, patch, { kind: 'device', label: `${d.integration}`, detail: 'changed at the device or in another app' });
+    // A sensor reports what it noticed; anything else was changed at the device or in another app.
+    this.apply(d, patch, isSensor(d) ? { kind: 'device', label: d.integration } : { kind: 'device', label: `${d.integration}`, detail: 'changed at the device or in another app' });
   }
 
   /**

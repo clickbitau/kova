@@ -485,7 +485,7 @@ test('Helix link: the box-offline backstop turns the TV and soundbar off only wh
 test('Helix link: without the box’s input in settings, the backstop needs Helix to have switched the TV last', async () => {
   const { t, tvs, box, link, settle, offs } = await boxOnTv({ 'Lounge box': { tv: 'lounge_tv' } });
   try {
-    const idea = automationIdeas(t.hub.config.get(), t.hub.reg.devices, t.hub.screens())[0];
+    const idea = automationIdeas(t.hub.config.get(), t.hub.reg.devices, t.hub.screens()).find(i => i.key.startsWith('tv-off-with:'))!;
     assert.deepEqual(idea.conditions, [{ kind: 'device', device: 'lounge_tv', is: { on: true, inputBy: 'helix-auto' } }]);
     assert.match(idea.why, /Helix switched it/);
     const { key: _k, why: _w, ...a } = idea;

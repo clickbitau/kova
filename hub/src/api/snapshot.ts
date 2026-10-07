@@ -9,8 +9,25 @@ import { combineIdeas, combinedDeviceId } from '../adapters/combined.ts';
 import { AUTOMATION_EVENTS, actionWords, condWords, isOneTime, nextRun, triggerWords } from '../engine/automations.ts';
 import { wattsSetting } from '../services/energy.ts';
 import SunCalc from 'suncalc';
+import { alertsFor, isCamera, isOutdoor, kindOf, isSensor } from '../util/sensors.ts';
+import { roomClimate, sensorViews } from '../services/sensors.ts';
+import { roomOutdoor } from '../util/sensors.ts';
 
 const FEED_ICON: Record<string, string> = { mode: 'routine', run: 'bolt', presence: 'person_pin_circle', state: 'lightbulb', system: 'info', skip: 'event_busy' };
+
+/** Activity icons for device events (cameras, doorbells, players). */
+const DEVICE_EVENT_ICON: Record<string, string> = { ring: 'doorbell', person: 'person', motion: 'sensors', vehicle: 'directions_car', animal: 'pets', package: 'package_2', sound: 'graphic_eq' };
+
+/** Camera and sensor events as the timelines show them, each with its picture's address when one was kept. */
+export function timelineRows(hub: Hub, events: import('../engine/rooms.ts').RoomEvent[]) {
+  const cfg = hub.config.get(), tz = cfg.timezone, today = localDate(hub.engine.now(), tz);
+  return events.map(e => ({
+    id: e.id, at: e.at, t: localDate(e.at, tz) === today ? clock(e.at, tz) : `${new Date(e.at).toLocaleDateString('en-AU', { weekday: 'short', timeZone: tz })} ${clock(e.at, tz)}`,
+    room: e.room, roomName: cfg.rooms.find(r => r.id === e.room)?.name ?? null, device: e.device, kind: e.kind, source: e.source, outdoor: e.outdoor, what: e.what,
+    icon: e.kind === 'opened' || e.kind === 'closed' ? 'sensor_door' : DEVICE_EVENT_ICON[e.kind] ?? 'videocam',
+    frame: hub.security.hasFrame(e.device, e.id) ? `/api/frames/${encodeURIComponent(e.device)}/${e.id}` : null,
+  }));
+}
 
 const IPV4 = /\b(?:\d{1,3}\.){3}\d{1,3}\b/;
 
@@ -26,7 +43,8 @@ function netOf(reg: Hub['reg']) {
 }
 
 function feedIcon(e: LogEntry): string {
-  if (e.kind === 'device_event') return e.data.type === 'ring' ? 'doorbell' : 'person';
+  if (e.kind === 'device_event') return DEVICE_EVENT_ICON[String(e.data.type)] ?? 'person';
+  if (e.kind === 'state' && e.data && typeof (e.data.patch as { open?: unknown } | undefined)?.open === 'boolean') return 'sensor_door';
   if (e.kind === 'presence') return e.data.home ? 'person_pin_circle' : 'directions_walk';
   if (e.kind === 'run' && e.cause.kind === 'overlay') return 'layers';
   if (e.kind === 'system' && 'backup' in e.data) return 'backup';
@@ -137,6 +155,18 @@ export function snapshot(hub: Hub) {
       sun: (() => { const t = SunCalc.getTimes(new Date(now), cfg.latitude, cfg.longitude); const h = (d: Date) => (isNaN(+d) ? null : localHour(+d, tz)); return { rise: h(t.sunrise), set: h(t.sunset) }; })(),
     },
     rooms: cfg.rooms,
+    // Each room's temperature, humidity and light (sensors first), and what's been happening there.
+    roomStatus: roomClimate(reg.list(), cfg, engine.rooms),
+    // Sensors: they only report. Their readings with units, trends, last changed and reported, battery, offline.
+    sensors: sensorViews(reg.list(), cfg, hub.sensors),
+    // Cameras and sensors: inside or out, when each kind of event alerts; quiet hours and per-room choices; the latest events.
+    security: {
+      ...hub.security.settings(), quietNow: hub.security.quietNow(),
+      outdoorRooms: cfg.rooms.filter(r => roomOutdoor(r)).map(r => r.id),
+      devices: Object.fromEntries(reg.list().filter(d => isCamera(d) || isSensor(d)).map(d => [d.id, { outdoor: isOutdoor(d, cfg), outdoorSet: typeof cfg.devices?.[d.id]?.outdoor === 'boolean', alerts: alertsFor(d, cfg) }])),
+      recent: timelineRows(hub, engine.rooms.timeline({ limit: 24 })),
+      decisions: hub.security.recent(10).map(d => ({ ...d, atLabel: clock(d.at, tz) })),
+    },
     // The owner's favourites (null until they pick some: the apps then suggest a few).
     favourites: cfg.favourites ?? null,
     // Speaker groups, and whether they play in perfect sync (their speakers are exactly a Cast group made in Google Home).
@@ -154,7 +184,8 @@ export function snapshot(hub: Hub) {
     }),
     // zoneNames: what the owner calls a ducted air conditioner's zones. `watts` / `typicalWatts`: what a device with no
     // meter draws while on, the owner's figure and Kova's (Energy page).
-    devices: reg.list().map(d => ({ ...d, why: engine.why(d.id), usedIn: engine.usedIn(d.id), ...wattsSetting(d, cfg.devices?.[d.id]?.watts), ...(cfg.devices?.[d.id]?.zoneNames ? { zoneNames: cfg.devices[d.id].zoneNames } : {}) })),
+    // `kind`: device (something to control), sensor (only reports) or camera. Sensors stay here so ids keep working.
+    devices: reg.list().map(d => ({ ...d, kind: kindOf(d), why: engine.why(d.id), usedIn: engine.usedIn(d.id), ...wattsSetting(d, cfg.devices?.[d.id]?.watts), ...(cfg.devices?.[d.id]?.zoneNames ? { zoneNames: cfg.devices[d.id].zoneNames } : {}) })),
     modes,
     current: {
       modeId: mn.mode.id, since: mn.since, until: mn.until, untilLabel: clock(mn.until, tz), nextId: mn.next.id,
@@ -193,7 +224,7 @@ export function snapshot(hub: Hub) {
     glance: hub.insights.glance(),
     activity,
     integrations: [
-      ...[...reg.adapters.values()].map(a => ({ id: a.id, name: a.name, icon: a.icon, kind: a.kind, ...a.status(), devices: reg.list().filter(d => d.adapter === a.id).length })),
+      ...[...reg.adapters.values()].map(a => ({ id: a.id, name: a.name, icon: a.icon, kind: a.kind, ...a.status(), devices: reg.list().filter(d => d.adapter === a.id && !isSensor(d)).length, sensors: reg.list().filter(d => d.adapter === a.id && isSensor(d)).length })),
       ...hub.services.map(x => ({ id: x.id, name: x.name, icon: x.icon, kind: x.kind, ...x.status(), devices: x.devices ?? 0 })),
     ],
     weather: hub.weather?.current ?? null,

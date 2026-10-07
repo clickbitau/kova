@@ -62,7 +62,8 @@ const homeFile = resolve(dataDir, 'home.json');
 const initialConfig = (): HomeConfig => !demo && existsSync(homeFile) ? JSON.parse(readFileSync(homeFile, 'utf8')) as HomeConfig : demoConfig();
 
 const adapters: Adapter[] = integrations ? adaptersFor(integrations, dataDir) : [];
-if (demo) adapters.push(new VirtualAdapter(demoDevices(), DEMO_SOLAR));
+// The demo home lives a little: its sensors drift and its cameras see things now and then.
+if (demo) adapters.push(new VirtualAdapter(demoDevices(), DEMO_SOLAR, Date.now, { simulate: true }));
 // KOVA_SONOS=1 is the older switch; Sonos set up under Integrations (or found there) takes its place.
 if (env.KOVA_SONOS === '1' && !integrations?.sonos) adapters.push(new SonosAdapter());
 if (env.KOVA_MATTER === '1' && !integrations?.matter) adapters.push(new MatterAdapter({ storageDir: resolve(dataDir, 'matter') }));
@@ -73,6 +74,8 @@ const hub = new Hub({
   adapters,
   demo,
   weather: env.KOVA_WEATHER === '0' ? undefined : new Weather(Date.now),
+  // The picture of each camera event, kept with it for the timelines.
+  security: { framesDir: resolve(dataDir, 'frames') },
 });
 
 await hub.start();
@@ -208,8 +211,9 @@ hub.updates = new Updates(hub, {
 });
 hub.updates.start();
 notifier.start();
-// Automations' "Notify" steps go to the same phones.
+// Automations' "Notify" steps go to the same phones, and so do camera and sensor alerts.
 hub.engine.automations.notify = n => notifier.notify(n);
+hub.security.notify = n => notifier.notify(n);
 // Cloud: Web Push is delivered by Apple's / Google's push service (and ntfy.sh unless self-hosted).
 hub.services.push({ id: 'notify', name: 'Notifications', icon: 'notifications', kind: 'Cloud', status: () => notifier.status() });
 

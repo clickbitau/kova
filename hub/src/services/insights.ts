@@ -4,6 +4,7 @@ import type { Registry } from '../devices/registry.ts';
 import type { Store } from '../store/db.ts';
 import type { WeatherNow, WeatherToday } from './weather.ts';
 import { clock, localDate } from '../util/time.ts';
+import { isOutdoor, isSensor, roomOutdoor } from '../util/sensors.ts';
 
 // What Kova notices about the home, for the Now page: the home at a glance (outside, inside, the air) and alerts and
 // warnings worth acting on. Each insight has a stable id, so it can be snoozed and so a phone is told once, when it
@@ -25,8 +26,8 @@ export interface Insight {
 
 export interface Glance {
   outside: (WeatherNow & { high?: number; low?: number; rain?: string | null; uvMax?: number | null }) | null;
-  /** Rooms (or devices) with a temperature inside, in °C. */
-  inside: { name: string; temp: number; device: string }[];
+  /** Rooms (or devices) with a temperature inside, in °C, and the humidity there when something senses it. */
+  inside: { name: string; temp: number; humidity?: number; device: string; room?: string }[];
   /** The air as purifiers rate it: the worst room first. */
   air: { name: string; level: number; label: string; device: string }[];
 }
@@ -46,6 +47,35 @@ export interface InsightInputs {
   failing: { id: string; name: string; note?: string }[];
   /** When each device was first seen offline (still offline now). */
   offlineSince: Map<string, number>;
+  /** When each door or window sensor opened (still open now). */
+  openSince?: Map<string, number>;
+}
+
+/** A door or window left open this long is worth saying. */
+const OPEN_MS = 20 * 60_000;
+const avg = (xs: number[]) => Math.round(xs.reduce((a, b) => a + b, 0) / xs.length * 10) / 10;
+
+/**
+ * Each indoor room's temperature (and humidity): its sensors' when it has them (the average of several), else a
+ * climate device there that senses the room. Outdoor rooms and outdoor sensors aren't "inside".
+ */
+export function insideRooms(x: Pick<InsightInputs, 'devices' | 'cfg'>): Glance['inside'] {
+  const visible = x.devices.filter(d => !x.cfg.devices?.[d.id]?.hidden && d.state.online !== false && typeof d.state.temp === 'number');
+  const out: Glance['inside'] = [];
+  const seen = new Set<string>();
+  for (const r of x.cfg.rooms) {
+    if (roomOutdoor(r)) continue;
+    const here = visible.filter(d => d.room === r.id && !(isSensor(d) && isOutdoor(d, x.cfg)));
+    const sensors = here.filter(isSensor);
+    const from = sensors.length ? sensors : here.filter(d => d.type === 'climate');
+    if (!from.length) continue;
+    for (const d of here) seen.add(d.id);
+    const hums = from.map(d => d.state.humidity).filter((v): v is number => typeof v === 'number');
+    out.push({ name: r.name === 'Unsorted' ? from[0].name : r.name, room: r.id, temp: avg(from.map(d => d.state.temp as number)), ...(hums.length ? { humidity: Math.round(avg(hums)) } : {}), device: from[0].id });
+  }
+  // Climate devices in no room of the home still say how warm it is by them.
+  for (const d of visible) if (!seen.has(d.id) && d.type === 'climate' && !x.cfg.rooms.some(r => r.id === d.room)) out.push({ name: d.name, temp: d.state.temp as number, device: d.id });
+  return out;
 }
 
 const roomName = (cfg: InsightInputs['cfg'], d: Device) => cfg.rooms.find(r => r.id === d.room)?.name;
@@ -66,8 +96,7 @@ export function glance(x: InsightInputs): Glance {
   const w = x.weather;
   return {
     outside: w?.current ? { ...w.current, ...(w.today ? { high: w.today.high, low: w.today.low, uvMax: w.today.uvMax, rain: rainText(w.today.rain, x.now, x.cfg.timezone) } : {}) } : null,
-    inside: visible.filter(d => d.type === 'climate' && typeof d.state.temp === 'number' && d.state.online !== false)
-      .map(d => ({ name: roomName(x.cfg, d) && roomName(x.cfg, d) !== 'Unsorted' ? roomName(x.cfg, d)! : d.name, temp: d.state.temp as number, device: d.id })),
+    inside: insideRooms(x),
     air: visible.filter(d => typeof d.state.airQuality === 'number' && d.state.online !== false)
       .map(d => ({ name: d.name, level: d.state.airQuality as number, label: AIR_LABEL[d.state.airQuality as number] ?? '?', device: d.id }))
       .sort((a, b) => b.level - a.level),
@@ -88,9 +117,17 @@ export function insights(x: InsightInputs): Insight[] {
       out.push({ id: `air:${d.id}`, level: s.airQuality >= 4 ? 'alert' : 'warning', icon: 'air', device: d.id, push: true,
         title: `The air is ${AIR_LABEL[s.airQuality].toLowerCase()} near ${where(x.cfg, d)}`, detail: s.pm25 != null ? `PM2.5 ${s.pm25} µg/m³${s.on ? '' : '. The purifier is off.'}` : s.on ? undefined : 'The purifier is off.' });
     }
-    if (d.type === 'climate' && typeof s.temp === 'number' && s.online !== false) {
-      if (s.temp >= 30) out.push({ id: `indoor-hot:${d.id}`, level: 'warning', icon: 'device_thermostat', device: d.id, push: true, title: `It’s ${s.temp}° inside, by ${where(x.cfg, d)}`, detail: s.on ? undefined : 'The air conditioner is off.' });
-      if (s.temp <= 12) out.push({ id: `indoor-cold:${d.id}`, level: 'warning', icon: 'device_thermostat', device: d.id, push: true, title: `It’s ${s.temp}° inside, by ${where(x.cfg, d)}`, detail: s.on ? undefined : 'The air conditioner is off.' });
+    // Too hot or cold inside: by an air conditioner, or a sensor in an indoor room.
+    if ((d.type === 'climate' || (isSensor(d) && !isOutdoor(d, x.cfg))) && typeof s.temp === 'number' && s.online !== false) {
+      const ac = d.type === 'climate' ? (s.on ? undefined : 'The air conditioner is off.') : undefined;
+      const by = isSensor(d) ? (roomName(x.cfg, d) ?? d.name) : where(x.cfg, d);
+      if (s.temp >= 30) out.push({ id: `indoor-hot:${d.id}`, level: 'warning', icon: 'device_thermostat', device: d.id, push: true, title: isSensor(d) ? `It’s ${s.temp}° in the ${by}` : `It’s ${s.temp}° inside, by ${by}`, detail: ac });
+      if (s.temp <= 12) out.push({ id: `indoor-cold:${d.id}`, level: 'warning', icon: 'device_thermostat', device: d.id, push: true, title: isSensor(d) ? `It’s ${s.temp}° in the ${by}` : `It’s ${s.temp}° inside, by ${by}`, detail: ac });
+    }
+    // A door or window left open a while.
+    if (isSensor(d) && s.open === true && s.online !== false) {
+      const since = x.openSince?.get(d.id);
+      if (since != null && x.now - since >= OPEN_MS) out.push({ id: `open:${d.id}:${since}`, level: 'warning', icon: 'sensor_door', device: d.id, push: true, title: `${where(x.cfg, d)} has been open ${Math.round((x.now - since) / 60_000)} min`, detail: `Since ${clock(since, tz)}` });
     }
     if (typeof s.battery === 'number' && s.battery <= 20 && !(d.type === 'vacuum' && (s.activity === 'docked' || s.activity === 'returning'))) {
       out.push({ id: `battery:${d.id}`, level: s.battery <= 10 ? 'alert' : 'warning', icon: 'battery_alert', device: d.id, push: true, title: `${where(x.cfg, d)}: battery low`, detail: `${s.battery}%` });
@@ -103,7 +140,7 @@ export function insights(x: InsightInputs): Insight[] {
   const off = visible.filter(d => !DERIVED.has(d.adapter) && d.state.online === false && x.now - (x.offlineSince.get(d.id) ?? x.now) >= OFFLINE_MS && d.id !== 'warden_internet');
   if (off.length) {
     out.push({ id: `offline:${off.map(d => d.id).sort().join(',')}`, level: 'warning', icon: 'cloud_off', ...(off.length === 1 ? { device: off[0].id } : {}),
-      title: off.length === 1 ? `${off[0].name} isn’t responding` : `${off.length} devices aren’t responding`,
+      title: off.length === 1 ? `${off[0].name} isn’t responding` : `${off.length} ${off.every(isSensor) ? 'sensors' : off.some(isSensor) ? 'devices and sensors' : 'devices'} aren’t responding`,
       detail: off.length === 1 ? `Since ${clock(x.offlineSince.get(off[0].id)!, tz)}` : off.slice(0, 4).map(d => d.name).join(', ') + (off.length > 4 ? ` and ${off.length - 4} more` : '') });
   }
   for (const f of x.failing) out.push({ id: `integration:${f.id}`, level: 'warning', icon: 'extension_off', title: `${f.name} needs attention`, detail: f.note });
@@ -126,6 +163,7 @@ export function insights(x: InsightInputs): Insight[] {
  */
 export class Insights extends EventEmitter<{ new: [Insight] }> {
   private offlineSince = new Map<string, number>();
+  private openSince = new Map<string, number>();
   private seen = new Set<string>();
   private first = true;
 
@@ -136,6 +174,8 @@ export class Insights extends EventEmitter<{ new: [Insight] }> {
       for (const d of this.reg.list()) {
         if (d.state.online === false) { if (!this.offlineSince.has(d.id)) this.offlineSince.set(d.id, t); }
         else this.offlineSince.delete(d.id);
+        if (d.state.open === true) { if (!this.openSince.has(d.id)) this.openSince.set(d.id, t); }
+        else this.openSince.delete(d.id);
       }
     };
     reg.on('change', note);
@@ -154,7 +194,7 @@ export class Insights extends EventEmitter<{ new: [Insight] }> {
     this.store.set('insight-snooze', s);
   }
 
-  private all(): Insight[] { return insights({ ...this.inputs(), devices: this.reg.list(), offlineSince: this.offlineSince }); }
+  private all(): Insight[] { return insights({ ...this.inputs(), devices: this.reg.list(), offlineSince: this.offlineSince, openSince: this.openSince }); }
 
   /** What to show now (snoozed ones left out), and tell listeners about new ones worth a push. */
   current(): Insight[] {

@@ -9,7 +9,9 @@ import { FIELD_CAP, isPlayer, pseudoLabel, targetLabel } from '../util/describe.
 import { checkAutomation } from '../engine/automation-check.ts';
 import { actionWords, condWords, nextOnce, triggerWords } from '../engine/automations.ts';
 import { slug } from '../tools/import-ha.ts';
-import { clock, localDate, localStamp, stampWords } from '../util/time.ts';
+import { atLocal, clock, localDate, localStamp, stampWords } from '../util/time.ts';
+import { isCamera, isSensor, readingsOf } from '../util/sensors.ts';
+import { ROOM_EVENT_TEXT } from '../engine/automations.ts';
 import { norm, type AskReply } from './assistant.ts';
 import type { JevAdvisor } from '../services/jev.ts';
 
@@ -34,6 +36,11 @@ export interface ShareSettings {
   history: boolean;
   /** Who's home. */
   presence: boolean;
+  /**
+   * Room activity: how many times cameras and sensors noticed a person, motion, the doorbell or a door in each
+   * room today, and when last. Never pictures, camera names or anything a camera saw beyond the kind of event.
+   */
+  security: boolean;
   cameras: false;
 }
 
@@ -82,12 +89,12 @@ export const CLOUD_PROVIDERS: Record<CloudProvider, { label: string; baseUrl?: s
 const PROVIDER_KEYS = Object.keys(CLOUD_PROVIDERS) as CloudProvider[];
 
 const ENGINES: EngineKind[] = ['builtin', 'local', 'cloud'];
-const SHARE_KEYS = ['names', 'rooms', 'history', 'presence'] as const;
+const SHARE_KEYS = ['names', 'rooms', 'history', 'presence', 'security'] as const;
 
 export function defaultSettings(): AssistantSettings {
   return {
     engine: 'builtin',
-    share: { names: true, rooms: true, history: false, presence: false, cameras: false },
+    share: { names: true, rooms: true, history: false, presence: false, security: false, cameras: false },
     instructions: '',
     local: { url: '', model: '' },
     cloud: { provider: 'anthropic', model: DEFAULT_CLOUD_MODEL },
@@ -226,8 +233,8 @@ export const TOOLS = [
   {
     name: 'create_automation',
     description: `Create a home automation: "when" (triggers) starts it, every "if" (condition) must hold, then "then" (actions) run in order. It is saved and runs on its own from then on — only use it when the user asks for something ongoing or scheduled, not for a one-off change (use set_devices). Shapes:
-when: {kind:'time', at:'HH:MM' or {kind:'time', at:'HH:MM'} or {kind:'sun', event:'sunrise|sunset|dawn|dusk', offsetMin?:n} or {kind:'prayer', prayer:'fajr|sunrise|dhuhr|asr|maghrib|isha'}, days?:[0-6, 0=Sunday, empty=every day]} | {kind:'device', device:id, to?:{on?, online?, mode?, hvac?, input?, playing?, muted?}, from?:{...}, forSec?:n} | {kind:'numeric', device:id, field:'temp|target|power|energy|battery|bri|vol|grid|load|humidity|lux', above?:n, below?:n} | {kind:'event', device:id, event:string} | {kind:'every', minutes:n} | {kind:'presence', event:'arrives|leaves|first-arrives|last-leaves', person?:id} | {kind:'mode', mode:id} | {kind:'overlay', overlay:id, event:'starts|ends'} | {kind:'hub', event:'start'} | {kind:'once', at:'YYYY-MM-DDTHH:MM' in the home's time} or {kind:'once', inMinutes:n} — ONE time only
-if: {kind:'device', device:id, is:{on?...}} | {kind:'numeric', device:id, field, above?, below?} | {kind:'time', after?/before?:'HH:MM' or a sun/prayer object as above, days?} | {kind:'presence', who:'anyone|no-one|person id', home:boolean} | {kind:'mode', modes:[id]} | {kind:'overlay', overlay?:id, active:boolean} | {kind:'all|any|not', conditions:[...]}
+when: {kind:'time', at:'HH:MM' or {kind:'time', at:'HH:MM'} or {kind:'sun', event:'sunrise|sunset|dawn|dusk', offsetMin?:n} or {kind:'prayer', prayer:'fajr|sunrise|dhuhr|asr|maghrib|isha'}, days?:[0-6, 0=Sunday, empty=every day]} | {kind:'device', device:id, to?:{on?, online?, mode?, hvac?, input?, playing?, muted?, motion?, open?}, from?:{...}, forSec?:n} | {kind:'numeric', device:id, field:'temp|target|power|energy|battery|bri|vol|grid|load|humidity|lux|pm25', above?:n, below?:n} (sensors included) | {kind:'event', device:id, event:string} | {kind:'room', room:roomId, event:'person|motion|ring|vehicle|animal|package|sound|opened|closed'} (anything a camera or sensor in that room notices; 'motion' includes a person seen) | {kind:'every', minutes:n} | {kind:'presence', event:'arrives|leaves|first-arrives|last-leaves', person?:id} | {kind:'mode', mode:id} | {kind:'overlay', overlay:id, event:'starts|ends'} | {kind:'hub', event:'start'} | {kind:'once', at:'YYYY-MM-DDTHH:MM' in the home's time} or {kind:'once', inMinutes:n} — ONE time only
+if: {kind:'device', device:id, is:{on?...}} | {kind:'numeric', device:id, field, above?, below?} | {kind:'time', after?/before?:'HH:MM' or a sun/prayer object as above, days?} | {kind:'presence', who:'anyone|no-one|person id', home:boolean} | {kind:'mode', modes:[id]} | {kind:'overlay', overlay?:id, active:boolean} | {kind:'room', room:roomId, active:boolean, withinMin?:n} (a person, motion or a door in that room in the last withinMin minutes, default 10) | {kind:'all|any|not', conditions:[...]}
 then: {kind:'set', targets:{deviceId:{on:false, bri:50, ...same fields as set_devices + set}, or 'type:light'|'type:media'|'type:<device type>'|'room:<room id>' to reach EVERY matching device — including devices added later (use "type:light" for "all lights")}} | {kind:'delay', seconds:n} | {kind:'wait', until:condition, timeoutSec?:n, stopOnTimeout?:bool} | {kind:'notify', message:string, title?:string, people?:[ids]} | {kind:'overlay', overlay:id, op:'start|end'} | {kind:'if', conditions:[...], then:[...], else?:[...]} | {kind:'repeat', times:n, actions:[...]} | {kind:'ramp', targets:{same target map as set}, field:'bri'|'vol'|'target', to:number, from?:number, overSec:number, stepSec?:number} — gradual changes like brightness climbing over an hour | {kind:'run', automation:id} | {kind:'stop'}
 runMode: what a second start does while it's still running — single (ignore), restart (start over), queued (run after), parallel (alongside). Default single.
 One-time schedules: anything asked for once at a later time ("turn the AC off at 3pm", "in 20 minutes", "tomorrow at 7 open the blinds", "remind me tonight") is create_automation with only a once trigger — it runs once, then switches itself off. Name it after what it does and when ("AC off at 15:00"). Never use a daily time trigger for a one-off.
@@ -1028,7 +1035,9 @@ export class AiAssistant {
     const cfg = this.config.get();
     const tz = cfg.timezone;
     const now = this.engine.now();
-    const devices = this.reg.list().filter(d => d.type !== 'camera');
+    // Things to control. Cameras are never sent; sensors go on their own, read-only, below.
+    const devices = this.reg.list().filter(d => !isCamera(d) && !isSensor(d));
+    const sensors = this.reg.list().filter(d => isSensor(d) && !d.hidden);
     // Real ids spell out names ("kitchen_ceiling"); use neutral ones when names are private.
     const deviceIds = new Map<string, string>();
     const roomAlias = new Map(cfg.rooms.map((r, i) => [r.id, share.names ? r.id : `room${i + 1}`]));
@@ -1066,6 +1075,21 @@ export class AiAssistant {
       return JSON.stringify(parts);
     });
     lines.push('Devices:', ...devLines);
+    // Sensors only report: their readings feed the rooms; they can't be set, but automations can start on them.
+    if (sensors.length) {
+      const sLines = sensors.map((d, i) => {
+        const id = share.names ? d.id : `sensor${i + 1}`;
+        deviceIds.set(id, d.id);
+        const parts: Record<string, unknown> = { id, room: roomAlias.get(d.room) ?? `room${cfg.rooms.length + 1}` };
+        if (share.names) parts.name = d.name;
+        if (share.rooms) {
+          parts.readings = Object.fromEntries(readingsOf(d).map(r => [r.field, r.text]));
+          if (d.state.online === false) parts.online = false;
+        }
+        return JSON.stringify(parts);
+      });
+      lines.push('Sensors (read only — use them in automation triggers and conditions, never in set_devices):', ...sLines);
+    }
     // Helix music speakers can play (playlist titles are names, so only when names are shared).
     const music = devices.some(d => d.capabilities.includes('queue')) ? (this.music?.() ?? []) : [];
     if (music.length) lines.push(`Helix music for speakers with the queue capability: ${(share.names ? music : music.filter(m => m.kind !== 'playlist')).map(m => `"${m.name}"`).join(', ')}, or "Station: <artist, album or song>".`);
@@ -1080,6 +1104,16 @@ export class AiAssistant {
       lines.push(`Who's home: ${ps.length ? ps.join(', ') : 'nobody set up'}.`);
       lines.push(`People: ${cfg.people.map(p => `${p.id} (${p.name})`).join(', ')}.`);
       shared.push("who's home");
+    }
+
+    // Room-level activity only: kinds of event and times, by room. Never pictures or camera names.
+    if (share.security) {
+      const since = atLocal(localDate(now, tz), 0, tz);
+      const rows = cfg.rooms.map(r => ({ r, s: this.engine.rooms.summary(r.id, since) })).filter(x => x.s.length);
+      lines.push(rows.length
+        ? `Room activity today (from cameras and sensors; no pictures): ${rows.map(x => `${roomAlias.get(x.r.id)}: ${x.s.map(e => `${ROOM_EVENT_TEXT[e.kind] ?? e.kind} ×${e.count}, last ${clock(e.last, tz)}`).join(', ')}`).join('; ')}.`
+        : 'Room activity today (from cameras and sensors): nothing noticed.');
+      shared.push('room activity');
     }
 
     if (share.history) {
@@ -1239,7 +1273,7 @@ export class AiAssistant {
 
 /** "names and device states" for the Cloud AI source tag. `extra` adds things sent that aren't share toggles (recent chat). */
 export function sharedLabel(share: ShareSettings, extra: string[] = []): string {
-  const parts = [share.names && 'names', share.rooms && 'device states', share.history && 'activity history', share.presence && 'who’s home', ...extra].filter(Boolean) as string[];
+  const parts = [share.names && 'names', share.rooms && 'device states', share.history && 'activity history', share.presence && 'who’s home', share.security && 'room activity', ...extra].filter(Boolean) as string[];
   if (!parts.length) return 'your request only';
   return parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
 }

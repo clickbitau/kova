@@ -470,6 +470,7 @@ test('next run: time of day (on its days), every few minutes, and the soonest of
     assert.equal(get(wk).nextLabel, 'Sat 3 Oct at 08:00');
     assert.equal(get(ev).nextLabel, 'today at 21:45', '21:00 is slot 28 of 45 min; the next is 21:45');
   } finally { await h.close(); }
+});
 
 test('Automation events: screens asleep, shut down and awake, and playback carried on and ended, in words and in the editors’ list', async () => {
   for (const id of ['screen-asleep', 'screen-shutdown', 'screen-awake', 'resumed', 'ended', 'video-started', 'stopped']) {
