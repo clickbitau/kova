@@ -6,7 +6,7 @@ import { isLight, pseudoLabel, targetLabel } from '../util/describe.ts';
 import { rhythmLabel } from '../rhythms/rhythms.ts';
 import { automationIdeas } from '../engine/automation-ideas.ts';
 import { combineIdeas, combinedDeviceId } from '../adapters/combined.ts';
-import { actionWords, condWords, isOneTime, nextOnce, triggerWords } from '../engine/automations.ts';
+import { actionWords, condWords, isOneTime, nextRun, triggerWords } from '../engine/automations.ts';
 import { wattsSetting } from '../services/energy.ts';
 import SunCalc from 'suncalc';
 
@@ -165,7 +165,8 @@ export function snapshot(hub: Hub) {
     lightTheWay: cfg.lightTheWay.triggers.map(t => ({ id: t.id, label: t.label, minutes: t.minutes, lights: t.lights })),
     // When / if / then, with each part in words; and ones Kova suggests from how devices are connected.
     automations: engine.automations.list().map(a => {
-      const next = nextOnce(a, tz, now);
+      // The next clock start: a one-time schedule, a time of day (sun and prayer times too) or every few minutes.
+      const next = nextRun(a, cfg, now);
       // One-time schedules: when the next one goes off ("today at 15:30"), and whether it's all done.
       return { ...a, ...autoWords(a), lastRun: runSummary(engine.automations.lastRun(a.id)), running: engine.automations.running(a.id),
         oneTime: isOneTime(a), nextAt: next, nextLabel: next != null ? stampWords(localStamp(next, tz), now, tz) : null,

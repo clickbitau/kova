@@ -37,6 +37,26 @@ export const isPlayer = (d: Pick<Device, 'type'>) => d.type === 'media' || d.typ
 
 /** Chip text for a target: "Lamp 78% · 3000K", "Speaker · Tarateel 15%", "Ceiling off". */
 export function targetLabel(d: Device, t: Command): string {
+  const head = targetHead(d, t);
+  // Whatever the main phrase leaves out, said after it: "Lounge AC cool 23° · fan low, zone 1 closed, eco on".
+  const said = head.toLowerCase();
+  const more = [
+    t.fanSpeed && !said.includes(`fan ${t.fanSpeed}`) && `fan ${t.fanSpeed}`,
+    t.zoneSet && !said.includes('zone') && zoneWords(t.zoneSet),
+    t.input && !said.includes(`to ${t.input.toLowerCase()}`) && `to ${t.input === 'tv' ? 'TV' : t.input.toUpperCase()}`,
+    t.muted !== undefined && !said.includes('mute') && (t.muted ? 'muted' : 'unmuted'),
+    t.sound && !said.includes(`${t.sound} sound`.toLowerCase()) && `${t.sound} sound`,
+    t.night !== undefined && !said.includes('night mode') && `night mode ${t.night ? 'on' : 'off'}`,
+    t.vol != null && !said.includes(`${t.vol}%`) && `volume ${t.vol}%`,
+    t.childLock !== undefined && `child lock ${t.childLock ? 'on' : 'off'}`,
+    t.display !== undefined && `display ${t.display ? 'on' : 'off'}`,
+    t.fanLevel != null && !said.includes(`speed ${t.fanLevel}`) && `speed ${t.fanLevel}`,
+    ...Object.entries(t.extras ?? {}).map(([k, v]) => typeof v === 'boolean' ? `${k} ${v ? 'on' : 'off'}` : `${k} ${v}`),
+  ].filter(Boolean);
+  return more.length ? `${head} · ${more.join(', ')}` : head;
+}
+
+function targetHead(d: Device, t: Command): string {
   if (d.type === 'vacuum') return t.on === false || t.activity === 'returning' || t.activity === 'docked' ? `${d.name} docks` : `${d.name} cleans`;
   if (d.type === 'fan' && t.fanLevel != null && !t.mode) return `${d.name} on speed ${t.fanLevel}`;
   if (d.type === 'fan') return `${d.name} on ${t.mode ?? (t.on === false ? 'off' : 'Auto')}`;

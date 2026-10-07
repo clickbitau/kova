@@ -5,7 +5,7 @@ import type { Store } from '../store/db.ts';
 import type { ConfigStore } from './config.ts';
 import type { Notification } from '../services/notify.ts';
 import { resolveRhythm } from '../rhythms/rhythms.ts';
-import { localDate, localHour, stampAt, stampWords } from '../util/time.ts';
+import { addDays, atLocal, localDate, localHour, stampAt, stampWords } from '../util/time.ts';
 import { pseudoLabel } from '../util/describe.ts';
 
 // Automations: when (any trigger), if (all conditions), then (actions in order), with a run mode for when one
@@ -155,6 +155,29 @@ export const isOneTime = (a: Pick<Automation, 'triggers'>) => a.triggers.length 
 
 /** When a "once" trigger is due (null when its time isn't valid). */
 export const onceDue = (t: Extract<Trigger, { kind: 'once' }>, tz: string) => stampAt(t.at, tz);
+
+/** The next time any clock trigger (once, a time of day, every few minutes) starts this automation, within a week. */
+export function nextRun(a: Pick<Automation, 'triggers' | 'enabled'>, cfg: HomeConfig, now: number): number | null {
+  if (!a.enabled) return null;
+  let best = nextOnce(a, cfg.timezone, now);
+  const take = (t: number | null) => { if (t != null && t > now && (best == null || t < best)) best = t; };
+  const today = localDate(now, cfg.timezone);
+  for (const t of a.triggers) {
+    if (t.kind === 'time') {
+      for (let i = 0; i < 8; i++) {
+        const date = addDays(today, i);
+        if (t.days?.length && !t.days.includes(dayOf(date))) continue;
+        const at = resolveRhythm(t.at, date, cfg);
+        if (at != null && at > now) { take(at); break; }
+      }
+    } else if (t.kind === 'every' && t.minutes > 0) {
+      const mins = localHour(now, cfg.timezone) * 60;
+      const slot = Math.floor(mins / t.minutes + 1e-9) + 1;
+      take(slot * t.minutes >= 1440 ? atLocal(addDays(today, 1), 0, cfg.timezone) : atLocal(today, (slot * t.minutes) / 60, cfg.timezone));
+    }
+  }
+  return best;
+}
 
 /** The next time a one-time trigger of this automation goes off, if one is still to come. */
 export function nextOnce(a: Pick<Automation, 'triggers' | 'enabled'>, tz: string, now: number): number | null {

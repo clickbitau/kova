@@ -458,3 +458,16 @@ test('once: due while Kova was off — runs on start within half an hour, otherw
     assert.equal(h.hub.engine.automations.list().find(x => x.id === long)!.enabled, false);
   } finally { await h.close(); }
 });
+
+test('next run: time of day (on its days), every few minutes, and the soonest of several', async () => {
+  const h = await setup(21);
+  try {
+    // Wednesday 2026-09-30, 21:00.
+    const wk = await h.add({ name: 'Weekend 08:00', triggers: [{ kind: 'time', at: { kind: 'time', at: '08:00' }, days: [0, 6] }], actions: [{ kind: 'set', targets: { lamp: { on: true } } }] });
+    const ev = await h.add({ name: 'Every 45', triggers: [{ kind: 'every', minutes: 45 }, { kind: 'time', at: { kind: 'time', at: '23:00' } }], actions: [{ kind: 'set', targets: { lamp: { on: true } } }] });
+    const s = (await h.app.inject({ url: '/api/state' })).json();
+    const get = (id: string) => s.automations.find((x: { id: string }) => x.id === id);
+    assert.equal(get(wk).nextLabel, 'Sat 3 Oct at 08:00');
+    assert.equal(get(ev).nextLabel, 'today at 21:45', '21:00 is slot 28 of 45 min; the next is 21:45');
+  } finally { await h.close(); }
+});
