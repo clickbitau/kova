@@ -129,7 +129,9 @@ function simEnv(sim: NetworkSimulator, host: number | MockHost, dir: string) {
 }
 type MockHost = ReturnType<NetworkSimulator['addHost']>;
 
-const until = async (what: string, ok: () => boolean, ms = 5000) => {
+// The simulated Matter network is real code on timers: on a loaded build machine a round trip has taken ~8 s, so the
+// limit is generous. It only matters when something is wrong; a pass returns as soon as the condition holds.
+const until = async (what: string, ok: () => boolean, ms = 30_000) => {
   const end = Date.now() + ms;
   while (!ok()) {
     if (Date.now() > end) throw new Error(`timed out waiting for ${what}`);
@@ -284,16 +286,16 @@ test('Matter bridge: Kova\'s own controller commissions it, controls devices and
     assert.equal(epOf('lamp'), lampEp);
     // The controller's session resumes: its commands work straight away.
     await reg.command(ctlId('lamp'), { bri: 16 }, you);
-    await until('controller controls after the restart', () => dev('lamp').bri === 16, 10_000);
+    await until('controller controls after the restart', () => dev('lamp').bri === 16, 30_000);
     // Its subscription only comes back at its own liveness timeout (matter.js: ~1m 46s), so restart it too to see
     // reports flow again: that also shows both ends kept the fabric.
     await reg.stop();
     reg = new Registry(new Store(':memory:'));
     matter = new MatterAdapter({ storageDir: ctlDir, environment: simEnv(sim, 2, ctlDir), transitionTenths: 0, commandTimeoutMs: 5000 });
     await reg.addAdapter(matter);
-    await until('controller subscribed again', () => reg.get(ctlId('dining'))?.state.online === true, 20_000);
+    await until('controller subscribed again', () => reg.get(ctlId('dining'))?.state.online === true, 30_000);
     await hub.engine.command('dining', { on: false }, you);
-    await until('controller sees a change after the restart', () => reg.get(ctlId('dining'))!.state.on === false, 10_000);
+    await until('controller sees a change after the restart', () => reg.get(ctlId('dining'))!.state.on === false, 30_000);
     assert.equal(remote('lamp', 'levelControl').currentLevel, briToLevel(16));
   } finally {
     await reg.stop().catch(() => {});
