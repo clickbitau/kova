@@ -4,13 +4,12 @@ import { C, R, SP } from '../theme';
 import { useHub, useSnap } from '../state/hub';
 import { useIntegrationSetup } from '../state/integrations';
 import { useNav } from '../navigation';
-import { addable, describeHubUpdate, entries, type Entry, type HubUpdate } from '../logic/integrations';
+import { addable, entries, type Entry } from '../logic/integrations';
 import { Icon } from '../ui/Icon';
-import { Button, Card, Empty, Group, IconButton, IconWell, Press, Segmented, Sheet, Skeleton, SwitchRow, Tag } from '../ui/kit';
+import { Button, Card, Empty, Group, IconButton, IconWell, Press, Segmented, Skeleton, Tag } from '../ui/kit';
 import { Appear, animateLayout } from '../ui/motion';
 import { Screen } from '../ui/Screen';
 import { T } from '../ui/Text';
-import { Input } from './IntegrationFields';
 import { SearchField } from './DevicesScreen';
 
 /** One integration in the list: its icon, name, how it's doing and how many devices, Local or Cloud. */
@@ -34,60 +33,6 @@ function EntryRow({ e, first, onPress }: { e: Entry; first?: boolean; onPress: (
   );
 }
 
-/** The hub's own software: what's running, what's out, Update, Check now, overnight updates, the licence. */
-function HubUpdateCard({ u }: { u: HubUpdate }) {
-  const { act, api, say } = useHub();
-  const d = describeHubUpdate(u, Date.now());
-  const [keyOpen, setKeyOpen] = useState(false);
-  const [key, setKey] = useState('');
-  const [keyErr, setKeyErr] = useState<string | null>(null);
-  const ready = d.tone === 'ready';
-  return (
-    <View style={{ gap: SP[2] }}>
-      <T v="overline" color={C.stone2} style={{ paddingHorizontal: 4 }}>Kova on your hub</T>
-      <Card tint={ready ? C.blue : undefined} style={{ overflow: 'hidden' }}>
-        <View style={{ padding: SP[4], gap: SP[3] }}>
-          <View style={{ flexDirection: 'row', gap: SP[3], alignItems: 'center' }}>
-            <IconWell icon={ready ? 'cloud_download' : d.tone === 'error' ? 'cloud_off' : 'check_circle'} color={ready ? C.blue : d.tone === 'error' ? C.red : C.green} size={40} fill={!ready} />
-            <View style={{ flex: 1, gap: 2 }}>
-              <T v="headline">{d.title}</T>
-              <T v="footnote" color={C.stone}>{d.sub}</T>
-            </View>
-          </View>
-          {d.changes.length ? (
-            <View style={{ gap: 4, paddingLeft: 52 }}>
-              {d.changes.map((c, i) => <T key={i} v="footnote" color={C.bone2}>{`· ${c}`}</T>)}
-            </View>
-          ) : null}
-          {d.canUpdate || d.canCheck || d.licence ? (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SP[2], paddingLeft: 52 }}>
-              {d.canUpdate ? <Button size="sm" kind="blue" icon="restart_alt" label="Update" onPress={() => act('POST', '/api/update/apply', {}, 'Updating: Kova restarts in a minute, then reconnects')} /> : null}
-              {d.canCheck ? <Button size="sm" kind="secondary" icon="refresh" label="Check now" busy={u.state === 'checking'} onPress={() => act('POST', '/api/update/check', {}, 'Looking for a newer Kova')} /> : null}
-              {d.licence ? <Button size="sm" kind={d.licenceWarn ? 'ghost' : 'secondary'} icon="key" label={d.licence} onPress={() => { setKey(''); setKeyErr(null); setKeyOpen(true); }} /> : null}
-            </View>
-          ) : null}
-        </View>
-        {u.updater ? (
-          <SwitchRow icon="nightlight" iconFg={C.blue} title="Update overnight" sub={d.auto} on={u.auto.on}
-            onChange={on => void act('PUT', '/api/update/settings', { on }, on ? 'Kova updates itself overnight when one is waiting' : 'Overnight updates off')} />
-        ) : null}
-      </Card>
-      <Sheet open={keyOpen} onClose={() => setKeyOpen(false)} label="Licence key">
-        <View style={{ gap: SP[4] }}>
-          <T v="title" size={20}>Licence key</T>
-          <T v="callout" color={C.stone}>{`The Kova licence key from ClickBit, issued for hub ID ${u.licence?.hubId ?? ''}. Updates come from ClickBit’s releases once it’s activated.`}</T>
-          <Input label="Licence key" value={key} onChange={setKey} placeholder="KOVA-…" mono autoFocus bad={!!keyErr} />
-          {keyErr ? <T v="footnote" weight={600} color={C.redText}>{keyErr}</T> : null}
-          <Button full icon="key" label="Activate" onPress={async () => {
-            if (!key.trim()) { setKeyErr('Enter the key'); return false; }
-            try { await api('PUT', '/api/update/licence', { key: key.trim() }); setKeyOpen(false); say('Licence activated: looking for a newer Kova'); return true; } catch (e) { setKeyErr((e as Error).message); return false; }
-          }} />
-        </View>
-      </Sheet>
-    </View>
-  );
-}
-
 function ListSkeleton() {
   return (
     <Card style={{ overflow: 'hidden' }}>
@@ -102,7 +47,7 @@ function ListSkeleton() {
   );
 }
 
-/** More → Integrations: what's connected (what needs attention first), the hub's own updates, and Add integration. */
+/** More → Integrations: what's connected (what needs attention first), and Add integration. Kova's own updates are in Settings. */
 export function IntegrationsScreen() {
   const s = useSnap();
   const nav = useNav();
@@ -155,7 +100,6 @@ export function IntegrationsScreen() {
         </>
       )}
 
-      {s.update ? <HubUpdateCard u={s.update} /> : null}
     </Screen>
   );
 }

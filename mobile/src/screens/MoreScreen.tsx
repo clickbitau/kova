@@ -1,60 +1,14 @@
 import { View } from 'react-native';
-import { C, SP, alpha } from '../theme';
+import { C, SP } from '../theme';
 import { useHub, useSnap } from '../state/hub';
 import { useNav } from '../navigation';
-import { describeUpdate, notesBetween } from '../logic/ota';
-import { applyAppUpdate, checkForAppUpdate, running, useAppUpdate } from '../native/updates';
-import { Icon } from '../ui/Icon';
-import { Button, Card, Group, IconWell, Mark, PulseDot, Row, Spinner } from '../ui/kit';
+import { useAppUpdate } from '../native/updates';
+import { updateNotice } from '../logic/updates';
+import { Card, Group, IconWell, Mark, PulseDot, Row } from '../ui/kit';
 import { Screen } from '../ui/Screen';
 import { T } from '../ui/Text';
-import appVersion from '../version.json';
 import { display, KIND_LABEL } from '../logic/addresses';
 import { automationsOf } from '../logic/automations';
-
-const TONE = { ok: C.green, ready: C.amber, busy: C.stone, error: C.red, muted: C.stone } as const;
-
-/** More → App updates: what's running, whether the hub has something newer, check now, restart into it, and what's new. */
-function AppUpdates() {
-  const u = useAppUpdate();
-  const d = describeUpdate(u, running.version);
-  const fg = TONE[d.tone];
-  const notes = u.state === 'ready' ? (u.notes ?? notesBetween(appVersion.history, running.version, u.version)) : appVersion.history.slice(0, 1);
-  return (
-    <View style={{ gap: SP[2] }}>
-      <T v="overline" color={C.stone2} style={{ paddingHorizontal: 4 }}>App updates</T>
-      <Card tint={u.state === 'ready' ? C.amber : undefined} style={{ padding: SP[4], gap: SP[4] }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3] }} accessibilityLiveRegion="polite">
-          <View style={{ width: 40, height: 40, borderRadius: 13, backgroundColor: alpha(fg, 0.14), alignItems: 'center', justifyContent: 'center' }}>
-            {u.state === 'checking' ? <Spinner color={C.bone} /> : <Icon name={u.state === 'ready' ? 'cloud_download' : u.state === 'current' ? 'check_circle' : u.state === 'unreachable' ? 'cloud_off' : 'cloud'} size={21} color={fg} fill={u.state === 'current' || u.state === 'ready'} />}
-          </View>
-          <View style={{ flex: 1, gap: 2 }}>
-            <T v="headline">{d.title}</T>
-            <T v="footnote" color={u.state === 'unreachable' ? C.redText : C.stone}>{d.sub}</T>
-          </View>
-        </View>
-        {notes.length ? (
-          <View style={{ gap: SP[2], paddingTop: SP[3], borderTopWidth: 1, borderTopColor: C.hairline }}>
-            <T v="eyebrow" color={C.stone2}>{u.state === 'ready' ? 'What’s new' : `In Kova ${running.version}`}</T>
-            {notes.slice(0, 3).map(n => (
-              <View key={n.version} style={{ flexDirection: 'row', gap: SP[2] }}>
-                {u.state === 'ready' ? <T mono size={11.5} color={C.amber} style={{ paddingTop: 2 }}>{n.version}</T> : <Icon name="auto_awesome" size={15} color={C.stone2} style={{ marginTop: 2 }} />}
-                <T v="footnote" color={C.bone2} style={{ flex: 1 }}>{n.title}</T>
-              </View>
-            ))}
-          </View>
-        ) : null}
-        <View style={{ flexDirection: 'row', gap: SP[2], flexWrap: 'wrap' }}>
-          {u.state === 'ready' ? <Button icon="restart_alt" label="Restart to update" onPress={() => applyAppUpdate()} /> : null}
-          {u.state !== 'unsupported' && u.state !== 'ready' ? (
-            <Button kind="secondary" icon="refresh" label="Check now" busy={u.state === 'checking'} onPress={() => checkForAppUpdate(true).then(c => c.state !== 'unreachable')} />
-          ) : null}
-        </View>
-        <T mono size={11} color={C.stone2}>{`Kova ${running.version} · ${running.train}`}</T>
-      </Card>
-    </View>
-  );
-}
 
 export function MoreScreen() {
   const s = useSnap();
@@ -66,6 +20,8 @@ export function MoreScreen() {
   const players = s.devices.filter(d => (d.type === 'media' || d.type === 'tv') && d.state.on).length;
   const me = s.people.find(p => p.id === cfg?.personId);
   const live = conn === 'live';
+  // Software update lives in Settings; a waiting one shows here as a note on that row, nothing more.
+  const notice = updateNotice(s.update, useAppUpdate());
   return (
     <Screen title="More" over={s.home.name} gap={SP[6]}>
       <Card style={{ padding: SP[4], flexDirection: 'row', alignItems: 'center', gap: SP[3] }}>
@@ -89,8 +45,8 @@ export function MoreScreen() {
       </Group>
 
       <Group title="Set up">
-        <Row first icon="settings" iconFg={C.amber} title="Settings" sub="Where the home is, timezone, prayer times, behaviours" onPress={() => nav.navigate('Settings')} />
-        <Row icon="home" title="Customise home" sub="Rooms, people, names and favourites" onPress={() => nav.navigate('Customise')} />
+        <Row first icon="settings" iconFg={C.amber} title="Settings" sub={notice ?? 'The home, behaviours, notifications, software update'} subColor={notice ? C.blue : C.stone} badge={!!notice} onPress={() => nav.navigate('Settings')} />
+        <Row icon="home" title="Customise home" sub="Rooms and groups, people, devices, favourites" onPress={() => nav.navigate('Customise')} />
         <Row icon="hub" title="Integrations" sub={bad.length ? `${bad.length} need${bad.length === 1 ? 's' : ''} attention` : `${s.integrations.length} connected`} subColor={bad.length ? C.amber : C.stone} badge={bad.length > 0} onPress={() => nav.navigate('Integrations')} />
       </Group>
 
@@ -99,7 +55,6 @@ export function MoreScreen() {
         <Row icon="computer" iconFg={C.blue} title="Sign in a browser" sub="Type the code your Kova address shows on a computer" onPress={() => nav.navigate('Browsers')} />
       </Group>
 
-      <AppUpdates />
 
       <View style={{ alignItems: 'center', gap: SP[2], paddingTop: SP[2] }}>
         <Mark size={22} ink={C.stone2} />

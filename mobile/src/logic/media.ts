@@ -6,7 +6,7 @@ import { has, isPlayer, type Dev } from './devices.ts';
 /** Speakers, TVs and speaker groups, by name, groups last. */
 export function playersOf(all: Record<string, Dev>, groups: Pick<SpeakerGroup, 'deviceId'>[]): { players: Dev[]; groups: Dev[] } {
   const gids = new Set(groups.map(g => g.deviceId));
-  const list = Object.values(all).filter(d => isPlayer(d) && !d.hidden || gids.has(d.id));
+  const list = Object.values(all).filter(d => isPlayer(d) && !d.hidden && !d.archived || gids.has(d.id));
   const byName = (a: Dev, b: Dev) => a.name.localeCompare(b.name);
   return { players: list.filter(d => !gids.has(d.id)).sort(byName), groups: list.filter(d => gids.has(d.id)).sort(byName) };
 }

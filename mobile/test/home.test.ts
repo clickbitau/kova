@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cleanName, devicesIn, favouriteList, groupBody, groupDraftError, groupSyncNote, moveStep, roomDelete, roomRows, speakerChoices } from '../src/logic/customise.ts';
+import { archivedList, cleanName, combineChoices, devicesIn, favouriteList, groupBody, groupDraftError, groupSyncNote, moveStep, roomDelete, roomGroupError, roomGroups, roomRows, speakerChoices } from '../src/logic/customise.ts';
+import { historyRows, hubProgress, updateNotice } from '../src/logic/updates.ts';
 import { energyView, kw, kwh, parseWatts, wattsNote } from '../src/logic/energy.ts';
 import { groupMembers, loopDone, memberToggle, musicCommand, nowPlaying, pickPlayer, playersOf, playPause, sourceCommand, sourceSub, stationCommand, streamUrlError } from '../src/logic/media.ts';
 import { NATIVE_PAGES } from '../src/logic/links.ts';
@@ -30,11 +31,54 @@ test('moving a room or a favourite one step, and not past either end', () => {
 test('rooms count their devices; deleting one moves its devices to another room', () => {
   const ds = [dev('lamp', 'light', 'lounge'), dev('tv', 'tv', 'lounge'), dev('kettle', 'plug', 'kitchen')];
   assert.deepEqual(roomRows(rooms, ds).map(r => r.sub), ['2 devices', '1 device', 'No devices yet']);
-  assert.deepEqual(roomDelete('hall', rooms, ds), { inside: 0, moveTo: null, body: {} }, 'an empty room just goes');
-  assert.deepEqual(roomDelete('lounge', rooms, ds).body, { moveTo: 'kitchen' }, 'the first other room by default');
-  assert.deepEqual(roomDelete('lounge', rooms, ds, 'hall').body, { moveTo: 'hall' });
-  assert.deepEqual(roomDelete('lounge', rooms, ds, 'lounge').body, { moveTo: 'kitchen' }, 'never into itself');
-  assert.ok(roomDelete('lounge', [rooms[0]], ds).blocked, 'the only room, with devices in it, can’t go');
+  assert.deepEqual(roomDelete('hall', rooms, ds), { inside: 0, moveTo: null, body: {}, confirm: 'Delete Hall? It has no devices.' }, 'an empty room just goes');
+  const d = roomDelete('lounge', rooms, ds);
+  assert.deepEqual(d.body, { moveTo: 'unassigned' }, 'to no room by default');
+  assert.equal(d.confirm, 'Delete Lounge? Its 2 devices go to No room, until you give them a room.');
+  assert.deepEqual(roomDelete('lounge', rooms, ds, 'hall').body, { moveTo: 'hall' }, 'or a room picked instead');
+  assert.equal(roomDelete('kitchen', rooms, ds, 'hall').confirm, 'Delete Kitchen? Its device goes to Hall.');
+  assert.deepEqual(roomDelete('lounge', rooms, ds, 'lounge').body, { moveTo: 'unassigned' }, 'never into itself');
+  assert.deepEqual(roomDelete('lounge', [rooms[0]], ds).body, { moveTo: 'unassigned' }, 'the only room can go too');
+});
+
+test('groups of rooms: their rooms by name, and what stops one being saved', () => {
+  const g = roomGroups({ Downstairs: ['lounge', 'kitchen', 'gone'], Hallways: ['hall'] }, rooms);
+  assert.deepEqual(g, [{ name: 'Downstairs', rooms: ['lounge', 'kitchen'], roomNames: ['Lounge', 'Kitchen'] }, { name: 'Hallways', rooms: ['hall'], roomNames: ['Hall'] }]);
+  assert.deepEqual(roomGroups(undefined, rooms), []);
+  const groups = { Downstairs: ['lounge'] };
+  assert.equal(roomGroupError('', ['lounge'], groups, rooms), 'Give the group a name');
+  assert.equal(roomGroupError('downstairs', ['lounge'], groups, rooms), 'There’s already a group called Downstairs');
+  assert.equal(roomGroupError('downstairs', ['lounge'], groups, rooms, 'Downstairs'), null, 'its own name is fine when editing');
+  assert.equal(roomGroupError('Kitchen', ['lounge'], groups, rooms), 'Kitchen is already a room’s name');
+  assert.equal(roomGroupError('Upstairs', [], groups, rooms), 'Pick at least one room');
+  assert.equal(roomGroupError(' Upstairs ', ['hall'], groups, rooms), null);
+});
+
+test('archived devices: listed on their own, out of rooms, favourites and speaker choices; what a device can combine with', () => {
+  const ds = [dev('lamp', 'light', 'lounge'), dev('old', 'light', 'lounge', {}, { archived: true }), dev('spk', 'media', 'lounge', {}, { archived: true }), dev('g', 'media', 'lounge', {}, { adapter: 'groups' }), dev('tv', 'tv', 'lounge'), dev('soundbar', 'media', 'lounge')];
+  assert.deepEqual(archivedList(ds).map(d => d.id), ['old', 'spk']);
+  assert.deepEqual(devicesIn(ds, rooms, 'lounge').map(d => d.id), ['g', 'lamp', 'soundbar', 'tv']);
+  assert.deepEqual(roomRows(rooms, ds)[0].sub, '4 devices');
+  assert.deepEqual(favouriteList(['old', 'lamp'], ds).map(d => d.id), ['lamp']);
+  assert.ok(!speakerChoices(ds, rooms).some(d => d.id === 'spk'));
+  assert.deepEqual(combineChoices('tv', ds, []).map(d => d.id), ['lamp', 'soundbar'], 'not itself, groups or archived ones');
+  assert.deepEqual(combineChoices('tv', ds, [{ members: ['soundbar', 'x'] }]).map(d => d.id), ['lamp'], 'not one already combined');
+  assert.deepEqual(combineChoices('tv', ds, [], 'SOUND').map(d => d.id), ['soundbar'], 'searched by name');
+});
+
+test('software update: progress, history and the note on More', () => {
+  const now = Date.UTC(2026, 9, 7, 12);
+  assert.equal(hubProgress({ state: 'idle', available: null }), null);
+  assert.match(hubProgress({ state: 'updating', available: { version: '0.7.48', behind: 2, changes: [] } })!, /^Installing Kova 0\.7\.48\. It backs up first/);
+  assert.equal(hubProgress({ state: 'requested', available: null }), 'Asked the hub. It starts in a moment.');
+  const rows = historyRows({ last: null, history: [{ result: 'rolled-back', from: '0.7.46', to: '0.7.47', at: now - 2 * 86_400_000 }, { result: 'updated', from: '0.7.45', to: '0.7.46', at: now - 3_600_000 }] }, now);
+  assert.deepEqual(rows.map(r => [r.title, r.tone]), [['Updated 0.7.45 → 0.7.46', 'ok'], ['Went back to 0.7.46', 'warn']], 'newest first');
+  assert.match(rows[0].sub, /1 h ago$/);
+  assert.deepEqual(historyRows({ last: { result: 'failed', from: '0.7.40', to: '0.7.41', at: now }, history: undefined }, now).map(r => r.title), ['Update to 0.7.41 failed'], 'an older hub: just the last one');
+  assert.deepEqual(historyRows({ last: null, history: [] }, now), []);
+  assert.equal(updateNotice({ state: 'idle', available: { version: '0.7.48', behind: 1, changes: [] } }, { state: 'current' }), 'Kova 0.7.48 is ready to install on your hub');
+  assert.equal(updateNotice(null, { state: 'ready', version: '0.2.23' }), 'App update 0.2.23 ready: restart to use it');
+  assert.equal(updateNotice({ state: 'idle', available: null }, { state: 'current' }), null);
 });
 
 test('favourites keep their order and drop devices that are gone; devices by room, the rest under no room', () => {
@@ -187,5 +231,6 @@ test('notification links open the app’s own screens for these pages', () => {
   assert.equal(NATIVE_PAGES.energy, 'Energy');
   assert.equal(NATIVE_PAGES.media, 'Media');
   assert.equal(NATIVE_PAGES.customise, 'Customise');
+  assert.equal(NATIVE_PAGES.settings, 'Settings', 'hub update notifications open Settings, where Software update is');
   assert.equal(NATIVE_PAGES.integrations, 'Integrations');
 });

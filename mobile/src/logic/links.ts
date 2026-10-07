@@ -19,7 +19,9 @@ export function routeFor(url: string | undefined): { cam?: string; lightsOff?: b
 }
 
 /** Web-app pages (`?page=`) the app has its own screen for, and that screen. */
-export const NATIVE_PAGES: Record<string, 'Modes' | 'Activity' | 'Automations' | 'Energy' | 'Media' | 'Customise' | 'Integrations'> = {
+export const NATIVE_PAGES: Record<string, 'Modes' | 'Activity' | 'Automations' | 'Energy' | 'Media' | 'Customise' | 'Integrations' | 'Settings'> = {
   modes: 'Modes', activity: 'Activity', autos: 'Automations', automations: 'Automations', energy: 'Energy', media: 'Media', customise: 'Customise',
   integrations: 'Integrations',
+  // Hub update notifications open Settings, where Software update is.
+  settings: 'Settings',
 };

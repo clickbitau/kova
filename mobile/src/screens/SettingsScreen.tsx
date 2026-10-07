@@ -5,17 +5,26 @@ import { C, F, R, SP } from '../theme';
 import { useHub, useSnap } from '../state/hub';
 import { useNav } from '../navigation';
 import { methodName, PRAYER_METHODS, searchZones, timezones, zoneLabel } from '../logic/settings';
-import { Group, Row, Sheet, SwitchRow } from '../ui/kit';
+import { Button, Group, Row, Sheet, Spinner, SwitchRow } from '../ui/kit';
+import { cleanName } from '../logic/customise';
+import { FieldWithButton } from './DeviceSheet';
+import { SoftwareUpdate } from './SoftwareUpdate';
 import { Screen } from '../ui/Screen';
 import { T } from '../ui/Text';
 import { Icon } from '../ui/Icon';
 
-/** More → Settings: where the home is (sun and prayer times follow it), its timezone and prayer method, behaviours, and the rest. */
+type Found = { label: string; latitude: number; longitude: number };
+
+/** More → Settings: the home's name, address and location (sun and prayer times follow it), its timezone and prayer method, behaviours, and Software update. */
 export function SettingsScreen() {
   const s = useSnap();
   const nav = useNav();
-  const { act, say } = useHub();
-  const [pick, setPick] = useState<'tz' | 'method' | null>(null);
+  const { act, api, say } = useHub();
+  const [pick, setPick] = useState<'tz' | 'method' | 'name' | 'address' | null>(null);
+  const [nameDraft, setNameDraft] = useState('');
+  const [addr, setAddr] = useState('');
+  const [found, setFound] = useState<Found[] | null>(null);
+  const [finding, setFinding] = useState(false);
   const [q, setQ] = useState('');
   const [locating, setLocating] = useState(false);
   const loc = s.home.location;
@@ -31,16 +40,38 @@ export function SettingsScreen() {
     } catch (e) { say((e as Error).message, { error: true }); } finally { setLocating(false); }
   };
 
+  const findAddress = async () => {
+    const query = addr.trim();
+    if (query.length < 4) { say('Type more of the address', { error: true }); return; }
+    setFinding(true); setFound(null);
+    try { setFound((await api<{ results: Found[] }>('GET', `/api/geocode?q=${encodeURIComponent(query)}`)).results ?? []); }
+    catch (e) { say((e as Error).message, { error: true }); } finally { setFinding(false); }
+  };
+  const pickAddress = async (f: Found) => {
+    const ok = await act('PUT', '/api/home', { address: f.label, latitude: f.latitude, longitude: f.longitude, location: { latitude: f.latitude, longitude: f.longitude, source: 'geocode' } }, 'Address saved: sun, prayer times and the weather follow it');
+    if (ok) setPick(null);
+    return ok;
+  };
+  const saveName = async () => {
+    const n = cleanName(nameDraft);
+    if (!n) return false;
+    const ok = await act('PUT', '/api/home', { name: n }, 'Home renamed');
+    if (ok) setPick(null);
+    return ok;
+  };
+
   const zones = searchZones(timezones(s.home.timezone), q);
   return (
     <Screen title="Settings" over={s.home.name} onBack={() => nav.goBack()}>
       <Group title="Home">
-        <Row first icon="location_on" iconFg={C.amber} title="Where the home is" busy={locating}
+        <Row first icon="home" iconFg={C.amber} title="Name" sub={s.home.name} onPress={() => { setNameDraft(s.home.name); setPick('name'); }} />
+        <Row icon="home_work" iconFg={C.amber} title="Address" sub={s.home.address || 'Not set: find it, and the location comes from it'} onPress={() => { setAddr(s.home.address ?? ''); setFound(null); setPick('address'); }} />
+        <Row icon="location_on" iconFg={C.amber} title="Where the home is" busy={locating}
           sub={loc && (loc.latitude || loc.longitude) ? `${loc.latitude.toFixed(3)}, ${loc.longitude.toFixed(3)}. Tap to use where this phone is now.` : 'Not set: sun and prayer times need it. Tap at home to use this phone’s location.'}
           onPress={() => void here()} />
         <Row icon="schedule" iconFg={C.blue} title="Timezone" sub={zoneLabel(s.home.timezone)} onPress={() => { setQ(''); setPick('tz'); }} />
         <Row icon="mosque" iconFg={C.green} title="Prayer times" sub={methodName(s.home.prayerMethod)} onPress={() => setPick('method')} />
-        <Row icon="home" title="Rooms, people and devices" sub="Names, rooms, favourites, speaker groups" onPress={() => nav.navigate('Customise')} />
+        <Row icon="meeting_room" title="Rooms, people and devices" sub="Rooms and groups of rooms, people, devices, favourites, archived" onPress={() => nav.navigate('Customise')} />
       </Group>
       <Group title="Behaviours">
         <SwitchRow first icon="doorbell" iconFg={C.amber} title="Pause for the doorbell" sub="When it rings, pause what’s playing on players that can pause"
@@ -52,8 +83,29 @@ export function SettingsScreen() {
         <Row first icon="router" iconFg={C.blue} title="How Kova knows who’s home" sub="Warden or your router, phones, network checks" onPress={() => nav.navigate('Integration', { id: 'presence' })} />
         <Row icon="notifications" iconFg={C.amber} title="Notifications" sub="Which alerts, push and ntfy, send a test" onPress={() => nav.navigate('Integration', { id: 'notify' })} />
         <Row icon="computer" iconFg={C.blue} title="Sign in a browser" sub="Your home on a computer, and signed-in browsers" onPress={() => nav.navigate('Browsers')} />
-        <Row icon="hub" title="Integrations and hub updates" sub="What’s connected, Kova’s version and updates" onPress={() => nav.navigate('Integrations')} />
+        <Row icon="hub" title="Integrations" sub="What’s connected, and adding more" onPress={() => nav.navigate('Integrations')} />
       </Group>
+
+      <SoftwareUpdate hub={s.update} />
+
+      <Sheet open={pick === 'name'} onClose={() => setPick(null)} label="Home name">
+        <T v="title">Home name</T>
+        <FieldWithButton value={nameDraft} onChange={setNameDraft} button="Save" label="Home name" show={!!cleanName(nameDraft) && cleanName(nameDraft) !== s.home.name} onSubmit={() => void saveName()} />
+        <T v="footnote" color={C.stone}>Shown at the top of the app, on the web and in notifications.</T>
+      </Sheet>
+      <Sheet open={pick === 'address'} onClose={() => setPick(null)} label="Address">
+        <T v="title">Address</T>
+        <T v="footnote" color={C.stone}>Find the home’s address and pick the right match: sun and prayer times, the weather and arriving home follow it.</T>
+        <FieldWithButton value={addr} onChange={v => { setAddr(v); setFound(null); }} placeholder="Street, suburb, city" button={finding ? 'Searching…' : 'Search'} label="Address" onSubmit={() => void findAddress()} />
+        {finding ? <View style={{ alignItems: 'center', padding: SP[3] }}><Spinner /></View> : null}
+        {found && found.length ? (
+          <Group>
+            {found.map((f, i) => <Row key={`${f.label}${i}`} first={i === 0} icon="location_on" iconFg={C.amber} title={f.label} onPress={() => void pickAddress(f)} />)}
+          </Group>
+        ) : null}
+        {found && !found.length ? <T v="footnote" color={C.amber}>No match. Try the street and suburb, or use where this phone is from Settings at home.</T> : null}
+        {s.home.address ? <Button kind="ghost" size="sm" icon="close" label="Clear the saved address" onPress={async () => { const ok = await act('PUT', '/api/home', { address: null }, 'Address cleared: the location stays'); if (ok) setPick(null); return ok; }} /> : null}
+      </Sheet>
 
       <Sheet open={pick === 'tz'} onClose={() => setPick(null)} label="Timezone">
         <T v="title">Timezone</T>

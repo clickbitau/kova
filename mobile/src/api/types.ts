@@ -61,6 +61,8 @@ export interface Device {
   /** What the owner calls a ducted air conditioner's zones, by number. */
   zoneNames?: Record<string, string>;
   hidden?: boolean;
+  /** Archived by the owner: out of every list, Ask Kova and alerts; modes leave it alone. Customise home → Archived restores it. */
+  archived?: boolean;
   original?: { name: string; room: string };
   why?: { now: string; next: string };
   usedIn?: { kind: string; id: string; name: string }[];
@@ -94,7 +96,22 @@ export interface ModeView {
   startLabel: string; endLabel: string; nextId: string; start: number | null;
   groups: { room: string; chips: string[] }[];
   test: { days: ('ok' | 'problem' | 'skipped' | 'none')[]; text: string };
+  /** When it starts, as the hub keeps it; what it sets; today's moments in it; its behaviours (the mode editor). */
+  rhythm?: import('../logic/automations').Rhythm;
+  targets?: TargetRow[];
+  moments?: { id: string; t: string; text: string }[];
+  lightTheWay?: boolean;
+  onlyWhenSomeoneHome?: boolean;
 }
+
+/** One device a mode, overlay or moment sets: what it's set to, in words and as the command. */
+export interface TargetRow { deviceId: string; name: string; label: string; target: Command; missing: boolean }
+
+/** How an overlay ends. */
+export type OverlayEnd = { kind: 'manual' } | { kind: 'arrival' } | { kind: 'time'; at: import('../logic/automations').Rhythm } | { kind: 'device_off'; device: string };
+
+/** A one-off timed action ("21:00 rain sounds"). */
+export interface MomentView { id: string; label: string; what: string; at: import('../logic/automations').Rhythm; atLabel: string; targets: TargetRow[] }
 
 export interface Finding { id: string; modeId: string; kind: string; icon: string; tone: 'alert' | 'check'; title: string; body: string; fix: string; alt: string; done?: string }
 
@@ -122,8 +139,10 @@ export interface EnergyToday {
 }
 
 export interface Snapshot {
-  home: { name: string; timezone: string; now: number; nowHour: number; date: string; dateLabel: string; clock: string; location?: { latitude: number; longitude: number; radiusM?: number; source?: 'manual' | 'geocode' | 'phone' | 'import'; updatedAt?: number | null }; prayerMethod?: string; pauseForDoorbell?: boolean };
+  home: { name: string; timezone: string; now: number; nowHour: number; date: string; dateLabel: string; clock: string; location?: { latitude: number; longitude: number; radiusM?: number; source?: 'manual' | 'geocode' | 'phone' | 'import'; updatedAt?: number | null }; prayerMethod?: string; pauseForDoorbell?: boolean; /** The street address chosen in Settings. */ address?: string | null };
   rooms: Room[];
+  /** Groups of rooms by name ("Upstairs": room ids), for "turn off upstairs". */
+  groups?: Record<string, string[]>;
   favourites: string[] | null;
   speakerGroups: SpeakerGroup[];
   people: Person[];
@@ -132,7 +151,8 @@ export interface Snapshot {
   current: { modeId: string; since?: number; until?: number; untilLabel: string; nextId: string; overlay: { id: string; name: string; icon: string; endsLabel: string } | null };
   day: { bands: { modeId: string; start: number; end: number }[] };
   upcoming: { id: string; t: string; label: string; what: string; modeId: string | null; skipped: boolean }[];
-  overlays: { id: string; name: string; icon: string; endsLabel: string }[];
+  overlays: { id: string; name: string; icon: string; endsLabel: string; ends?: OverlayEnd; allOff?: boolean; targets?: TargetRow[] }[];
+  moments?: MomentView[];
   sources: MediaSource[];
   /** Helix music any speaker with `queue` can play: Shuffle all, Loved, playlists. Empty until Helix is paired. */
   music?: { name: string; kind: 'all' | 'loved' | 'playlist'; icon: string; tracks?: number }[];

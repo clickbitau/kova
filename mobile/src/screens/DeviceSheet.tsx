@@ -10,6 +10,7 @@ import { hubUrl } from '../logic/connect';
 import { AIR, combinedOf, devs, FAN_SPEEDS, filterNote, has, HVAC, ICON, isPlayer, stateOf, tint, type Dev } from '../logic/devices';
 import { arcPath, clampTarget, TARGET_MAX, TARGET_MIN } from '../logic/climate';
 import { snapOpen, visibleZones } from '../logic/zones';
+import { combineChoices, UNASSIGNED } from '../logic/customise';
 import { Icon } from '../ui/Icon';
 import { Button, Card, Group, IconButton, IconWell, Pill, HScroll, Press, Row, Section, Segmented, Sheet, Slider, Stat, Switch, SwitchRow, Tag } from '../ui/kit';
 import { T } from '../ui/Text';
@@ -84,8 +85,11 @@ export function DeviceSheet() {
   const [musicShuffle, setMusicShuffle] = useState(false);
   // The AC's target answers each tap at once and goes to the hub once the taps stop.
   const [target, setTarget] = useState<number | null>(null);
+  // Settings that open in place: combining with another device (searched by name), and archiving after a confirmation.
+  const [panel, setPanel] = useState<'combine' | 'archive' | null>(null);
+  const [combineQ, setCombineQ] = useState('');
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => { setName(null); setTitle(''); setStation(''); setTarget(null); }, [id]);
+  useEffect(() => { setName(null); setTitle(''); setStation(''); setTarget(null); setPanel(null); setCombineQ(''); }, [id]);
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
   const D = snap && id ? devs(snap)[id] : undefined;
   if (!snap || !D) return <Sheet open={false} onClose={close}>{null}</Sheet>;
@@ -99,7 +103,20 @@ export function DeviceSheet() {
   const group = snap.speakerGroups.find(g => g.deviceId === D.id);
   const readings = ([D.power != null && ['Using now', Math.abs(D.power) >= 1000 ? `${(D.power / 1000).toFixed(1)} kW` : `${Math.round(D.power)} W`, 'bolt'], D.energy != null && ['Today', `${D.energy} kWh`, 'electric_meter'], D.battery != null && D.type !== 'vacuum' && ['Battery', `${D.battery}%`, 'battery_full']] as const)
     .filter((x): x is [string, string, string] => !!x);
-  const rooms = snap.rooms.some(r => r.id === D.room) ? snap.rooms : [...snap.rooms, { id: D.room, name: D.room === 'unassigned' ? 'No room' : D.room, icon: 'category' }];
+  // Every room, then No room (where a deleted room's devices go); a room the home doesn't know is shown as it is.
+  const rooms = [...snap.rooms, ...(snap.rooms.some(r => r.id === D.room) || D.room === UNASSIGNED ? [] : [{ id: D.room, name: D.room, icon: 'category' }]), { id: UNASSIGNED, name: 'No room', icon: 'category' }];
+  const canCombine = !combo && !group && D.adapter !== 'combined' && D.adapter !== 'groups' && !combinedOf(snap).some(c => c.members.includes(D.id));
+  const choices = panel === 'combine' ? combineChoices(D.id, snap.devices, combinedOf(snap), combineQ).slice(0, 30) : [];
+  const combineWith = async (other: { id: string; name: string }) => {
+    const ok = await act('POST', '/api/combined', { members: [D.id, other.id], name: D.name }, `${D.name} and ${other.name} are one device now`);
+    if (ok) close();
+    return ok;
+  };
+  const archive = async (on: boolean) => {
+    const ok = await settings({ archived: on }, on ? `${D.name} archived` : `${D.name} restored`);
+    if (ok && on) close();
+    return ok;
+  };
   const roomName = rooms.find(r => r.id === D.room)?.name ?? '';
   const vac = D.type === 'vacuum' ? D.activity || (D.on ? 'cleaning' : 'docked') : null;
   const canPower = !['camera', 'sensor'].includes(D.type);
@@ -336,7 +353,36 @@ export function DeviceSheet() {
             <Row icon="join" iconFg={C.amber} title="One device, through two integrations" sub={`${combo.memberNames.join(' and ')}. Tap to separate them again.`}
               onPress={() => { void act('DELETE', `/api/combined/${encodeURIComponent(combo.id)}`, {}, `${combo.name} is two devices again`).then(ok => { if (ok) close(); }); }} />
           ) : null}
+          {canCombine ? (
+            <Row icon="join" iconFg={C.amber} title="Combine with another device…" sub="When it’s the same thing reached through two integrations" onPress={() => setPanel(panel === 'combine' ? null : 'combine')} />
+          ) : null}
+          <Row icon={D.archived ? 'history' : 'remove_circle'} iconFg={D.archived ? C.green : C.stone} title={D.archived ? 'Restore' : 'Archive…'}
+            sub={D.archived ? 'Archived: back into lists, Ask Kova and modes' : 'Gone, or not wanted: out of every list'}
+            onPress={() => { if (D.archived) void archive(false); else setPanel(panel === 'archive' ? null : 'archive'); }} />
         </Group>
+        {panel === 'combine' ? (
+          <Card style={{ padding: SP[4], gap: SP[3] }}>
+            <T v="headline">{`Combine ${D.name} with`}</T>
+            <TextInput value={combineQ} onChangeText={setCombineQ} placeholder="Search by name" placeholderTextColor={C.stone2} accessibilityLabel="Search devices" autoCorrect={false}
+              style={{ height: 44, paddingHorizontal: SP[3], borderRadius: R.md, borderWidth: 1, borderColor: C.line, backgroundColor: C.inset, color: C.bone, fontFamily: F[500], fontSize: 15 }} />
+            {choices.length ? (
+              <Group>
+                {choices.map((o, i) => <Row key={o.id} first={i === 0} icon={ICON[o.type] ?? 'devices'} title={o.name} sub={`${snap.rooms.find(r => r.id === o.room)?.name ?? 'No room'} · ${o.integration}`} onPress={() => void combineWith(o)} />)}
+              </Group>
+            ) : <T v="footnote" color={C.stone}>{combineQ ? `Nothing called “${combineQ}”.` : 'No other device to combine with.'}</T>}
+            <T v="footnote" color={C.stone2}>They show as one, named “{D.name}”; each command goes through whichever of them can do it. Separate them again any time.</T>
+          </Card>
+        ) : null}
+        {panel === 'archive' ? (
+          <Card tint={C.red} style={{ padding: SP[4], gap: SP[3] }}>
+            <T v="headline">{`Archive ${D.name}?`}</T>
+            <T v="footnote" color={C.stone}>It leaves every list, Ask Kova and alerts, and modes leave it alone. Restore it from Customise home → Archived.</T>
+            <View style={{ flexDirection: 'row', gap: SP[2] }}>
+              <View style={{ flex: 1 }}><Button full kind="secondary" label="Keep it" onPress={() => setPanel(null)} /></View>
+              <View style={{ flex: 1 }}><Button full kind="danger" icon="remove_circle" label="Archive" onPress={() => archive(true)} /></View>
+            </View>
+          </Card>
+        ) : null}
         <T mono size={11} color={C.stone2} center>{`${D.integration} · ${D.address}`}</T>
       </View>
     </Sheet>
