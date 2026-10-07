@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Animated, AppState, KeyboardAvoidingView, Platform, ScrollView, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useScrollToTop } from '@react-navigation/native';
+import { useRoute, useScrollToTop } from '@react-navigation/native';
 import type { AskReply } from '../api/types';
 import { askKova, Cancelled, engineLine, followJob, mergeHistory, progressLines, sourceIcon, type AskHistory, type AskJob, type ChatMsg } from '../logic/ask';
 import { C, F, R, SP } from '../theme';
@@ -147,6 +147,17 @@ export function AskScreen() {
     setChat(c => [...c, { id: `y${Date.now()}`, from: 'you', text: t, ts: Date.now() }]);
     void drain();
   };
+
+  // Asked from elsewhere ("Why?" on a suggestion's card): ask it once it arrives.
+  const route = useRoute();
+  const sent = route.params as { ask?: string; at?: number } | undefined;
+  const askedAt = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (!sent?.ask || sent.at === askedAt.current) return;
+    askedAt.current = sent.at;
+    ask(sent.ask);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sent?.ask, sent?.at]);
 
   const run = async (m: Msg, a: AskReply['actions'][number]) => {
     try {

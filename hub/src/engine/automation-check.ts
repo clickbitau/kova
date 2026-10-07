@@ -289,7 +289,15 @@ export function checkAction(v: unknown, x: CheckCtx, depth = 0): Action {
       const from = a.from === undefined || a.from === null || a.from === '' ? undefined : numOrUndef(a.from, 'Ramp from');
       if (to === undefined) fail('Say what to ramp to');
       if (!overSec) fail('Say how long the ramp takes');
-      return { kind: 'ramp', targets: checkTargets(obj(a.targets, 'Devices to ramp'), x, { [f]: to }), field: f, to: to!, overSec: Math.round(overSec!), ...(from !== undefined ? { from } : {}), stepSec: Math.round(stepSec ?? 60) };
+      // Devices that ease to their own end (learned from how someone sets them): known devices, numbers only.
+      const toFor: Record<string, number> = {};
+      if (a.toFor && typeof a.toFor === 'object' && !Array.isArray(a.toFor)) {
+        for (const [id, v] of Object.entries(a.toFor as Record<string, unknown>)) {
+          if (!x.device(id)) fail(`Unknown device ${id}`, 'toFor is keyed by device ids from the Devices list');
+          toFor[id] = numOrUndef(v, `Ramp ${id} to`) ?? fail(`Say what ${id} ramps to`);
+        }
+      }
+      return { kind: 'ramp', targets: checkTargets(obj(a.targets, 'Devices to ramp'), x, { [f]: to }), field: f, to: to!, overSec: Math.round(overSec!), ...(from !== undefined ? { from } : {}), stepSec: Math.round(stepSec ?? 60), ...(Object.keys(toFor).length ? { toFor } : {}) };
     }
     case 'delay': {
       const s = numOrUndef(a.seconds, 'Wait', 1, 7 * 86400);

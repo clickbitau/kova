@@ -142,7 +142,20 @@ export type OverlayEnd = { kind: 'manual' } | { kind: 'arrival' } | { kind: 'tim
 /** A one-off timed action ("21:00 rain sounds"). */
 export interface MomentView { id: string; label: string; what: string; at: import('../logic/automations').Rhythm; atLabel: string; targets: TargetRow[] }
 
-export interface Finding { id: string; modeId: string; kind: string; icon: string; tone: 'alert' | 'check'; title: string; body: string; fix: string; alt: string; done?: string }
+export interface Finding {
+  id: string; modeId: string; kind: string; icon: string; tone: 'alert' | 'check'; title: string; body: string; fix: string; alt: string; done?: string;
+  /** Learned from what people do (hubs from 0.7.60): "Not now" puts it off a week (POST …/snooze), `never` dismisses it for good. */
+  learned?: boolean; never?: string;
+  /** The automation it's about: shown on that automation's own screen too. */
+  automationId?: string;
+  /** The days it's based on, and what happened each day. */
+  evidence?: { day: string; text: string }[];
+  /** Other ways to apply it, each fixed by its own id. */
+  more?: { id: string; title: string; body: string; fix: string; done?: string }[];
+}
+
+/** What Kova has learned (hubs from 0.7.60): every suggestion, with whether it's new, put off or not wanted. */
+export interface Learned { on: boolean; items: (Finding & { status: 'new' | 'later' | 'never'; until?: number })[] }
 
 export interface ActivityRow { id: number; ts: number; t: string; type: string; icon: string; what: string; why: string; device?: string | null }
 
@@ -205,7 +218,7 @@ export interface EnergyToday {
 }
 
 export interface Snapshot {
-  home: { name: string; timezone: string; now: number; nowHour: number; date: string; dateLabel: string; clock: string; location?: { latitude: number; longitude: number; radiusM?: number; source?: 'manual' | 'geocode' | 'phone' | 'import' | 'map'; updatedAt?: number | null; /** Google's point (shown on Google's map only) or OpenStreetMap's, from an address search. */ provider?: 'google' | 'osm' }; /** Whether the address search goes through Google. */ maps?: { google: boolean }; prayerMethod?: string; pauseForDoorbell?: boolean; /** The street address chosen in Settings. */ address?: string | null };
+  home: { name: string; timezone: string; now: number; nowHour: number; date: string; dateLabel: string; clock: string; location?: { latitude: number; longitude: number; radiusM?: number; source?: 'manual' | 'geocode' | 'phone' | 'import' | 'map'; updatedAt?: number | null; /** Google's point (shown on Google's map only) or OpenStreetMap's, from an address search. */ provider?: 'google' | 'osm' }; /** Whether the address search goes through Google. */ maps?: { google: boolean }; prayerMethod?: string; pauseForDoorbell?: boolean; /** The street address chosen in Settings. */ address?: string | null; /** Kova learns from what people do (hubs from 0.7.60; unset: on). */ learnFromYou?: boolean };
   rooms: Room[];
   /** Groups of rooms by name ("Upstairs": room ids), for "turn off upstairs". */
   groups?: Record<string, string[]>;
@@ -227,6 +240,7 @@ export interface Snapshot {
   /** Helix music any speaker with `queue` can play: Shuffle all, Loved, playlists. Empty until Helix is paired. */
   music?: { name: string; kind: 'all' | 'loved' | 'playlist'; icon: string; tracks?: number }[];
   findings: Finding[];
+  learned?: Learned;
   activity: ActivityRow[];
   /** The engine Ask Kova hands what the built-in parser can't do to (hubs from 0.7.53). */
   assistant?: { kind: 'builtin' | 'local' | 'cloud'; label: string; model?: string; ready?: boolean };

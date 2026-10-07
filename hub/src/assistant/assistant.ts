@@ -3,6 +3,7 @@ import type { HelixMusic } from '../services/helix-music.ts';
 import type { Registry } from '../devices/registry.ts';
 import type { ConfigStore } from '../engine/config.ts';
 import type { RoomClimate } from '../engine/room-climate.ts';
+import type { Learner } from '../engine/learn.ts';
 import type { Cause, Command, Device, Overlay, RoomEventKind, Targets } from '../model/types.ts';
 import { allClosedAfter, hasZones, roomReading, sensibleMode, zonesServing, type ZoneCommand } from '../util/zones.ts';
 import { isLight, isPlayer } from '../util/describe.ts';
@@ -59,7 +60,12 @@ export type Intent =
    */
   | { kind: 'zone'; label: string; what: string; targets: Targets; offer: { targets: Targets; label: string } | null }
   /** "turn on the AC in here", "turn the aircon off": a room AC, but which room isn't said (the app doesn't know its room yet). */
-  | { kind: 'acWhere'; on: boolean; rooms: { room: string; label: string }[] };
+  | { kind: 'acWhere'; on: boolean; rooms: { room: string; label: string }[] }
+  /**
+   * "why do you suggest moving Thunderstorm?", "apply the bedroom LED suggestion", "what have you learned?": what Kova
+   * learned from what people do (engine/learn.ts). `id` is the suggestion meant, null when none or several match.
+   */
+  | { kind: 'suggestion'; op: 'why' | 'apply' | 'list'; id: string | null };
 
 /** A follow-up the user can tap, executed by POST /api/ask/act. */
 export type AskAction =
@@ -68,7 +74,9 @@ export type AskAction =
   | { type: 'learnGroup'; name: string; rooms: string[] }
   | { type: 'screen'; screen: string }
   /** A room's AC on or off, by the room-AC policy (engine/room-climate.ts). */
-  | { type: 'roomAc'; room: string; on: boolean; done: string };
+  | { type: 'roomAc'; room: string; on: boolean; done: string }
+  /** Apply something Kova learned from what people do (a learned suggestion's id). */
+  | { type: 'suggestion'; id: string };
 
 export interface AskReply {
   text: string; source: Source; actions: { label: string; action: AskAction }[]; undo?: string; understood: boolean;
@@ -99,7 +107,24 @@ export class Assistant {
   /** Room ACs (set by the hub): "turn on the AC in the theatre" goes through its policy. */
   roomClimate: RoomClimate | null = null;
 
+  /** What Kova learned from what people do (set by the hub): "why do you suggest that?", "apply it". */
+  learner: Learner | null = null;
+
   constructor(private engine: Engine, private reg: Registry, private config: ConfigStore) {}
+
+  /** The learned suggestion a question is about: the one sharing the most words with it, or the only one. */
+  private suggestionFor(t: string): string | null {
+    const all = this.learner?.suggestions() ?? [];
+    const STOP = new Set(['why', 'do', 'does', 'you', 'kova', 'suggest', 'suggesting', 'suggestion', 'suggestions', 'the', 'a', 'an', 'this', 'that', 'it', 'to', 'of', 'about', 'for', 'is', 'are', 'apply', 'accept', 'use', 'go', 'ahead', 'with', 'and', 'what', 'whats', 'explain', 'please', 'one', 'your', 'my', 'at', 'on', 'in']);
+    const words = t.split(' ').filter(w => w.length > 1 && !STOP.has(w));
+    const autos = this.config.get().automations ?? [];
+    const scored = all.map(s => {
+      const hay = norm(`${s.finding.title} ${s.finding.body} ${autos.find(a => a.id === s.automationId)?.name ?? ''} ${this.reg.get(s.device)?.name ?? ''}`);
+      return { s, n: words.filter(w => hay.split(' ').includes(w)).length };
+    }).sort((a, b) => b.n - a.n);
+    if (scored[0]?.n && (scored.length === 1 || scored[0].n > scored[1].n)) return scored[0].s.id;
+    return !words.length && all.length === 1 ? all[0].id : null;
+  }
 
   private rooms() { return this.config.get().rooms; }
 
@@ -297,6 +322,13 @@ export class Assistant {
         .map(s => this.rooms().find(r => norm(r.name) === s || norm(r.name).startsWith(s))).filter((r): r is NonNullable<typeof r> => !!r);
       if (rooms.length) return { kind: 'learn', name: learn[1], rooms: rooms.map(r => r.id), roomNames: rooms.map(r => r.name) };
     }
+    // What Kova learned: "why do you suggest moving Thunderstorm?", "apply that suggestion", "what have you learned?"
+    const asking = /^(why|how come|explain|what|whats|tell me|show|list|any|apply|accept|use|go ahead|yes|ok|okay)\b/.test(t);
+    if (this.learner && /\b(suggest|suggests|suggesting|suggestions?|learned|learnt|noticed)\b/.test(t) && (asking || !/\b(turn|switch|set|play|dim)\b/.test(t))) {
+      const op = /^(apply|accept|use|go ahead|yes|ok|okay)\b/.test(t) ? 'apply' as const
+        : /^(what|whats|any|show|list)\b/.test(t) && !/\bwhy\b/.test(t) && /\b(learned|learnt|noticed|suggestions)\b/.test(t) ? 'list' as const : 'why' as const;
+      return { kind: 'suggestion', op, id: op === 'list' ? null : this.suggestionFor(t) };
+    }
     // A change for later ("lights off at 9pm", "in 20 minutes", "tomorrow morning") is a one-time schedule, not
     // something to do now: left to the AI, which makes one. Questions about the plan ("what's on tonight") stay here.
     if (LATER.test(raw) && !/^(what|whats|what's|when|is|are|anything)\b/.test(raw)) return null;
@@ -454,6 +486,7 @@ export class Assistant {
       case 'hardware': return ['Hardware', i.label];
       case 'zone': return [i.what, `${i.label} zone`];
       case 'acWhere': return [i.on ? 'Turn on' : 'Turn off', 'The AC', 'Which room?'];
+      case 'suggestion': return [i.op === 'apply' ? 'Apply' : i.op === 'list' ? 'What Kova learned' : 'Why', i.op === 'list' ? 'From what you do' : 'A suggestion'];
     }
   }
 
@@ -467,6 +500,22 @@ export class Assistant {
       case 'greeting': {
         const on = this.devs().filter(d => isLight(d) && d.state.on).length;
         return reply(`Hi. ${plural(on, 'light')} ${on === 1 ? 'is' : 'are'} on and the home is in ${this.engine.mode().name}. What do you need?`, 'Built-in · nothing left your home');
+      }
+      case 'suggestion': {
+        const src: Source = 'Built-in · nothing left your home';
+        const all = this.learner?.suggestions() ?? [];
+        if (!all.length) return reply(this.learner?.on === false ? 'Learning from what you do is off. Turn it on in Settings and Kova will suggest changes when it notices a habit.' : 'Nothing to suggest yet. When Kova notices you doing the same thing by hand on most days, it suggests a change and shows the days it saw.', src);
+        const s = i.id ? this.learner!.find(i.id) : undefined;
+        if (!s) {
+          const which = all.slice(0, 4).map(x => x.finding.title.replace(/\?$/, '')).join('; ');
+          return reply(i.op === 'list' ? `Kova noticed ${plural(all.length, 'thing')}: ${which}. Ask “why do you suggest …?” about one.` : `Which one? ${which}.`, src,
+            { actions: [{ label: 'Open the suggestions', action: { type: 'screen', screen: 'modes' } }] });
+        }
+        if (i.op === 'apply') {
+          const undo = this.engine.registerUndo(this.learner!.apply(s.id));
+          return reply(`${s.finding.done ?? 'Done'}.`, src, { undo });
+        }
+        return reply(this.learner!.explain(s.id) ?? s.finding.body, src, { actions: [{ label: s.finding.fix, action: { type: 'suggestion', id: s.id } }] });
       }
       case 'learn':
         return reply(`Got it. “${i.name}” will mean ${list(i.roomNames)}.`, 'Built-in · nothing left your home', { actions: [{ label: 'Remember that', action: { type: 'learnGroup', name: i.name, rooms: i.rooms } }] });
@@ -665,6 +714,11 @@ export class Assistant {
       const HV: Record<string, string> = { cool: 'cooling', heat: 'heating', dry: 'drying', fan: 'on fan only', auto: 'on auto' };
       const how = a.on && unit?.on && unit.hvac ? ` The AC is ${HV[unit.hvac] ?? 'on'}${unit.target != null ? ` to ${unit.target}°` : ''}${r.why ? `, because ${r.why}` : ''}.` : '';
       return { text: `${a.done}${how}`, undo: r.changed.length ? r.undo : undefined };
+    }
+    if (a.type === 'suggestion') {
+      const s = this.learner?.find(a.id);
+      if (!s) return { text: 'That suggestion no longer applies.' };
+      return { text: `${s.finding.done ?? 'Done'}.`, undo: this.engine.registerUndo(this.learner!.apply(a.id)) };
     }
     if (a.type === 'learnGroup') {
       const undo = this.config.update(c => { c.groups[a.name] = a.rooms; });

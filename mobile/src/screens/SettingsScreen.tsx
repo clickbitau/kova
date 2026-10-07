@@ -6,6 +6,7 @@ import { useNav } from '../navigation';
 import { methodName, PRAYER_METHODS, searchZones, timezones, zoneLabel } from '../logic/settings';
 import { Group, Row, Sheet, SwitchRow } from '../ui/kit';
 import { cleanName } from '../logic/customise';
+import { findingCall, findingToast, learnedRows } from '../logic/learning';
 import { FieldWithButton } from './DeviceSheet';
 import { SoftwareUpdate } from './SoftwareUpdate';
 import { Screen } from '../ui/Screen';
@@ -32,6 +33,7 @@ export function SettingsScreen() {
   };
 
   const zones = searchZones(timezones(s.home.timezone), q);
+  const learned = learnedRows(s.learned, s.home.timezone);
   return (
     <Screen title="Settings" over={s.home.name} onBack={() => nav.goBack()}>
       <Group title="Home">
@@ -46,12 +48,24 @@ export function SettingsScreen() {
       <Group title="Behaviours">
         <SwitchRow first icon="doorbell" iconFg={C.amber} title="Pause for the doorbell" sub="When it rings, pause what’s playing on players that can pause"
           on={s.home.pauseForDoorbell !== false} onChange={v => void put({ pauseForDoorbell: v }, v ? 'The doorbell pauses what’s playing' : 'The doorbell no longer pauses anything')} />
+        <SwitchRow icon="auto_awesome" iconFg={C.amber} title="Learn from what you do" sub="Suggest changes when you keep doing the same thing by hand. Nothing changes until you say so"
+          on={s.home.learnFromYou !== false} onChange={v => void put({ learnFromYou: v }, v ? 'Kova learns from what you do again' : 'Kova no longer learns from what you do')} />
         <Row icon="routine" title="Modes and Light the way" sub="The home through the day" onPress={() => nav.navigate('Modes')} />
         <Row icon="account_tree" title="Automations" sub="When something happens, do something" onPress={() => nav.navigate('Automations')} />
         {s.roomClimate?.rooms.length ? (
           <Row icon="graphic_eq" iconFg={C.blue} title="Voice and other apps" sub={`${s.roomClimate.rooms.length} room AC${s.roomClimate.rooms.length === 1 ? '' : 's'} for Google Home, Alexa and Apple Home`} onPress={() => nav.navigate('Voice')} />
         ) : null}
       </Group>
+      {s.home.learnFromYou !== false ? (
+        <Group title="What Kova has learned" note={learned.length ? 'From what you do by hand. Each shows the days it’s based on, and nothing changes until you apply it.' : 'When you keep doing the same thing by hand on most days, Kova suggests a change in Worth a look, and lists it here.'}>
+          {learned.length ? learned.map((r, i) => (
+            <Row key={r.id} first={i === 0} icon={r.action === 'restore' ? 'history' : 'auto_awesome'} iconFg={r.tone === 'amber' ? C.amber : C.stone} title={r.title}
+              sub={r.action === 'restore' ? `${r.status} · tap to suggest it again` : r.status} subColor={r.tone === 'amber' ? C.amber : C.stone}
+              onPress={() => r.action === 'restore' ? void act('POST', findingCall({ id: r.id }, 'restore'), {}, findingToast({ id: r.id }, 'restore'))
+                : r.automationId ? nav.navigate('AutomationEditor', { id: r.automationId }) : nav.navigate('Modes')} />
+          )) : <Row first icon="auto_awesome" iconFg={C.stone} title="Nothing learned yet" sub="Kova keeps an eye on what you do by hand" />}
+        </Group>
+      ) : null}
       <Group title="Presence, alerts and access">
         <Row first icon="router" iconFg={C.blue} title="How Kova knows who’s home" sub="Warden or your router, phones, network checks" onPress={() => nav.navigate('Integration', { id: 'presence' })} />
         <Row icon="notifications" iconFg={C.amber} title="Notifications" sub="Which alerts, push and ntfy, send a test" onPress={() => nav.navigate('Integration', { id: 'notify' })} />

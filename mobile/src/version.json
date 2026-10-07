@@ -2,8 +2,12 @@
   "//": "The Kova app's version (docs/VERSIONING.md). store: the X.Y.0 a store binary on this train carries (app.json version). version: what runs, store or over the air (X.Y.Z, PATCH only). train: the native runtime (app.json runtimeVersion). history: newest first; an over-the-air release adds an entry.",
   "train": "kova-mobile-0.2",
   "store": "0.2.0",
-  "version": "0.2.32",
+  "version": "0.2.34",
   "history": [
+    {
+      "version": "0.2.34",
+      "title": "Kova learns from what you do: an automation you start early, a value you always change, one you undo, or two things you do one after the other become suggestions with the days they’re based on, on Modes and the automation’s own screen; Not now, Don’t suggest again, Why?, and Settings → What Kova has learned"
+    },
     {
       "version": "0.2.32",
       "title": "Watch live plays the camera right where its picture was: live, with the time, sound off until you turn it on, full screen, and a clear reason when it can’t stream"

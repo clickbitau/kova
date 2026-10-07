@@ -49,19 +49,23 @@ test('the history behind findings is read again only when it changes', async () 
   const t = await testHub(12);
   try {
     const learner = t.hub.checker.learner;
-    const first = learner.suggestions();
-    assert.equal(learner.suggestions(), first, 'nothing changed: the same answer, not read again');
-    // A manual change is new history: read again.
+    const first = learner.all();
+    assert.equal(learner.all(), first, 'nothing changed: the same answer, not read again');
+    // A manual change is new history: read again, though not more than every 30 s (a ramp changes things every minute,
+    // a device may report every second).
     t.hub.store.append({ kind: 'state', device: 'lounge_lamp', feed: 'device', what: 'Lamp on', data: { patch: { on: true } }, cause: { kind: 'user', label: 'You' }, ts: at(12) });
-    assert.notEqual(learner.suggestions(), first);
-    const second = learner.suggestions();
-    // So is a change to the home's config (a suggestion taken or dismissed changes it).
+    assert.equal(learner.all(), first, 'resting');
+    t.clock.t += 31_000;
+    assert.notEqual(learner.all(), first);
+    const second = learner.all();
+    // So is a change to the home's config (a suggestion taken or dismissed changes it), at once.
     t.hub.config.update(c => { c.dismissedFindings = [...c.dismissedFindings, 'x']; });
-    assert.notEqual(learner.suggestions(), second);
+    assert.notEqual(learner.all(), second);
     // Other events (samples, device events) don't count.
-    const third = learner.suggestions();
+    const third = learner.all();
+    t.clock.t += 31_000;
     t.hub.store.append({ kind: 'sample', device: null, feed: null, what: '', data: {}, cause: { kind: 'system', label: 'Kova' } });
-    assert.equal(learner.suggestions(), third);
+    assert.equal(learner.all(), third);
   } finally {
     t.hub.stop();
   }

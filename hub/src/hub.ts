@@ -111,8 +111,9 @@ export class Hub extends EventEmitter<{ changed: [] }> {
     this.config.on('changed', () => this.combined.sync());
     this.config.on('changed', () => this.linkNamedZones());
     this.engine = new Engine(this.store, this.reg, this.config, opts.now);
-    this.checker = new Checker(this.engine, this.store, this.config, () => this.reg.devices);
+    this.checker = new Checker(this.engine, this.store, this.config, () => this.reg.devices, t => this.reg.expandTargets(t));
     this.assistant = new Assistant(this.engine, this.reg, this.config);
+    this.assistant.learner = this.checker.learner;
     this.maps = new Maps({ now: opts.now, ...opts.maps, store: this.store, near: () => { const c = this.config.get(); return c.latitude || c.longitude ? { latitude: c.latitude, longitude: c.longitude } : null; } });
     this.energy = new Energy(this.store, this.reg, () => this.config.get().timezone, opts.now, () => this.config.get().devices ?? {});
     this._demo = !!opts.demo;

@@ -387,7 +387,9 @@ export type Action =
   | { kind: 'repeat'; times: number; actions: Action[] }
   /** Ease a numeric field (brightness, volume, set temperature) toward `to` over `overSec` seconds,
    *  stepping every `stepSec` (default 60). `from` defaults to the first target's current value. */
-  | { kind: 'ramp'; targets: Targets; field: NumericField; to: number; from?: number; overSec: number; stepSec?: number }
+  | { kind: 'ramp'; targets: Targets; field: NumericField; to: number; from?: number; overSec: number; stepSec?: number;
+      /** Devices that ease to a value of their own instead of `to` (learned from how someone sets them), by device id. */
+      toFor?: Record<string, number> }
   /** Run another automation's actions (its triggers and conditions are skipped). */
   | { kind: 'run'; automation: string }
   /** Stop here. */
@@ -488,6 +490,10 @@ export interface HomeConfig {
   groups: Record<string, string[]>;
   /** Findings the user chose to keep as they are. */
   dismissedFindings: string[];
+  /** Suggestions put off with "Not now": shown again after this time (ms), by finding id. */
+  snoozedFindings?: Record<string, number>;
+  /** Learn from what people do by hand and suggest changes (engine/learn.ts). Default on. */
+  learnFromYou?: boolean;
   /** Per-device names, rooms and visibility set by the owner (they win over what integrations report). */
   devices?: Record<string, DeviceSettings>;
   /** Devices on the owner's Now screen, in order. */
