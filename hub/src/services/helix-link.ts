@@ -179,7 +179,7 @@ export class HelixLink {
   private again = false;
   /** What Helix said back after the last PUT: the screens it keeps (by its canonical ids) and whether it reaches Kova. */
   private helixView: { reachable?: boolean; playerIds: string[] } | null = null;
-  /** Helix's commands per device: the one running (joined by an identical one), and the queue behind it. */
+  /** Helix's commands per device: the last one asked for, while it waits or runs (an identical one joins it), and the queue. */
   private running = new Map<string, { key: string; done: Promise<void> }>();
   private queue = new Map<string, Promise<unknown>>();
   /** The last Helix command per device that finished, so a retry of it (Helix timed out waiting) isn't sent twice. */
@@ -265,7 +265,6 @@ export class HelixLink {
       const cause = auto ? HELIX_AUTO : HELIX_REMOTE;
       const before = this.queue.get(deviceId) ?? Promise.resolve();
       done = before.catch(() => {}).then(async () => {
-        this.running.set(deviceId, { key, done });
         try {
           await this.hub.engine.command(deviceId, t.cmd, cause);
           this.recent.set(deviceId, { key, at: Date.now() });
@@ -273,6 +272,7 @@ export class HelixLink {
           if (this.running.get(deviceId)?.done === done) this.running.delete(deviceId);
         }
       });
+      this.running.set(deviceId, { key, done });
       const tail = done.catch(err => { console.warn(`[helix-link] ${deviceId} ${key}: ${err instanceof Error ? err.message : String(err)}`); });
       this.queue.set(deviceId, tail);
       void tail.then(() => { if (this.queue.get(deviceId) === tail) this.queue.delete(deviceId); });

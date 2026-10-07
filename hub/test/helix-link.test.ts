@@ -241,6 +241,8 @@ test('Helix link: commands answer within Helix’s timeout; a slow TV wake finis
     // Helix sends the input straight after: accepted (never refused), and sent only once the TV is on.
     const inp = await app.inject({ method: 'POST', url: '/api/devices/lounge_tv', headers: helix, payload: { input: 'hdmi2' } });
     assert.ok(inp.statusCode === 202 || inp.statusCode === 200, inp.body);
+    // …and again while it waits: joined.
+    assert.ok([200, 202].includes((await app.inject({ method: 'POST', url: '/api/devices/lounge_tv', headers: helix, payload: { input: 'hdmi2' } })).statusCode));
     // Helix asks again for "on" while it's still going: the same command, joined, not sent twice.
     assert.ok([200, 202].includes((await app.inject({ method: 'POST', url: '/api/devices/lounge_tv', headers: helix, payload: { on: true } })).statusCode));
     for (let i = 0; i < 100 && tvs.got.length < 2; i++) await new Promise(r => setTimeout(r, 20));
