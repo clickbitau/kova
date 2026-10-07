@@ -5,6 +5,7 @@ import type { Store } from '../store/db.ts';
 import type { WeatherNow, WeatherToday } from './weather.ts';
 import { clock, localDate } from '../util/time.ts';
 import { isOutdoor, isSensor, roomOutdoor } from '../util/sensors.ts';
+import { badSupplies, powerTrouble, powerTroubleText } from '../util/hardware.ts';
 
 // What Kova notices about the home, for the Now page: the home at a glance (outside, inside, the air) and alerts and
 // warnings worth acting on. Each insight has a stable id, so it can be snoozed and so a phone is told once, when it
@@ -22,6 +23,10 @@ export interface Insight {
   device?: string;
   /** Push it to phones when it first appears (the notifier pushes offline devices and broken links itself). */
   push?: boolean;
+  /** Which of the notifier's rules lets it be pushed. Default `home`. */
+  rule?: 'home' | 'network';
+  /** The phone notification's tag, when a later one should replace it (default: one per insight). */
+  tag?: string;
 }
 
 export interface Glance {
@@ -136,8 +141,23 @@ export function insights(x: InsightInputs): Insight[] {
   // The internet (Warden's device).
   const net = x.devices.find(d => d.id === 'warden_internet');
   if (net && net.state.online !== false && net.state.on === false) out.push({ id: 'internet', level: 'alert', icon: 'wifi_off', device: net.id, title: 'The internet is down', detail: 'Cloud devices won’t answer until it’s back.' });
+  // The router's power (Warden, from its BMC): while a supply isn't OK or they no longer back each other up. The id
+  // carries what's wrong, so a change (the other supply fails too, or one comes back) is news again, and a snooze
+  // covers only what was snoozed.
+  for (const d of x.devices) {
+    if (d.adapter !== 'warden' || d.state.online === false || !powerTrouble(d.state)) continue;
+    const bad = badSupplies(d.state);
+    const serious = d.state.redundancy === 'lost' || bad.some(b => b.problem !== 'predicted to fail');
+    const fine = (d.state.supplies ?? []).filter(b => b.ok).map(b => b.name);
+    out.push({
+      id: `power:${d.id}:${bad.map(b => `${b.name}=${b.problem ?? 'bad'}`).sort().join(',')}:${d.state.redundancy ?? ''}`,
+      level: serious ? 'alert' : 'warning', icon: 'power_off', device: d.id, push: true, rule: 'network', tag: `power-${d.id}`,
+      title: powerTroubleText(d)!,
+      detail: [fine.length ? `${fine.join(' and ')} ${fine.length === 1 ? 'is' : 'are'} OK${bad.length ? ', so it’s still running' : ''}.` : '', d.state.power != null ? `Drawing ${d.state.power} W.` : ''].filter(Boolean).join(' ') || undefined,
+    });
+  }
   // Devices offline a while, together.
-  const off = visible.filter(d => !DERIVED.has(d.adapter) && d.state.online === false && x.now - (x.offlineSince.get(d.id) ?? x.now) >= OFFLINE_MS && d.id !== 'warden_internet');
+  const off = visible.filter(d => !DERIVED.has(d.adapter) && d.state.online === false && x.now - (x.offlineSince.get(d.id) ?? x.now) >= OFFLINE_MS && d.id !== 'warden_internet' && d.id !== 'warden_router');
   if (off.length) {
     out.push({ id: `offline:${off.map(d => d.id).sort().join(',')}`, level: 'warning', icon: 'cloud_off', ...(off.length === 1 ? { device: off[0].id } : {}),
       title: off.length === 1 ? `${off[0].name} isn’t responding` : `${off.length} ${off.every(isSensor) ? 'sensors' : off.some(isSensor) ? 'devices and sensors' : 'devices'} aren’t responding`,

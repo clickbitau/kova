@@ -6,6 +6,7 @@ import type { ConfigStore } from '../engine/config.ts';
 import type { Store } from '../store/db.ts';
 import { ROOM_ICONS, UNASSIGNED_ROOM, type Automation, type Cause, type Command, type Device, type Targets } from '../model/types.ts';
 import { FIELD_CAP, isPlayer, pseudoLabel, targetLabel } from '../util/describe.ts';
+import { hardwareSummary, hasHardware } from '../util/hardware.ts';
 import { checkAutomation } from '../engine/automation-check.ts';
 import { actionWords, condWords, nextOnce, triggerWords } from '../engine/automations.ts';
 import { slug } from '../tools/import-ha.ts';
@@ -1070,7 +1071,10 @@ export class AiAssistant {
       if (share.rooms) {
         const s = d.state;
         const zoneNames = cfg.devices?.[d.id]?.zoneNames;
-        parts.state = Object.fromEntries(Object.entries({ on: s.on, bri: s.bri, k: s.k, color: s.color, mode: s.mode, media: s.media, song: s.track ? `${s.track.title}${s.track.artist ? ` by ${s.track.artist}` : ''}` : undefined, shuffle: s.shuffle || undefined, paused: s.paused || undefined, vol: s.vol, hvac: s.hvac, target: s.target, temp: s.temp, humidity: s.humidity, lux: s.lux, fanSpeed: s.fanSpeed, extras: s.extras, fanLevel: s.fanLevel, fanLevelMax: s.fanLevelMax, airQuality: s.airQuality, pm25: s.pm25, filterLife: s.filterLife, display: s.display, childLock: s.childLock, battery: s.battery, activity: s.activity, zones: s.zones?.map(z => ({ zone: z.n, ...(zoneNames?.[String(z.n)] ? { name: zoneNames[String(z.n)] } : {}), on: z.on, open: z.open })), online: s.online }).filter(([, v]) => v !== undefined && v !== null));
+        parts.state = Object.fromEntries(Object.entries({ on: s.on, bri: s.bri, k: s.k, color: s.color, mode: s.mode, media: s.media, song: s.track ? `${s.track.title}${s.track.artist ? ` by ${s.track.artist}` : ''}` : undefined, shuffle: s.shuffle || undefined, paused: s.paused || undefined, vol: s.vol, hvac: s.hvac, target: s.target, temp: s.temp, humidity: s.humidity, lux: s.lux, fanSpeed: s.fanSpeed, extras: s.extras, fanLevel: s.fanLevel, fanLevelMax: s.fanLevelMax, airQuality: s.airQuality, pm25: s.pm25, filterLife: s.filterLife, display: s.display, childLock: s.childLock, battery: s.battery, activity: s.activity, zones: s.zones?.map(z => ({ zone: z.n, ...(zoneNames?.[String(z.n)] ? { name: zoneNames[String(z.n)] } : {}), on: z.on, open: z.open })),
+          // Server hardware (the router, from Warden's BMC): what it draws, its power supplies, redundancy, temperatures and fans.
+          ...(hasHardware(d) ? { watts: s.power, supplies: s.supplies?.map(x => x.ok ? `${x.name}: OK` : `${x.name}: ${x.problem ?? 'not OK'}`), redundancy: s.redundancy, sensors: s.sensors?.map(x => `${x.name} ${x.value}${x.kind === 'temp' ? '°C' : ' RPM'}`), fanMode: s.fanMode, fanPercent: s.fanPercent, health: hardwareSummary(d) } : {}),
+          online: s.online }).filter(([, v]) => v !== undefined && v !== null));
       }
       return JSON.stringify(parts);
     });
@@ -1085,6 +1089,11 @@ export class AiAssistant {
         if (share.rooms) {
           parts.readings = Object.fromEntries(readingsOf(d).map(r => [r.field, r.text]));
           if (d.state.online === false) parts.online = false;
+          // Server hardware (the router, from Warden's BMC): what it draws, its power supplies, redundancy, temperatures and fans.
+          if (hasHardware(d)) {
+            const s = d.state;
+            Object.assign(parts, { watts: s.power, supplies: s.supplies?.map(x => x.ok ? `${x.name}: OK` : `${x.name}: ${x.problem ?? 'not OK'}`), redundancy: s.redundancy, sensors: s.sensors?.map(x => `${x.name} ${x.value}${x.kind === 'temp' ? '°C' : ' RPM'}`), fanMode: s.fanMode, fanPercent: s.fanPercent, health: hardwareSummary(d) });
+          }
         }
         return JSON.stringify(parts);
       });

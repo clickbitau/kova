@@ -1,97 +1,21 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import https from 'node:https';
-import type { ServerResponse } from 'node:http';
-import type { AddressInfo } from 'node:net';
-import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { testHub } from './helpers.ts';
 import { buildServer } from '../src/api/server.ts';
 import { IntegrationsManager } from '../src/integrations-store.ts';
-import { INTERNET_ID, WARDEN_SCOPES, WardenAdapter, internetId, type WardenDevice } from '../src/adapters/warden.ts';
+import { INTERNET_ID, WARDEN_SCOPES, WardenAdapter, internetId } from '../src/adapters/warden.ts';
+import { fakeWarden } from './fake-warden.ts';
 import { Presence } from '../src/services/presence.ts';
 
 const webRoot = resolve(import.meta.dirname, '../../web');
-
-function selfSigned(cn: string): { key: string; cert: string } {
-  const dir = mkdtempSync(join(tmpdir(), 'warden-cert-'));
-  execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', join(dir, 'k.pem'), '-out', join(dir, 'c.pem'), '-days', '1', '-subj', `/CN=${cn}`], { stdio: 'ignore' });
-  return { key: readFileSync(join(dir, 'k.pem'), 'utf8'), cert: readFileSync(join(dir, 'c.pem'), 'utf8') };
-}
 
 const until = async (what: string, ok: () => boolean, ms = 4000) => {
   for (let t = 0; t < ms && !ok(); t += 20) await new Promise(r => setTimeout(r, 20));
   assert.ok(ok(), `timed out waiting for ${what}`);
 };
-
-/** Warden with device records, people, pairing by code and the live feed, over HTTPS like the real box. */
-async function fakeWarden() {
-  const TOKEN = 'cr_' + 'k'.repeat(64);
-  const tablet: WardenDevice = { id: 'dev_tablet', name: 'Aisha’s iPad', class: 'tablet', vendor: 'Apple', macs: ['aa:bb:cc:00:00:01'], ips: ['10.10.0.40'], online: true, paused: false, network: { id: 'lan', name: 'Home' } };
-  const phone: WardenDevice = { id: 'dev_phone', name: 'Methel’s iPhone', class: 'phone', owner: 'Methel', macs: ['da:a1:19:6e:02:5f'], ips: ['10.10.0.109'], online: true, paused: false };
-  const s = {
-    pair: { status: 'pending' as 'pending' | 'approved', collected: false, scopes: [] as string[] },
-    devices: [tablet, phone],
-    people: [{ id: 'methel', name: 'Methel', devices: ['dev_phone'], presence: { home: true, via: 'Methel’s iPhone' } }, { id: 'sam', name: 'Sam', devices: ['dev_sam'], presence: { home: false } }],
-    seen: [] as string[],
-    streams: [] as { res: ServerResponse; lastId?: string }[],
-    seq: 0,
-  };
-  const server = https.createServer(selfSigned('warden.test'), (req, res) => {
-    const chunks: Buffer[] = [];
-    req.on('data', c => chunks.push(c));
-    req.on('end', () => {
-      const raw = Buffer.concat(chunks).toString('utf8');
-      const body = raw ? JSON.parse(raw) : undefined;
-      const u = new URL(req.url!, 'https://x');
-      const send = (code: number, j?: unknown) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(j === undefined ? '' : JSON.stringify(j)); };
-      s.seen.push(`${req.method} ${u.pathname}${raw ? ' ' + raw : ''}`);
-      if (u.pathname === '/.well-known/wardenos-gateway') return send(200, { product: 'WardenOS', siteName: 'Methel Home' });
-      if (u.pathname === '/api/v1/apps/pair' && req.method === 'POST') {
-        s.pair.scopes = body.scopes;
-        return send(201, { pairId: 'pr1', code: 'BM5632', pollSecret: 'ps', expiresAt: new Date(Date.now() + 600_000).toISOString(), pollUrl: '/api/v1/apps/pair/pr1' });
-      }
-      if (u.pathname === '/api/v1/apps/pair/pr1') {
-        if (req.headers['x-pair-secret'] !== 'ps') return send(404, { message: 'no such request' });
-        if (s.pair.status === 'approved' && !s.pair.collected) { s.pair.collected = true; return send(200, { status: 'approved', token: TOKEN, scopes: s.pair.scopes, role: 'operator' }); }
-        return send(200, { status: s.pair.status });
-      }
-      if (req.headers.authorization !== `Bearer ${TOKEN}`) return send(401, { message: 'unauthorized' });
-      if (u.pathname === '/api/v1/feed' && /event-stream/.test(String(req.headers.accept))) {
-        res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store' });
-        res.write('retry: 3000\n\n');
-        const st = { res, lastId: req.headers['last-event-id'] as string | undefined };
-        s.streams.push(st);
-        res.on('close', () => { const i = s.streams.indexOf(st); if (i >= 0) s.streams.splice(i, 1); });
-        return;
-      }
-      if (u.pathname === '/api/v1/dashboard') return send(200, { wanUp: true, clientCount: 2, last24h: { threatsBlocked: 0 } });
-      if (u.pathname === '/api/v1/devices') return send(200, { devices: s.devices });
-      if (u.pathname === '/api/v1/people') return send(200, { people: s.people });
-      const byMac = /^\/api\/v1\/devices\/by-mac\/(.+)$/.exec(u.pathname);
-      if (byMac) { const d = s.devices.find(x => x.macs.includes(decodeURIComponent(byMac[1]))); return d ? send(200, d) : send(404, { message: 'no device has that address' }); }
-      const pause = /^\/api\/v1\/devices\/([^/]+)\/pause$/.exec(u.pathname);
-      if (pause) {
-        const d = s.devices.find(x => x.id === pause[1]);
-        if (!d) return send(404, { message: 'no device has that ID' });
-        d.paused = req.method === 'POST';
-        return send(200, d);
-      }
-      send(404, { message: 'not found' });
-    });
-  });
-  await new Promise<void>(r => server.listen(0, '127.0.0.1', r));
-  const url = `https://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  /** Publish an event to every open stream. */
-  const publish = (type: string, data: unknown) => {
-    const id = `evt_${++s.seq}`;
-    for (const st of s.streams) st.res.write(`id: ${id}\nevent: ${type}\ndata: ${JSON.stringify({ id, seq: s.seq, type, at: new Date().toISOString(), data })}\n\n`);
-  };
-  const drop = () => { for (const st of s.streams.splice(0)) st.res.end(); };
-  return { url, s, TOKEN, tablet, phone, publish, drop, close: () => new Promise<void>(r => { drop(); server.closeAllConnections(); server.close(() => r()); }) };
-}
 
 test('Warden: pair with a code approved at /apps, then follow the live feed, device records and people', { timeout: 30_000 }, async () => {
   const w = await fakeWarden();
@@ -110,6 +34,7 @@ test('Warden: pair with a code approved at /apps, then follow the live feed, dev
     // An admin approves it; Kova collects its token once and pins Warden's certificate.
     w.s.pair.status = 'approved';
     await until('token saved', () => manager.raw('warden')?.token === w.TOKEN);
+    assert.deepEqual(manager.raw('warden')?.scopes, WARDEN_SCOPES, 'what Warden granted is kept, so the status can say when to pair again');
     assert.match(String(manager.raw('warden')?.fingerprint), /^[0-9A-F]{2}(:[0-9A-F]{2}){31}$/);
     assert.equal((await app.inject({ method: 'GET', url: '/api/integrations/warden/pair' })).json().status, 'approved');
 

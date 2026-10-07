@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import type { Adapter, AdapterContext, AdapterStatus } from './sdk.ts';
-import type { Command, Device } from '../model/types.ts';
+import { POWER_PROBLEMS, type Command, type Device, type DeviceState, type PowerProblem, type PowerRedundancy, type PowerSupply, type HardwareSensor } from '../model/types.ts';
+import { problemWords } from '../util/hardware.ts';
 import { LanHttpError, lanJson, lanStream, trimUrl, type SseEvent } from '../util/lan-http.ts';
 
 /**
@@ -10,7 +11,11 @@ import { LanHttpError, lanJson, lanStream, trimUrl, type SseEvent } from '../uti
  *    down, comes back or fails over, a new device joins, or Warden blocks an attack;
  *  - an **internet switch** per device you choose (a child's tablet, a console):
  *    off pauses that device's internet in Warden, so modes can do bedtime;
- *  - who's home, from Warden's people and their phones (see services/presence.ts).
+ *  - who's home, from Warden's people and their phones (see services/presence.ts);
+ *  - a **Router** device when Warden runs on server hardware with a BMC (`GET /api/v1/host/bmc`, Warden 1.041+,
+ *    the `network:read` scope): what it draws in W (a load on the Energy page), each power supply and whether
+ *    they still back each other up, its temperatures and fans. Reading the BMC is slow (about 4 s), so Kova reads
+ *    it every 5 minutes and again when the feed says a supply changed (`power.supply_changed`).
  *
  * Events arrive live on Warden's feed (`GET /api/v1/feed`, Server-Sent Events, resumed
  * with Last-Event-ID). Devices are Warden's device records: a stable `dev_…` id that
@@ -38,6 +43,10 @@ export interface WardenOptions {
   pollSec?: number;
   /** Follow the live feed. Default on. */
   feed?: boolean;
+  /** What Warden granted when Kova paired (from the pairing answer). Unset for a token made by signing in, or paired before Kova kept it. */
+  scopes?: string[];
+  /** How often to read the router's hardware (BMC). Default 300 s; 0 turns the timer off (tests call pollPower()). */
+  bmcSec?: number;
 }
 
 /** What Kova asks Warden for when pairing. */
@@ -75,7 +84,32 @@ interface Incident { id: string; kind: string; level: string; title: string; bod
 interface Dashboard { wanUp?: boolean; threatsBlocked?: number | null; clientCount?: number; last24h?: { threatsBlocked?: number; dnsBlocked?: number } }
 interface SiteDoc { people?: { id: string; devices?: string[] }[] }
 
+/** Warden's GET /api/v1/host/bmc: the server's BMC, when it has one. Every part but `available` may be missing. */
+export interface WardenBmc {
+  available: boolean;
+  /** Why there's no BMC (normal on hardware that isn't a server). */
+  error?: string;
+  powerWatts?: number;
+  powerSupplies?: { name: string; present?: boolean; ok: boolean; problem?: string }[];
+  powerRedundancy?: string;
+  sensors?: { name: string; kind: string; value: number; unit?: string }[];
+  fanMode?: string;
+  /** Only while the fans run in manual mode. */
+  fanPercent?: number;
+}
+
 export const INTERNET_ID = 'warden_internet';
+/** The router itself, when Warden can read its BMC. */
+export const ROUTER_ID = 'warden_router';
+/** The first Warden that serves the BMC to paired apps. */
+const BMC_SINCE = [1, 41];
+/** "1.728" → [1, 728]; compared part by part. */
+const versionAtLeast = (v: string | undefined, min: number[]) => {
+  const p = String(v ?? '').split('.').map(x => parseInt(x, 10));
+  if (!p.length || p.some(Number.isNaN)) return false;
+  for (let i = 0; i < min.length; i++) { const a = p[i] ?? 0; if (a !== min[i]) return a > min[i]; }
+  return true;
+};
 export const normMac = (m: string) => m.trim().toLowerCase().replace(/-/g, ':').split(':').map(x => x.padStart(2, '0')).join(':');
 export const internetId = (mac: string) => `warden_${normMac(mac).replace(/:/g, '')}`;
 /** Kova's id for an internet switch: kept from its MAC when it was set up that way, else from Warden's device id. */
@@ -89,8 +123,8 @@ export class Warden {
   readonly url: string;
   constructor(private o: Pick<WardenOptions, 'url' | 'token' | 'fingerprint' | 'publicKeySha256'>) { this.url = trimUrl(o.url); }
 
-  async get<T>(path: string): Promise<T> {
-    return (await lanJson<T>(this.url + path, { token: this.o.token, fingerprint: this.o.fingerprint, publicKeySha256: this.o.publicKeySha256 })).json;
+  async get<T>(path: string, timeoutMs?: number): Promise<T> {
+    return (await lanJson<T>(this.url + path, { token: this.o.token, fingerprint: this.o.fingerprint, publicKeySha256: this.o.publicKeySha256, timeoutMs })).json;
   }
 
   private async send<T>(method: 'POST' | 'DELETE', path: string, body?: unknown): Promise<T> {
@@ -106,6 +140,12 @@ export class Warden {
   device(id: string): Promise<WardenDevice> { return this.get(`/api/v1/devices/${encodeURIComponent(id)}`); }
   deviceByMac(mac: string): Promise<WardenDevice> { return this.get(`/api/v1/devices/by-mac/${encodeURIComponent(normMac(mac))}`); }
   people(): Promise<WardenPerson[]> { return this.get<{ people?: WardenPerson[] }>('/api/v1/people').then(r => r.people ?? []); }
+  /** The server's BMC, read live by Warden: it takes about 4 s, so allow 15. */
+  bmc(): Promise<WardenBmc> { return this.get('/api/v1/host/bmc', 15_000); }
+  /** Warden's version, from its discovery document (no token needed). */
+  version(): Promise<string | undefined> {
+    return lanJson<{ version?: string }>(`${this.url}/.well-known/wardenos-gateway`, { fingerprint: this.o.fingerprint, publicKeySha256: this.o.publicKeySha256, timeoutMs: 6000 }).then(r => r.json?.version);
+  }
 
   /** Pause a device's internet (every MAC it has used), optionally until a time; or lift it. */
   pauseDevice(id: string, paused: boolean, until?: Date): Promise<WardenDevice> {
@@ -205,6 +245,39 @@ export async function linkWarden(url: string, username: string, password: string
 
 const RECENT_MS = 5 * 60_000;
 
+const REDUNDANCY = new Set<string>(['full', 'degraded', 'lost']);
+const redundancyOf = (v: unknown): PowerRedundancy | undefined => typeof v === 'string' && REDUNDANCY.has(v) ? v as PowerRedundancy : undefined;
+const problemOf = (v: unknown): PowerProblem | null => typeof v === 'string' && (POWER_PROBLEMS as readonly string[]).includes(v) ? v as PowerProblem : null;
+/** One supply as Kova keeps it: the problem only while it isn't OK. */
+const supplyOf = (x: { name: string; present?: unknown; ok?: unknown; problem?: unknown }): PowerSupply => ({
+  name: x.name, ...(typeof x.present === 'boolean' ? { present: x.present } : {}), ok: x.ok === true,
+  ...(x.ok === true ? {} : { problem: problemOf(x.problem) ?? (x.present === false ? 'not installed' : null) }),
+});
+
+/** Warden's BMC reading as the Router's state. Only what the hardware reports: a part it doesn't have stays out. */
+export function bmcState(r: WardenBmc): DeviceState {
+  const out: DeviceState = {};
+  if (typeof r.powerWatts === 'number' && Number.isFinite(r.powerWatts) && r.powerWatts >= 0) out.power = Math.round(r.powerWatts);
+  if (Array.isArray(r.powerSupplies)) out.supplies = r.powerSupplies.filter(x => x && typeof x.name === 'string' && x.name).slice(0, 16).map(supplyOf);
+  const red = redundancyOf(r.powerRedundancy);
+  if (red) out.redundancy = red;
+  if (Array.isArray(r.sensors)) {
+    out.sensors = r.sensors.flatMap((x): HardwareSensor[] => {
+      if (!x || typeof x.name !== 'string' || typeof x.value !== 'number' || !Number.isFinite(x.value)) return [];
+      if (x.kind === 'temp' && x.value >= -40 && x.value <= 120) return [{ name: x.name, kind: 'temp' as const, value: Math.round(x.value * 10) / 10, unit: 'C' as const }];
+      if (x.kind === 'fan' && x.value >= 0 && x.value <= 30000) return [{ name: x.name, kind: 'fan' as const, value: Math.round(x.value), unit: 'RPM' as const }];
+      return [];
+    }).slice(0, 64);
+  }
+  if (typeof r.fanMode === 'string' && r.fanMode) {
+    out.fanMode = r.fanMode;
+    out.fanPercent = typeof r.fanPercent === 'number' && Number.isFinite(r.fanPercent) ? Math.round(r.fanPercent) : null;
+  }
+  return out;
+}
+
+const BMC_EVERY_SEC = 300;
+
 export class WardenAdapter implements Adapter {
   id = 'warden';
   name = 'Warden';
@@ -232,6 +305,19 @@ export class WardenAdapter implements Adapter {
   /** IP → the physical device it currently belongs to, from the last device table. Lets the rest of Kova prove two integrations reached the same hardware. */
   readonly byIp = new Map<string, { mac: string; name?: string }>();
   private summary = '';
+  /** The router's hardware (BMC). Reads never overlap; one asked for during a read runs right after it. */
+  private bmcTimer: NodeJS.Timeout | null = null;
+  private bmcRun: Promise<void> | null = null;
+  private bmcAgain = false;
+  /** Bumped by each power.supply_changed: a read that started before it is out of date. */
+  private bmcSeq = 0;
+  private bmcFails = 0;
+  /** Reading the BMC: not tried yet, works, nothing to show (no BMC, or a Warden before 1.041), or the token lacks network:read. */
+  private power: 'unknown' | 'ok' | 'none' | 'scope' = 'unknown';
+  private routerShown = false;
+  /** The supplies as last known, in Warden's order. */
+  private supplyList: PowerSupply[] = [];
+  private watts: number | null = null;
 
   constructor(private opts: WardenOptions, private clock: () => number = Date.now) {
     this.api = new Warden(opts);
@@ -255,13 +341,18 @@ export class WardenAdapter implements Adapter {
     if (this.opts.feed !== false && !this.legacy) this.connect();
     const every = (this.opts.pollSec ?? (this.opts.feed !== false && !this.legacy ? 60 : 20)) * 1000;
     if (every > 0) { this.timer = setInterval(() => void this.poll(), every); this.timer.unref?.(); }
+    // The router's hardware: slow to read, so not waited for here.
+    void this.pollPower();
+    const bmcEvery = (this.opts.bmcSec ?? BMC_EVERY_SEC) * 1000;
+    if (bmcEvery > 0) { this.bmcTimer = setInterval(() => void this.pollPower(), bmcEvery); this.bmcTimer.unref?.(); }
   }
 
   async stop(): Promise<void> {
     this.stopped = true;
     if (this.timer) clearInterval(this.timer);
     if (this.retry) clearTimeout(this.retry);
-    this.timer = this.retry = null;
+    if (this.bmcTimer) clearInterval(this.bmcTimer);
+    this.timer = this.retry = this.bmcTimer = null;
     this.stream?.close();
     this.stream = null;
     this.live = false;
@@ -340,6 +431,7 @@ export class WardenAdapter implements Adapter {
       case 'device.joined': case 'device.left': case 'device.updated': case 'device.roamed': case 'device.ip_changed':
         if (d.device) this.onDevice(d.device as WardenDevice);
         break;
+      case 'power.supply_changed': void this.onSupplyChanged(d); break;
       case 'pause.changed': {
         const byMac = this.switches.find(s => s.mac && d.mac && normMac(s.mac) === normMac(d.mac));
         const kid = (d.deviceId && this.kovaIdFor(d.deviceId)) || (byMac && switchId(byMac));
@@ -405,7 +497,134 @@ export class WardenAdapter implements Adapter {
 
   private status_(): void {
     if (!this.summary) return;
-    this.last = { ok: true, note: `${this.summary}${this.live ? ' · live' : ''}` };
+    const hw = this.power === 'scope' ? ' · Pair with Warden again so Kova can show the router’s power (its token doesn’t have network:read)'
+      : this.power === 'ok' && this.watts != null ? ` · router ${this.watts} W` : '';
+    this.last = { ok: true, note: `${this.summary}${hw}${this.live ? ' · live' : ''}` };
+  }
+
+  // ------------------------------------------------- the router's power --
+
+  /** Read the router's BMC: now, or right after a read already on its way. */
+  pollPower(): Promise<void> {
+    if (this.bmcRun) { this.bmcAgain = true; return this.bmcRun; }
+    this.bmcRun = (async () => {
+      try {
+        do { this.bmcAgain = false; await this.readBmc(); } while (this.bmcAgain && !this.stopped);
+      } finally { this.bmcRun = null; }
+    })();
+    return this.bmcRun;
+  }
+
+  private async readBmc(): Promise<void> {
+    if (this.stopped) return;
+    const seq = this.bmcSeq;
+    let r: WardenBmc;
+    try {
+      r = await this.api.bmc();
+    } catch (e) {
+      if (this.stopped) return;
+      // No BMC on an older Warden (404), or not for this token (403): nothing to show, quietly.
+      if (e instanceof LanHttpError && (e.status === 403 || e.status === 404)) {
+        const why = e.status === 403 ? await this.forbidden() : 'none';
+        if (this.stopped) return;
+        this.power = why;
+        this.hideRouter();
+      } else if (this.routerShown && ++this.bmcFails >= 2) {
+        // Twice in a row (10 minutes): don't keep showing an old reading as now.
+        this.watts = null;
+        this.ctx.report(ROUTER_ID, { online: false, power: null });
+      }
+      this.status_();
+      return;
+    }
+    if (this.stopped) return;
+    // No BMC: normal on hardware that isn't a server. Hide the panel.
+    if (!r || r.available !== true) { this.power = 'none'; this.hideRouter(); this.status_(); return; }
+    this.power = 'ok';
+    this.bmcFails = 0;
+    this.showRouter();
+    const state = bmcState(r);
+    let events: (() => void)[] = [];
+    if (seq !== this.bmcSeq) {
+      // A supply changed while this read was on its way: what the feed said is newer, and the read after this one has it.
+      delete state.supplies; delete state.redundancy;
+      this.bmcAgain = true;
+    } else if (state.supplies) events = this.supplyChanges(state.supplies, state.redundancy ?? null, state.power ?? null);
+    if (state.power !== undefined) this.watts = state.power ?? null;
+    this.ctx.report(ROUTER_ID, { ...state, online: true });
+    for (const f of events) f();
+    this.status_();
+  }
+
+  /** Why Warden said 403: an older Warden (it shows the BMC to paired apps from 1.041), or a token without network:read. */
+  private async forbidden(): Promise<'none' | 'scope'> {
+    if (this.opts.scopes?.includes('network:read')) return 'none';
+    const v = await this.api.version().catch(() => undefined);
+    return versionAtLeast(v, BMC_SINCE) ? 'scope' : 'none';
+  }
+
+  private showRouter(): void {
+    if (this.routerShown) return;
+    this.routerShown = true;
+    this.ctx.announce([{ id: ROUTER_ID, name: 'Router', room: this.opts.room ?? 'unassigned', type: 'sensor', capabilities: ['power', 'events'], integration: 'Warden', address: this.api.url, state: { online: true } }]);
+  }
+
+  private hideRouter(): void {
+    this.routerShown = false;
+    this.supplyList = [];
+    this.watts = null;
+    this.ctx.retract([ROUTER_ID]);
+  }
+
+  /** Remember the supplies; the events for each that changed since last known (to send once the state is reported). */
+  private supplyChanges(list: PowerSupply[], redundancy: PowerRedundancy | null, watts: number | null): (() => void)[] {
+    const was = new Map(this.supplyList.map(x => [x.name, x]));
+    const first = !this.supplyList.length;
+    this.supplyList = list;
+    if (first) return [];
+    return list.flatMap(x => {
+      const p = was.get(x.name);
+      if (p && p.ok === x.ok && (p.problem ?? null) === (x.problem ?? null)) return [];
+      return [() => this.supplyEvent(x, p?.ok, redundancy, watts)];
+    });
+  }
+
+  /** A supply changed: power-supply-changed, and power-supply-failed or -restored when it stopped or started being OK. */
+  private supplyEvent(x: PowerSupply, wasOk: boolean | undefined, redundancy: PowerRedundancy | null, watts: number | null): void {
+    if (this.stopped) return;
+    const failed = !x.ok && wasOk !== false, restored = x.ok && wasOk === false;
+    const title = `${x.name} ${x.ok ? (restored ? 'is back' : 'is OK') : problemWords(x.problem)}`;
+    const body = [redundancy ? `Redundancy ${redundancy}.` : '', watts != null ? `Drawing ${watts} W.` : ''].filter(Boolean).join(' ');
+    const data = { name: x.name, ok: x.ok, problem: x.problem ?? null, redundancy, watts, title, body };
+    // The change is what Activity shows; failed and restored are for automations that only care about those.
+    this.ctx.event(ROUTER_ID, 'power-supply-changed', data);
+    if (failed) this.ctx.event(ROUTER_ID, 'power-supply-failed', { ...data, quiet: true });
+    if (restored) this.ctx.event(ROUTER_ID, 'power-supply-restored', { ...data, quiet: true });
+  }
+
+  /** Warden's feed: a power supply changed. Take its word now, then read the BMC once for the rest. */
+  private async onSupplyChanged(d: Record<string, unknown>): Promise<void> {
+    if (this.stopped) return;
+    this.bmcSeq++;
+    const name = typeof d.name === 'string' ? d.name : '';
+    const x = name ? supplyOf({ name, ok: d.ok, problem: d.problem, present: d.present }) : null;
+    const redundancy = redundancyOf(d.redundancy) ?? null;
+    const watts = typeof d.watts === 'number' && Number.isFinite(d.watts) ? Math.round(d.watts) : null;
+    if (x && this.routerShown && this.supplyList.length) {
+      const prev = this.supplyList.find(s => s.name === x.name);
+      const merged = { ...x, ...(x.present === undefined && prev?.present !== undefined ? { present: prev.present } : {}) };
+      const known = prev ? this.supplyList.map(s => s.name === x.name ? merged : s) : [...this.supplyList, merged];
+      this.supplyList = known;
+      if (watts != null) this.watts = watts;
+      this.ctx.report(ROUTER_ID, { supplies: known, ...(redundancy ? { redundancy } : {}), ...(watts != null ? { power: watts } : {}) });
+      if (!prev || prev.ok !== x.ok || (prev.problem ?? null) !== (x.problem ?? null)) this.supplyEvent(x, prev?.ok, redundancy, watts);
+      this.status_();
+      await this.pollPower();
+      return;
+    }
+    // Not shown yet (the first read hasn't finished): read it, then pass the change on.
+    await this.pollPower();
+    if (x && this.routerShown) this.supplyEvent(x, undefined, redundancy, watts);
   }
 
   /** Older Warden: incidents for events, clients by MAC for the switches. */
@@ -442,6 +661,7 @@ export class WardenAdapter implements Adapter {
 
   async command(device: Device, cmd: Command): Promise<void> {
     if (device.id === INTERNET_ID) throw new Error('The internet can’t be switched from Kova');
+    if (device.id === ROUTER_ID) throw new Error('The router can’t be switched from Kova');
     if (cmd.on === undefined) return;
     const s = this.switches.find(x => switchId(x) === device.id);
     let devId = this.devIds.get(device.id);

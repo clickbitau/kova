@@ -8,9 +8,10 @@ import { isSensor } from '../util/sensors.ts';
 /**
  * Readings that update silently: they're not "changes" anyone made. A vacuum's
  * activity rides along with `on`, which is what gets logged. A room's temperature,
- * humidity, light and air are readings too, whichever device senses them.
+ * humidity, light and air are readings too, whichever device senses them. A server's power supplies and
+ * sensors (the router's BMC) too: a supply that changes comes with an event, and that's logged.
  */
-const MEASUREMENTS = new Set(['online', 'power', 'energy', 'grid', 'load', 'battery', 'activity', 'temp', 'humidity', 'lux', 'pm25', 'airQuality', 'filterLife']);
+const MEASUREMENTS = new Set(['online', 'power', 'energy', 'grid', 'load', 'battery', 'activity', 'temp', 'humidity', 'lux', 'pm25', 'airQuality', 'filterLife', 'supplies', 'redundancy', 'sensors', 'fanMode', 'fanPercent']);
 
 /** Value equality for state fields: objects (extras, zones, track) compare by content, not reference. */
 function same(a: unknown, b: unknown): boolean {

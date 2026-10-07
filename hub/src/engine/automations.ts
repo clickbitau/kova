@@ -610,6 +610,7 @@ export const EVENT_WORDS: Record<string, string> = {
   paused: 'paused', resumed: 'carried on', stopped: 'stopped', ended: 'played to the end',
   'screen-asleep': 'screen went to sleep', 'screen-shutdown': 'shut down', 'screen-awake': 'screen woke up',
   'internet-down': 'internet down', 'internet-up': 'internet back', 'new-device': 'new device joined',
+  'power-supply-changed': 'power supply changed', 'power-supply-failed': 'power supply failed', 'power-supply-restored': 'power supply back',
 };
 
 /**

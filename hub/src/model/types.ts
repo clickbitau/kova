@@ -82,8 +82,26 @@ export interface DeviceState {
   /** Switches and readings the integration reports that Kova has no named field for yet — AC eco/sleep/turbo
    * modes and the like — kept and settable by name (the `extras` capability). */
   extras?: Record<string, boolean | number | string | null>;
+  /** Server hardware read through its BMC (the router, from Warden): each power supply, whether the supplies still
+   * back each other up, its temperature and fan sensors, and how the fans are run. `power` is what it draws, in W. */
+  supplies?: PowerSupply[] | null;
+  redundancy?: PowerRedundancy | null;
+  sensors?: HardwareSensor[] | null;
+  fanMode?: string | null;
+  /** The fans' duty in %, only while they run in manual mode. */
+  fanPercent?: number | null;
   online?: boolean;
 }
+
+/** What's wrong with a power supply, as the BMC says it. */
+export type PowerProblem = 'no input power' | 'failed' | 'predicted to fail' | 'input power out of range' | 'not installed';
+export const POWER_PROBLEMS: readonly PowerProblem[] = ['no input power', 'failed', 'predicted to fail', 'input power out of range', 'not installed'];
+/** One power supply of a server. `ok` false with a `problem` when it isn't feeding the server as it should. */
+export interface PowerSupply { name: string; present?: boolean; ok: boolean; problem?: PowerProblem | null }
+/** Whether a server's power supplies back each other up: full, degraded, or lost (one more failure and it's off). */
+export type PowerRedundancy = 'full' | 'degraded' | 'lost';
+/** A temperature (°C) or fan (RPM) reading from a server's BMC. */
+export interface HardwareSensor { name: string; kind: 'temp' | 'fan'; value: number; unit: 'C' | 'RPM' }
 
 /** One song in a play queue: what a speaker fetches, and what Kova shows. */
 export interface Track { title: string; artist?: string; album?: string; art?: string; durationMs?: number; /** The song's id where it came from (Helix: helix:…), for counting plays. */ id?: string }

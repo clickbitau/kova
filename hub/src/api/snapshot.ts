@@ -43,7 +43,7 @@ function netOf(reg: Hub['reg']) {
 }
 
 function feedIcon(e: LogEntry): string {
-  if (e.kind === 'device_event') return DEVICE_EVENT_ICON[String(e.data.type)] ?? 'person';
+  if (e.kind === 'device_event') return /^power-supply-/.test(String(e.data.type)) ? 'power' : DEVICE_EVENT_ICON[String(e.data.type)] ?? 'person';
   if (e.kind === 'state' && e.data && typeof (e.data.patch as { open?: unknown } | undefined)?.open === 'boolean') return 'sensor_door';
   if (e.kind === 'presence') return e.data.home ? 'person_pin_circle' : 'directions_walk';
   if (e.kind === 'run' && e.cause.kind === 'overlay') return 'layers';

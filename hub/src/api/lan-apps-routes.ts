@@ -43,7 +43,8 @@ export function registerLanAppRoutes(app: FastifyInstance, o: LanAppsOptions): v
     try {
       const l = await linkWarden(url, b.username, b.password, b.totp?.trim() || undefined);
       const prev = o.integrations.raw('warden');
-      const applied = await o.integrations.update('warden', { ...prev, url: l.url, token: l.token, fingerprint: l.fingerprint });
+      // An operator token, not a paired one: it has no scopes of its own.
+      const applied = await o.integrations.update('warden', { ...prev, url: l.url, token: l.token, fingerprint: l.fingerprint, scopes: undefined });
       reply.header('cache-control', 'no-store');
       return {
         linked: `Warden${l.siteName ? ` (${l.siteName})` : ''} at ${l.url}`,
@@ -68,7 +69,8 @@ export function registerLanAppRoutes(app: FastifyInstance, o: LanAppsOptions): v
         if (r.status === 'approved' && 'token' in r && r.token) {
           p.status = 'approved';
           const prev = o.integrations?.raw('warden');
-          await o.integrations?.update('warden', { ...prev, url: p.url, token: r.token, fingerprint: p.fingerprint });
+          // Keep what Warden granted: the status can then say when a feature needs pairing again (the router's power needs network:read).
+          await o.integrations?.update('warden', { ...prev, url: p.url, token: r.token, fingerprint: p.fingerprint, scopes: Array.isArray(r.scopes) ? r.scopes.filter(x => typeof x === 'string') : undefined });
           return;
         }
         if (r.status === 'approved') { p.status = 'expired'; p.error = 'The token was already collected. Pair again.'; return; }

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { devs, favourites, groupDevices, stateOf, tint, toggleCommand, type Dev } from '../src/logic/devices.ts';
+import { devs, favourites, groupDevices, iconOf, routerPanel, stateOf, tint, toggleCommand, type Dev } from '../src/logic/devices.ts';
 import { routeFor } from '../src/logic/links.ts';
 import type { Device, Snapshot } from '../src/api/types.ts';
 
@@ -89,4 +89,31 @@ test('a purifier: a tap switches it on or off; its line says mode, speed, the ai
   assert.equal(stateOf({ ...p, mode: 'Auto', airQuality: 3 } as Dev)[0], 'Auto · air poor');
   assert.deepEqual(stateOf({ ...p, filterLife: 18 } as Dev), ['Manual · filter 18%', '#f2b14c']);
   assert.equal(stateOf({ ...p, on: false } as Dev)[0], 'Off');
+});
+
+test('the router’s power: status line, icon and the panel on the Router and the Internet device', () => {
+  const router = d('warden_router', 'sensor', 'unassigned', {
+    online: true, power: 268, redundancy: 'lost', fanMode: 'auto', fanPercent: null,
+    supplies: [{ name: 'Power supply 1', present: true, ok: false, problem: 'no input power' }, { name: 'Power supply 2', present: true, ok: true }],
+    sensors: [{ name: 'Inlet Temp', kind: 'temp', value: 24, unit: 'C' }, { name: 'CPU1 Temp', kind: 'temp', value: 82, unit: 'C' }, { name: 'Fan1', kind: 'fan', value: 5400, unit: 'RPM' }],
+  }, { capabilities: ['power', 'events'], adapter: 'warden' });
+  const s = { ...snap, devices: [...snap.devices, router], insights: [{ id: 'power:warden_router:Power supply 1=no input power:lost', level: 'alert', icon: 'power_off', title: 'Router power supply 1 has no input power — redundancy lost', device: 'warden_router' }] } as unknown as Snapshot;
+  const R = devs(s).warden_router;
+  assert.deepEqual(stateOf(R), ['Power supply 1 not OK · 268 W', '#ff6b5e']);
+  assert.equal(iconOf(R), 'dns');
+  assert.equal(iconOf(all.lamp), 'lightbulb');
+  const p = routerPanel(s, R)!;
+  assert.deepEqual([p.title, p.watts, p.redundancy.label, p.alert?.text], ['Power', '268 W', 'Lost', 'Router power supply 1 has no input power — redundancy lost']);
+  assert.deepEqual(p.supplies.map(x => [x.name, x.badge, x.color]), [['Power supply 1', 'No input power', '#ff6b5e'], ['Power supply 2', 'OK', '#7fd4a0']]);
+  assert.deepEqual(p.temps.map(x => [x.value, x.color]), [['24°', '#f1efea'], ['82°', '#ff6b5e']]);
+  assert.deepEqual([p.fans, p.fanMode], [['Fan1 · 5400 rpm'], 'Auto']);
+  // The same panel on the Internet device; nothing on others, or when Warden can't read the router's hardware.
+  assert.equal(routerPanel(s, all.warden_internet)!.title, 'Router power');
+  assert.equal(routerPanel(s, all.lamp), null);
+  assert.equal(routerPanel(snap, all.warden_internet), null);
+  // Fine again.
+  const ok = devs({ devices: [{ ...router, state: { ...router.state, redundancy: 'full', supplies: [{ name: 'Power supply 1', ok: true }, { name: 'Power supply 2', ok: true }] } }] } as unknown as Snapshot).warden_router;
+  assert.deepEqual(stateOf(ok), ['268 W', '#7fd4a0']);
+  const pred = devs({ devices: [{ ...router, state: { ...router.state, redundancy: 'degraded', supplies: [{ name: 'Power supply 1', ok: false, problem: 'predicted to fail' }] } }] } as unknown as Snapshot).warden_router;
+  assert.deepEqual(stateOf(pred), ['Power supply 1 not OK · 268 W', '#f2b14c']);
 });

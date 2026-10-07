@@ -188,6 +188,7 @@ export const EVENTS = opts([
   ['video-started', 'starts a video'], ['music-started', 'starts music'], ['paused', 'pauses'], ['resumed', 'carries on playing'], ['stopped', 'stops playing'], ['ended', 'finishes playing'],
   ['screen-asleep', 'screen goes to sleep'], ['screen-shutdown', 'screen shuts down'], ['screen-awake', 'screen wakes up'],
   ['internet-down', 'internet goes down'], ['internet-up', 'internet comes back'], ['internet-failover', 'switches to the backup connection'], ['new-device', 'a new device joins'], ['threat', 'blocks an attack'],
+  ['power-supply-changed', 'a power supply changes'], ['power-supply-failed', 'a power supply fails'], ['power-supply-restored', 'a power supply comes back'],
 ]);
 export const PRESENCE_EVENTS = opts<'arrives' | 'leaves' | 'first-arrives' | 'last-leaves'>([['arrives', 'comes home'], ['leaves', 'leaves'], ['first-arrives', 'first home (nobody was)'], ['last-leaves', 'last one out']]);
 export const DAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
