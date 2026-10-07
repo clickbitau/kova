@@ -14,6 +14,7 @@ import { roomClimate, sensorViews } from '../services/sensors.ts';
 import { roomOutdoor } from '../util/sensors.ts';
 import { engineInfo, loadSettings } from '../assistant/ai.ts';
 import { hasZones, suggestZoneRooms, zoneCommandWords, type ZoneCommand } from '../util/zones.ts';
+import { SEASON_LABEL } from '../engine/room-climate.ts';
 
 const FEED_ICON: Record<string, string> = { mode: 'routine', run: 'bolt', presence: 'person_pin_circle', state: 'lightbulb', system: 'info', skip: 'event_busy' };
 
@@ -242,6 +243,16 @@ export function snapshot(hub: Hub) {
       ...hub.services.map(x => ({ id: x.id, name: x.name, icon: x.icon, kind: x.kind, ...x.status(), devices: x.devices ?? 0 })),
     ],
     weather: hub.weather?.current ?? null,
+    // Room ACs (engine/room-climate.ts): one per room a ducted unit's zone serves, what Kova does with "turn on the AC",
+    // the season it chooses by, and which bridges publish them to voice assistants and other apps.
+    roomClimate: (() => {
+      const season = hub.roomClimate.season();
+      return {
+        settings: hub.roomClimate.settings(), season, seasonLabel: season ? SEASON_LABEL[season] : null,
+        rooms: hub.roomClimate.rooms(),
+        bridges: { matter: hub.services.some(x => x.id === 'matter-bridge'), homekit: hub.services.some(x => x.id === 'homekit-bridge') },
+      };
+    })(),
     energy: hub.energy.today(),
     demo: hub.demo,
   };

@@ -2,6 +2,7 @@ import type { Engine } from '../engine/engine.ts';
 import type { HelixMusic } from '../services/helix-music.ts';
 import type { Registry } from '../devices/registry.ts';
 import type { ConfigStore } from '../engine/config.ts';
+import type { RoomClimate } from '../engine/room-climate.ts';
 import type { Cause, Command, Device, Overlay, RoomEventKind, Targets } from '../model/types.ts';
 import { allClosedAfter, hasZones, roomReading, sensibleMode, zonesServing, type ZoneCommand } from '../util/zones.ts';
 import { isLight, isPlayer } from '../util/describe.ts';
@@ -56,14 +57,18 @@ export type Intent =
    * "cool the lounge", "turn off the AC in the office", "open the lounge zone to 50%": the air conditioner zone serving
    * a room (and the unit's power and mode when that's asked). `targets` is empty when no zone serves the place.
    */
-  | { kind: 'zone'; label: string; what: string; targets: Targets; offer: { targets: Targets; label: string } | null };
+  | { kind: 'zone'; label: string; what: string; targets: Targets; offer: { targets: Targets; label: string } | null }
+  /** "turn on the AC in here", "turn the aircon off": a room AC, but which room isn't said (the app doesn't know its room yet). */
+  | { kind: 'acWhere'; on: boolean; rooms: { room: string; label: string }[] };
 
 /** A follow-up the user can tap, executed by POST /api/ask/act. */
 export type AskAction =
   | { type: 'apply'; targets: Targets; label: string; done: string }
   | { type: 'overlay'; id: string; done: string }
   | { type: 'learnGroup'; name: string; rooms: string[] }
-  | { type: 'screen'; screen: string };
+  | { type: 'screen'; screen: string }
+  /** A room's AC on or off, by the room-AC policy (engine/room-climate.ts). */
+  | { type: 'roomAc'; room: string; on: boolean; done: string };
 
 export interface AskReply {
   text: string; source: Source; actions: { label: string; action: AskAction }[]; undo?: string; understood: boolean;
@@ -91,6 +96,8 @@ const ARRIVED = /\b(im|i am|we re|were|we are) (home|back)\b|\bback home\b/;
 export class Assistant {
   /** Helix music on speakers ("play Bangla Collection on shuffle in the kitchen"), once Helix is set up. */
   music: HelixMusic | null = null;
+  /** Room ACs (set by the hub): "turn on the AC in the theatre" goes through its policy. */
+  roomClimate: RoomClimate | null = null;
 
   constructor(private engine: Engine, private reg: Registry, private config: ConfigStore) {}
 
@@ -205,6 +212,20 @@ export class Assistant {
     return { label: room.name, zones: zonesServing(room.id, zoned, settings), room: room.id };
   }
 
+  /**
+   * "turn on the AC in here", "turn on the aircon": a room AC with no room. The app doesn't know which room it's in
+   * yet, so Kova asks, offering the rooms that have one.
+   */
+  private acWhere(t: string): Intent | null {
+    const AC = '(?:ac|a c|aircon|air con|air conditioning|air conditioner|airconditioner)';
+    const m = t.match(new RegExp(`^(?:please )?(?:turn|switch|put) (on|off) (?:the )?${AC}(?: (?:in )?here| in this room)?$`))
+      ?? t.match(new RegExp(`^(?:please )?(?:turn|switch) (?:the )?${AC}(?: (?:in )?here| in this room)? (on|off)$`));
+    if (!m || !this.roomClimate) return null;
+    const rooms = this.roomClimate.rooms().map(r => ({ room: r.room, label: r.name }));
+    if (!rooms.length) return null;
+    return { kind: 'acWhere', on: m[1] === 'on', rooms };
+  }
+
   /** "cool the lounge", "turn on the AC in the office", "close the kitchen zone", "lounge zone to 40%". */
   private zoneIntent(t: string): Intent | null {
     const AC = '(?:ac|a c|aircon|air con|air conditioning|air conditioner|airconditioner|climate)';
@@ -243,7 +264,9 @@ export class Assistant {
     if (cmd.ac && off.length) { const s = sensibleMode(off[0].state, temp); cmd = { ...cmd, hvac: s.hvac, target: s.target }; }
     const targets: Targets = {};
     const confirmed = !!zp.room && zp.zones.every(z => settings[z.d.id]?.zoneRooms?.[String(z.n)]?.includes(zp.room!));
-    if (zp.zones.length && confirmed) targets[`zone:${zp.room}`] = cmd as unknown as Command;
+    // "Turn on the AC in the theatre": the room AC's policy chooses the mode (or keeps the unit's, when it's running).
+    if (zp.zones.length && confirmed && cmd.ac && cmd.on && !hit[1].hvac && this.roomClimate) Object.assign(targets, this.roomClimate.planOn(zp.room!).targets);
+    else if (zp.zones.length && confirmed) targets[`zone:${zp.room}`] = cmd as unknown as Command;
     else for (const z of zp.zones) {
       // A zone named in the words but not yet tied to a room: the unit itself.
       const c = (targets[z.d.id] ??= {}) as Command;
@@ -313,6 +336,8 @@ export class Assistant {
     if (hw && /\b(ok|okay|alright|fine|healthy|good|working|power|watts?|using|draw(ing|s)?|use|supply|supplies|psus?|redundan\w*|temp\w*|hot|warm|fans?|status|how is|hows)\b/.test(t) && !/^(turn|switch|restart|reboot)\b/.test(t)) {
       return { kind: 'hardware', device: hw.id, label: hw.name };
     }
+    const aw = this.acWhere(t);
+    if (aw) return aw;
     const zi = this.zoneIntent(t);
     if (zi) return zi;
     if (/^why\b/.test(t)) {
@@ -428,6 +453,7 @@ export class Assistant {
       case 'greeting': return ['Greeting'];
       case 'hardware': return ['Hardware', i.label];
       case 'zone': return [i.what, `${i.label} zone`];
+      case 'acWhere': return [i.on ? 'Turn on' : 'Turn off', 'The AC', 'Which room?'];
     }
   }
 
@@ -579,6 +605,12 @@ export class Assistant {
         const acts = i.offer && !ac?.on ? [{ label: i.offer.label, action: { type: 'apply' as const, targets: i.offer.targets, label: 'AC on', done: 'The AC is on.' } }] : [];
         return reply(`${done}${acText}`, 'Device control', { undo: r.changed.length ? r.undo : undefined, actions: acts });
       }
+      case 'acWhere': {
+        const shown = i.rooms.slice(0, 8);
+        return reply(`Which room? I don’t know where you are yet. Each room with an air conditioner zone has its own AC.`, 'Device control', {
+          actions: shown.map(r => ({ label: r.label, action: { type: 'roomAc' as const, room: r.room, on: i.on, done: `${r.label} AC ${i.on ? 'on' : 'off'}.` } })),
+        });
+      }
       case 'hardware': {
         const d = this.reg.get(i.device);
         return reply(d ? hardwareSummary(d) : 'Kova can’t read that right now.', 'Built-in · nothing left your home');
@@ -626,6 +658,14 @@ export class Assistant {
   async act(a: AskAction): Promise<{ text: string; undo?: string }> {
     if (a.type === 'apply') { const r = await this.engine.applyMany(a.targets, { ...CAUSE, label: a.label }); return { text: a.done, undo: r.undo }; }
     if (a.type === 'overlay') return { text: a.done, undo: await this.engine.startOverlay(a.id, CAUSE) };
+    if (a.type === 'roomAc') {
+      if (!this.roomClimate) return { text: 'Room ACs aren’t available on this hub.' };
+      const r = await this.roomClimate.apply(a.room, { on: a.on }, CAUSE);
+      const unit = this.roomClimate.view(a.room);
+      const HV: Record<string, string> = { cool: 'cooling', heat: 'heating', dry: 'drying', fan: 'on fan only', auto: 'on auto' };
+      const how = a.on && unit?.on && unit.hvac ? ` The AC is ${HV[unit.hvac] ?? 'on'}${unit.target != null ? ` to ${unit.target}°` : ''}${r.why ? `, because ${r.why}` : ''}.` : '';
+      return { text: `${a.done}${how}`, undo: r.changed.length ? r.undo : undefined };
+    }
     if (a.type === 'learnGroup') {
       const undo = this.config.update(c => { c.groups[a.name] = a.rooms; });
       return { text: `Saved. Try “turn off ${a.name}”.`, undo: this.engine.registerUndo(undo) };

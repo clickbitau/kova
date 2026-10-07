@@ -13,8 +13,11 @@ import { ColorTemperatureLightDevice } from '@matter/main/devices/color-temperat
 import { ExtendedColorLightDevice } from '@matter/main/devices/extended-color-light';
 import { OnOffPlugInUnitDevice } from '@matter/main/devices/on-off-plug-in-unit';
 import { AirPurifierDevice } from '@matter/main/devices/air-purifier';
+import { ThermostatDevice } from '@matter/main/devices/thermostat';
+import { ThermostatServer } from '@matter/main/behaviors/thermostat';
 import type { Hub } from '../hub.ts';
-import type { Cause, Command, Device, DeviceState, Overlay } from '../model/types.ts';
+import type { Cause, Command, Device, DeviceState, FanSpeed, HvacMode, Overlay } from '../model/types.ts';
+import type { RoomAc, RoomAcChange } from '../engine/room-climate.ts';
 import { briToLevel, levelToBri, kelvinToMireds, miredsToKelvin, hexToHueSat, hueSatToHex, hexToXy, xyToHex } from '../adapters/matter.ts';
 
 // Matter bridge. Kova publishes itself as a Matter bridge (an aggregator) so
@@ -33,6 +36,11 @@ import { briToLevel, levelToBri, kelvinToMireds, miredsToKelvin, hexToHueSat, hu
 //   fan    → Air Purifier (Fan Control: Off / Low = Sleep / High = Manual / Auto)
 //   media / tv / camera / sensor → not exposed.
 //   overlays → an On/Off Plug-in Unit each, "Kova Movie": on starts the overlay, off ends it.
+//   room ACs → a Thermostat each, "<Room> AC", for every room a ducted unit's zone serves (engine/room-climate.ts):
+//     SystemMode Off/Cool/Heat/Auto/Fan only/Dry, both set points on the unit's one set temperature, the room's
+//     temperature, and a Fan Control cluster for the unit's fan. Thermostat rather than Room Air Conditioner:
+//     Google Home supports Thermostat over Matter, and doesn't list Room Air Conditioner. Writes go to the room-AC
+//     policy, not straight to the unit: "on" opens the room's zone and lets Kova choose the mode.
 
 /** Default cause for writes from a controller. Apple, Amazon and Samsung fabrics get their own label (see causeFor). */
 export const CAUSE: Cause = { kind: 'user', label: 'Google Home' };
@@ -97,15 +105,15 @@ export function deviceLabel(name: string, room?: string): string {
  * endpoint number it assigned to an id in storage, so the same Kova id keeps
  * the same endpoint number (and its room and name in Google Home) across restarts.
  */
-export function endpointId(kind: 'device' | 'overlay', id: string): string {
+export function endpointId(kind: 'device' | 'overlay' | 'room', id: string): string {
   const safe = id.replace(/[^A-Za-z0-9_-]/g, '_');
-  return `${kind === 'device' ? 'd' : 'o'}-${safe === id ? safe : `${safe}-${sha(id).slice(0, 6)}`}`;
+  return `${kind === 'device' ? 'd' : kind === 'room' ? 'r' : 'o'}-${safe === id ? safe : `${safe}-${sha(id).slice(0, 6)}`}`;
 }
 
 /** A stable 32-character unique id for a bridged node. */
-export const uniqueId = (kind: 'device' | 'overlay', id: string) => sha(`kova:${kind}:${id}`).slice(0, 32);
+export const uniqueId = (kind: 'device' | 'overlay' | 'room', id: string) => sha(`kova:${kind}:${id}`).slice(0, 32);
 /** A serial number for a bridged node (the spec wants it different from the unique id). */
-export const serialNumber = (kind: 'device' | 'overlay', id: string) => `KOVA-${sha(`kova:serial:${kind}:${id}`).slice(0, 12).toUpperCase()}`;
+export const serialNumber = (kind: 'device' | 'overlay' | 'room', id: string) => `KOVA-${sha(`kova:serial:${kind}:${id}`).slice(0, 12).toUpperCase()}`;
 
 /** Passcodes the Matter spec forbids (§5.1.7.1): all one digit, 12345678 and 87654321. */
 const INVALID_PASSCODES = new Set([12345678, 87654321, ...Array.from({ length: 10 }, (_, i) => i * 11111111)]);
@@ -156,6 +164,79 @@ export function fanState(st: Pick<DeviceState, 'on' | 'mode'>): { fanMode: numbe
   const fanMode = fanModeFromKova(st);
   const percent = fanMode === 0 ? 0 : fanMode === 1 ? 33 : fanMode === 3 ? 100 : null;
   return { fanMode, percentSetting: percent, percentCurrent: percent ?? 50 };
+}
+
+// ------------------------------------------------------------ room ACs --
+
+/** Matter Thermostat SystemMode values Kova uses. */
+export const SYSTEM_MODE = { off: 0, auto: 1, cool: 3, heat: 4, fan: 7, dry: 8 } as const;
+
+/** A room AC's SystemMode: Off unless the room's AC is on, else the unit's mode. */
+export function systemModeFromKova(on: boolean, hvac: HvacMode | null): number {
+  if (!on) return SYSTEM_MODE.off;
+  return SYSTEM_MODE[hvac ?? 'auto'] ?? SYSTEM_MODE.auto;
+}
+
+/** SystemMode written by a controller → Kova mode, 'off', or null for one Kova doesn't do (sleep). */
+export function systemModeCommand(mode: number): HvacMode | 'off' | null {
+  switch (mode) {
+    case 0: return 'off';
+    case 1: return 'auto';
+    case 3: case 6: return 'cool'; // 6: precooling
+    case 4: case 5: return 'heat'; // 5: emergency heat
+    case 7: return 'fan';
+    case 8: return 'dry';
+    default: return null; // 9: sleep
+  }
+}
+
+/** °C → Matter temperature (hundredths), and back to Kova's half degrees. */
+export const toMatterTemp = (c: number) => Math.round(c * 100);
+export const fromMatterTemp = (v: number) => Math.round(v / 50) / 2;
+
+/** Kova fan speed → Matter FanMode for a room AC: Off when the room's AC is off; quiet/low → Low, high/turbo → High. */
+export function acFanMode(on: boolean, fan: FanSpeed | null): number {
+  if (!on) return 0;
+  switch (fan) {
+    case 'quiet': case 'low': return 1;
+    case 'medium': return 2;
+    case 'high': case 'turbo': return 3;
+    default: return 5;
+  }
+}
+
+/** Matter FanMode written to a room AC → a room AC change. */
+export function acFanCommand(fanMode: number): RoomAcChange | null {
+  switch (fanMode) {
+    case 0: return { on: false };
+    case 1: return { fanSpeed: 'low' };
+    case 2: return { fanSpeed: 'medium' };
+    case 3: return { fanSpeed: 'high' };
+    case 4: return { on: true };
+    case 5: case 6: return { fanSpeed: 'auto' };
+    default: return null;
+  }
+}
+
+/** Matter PercentSetting written to a room AC → a fan speed. */
+export function acFanPercentCommand(percent: number | null): RoomAcChange | null {
+  if (percent == null) return null;
+  if (percent <= 0) return { on: false };
+  return { fanSpeed: percent <= 33 ? 'low' : percent <= 66 ? 'medium' : 'high' };
+}
+
+/** Thermostat and Fan Control attributes for a room AC. Both set points carry the unit's one set temperature. */
+export function roomAcState(r: RoomAc): { thermostat: Record<string, unknown>; fanControl: Record<string, unknown> } {
+  const t = toMatterTemp(Math.min(32, Math.max(16, r.target ?? 24)));
+  const fanMode = acFanMode(r.on, r.fanSpeed);
+  const percent = fanMode === 0 ? 0 : fanMode === 1 ? 33 : fanMode === 2 ? 66 : fanMode === 3 ? 100 : null;
+  return {
+    thermostat: {
+      systemMode: systemModeFromKova(r.on, r.hvac), localTemperature: r.temp != null ? toMatterTemp(r.temp) : null,
+      occupiedCoolingSetpoint: t, occupiedHeatingSetpoint: t,
+    },
+    fanControl: { fanMode, percentSetting: percent, percentCurrent: percent ?? 50 },
+  };
 }
 
 export interface ColorAttrs {
@@ -245,8 +326,12 @@ export interface PairingInfo {
 interface Identity { passcode: number; discriminator: number; serial: string }
 
 interface Entry { endpoint: Endpoint; kind: MatterKind; label: string; reachable: boolean }
+/** A room AC's endpoint, the SystemMode it last showed while on (what a controller's "on" sends back), and what it last pushed. */
+interface RoomEntry { endpoint: Endpoint; label: string; reachable: boolean; lastActive: number | null; pushed: string }
 
 type Pending = { cmd: Command; cause: Cause };
+/** A room AC's controller writes within one transaction. */
+type RoomPending = { values: Map<string, unknown>; cause: Cause };
 
 const IDENTITY_FILE = 'kova-matter-bridge.json';
 
@@ -255,6 +340,8 @@ export class MatterBridge {
   /** Bridged endpoints by Kova device id / overlay id. */
   readonly devices = new Map<string, Entry>();
   readonly overlays = new Map<string, Entry>();
+  /** Room ACs by room id. */
+  readonly roomAcs = new Map<string, RoomEntry>();
   private node?: ServerNode;
   private aggregator?: Endpoint;
   private env?: Environment;
@@ -264,6 +351,7 @@ export class MatterBridge {
   /** Controller changes collected for one device within a transaction, sent together. */
   private pending = new Map<string, Pending>();
   private inFlight = new Map<string, number>();
+  private roomPending = new Map<string, RoomPending>();
   private running = false;
 
   constructor(private hub: Hub, private opts: MatterBridgeOptions) {
@@ -307,14 +395,15 @@ export class MatterBridge {
       this.aggregator = undefined;
       this.devices.clear();
       this.overlays.clear();
+      this.roomAcs.clear();
       await node?.close().catch(() => {});
       const msg = err instanceof Error ? err.message : String(err);
       throw new Error(`Matter bridge didn't start: ${msg}${/mdns|ipv6|bind|EADDRINUSE/i.test(msg) ? ' (Matter needs IPv6, mDNS and a free UDP port on the host network)' : ''}`);
     }
     this.running = true;
 
-    const onChange = ({ device }: { device: Device }) => this.push(device.id);
-    const onMeasure = () => this.pushReachable();
+    const onChange = ({ device }: { device: Device }) => { this.push(device.id); this.pushRooms(); };
+    const onMeasure = () => { this.pushReachable(); this.pushRooms(); };
     const onDevices = () => this.reconcile();
     const onEngine = () => { for (const id of this.overlays.keys()) this.pushOverlay(id); };
     const onConfig = () => this.reconcile();
@@ -323,6 +412,7 @@ export class MatterBridge {
     this.hub.reg.on('devices', onDevices);
     this.hub.engine.on('changed', onEngine);
     this.hub.config.on('changed', onConfig);
+    this.hub.roomClimate.onMemory(() => this.pushRooms());
     this.unsubs.push(
       () => this.hub.reg.off('change', onChange),
       () => this.hub.reg.off('measure', onMeasure),
@@ -343,6 +433,7 @@ export class MatterBridge {
     await node.close();
     this.devices.clear();
     this.overlays.clear();
+    this.roomAcs.clear();
     this.aggregator = undefined;
   }
 
@@ -433,6 +524,124 @@ export class MatterBridge {
       const e = this.devices.get(d.id);
       if (e) { if (e.label !== label) { e.label = label; await e.endpoint.set({ bridgedDeviceBasicInformation: { nodeLabel: label } } as never); } continue; }
       await this.addDevice(agg, d, label);
+    }
+    // Room ACs: one per room a zone serves, unless every unit serving it is left off the bridge.
+    const exDevices = new Set(this.exclude.devices ?? []);
+    const rooms = new Map(this.hub.roomClimate.rooms().filter(r => r.zones.some(z => !exDevices.has(z.device))).map(r => [r.room, r]));
+    for (const [id, e] of this.roomAcs) {
+      if (rooms.has(id)) continue;
+      this.roomAcs.delete(id);
+      await e.endpoint.close();
+    }
+    for (const r of rooms.values()) {
+      const label = matterLabel(r.label);
+      const e = this.roomAcs.get(r.room);
+      if (e) { if (e.label !== label) { e.label = label; await e.endpoint.set({ bridgedDeviceBasicInformation: { nodeLabel: label } } as never); } continue; }
+      await this.addRoomAc(agg, r, label);
+    }
+  }
+
+  /** The room ACs on the bridge, with the names controllers show. */
+  roomAcList(): { room: string; label: string; endpoint: number | null }[] {
+    return [...this.roomAcs].map(([room, e]) => ({ room, label: e.label, endpoint: e.endpoint.number ?? null }));
+  }
+
+  private async addRoomAc(agg: Endpoint, r: RoomAc, label: string): Promise<void> {
+    const type = ThermostatDevice.with(BridgedDeviceBasicInformationServer, ThermostatServer.with('Heating', 'Cooling', 'AutoMode'), FanControlServer.with('Auto'));
+    const st = roomAcState(r);
+    const limits = { absMinHeatSetpointLimit: 1600, absMaxHeatSetpointLimit: 3200, minHeatSetpointLimit: 1600, maxHeatSetpointLimit: 3200, absMinCoolSetpointLimit: 1600, absMaxCoolSetpointLimit: 3200, minCoolSetpointLimit: 1600, maxCoolSetpointLimit: 3200 };
+    const endpoint = new Endpoint(type as never, {
+      id: endpointId('room', r.room),
+      bridgedDeviceBasicInformation: {
+        nodeLabel: label, productName: 'Kova room AC', productLabel: matterLabel(`${r.zones.map(z => z.name).join(', ')} zone`), vendorName: 'Kova',
+        serialNumber: serialNumber('room', r.room), uniqueId: uniqueId('room', r.room), reachable: r.online,
+      },
+      // Cooling and heating, any set point (the unit has one), and no gap between them: auto runs to the same one.
+      thermostat: { controlSequenceOfOperation: 4, minSetpointDeadBand: 0, ...limits, ...st.thermostat },
+      fanControl: { fanModeSequence: 2, ...st.fanControl }, // OffLowMedHighAuto
+    } as never) as Endpoint;
+    await agg.add(endpoint);
+    const e: RoomEntry = { endpoint, label, reachable: r.online, lastActive: r.on ? systemModeFromKova(true, r.hvac) : null, pushed: JSON.stringify(st) };
+    this.roomAcs.set(r.room, e);
+    this.followRoom(r.room, endpoint);
+  }
+
+  private followRoom(room: string, ep: Endpoint): void {
+    const ev = ep.events as unknown as Record<string, Record<string, { on(fn: (v: unknown, old: unknown, ctx?: Ctx) => void): void } | undefined> | undefined>;
+    // The values as written: Kova's own pushes may land on the endpoint before they're read.
+    const watch = (cluster: string, attr: string) => ev[cluster]?.[`${attr}$Changed`]?.on((v, _old, ctx) => {
+      if (!ctx || ctx.offline) return;
+      const p = this.roomPending.get(room);
+      if (p) { p.values.set(`${cluster}.${attr}`, v); return; }
+      this.roomPending.set(room, { values: new Map([[`${cluster}.${attr}`, v]]), cause: this.causeOf(ctx) });
+      setImmediate(() => void this.forwardRoom(room));
+    });
+    for (const a of ['systemMode', 'occupiedCoolingSetpoint', 'occupiedHeatingSetpoint']) watch('thermostat', a);
+    for (const a of ['fanMode', 'percentSetting']) watch('fanControl', a);
+  }
+
+  /** What a controller's writes to a room AC ask of it, from the values it wrote ("thermostat.systemMode" → 3). */
+  roomChange(room: string, values: Map<string, unknown>): RoomAcChange {
+    const e = this.roomAcs.get(room);
+    const view = this.hub.roomClimate.view(room);
+    const out: RoomAcChange = {};
+    if (values.has('thermostat.systemMode')) {
+      const mode = Number(values.get('thermostat.systemMode'));
+      const hvac = systemModeCommand(mode);
+      // A controller's "turn on" switches an off thermostat back to the mode it last showed (Google Home), or to Auto:
+      // that's "on", for Kova to choose the mode. Any other mode is a person choosing it.
+      if (hvac === 'off') out.on = false;
+      else if (hvac && !view?.on && (mode === e?.lastActive || mode === SYSTEM_MODE.auto)) out.on = true;
+      else if (hvac) out.hvac = hvac;
+    }
+    const cool = values.get('thermostat.occupiedCoolingSetpoint'), heat = values.get('thermostat.occupiedHeatingSetpoint');
+    if ((cool != null || heat != null) && out.on !== false) {
+      const mode = out.hvac ?? view?.hvac ?? null;
+      // The set point for the mode it's in; matter.js keeps the other one out of its way, which isn't a choice.
+      const v = Number(mode === 'heat' ? heat ?? cool : cool ?? heat);
+      if (Number.isFinite(v) && fromMatterTemp(v) !== view?.target) out.target = fromMatterTemp(v);
+    }
+    if (out.on !== false) {
+      const fan = values.has('fanControl.fanMode') ? acFanCommand(Number(values.get('fanControl.fanMode')))
+        : values.has('fanControl.percentSetting') ? acFanPercentCommand(values.get('fanControl.percentSetting') as number | null) : null;
+      if (fan?.on === false && !out.hvac && out.target == null) out.on = false;
+      else if (fan?.fanSpeed) out.fanSpeed = fan.fanSpeed;
+      else if (fan?.on) out.on ??= true;
+    }
+    return out;
+  }
+
+  private async forwardRoom(room: string): Promise<void> {
+    const p = this.roomPending.get(room);
+    this.roomPending.delete(room);
+    const e = this.roomAcs.get(room);
+    if (!p || !e || !this.running) return;
+    const change = this.roomChange(room, p.values);
+    try {
+      if (Object.keys(change).length) await this.hub.roomClimate.apply(room, change, p.cause);
+    } catch (err) {
+      console.warn(`[matter-bridge] ${e.label}:`, err instanceof Error ? err.message : err);
+    }
+    // Back in line with Kova (a mode the unit kept, a "turn on" that kept another room's mode).
+    e.pushed = '';
+    if (!this.roomPending.has(room)) this.pushRooms();
+  }
+
+  /** Push every room AC whose state changed. */
+  private pushRooms(): void {
+    if (!this.running) return;
+    for (const r of this.hub.roomClimate.rooms()) {
+      const e = this.roomAcs.get(r.room);
+      if (!e || this.roomPending.has(r.room)) continue;
+      const st = roomAcState(r);
+      if (r.on) e.lastActive = st.thermostat.systemMode as number;
+      const sig = JSON.stringify(st);
+      const reach = r.online !== e.reachable;
+      if (sig === e.pushed && !reach) continue;
+      e.pushed = sig;
+      const state: Record<string, object> = { ...st };
+      if (reach) { e.reachable = r.online; state.bridgedDeviceBasicInformation = { reachable: r.online }; }
+      void this.enqueue(async () => { if (this.roomAcs.get(r.room) === e) await e.endpoint.set(state as never); });
     }
   }
 

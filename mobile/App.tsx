@@ -33,6 +33,7 @@ import { IntegrationScreen } from './src/screens/IntegrationScreen';
 import { AutomationsScreen } from './src/screens/AutomationsScreen';
 import { BrowsersScreen } from './src/screens/BrowsersScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
+import { VoiceScreen } from './src/screens/VoiceScreen';
 import { HomeLocationScreen } from './src/screens/HomeLocationScreen';
 import { AutomationEditor } from './src/screens/AutomationEditor';
 import { CustomiseScreen } from './src/screens/CustomiseScreen';
@@ -125,6 +126,7 @@ function Home() {
           <Stack.Screen name="Automations" component={AutomationsScreen} />
           <Stack.Screen name="Browsers" component={BrowsersScreen} />
           <Stack.Screen name="Settings" component={SettingsScreen} />
+          <Stack.Screen name="Voice" component={VoiceScreen} />
           <Stack.Screen name="HomeLocation" component={HomeLocationScreen} />
           <Stack.Screen name="AutomationEditor" component={AutomationEditor} />
           <Stack.Screen name="Customise" component={CustomiseScreen} />

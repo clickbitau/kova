@@ -23,6 +23,8 @@ export type Stack = {
   Browsers: undefined;
   /** More → Settings: where the home is, its timezone and prayer method, behaviours. */
   Settings: undefined;
+  /** Settings → Voice and other apps: room ACs for Google Home, Alexa and Apple Home, comfort, pairing. */
+  Voice: undefined;
   /** Settings → Where the home is: the address search, paste from Google Maps, the map and the circle. */
   HomeLocation: undefined;
   Energy: undefined;

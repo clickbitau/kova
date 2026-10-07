@@ -48,6 +48,9 @@ export function SettingsScreen() {
           on={s.home.pauseForDoorbell !== false} onChange={v => void put({ pauseForDoorbell: v }, v ? 'The doorbell pauses what’s playing' : 'The doorbell no longer pauses anything')} />
         <Row icon="routine" title="Modes and Light the way" sub="The home through the day" onPress={() => nav.navigate('Modes')} />
         <Row icon="account_tree" title="Automations" sub="When something happens, do something" onPress={() => nav.navigate('Automations')} />
+        {s.roomClimate?.rooms.length ? (
+          <Row icon="graphic_eq" iconFg={C.blue} title="Voice and other apps" sub={`${s.roomClimate.rooms.length} room AC${s.roomClimate.rooms.length === 1 ? '' : 's'} for Google Home, Alexa and Apple Home`} onPress={() => nav.navigate('Voice')} />
+        ) : null}
       </Group>
       <Group title="Presence, alerts and access">
         <Row first icon="router" iconFg={C.blue} title="How Kova knows who’s home" sub="Warden or your router, phones, network checks" onPress={() => nav.navigate('Integration', { id: 'presence' })} />

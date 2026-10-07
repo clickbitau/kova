@@ -10,6 +10,7 @@ import { buildServer } from '../src/api/server.ts';
 import {
   HomeKitBridge, kelvinToMired, miredToKelvin, hsToHex, hexToHs, toHomeKitBrightness, brightnessCommand,
   fanModeToTarget, targetToFanMode, generatePincode, isValidPincode, setupURI, homeKitName, deviceUUID,
+  roomAcUUID, heaterCoolerTarget, heaterCoolerMode, heaterCoolerCurrent,
 } from '../src/bridges/homekit.ts';
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../web');
@@ -217,6 +218,49 @@ test('HomeKit bridge: TVs as their own accessories, and no duplicates of Apple/M
     assert.equal(dev('bedroom_tv').vol, 27);
     await hub.engine.command('bedroom_tv', { on: false });
     assert.equal(svc.getCharacteristic(Characteristic.Active).value, Characteristic.Active.INACTIVE, 'Kova changes reach the Home app');
+  } finally {
+    await hk.stop();
+    await hub.stop();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('HomeKit bridge: a HeaterCooler per room a zone serves, through the room-AC policy', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'kova-homekit-'));
+  const { hub, dev } = await testHub(12, c => { c.devices!.ducted_ac = { ...c.devices!.ducted_ac, zoneRooms: { 1: ['lounge'], 3: ['master'] } }; });
+  const hk = new HomeKitBridge(hub, { storageDir: dir });
+  try {
+    assert.equal(heaterCoolerTarget('heat'), 1);
+    assert.equal(heaterCoolerTarget('cool'), 2);
+    assert.equal(heaterCoolerTarget('dry'), 0);
+    assert.equal(heaterCoolerMode(2), 'cool');
+    assert.equal(heaterCoolerCurrent(false, 'cool'), 0);
+    assert.equal(heaterCoolerCurrent(true, 'heat'), 2);
+    assert.equal(heaterCoolerCurrent(true, 'fan'), 1);
+
+    assert.deepEqual(hk.roomAcList(), [{ room: 'lounge', label: 'Lounge AC' }, { room: 'master', label: 'Master bed AC' }]);
+    const acc = hk.roomAcs.get('master')!.accessory;
+    assert.equal(acc.UUID, roomAcUUID('master'));
+    assert.equal(acc.category, Categories.AIR_CONDITIONER);
+    const hc = acc.getService(Service.HeaterCooler)!;
+    const active = hc.getCharacteristic(Characteristic.Active);
+    assert.equal(active.value, 0);
+    assert.ok(Math.abs(Number(hc.getCharacteristic(Characteristic.CurrentTemperature).value) - 21.2) < 0.01, 'the room’s temperature');
+    // On from the Home app or Siri: the master bed's zone, the unit on in a mode Kova chooses (spring, 21.2°: heat 21).
+    await active.handleSetRequest(1);
+    assert.equal(dev('ducted_ac').on, true);
+    assert.equal(dev('ducted_ac').hvac, 'heat');
+    assert.equal(dev('ducted_ac').zones!.find(z => z.n === 3)!.on, true);
+    assert.equal(dev('ducted_ac').zones!.find(z => z.n === 1)!.on, false);
+    assert.equal(hc.getCharacteristic(Characteristic.CurrentHeaterCoolerState).value, 2);
+    // Cool to 23: explicit.
+    await hc.getCharacteristic(Characteristic.TargetHeaterCoolerState).handleSetRequest(2);
+    await hc.getCharacteristic(Characteristic.CoolingThresholdTemperature).handleSetRequest(23);
+    assert.deepEqual([dev('ducted_ac').hvac, dev('ducted_ac').target], ['cool', 23]);
+    assert.equal(hk.roomAcs.get('lounge')!.accessory.getService(Service.HeaterCooler)!.getCharacteristic(Characteristic.Active).value, 0);
+    await active.handleSetRequest(0);
+    assert.equal(dev('ducted_ac').on, false, 'the last zone closing turns the unit off');
+    assert.equal(active.value, 0);
   } finally {
     await hk.stop();
     await hub.stop();

@@ -13,7 +13,10 @@ import { testHub } from './helpers.ts';
 import {
   MatterBridge, matterKind, isBridged, matterLabel, deviceLabel, endpointId, isValidPasscode, generatePasscode, generateDiscriminator,
   fanModeFromKova, fanModeCommand, fanPercentCommand, fanState, colorState, colorCommand, causeFor, vendorName, uniqueId,
+  systemModeFromKova, systemModeCommand, toMatterTemp, fromMatterTemp, acFanMode, acFanCommand, acFanPercentCommand,
 } from '../src/bridges/matter-bridge.ts';
+import { ThermostatClient } from '@matter/main/behaviors/thermostat';
+import { FanControlClient } from '@matter/main/behaviors/fan-control';
 
 // ------------------------------------------------------------- pure maps --
 
@@ -312,5 +315,127 @@ test('Matter bridge: rejects an invalid passcode', async () => {
   } finally {
     await hub.stop();
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// -------------------------------------------------------------- room ACs --
+
+test('Matter bridge: room AC conversions', () => {
+  assert.equal(systemModeFromKova(false, 'cool'), 0);
+  assert.equal(systemModeFromKova(true, 'cool'), 3);
+  assert.equal(systemModeFromKova(true, 'heat'), 4);
+  assert.equal(systemModeFromKova(true, 'fan'), 7);
+  assert.equal(systemModeFromKova(true, 'dry'), 8);
+  assert.equal(systemModeFromKova(true, null), 1);
+  assert.equal(systemModeCommand(0), 'off');
+  assert.equal(systemModeCommand(1), 'auto');
+  assert.equal(systemModeCommand(3), 'cool');
+  assert.equal(systemModeCommand(6), 'cool', 'precooling');
+  assert.equal(systemModeCommand(5), 'heat', 'emergency heat');
+  assert.equal(systemModeCommand(9), null, 'sleep');
+  assert.equal(toMatterTemp(22.5), 2250);
+  assert.equal(fromMatterTemp(2249), 22.5);
+  assert.equal(fromMatterTemp(2210), 22);
+  assert.equal(acFanMode(false, 'high'), 0);
+  assert.equal(acFanMode(true, 'quiet'), 1);
+  assert.equal(acFanMode(true, 'medium'), 2);
+  assert.equal(acFanMode(true, 'turbo'), 3);
+  assert.equal(acFanMode(true, 'auto'), 5);
+  assert.deepEqual(acFanCommand(0), { on: false });
+  assert.deepEqual(acFanCommand(2), { fanSpeed: 'medium' });
+  assert.deepEqual(acFanCommand(5), { fanSpeed: 'auto' });
+  assert.deepEqual(acFanPercentCommand(20), { fanSpeed: 'low' });
+  assert.deepEqual(acFanPercentCommand(100), { fanSpeed: 'high' });
+  assert.equal(acFanPercentCommand(null), null);
+  assert.equal(endpointId('room', 'theatre'), 'r-theatre');
+  assert.notEqual(uniqueId('room', 'lamp'), uniqueId('device', 'lamp'));
+});
+
+test('Matter bridge: a Thermostat per room a zone serves, and a controller\'s writes go through the room-AC policy', { timeout: 180_000 }, async () => {
+  const root = mkdtempSync(join(tmpdir(), 'kova-matter-roomac-'));
+  const sim = new NetworkSimulator();
+  const { hub, dev } = await testHub(12, c => { c.devices!.ducted_ac = { ...c.devices!.ducted_ac, zoneRooms: { 1: ['lounge'], 2: ['kitchen'], 3: ['master'] } }; });
+  const bridgeDir = join(root, 'bridge');
+  const bridge = new MatterBridge(hub, { storageDir: bridgeDir, environment: simEnv(sim, 40, bridgeDir) });
+  const ctlDir = join(root, 'controller');
+  const reg = new Registry(new Store(':memory:'));
+  const matter = new MatterAdapter({ storageDir: ctlDir, environment: simEnv(sim, 3, ctlDir), transitionTenths: 0, commandTimeoutMs: 5000 });
+  try {
+    await bridge.start();
+    assert.deepEqual(bridge.roomAcList().map(r => r.label), ['Lounge AC', 'Kitchen AC', 'Master bed AC']);
+    await reg.addAdapter(matter);
+    const added = await matter.commission(bridge.pairingInfo().manualCode);
+    const nodeId = added[0].address.split('/')[0];
+    const node = (matter as unknown as { targets: Map<string, ControllerTarget> }).targets.get(added[0].id)!.node as unknown as {
+      endpoints: { for(n: number): { maybeStateOf(c: string): Record<string, unknown> | undefined; setStateOf(t: unknown, v: object): Promise<void> } };
+    };
+    assert.ok(nodeId);
+    const ep = (room: string) => node.endpoints.for(bridge.roomAcs.get(room)!.endpoint.number!);
+    const remote = (room: string, cluster: string) => ep(room).maybeStateOf(cluster) as Record<string, unknown>;
+    const types = (room: string) => (remote(room, 'descriptor').deviceTypeList as { deviceType: number }[]).map(t => Number(t.deviceType));
+    assert.ok(types('master').includes(0x301), 'a Thermostat');
+    assert.equal(remote('master', 'bridgedDeviceBasicInformation').nodeLabel, 'Master bed AC');
+    assert.equal(remote('master', 'thermostat').systemMode, 0, 'off: the unit is off');
+    assert.equal(remote('master', 'thermostat').localTemperature, 2120, 'the master bed’s sensor');
+    assert.equal(remote('master', 'thermostat').occupiedCoolingSetpoint, 2300);
+    assert.equal(remote('master', 'fanControl').fanMode, 0);
+
+    // Google Home's "turn on" on a thermostat that never ran: Auto. That's "on", and Kova chooses (spring, 21.2°: heat 21).
+    const write = (room: string, cluster: string, values: object) => ep(room).setStateOf(cluster === 'thermostat' ? ThermostatClient : FanControlClient, values);
+    await write('master', 'thermostat', { systemMode: 1 });
+    await until('master bed on', () => dev('ducted_ac').on === true && dev('ducted_ac').zones!.find(z => z.n === 3)!.on);
+    assert.equal(dev('ducted_ac').hvac, 'heat');
+    assert.equal(dev('ducted_ac').target, 21);
+    assert.equal(dev('ducted_ac').zones!.find(z => z.n === 1)!.on, false, 'only the master bed gets air');
+    await until('controller sees heat', () => remote('master', 'thermostat').systemMode === 4);
+    assert.equal(remote('lounge', 'thermostat').systemMode, 0, 'the lounge’s zone is closed');
+    const byGoogle = hub.store.between(0, Number.MAX_SAFE_INTEGER, 'run').filter(e => e.cause.label === 'Google Home' || e.cause.label === 'Test vendor');
+    assert.ok(hub.store.between(0, Number.MAX_SAFE_INTEGER, 'run').some(e => /Master bed AC on/.test(e.cause.detail ?? '')), JSON.stringify(byGoogle));
+
+    // "Set the master bed AC to 22": its heating set point.
+    await write('master', 'thermostat', { occupiedHeatingSetpoint: 2200 });
+    await until('22°', () => dev('ducted_ac').target === 22);
+    assert.deepEqual(hub.roomClimate.view('master')!.held, { target: 22 });
+
+    // Another room, turned on to the mode the thermostat showed last (none: Auto): keeps the unit's mode.
+    await write('lounge', 'thermostat', { systemMode: 1 });
+    await until('lounge open', () => dev('ducted_ac').zones!.find(z => z.n === 1)!.on);
+    assert.equal(dev('ducted_ac').hvac, 'heat');
+    assert.equal(dev('ducted_ac').target, 22);
+    await until('lounge shows heat', () => remote('lounge', 'thermostat').systemMode === 4);
+
+    // "Cool mode" from the lounge: a person choosing; the unit cools, to the cool-to temperature.
+    await write('lounge', 'thermostat', { systemMode: 3 });
+    await until('cool', () => dev('ducted_ac').hvac === 'cool');
+    assert.equal(dev('ducted_ac').target, 24);
+    // Fan from the controller.
+    await write('lounge', 'fanControl', { fanMode: 2 });
+    await until('fan medium', () => dev('ducted_ac').fanSpeed === 'medium');
+
+    // Off: the lounge's zone closes, the unit keeps running for the master bed; then the master bed: the unit goes off.
+    await write('lounge', 'thermostat', { systemMode: 0 });
+    await until('lounge closed', () => !dev('ducted_ac').zones!.find(z => z.n === 1)!.on);
+    assert.equal(dev('ducted_ac').on, true);
+    await write('master', 'thermostat', { systemMode: 0 });
+    await until('unit off', () => dev('ducted_ac').on === false);
+    await until('controller sees off', () => remote('master', 'thermostat').systemMode === 0);
+
+    // Turning it back on sends the mode it last showed (cool): that's "on", and the master bed's own choice comes back.
+    await write('master', 'thermostat', { systemMode: 3 });
+    await until('master bed on again', () => dev('ducted_ac').on === true);
+    assert.equal(dev('ducted_ac').zones!.find(z => z.n === 3)!.on, true);
+    assert.equal(dev('ducted_ac').target, 22, 'its own 22°');
+
+    // A change in Kova reaches the controller; unmapping a zone removes its room AC.
+    await hub.engine.command('ducted_ac', { target: 23 }, { kind: 'user', label: 'You' });
+    await until('controller sees 23°', () => remote('master', 'thermostat').occupiedHeatingSetpoint === 2300);
+    hub.config.update(c => { c.devices!.ducted_ac.zoneRooms = { 3: ['master'] }; });
+    await bridge.reconcile();
+    assert.deepEqual(bridge.roomAcList().map(r => r.label), ['Master bed AC']);
+  } finally {
+    await reg.stop().catch(() => {});
+    await bridge.stop().catch(() => {});
+    await hub.stop();
+    rmSync(root, { recursive: true, force: true });
   }
 });

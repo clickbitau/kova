@@ -385,6 +385,46 @@ accepts it for accounts that registered that vendor/product id in the Google
 Home Developer Console. Needs IPv6 and mDNS on the host network (UDP 5540,
 `KOVA_MATTER_BRIDGE_PORT`).
 
+**Room ACs: "Hey Google, turn on the AC" in a room** (`engine/room-climate.ts`). A ducted air conditioner
+serves the whole home; its zones serve rooms (`zoneRooms`). Both bridges publish one device per room a zone
+serves, named "<Room> AC": a **Thermostat** on the Matter bridge (SystemMode Off / Cool / Heat / Auto / Fan only
+/ Dry, both set points on the unit's one set temperature, the room's temperature, and a Fan Control cluster) and
+a **HeaterCooler** on the Apple Home bridge (Active, Heat / Cool / Auto, set temperature, room temperature; no
+fan, as HomeKit's fan speed has no "auto"). Thermostat rather than Room Air Conditioner because Google Home's
+list of supported Matter device types has Thermostat and not Room Air Conditioner. The owner puts each room AC
+in its room in Google Home once; Google then sends "turn on the AC" from a speaker to the AC in the speaker's
+room. That is how Kova knows which speaker asked: it doesn't hear the speaker, the speaker's room does it.
+A controller's writes don't go to the unit: they go to the room-AC policy (`RoomClimate.apply`):
+
+- **On** opens the room's zone(s). If the unit is off, it turns on in a mode chosen for the room, at the
+  comfortable temperature for that mode (cool to 24°, heat to 21° unless changed in Settings), fan auto; zones
+  left open while the unit was off close, so only the room that asked gets air. If the unit is already running
+  for other rooms, its mode, set temperature and fan are kept: one room never flips another.
+- **The mode**: the room's temperature first (cool at cool-to + 1°, heat at heat-to − 1°; against the season
+  only 3° past it), then the season for the home's hemisphere (meteorological seasons from the latitude; within
+  15° of the equator, warm all year): summer cools, winter heats; in spring and autumn the forecast (a high of
+  28°+ or 26° now cools, a high of 18° or less or 14° now heats), then the room against the middle of the
+  comfortable band.
+- **Off** closes the room's zone(s); the unit goes off when no zone is left open (the registry's zone logic).
+- **A mode, set temperature or fan from a person** is done as asked (and opens the zone, turning the unit on),
+  holds while the room's AC is on (Kova never re-evaluates a running unit), and is remembered for the room's
+  next "on" in the same season. The unit has one set temperature, so "set the lounge AC to 22" sets it for
+  every open zone.
+- Google Home turns a Matter thermostat "on" by writing back the mode it last showed (or Auto). The bridge
+  treats that as plain "on", for the policy; any other mode is a person choosing it.
+
+A zone serving two rooms ("Office & Guest") gives each room its own AC; turning either off closes the shared zone.
+
+**The maker's own link.** If the unit's own app (ConnectLife and the like) is linked in Google Home, Google has a
+second, whole-home AC with mode and fan only. Kova doesn't touch it; Settings → Voice and other apps and the AC's
+panel say to unlink it or rename it and keep it out of rooms with speakers. Optional (Settings, off by default):
+when the unit turns on from elsewhere (a report Kova didn't cause, no Kova command to it for 2 minutes) with every
+zone closed, Kova opens the zones of rooms where someone is now (a motion sensor holding, a person or motion in
+the last 5 minutes, a TV on or a speaker playing), keeping the mode it was turned on in; with nobody anywhere it
+asks on the phones. Kova can't know which speaker spoke to the maker's integration, so this is a best guess and
+stays opt-in. Ask Kova takes "turn on the AC in the theatre" through the same policy; "turn on the AC in here"
+asks which room, since the app doesn't know the room it's in yet.
+
 **AirPlay → Cast** (`aircast.ts`) runs AirConnect's `aircast` (MIT) as a
 supervised child process, so every Cast speaker, display and Cast group appears
 as an AirPlay speaker on iPhones, iPads and Macs. Pick a Cast group in AirPlay
@@ -560,6 +600,9 @@ a row on the Integrations screen ("Router: 2 phones seen").
 | GET | `/api/integrations/homekit-devices/discover` | HomeKit accessories on the network: `{accessories: [{id, name, category, host, port, paired}]}` (browses mDNS for 3 s) |
 | POST | `/api/integrations/homekit-devices/pair` | `{id, code: "123-45-678", room?, name?}` pairs Kova with an accessory and returns its new devices; 400 with a message on a wrong code, an accessory that's already paired elsewhere, or when `homekit` isn't in integrations.json |
 | GET | `/api/integrations/matter-bridge` | `{enabled, manualCode, qrCode, commissioned, fabrics:[{label, vendor}]}` for the Matter bridge |
+| PUT | `/api/room-climate` | Room ACs: `{coolTo?, heatTo?, fromElsewhere?: "off"\|"rooms"}` (null puts a default back) → `{undo}` |
+| POST | `/api/room-climate/:room` | A room AC as a voice assistant would: `{on?, hvac?: …\|"off", target?, fanSpeed?}` → `{ok, changed, what, why, undo, room}` |
+| GET | `/api/room-climate/pairing` | `{matter: {enabled, manualCode, qrSvg, commissioned, fabrics, roomAcs}, homekit: {enabled, pincode, qrSvg, paired, roomAcs}}` for Settings → Voice and other apps |
 | POST | `/api/devices/:id/webrtc` | Camera live view: `{offerSdp}` → `{answerSdp, mediaSessionId, expiresAt}`; 400 "Live view isn’t available for this camera yet" for cameras without WebRTC |
 | POST | `/api/devices/:id/webrtc/extend`, `/stop` | `{mediaSessionId}`: keep a live stream going (they last about 5 min) or end it |
 | GET | `/api/devices/:id/snapshot` | Latest event image, where the camera offers one (404 otherwise) |

@@ -10,6 +10,7 @@ tested against your real history.
 - `docs/install.md`: **installing it for real** (Proxmox LXC, Debian/Ubuntu, Docker), backups, restore, updates
 - `docs/DOCKBIT.md`: how releases are built (`scripts/build-release.sh`) and how hubs get them from ClickBit's catalog
 - `docs/architecture.md`: how it fits together
+- `docs/voice.md`: room ACs with Google Home, Alexa and Apple Home (one AC per room a ducted zone serves)
 - `docs/design/`: the design handoff (prototypes, design language, sitemap)
 
 ## Run it

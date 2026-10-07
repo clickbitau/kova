@@ -316,13 +316,13 @@ export const CATALOG: CatalogItem[] = [
   },
   {
     id: 'homekitBridge', name: 'Apple Home bridge', icon: 'home', kind: 'Local', apply: 'restart',
-    description: 'Your Kova lights, plugs and overlays appear in the Home app and Siri.',
+    description: 'Your Kova lights, plugs, overlays and room ACs appear in the Home app and Siri.',
     fields: [{ key: 'port', label: 'Port', type: 'number', placeholder: '51826', help: 'Only change this if something else uses the port.' }],
     actions: [{ id: 'code', label: 'Show pairing code', icon: 'qr_code_2', method: 'GET', path: '/api/integrations/homekit', help: 'In the Home app: Add Accessory, then scan or type this code.' }],
   },
   {
     id: 'matterBridge', name: 'Matter bridge', icon: 'hub', kind: 'Local', apply: 'restart',
-    description: 'Share Kova devices with Google Home, Alexa and SmartThings over Matter.',
+    description: 'Share Kova devices with Google Home, Alexa and SmartThings over Matter, with an AC for each room a ducted zone serves.',
     fields: [],
     actions: [{ id: 'code', label: 'Show pairing code', icon: 'qr_code_2', method: 'GET', path: '/api/integrations/matter-bridge' }],
   },
