@@ -168,7 +168,7 @@ export function AskScreen() {
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2], paddingHorizontal: SP[3] }}>
           <TextInput value={text} onChangeText={setText} placeholder="Ask or tell Kova…" placeholderTextColor={C.stone2} returnKeyType="send" onSubmitEditing={() => void ask(text)}
             onFocus={() => setFocus(true)} onBlur={() => setFocus(false)} accessibilityLabel="Ask or tell Kova"
-            style={{ flex: 1, height: 48, paddingHorizontal: SP[4], borderRadius: 24, backgroundColor: C.card, borderWidth: 1, borderColor: focus ? C.amberLine : C.line, color: C.bone, fontFamily: F[500], fontSize: 16 }} />
+            style={{ flex: 1, minWidth: 0, height: 48, paddingHorizontal: SP[4], borderRadius: 24, backgroundColor: C.card, borderWidth: 1, borderColor: focus ? C.amberLine : C.line, color: C.bone, fontFamily: F[500], fontSize: 16 }} />
           <Press onPress={() => void ask(text)} label="Send" disabled={!ready} style={{ width: 48, height: 48, borderRadius: 24 }}>
             <Animated.View style={{ flex: 1, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: can.interpolate({ inputRange: [0, 1], outputRange: [C.control, C.amber] }) }}>
               <Icon name="arrow_upward" size={23} color={ready ? C.onAmber : C.stone2} />

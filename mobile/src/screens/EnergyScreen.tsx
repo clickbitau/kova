@@ -79,7 +79,7 @@ function Flow({ icon, label, value, color, dim }: { icon: string; label: string;
     <View style={{ flex: 1, gap: SP[2], alignItems: 'flex-start' }}>
       <IconWell icon={icon} color={dim ? C.stone2 : color} size={34} fill={!dim} />
       <View style={{ gap: 1 }}>
-        <T v="title" size={21} tabular color={dim ? C.stone : C.bone}>{value}</T>
+        <T v="title" size={21} tabular color={dim ? C.stone : C.bone} numberOfLines={1} maxFontSizeMultiplier={1.2}>{value}</T>
         <T v="footnote" weight={600} color={C.stone} numberOfLines={1}>{label}</T>
       </View>
     </View>
@@ -182,7 +182,7 @@ export function EnergyScreen() {
                       <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: TONE[st.tone] }} />
                       <T v="eyebrow" color={C.stone2}>{st.label}</T>
                     </View>
-                    <T v="title" size={21} tabular color={st.tone === 'muted' ? C.stone : C.bone}>{st.value}</T>
+                    <T v="title" size={21} tabular color={st.tone === 'muted' ? C.stone : C.bone} maxFontSizeMultiplier={1.2}>{st.value}</T>
                     <T v="footnote" color={C.stone} numberOfLines={2}>{st.sub}</T>
                   </Card>
                 </Appear>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { TextInput, View } from 'react-native';
+import { TextInput, View, useWindowDimensions } from 'react-native';
 import { Image } from 'expo-image';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { C, F, R, SP, alpha } from '../theme';
@@ -12,7 +12,7 @@ import { arcPath, clampTarget, TARGET_MAX, TARGET_MIN } from '../logic/climate';
 import { snapOpen, visibleZones } from '../logic/zones';
 import { combineChoices, UNASSIGNED } from '../logic/customise';
 import { Icon } from '../ui/Icon';
-import { Button, Card, Group, IconButton, IconWell, Pill, HScroll, Press, Row, Section, Segmented, Sheet, Slider, Stat, Switch, SwitchRow, Tag } from '../ui/kit';
+import { Button, Card, Chips, Group, IconButton, Notice, IconWell, Pill, HScroll, Press, Row, Section, Segmented, Sheet, Slider, Stat, Switch, SwitchRow, Tag } from '../ui/kit';
 import { T } from '../ui/Text';
 import { CameraStill } from './SecurityScreen';
 import { SensorReadings, WatchSettings } from './SensorPanel';
@@ -29,11 +29,13 @@ const MUSIC = '#c79bf2';
 
 /** One choice of a few (an input, a sound mode): a tile with an icon, two to a row, the chosen one lit. */
 export function Choice({ label, icon, on, onPress, color = C.blue }: { label: string; icon: string; on: boolean; onPress: () => void; color?: string }) {
+  // Two to a row, or one when half the row is too narrow for a label (a small phone with large text).
+  const { fontScale } = useWindowDimensions();
   return (
-    <Press label={label} selected={on} onPress={onPress} style={{ flexBasis: '47%', flexGrow: 1, flexDirection: 'row', alignItems: 'center', gap: SP[3], height: 52, paddingHorizontal: SP[3], borderRadius: R.md,
+    <Press label={label} selected={on} onPress={onPress} style={{ flexBasis: '47%', minWidth: 134 * Math.min(Math.max(fontScale, 1), 1.6), flexGrow: 1, flexDirection: 'row', alignItems: 'center', gap: SP[2] + 2, minHeight: 52, paddingVertical: SP[2], paddingHorizontal: SP[3], borderRadius: R.md,
       backgroundColor: on ? alpha(color, 0.16) : C.inset, borderWidth: 1, borderColor: on ? alpha(color, 0.45) : C.edge }}>
       <Icon name={icon} size={20} color={on ? color : C.stone} fill={on} />
-      <T v="label" weight={on ? 700 : 600} color={on ? C.bone : C.bone2} numberOfLines={1} style={{ flex: 1 }}>{label}</T>
+      <T v="label" weight={on ? 700 : 600} color={on ? C.bone : C.bone2} numberOfLines={2} style={{ flex: 1, minWidth: 0 }}>{label}</T>
       {on ? <Icon name="check" size={18} color={color} /> : null}
     </Press>
   );
@@ -44,7 +46,7 @@ export function FieldWithButton({ value, onChange, placeholder, button, color = 
   return (
     <View style={{ flexDirection: 'row', gap: SP[2] }}>
       <TextInput value={value} onChangeText={onChange} placeholder={placeholder} placeholderTextColor={C.stone2} returnKeyType="go" onSubmitEditing={onSubmit} accessibilityLabel={label} autoCorrect={false}
-        style={{ flex: 1, height: 48, paddingHorizontal: SP[3] + 2, borderRadius: R.md, borderWidth: 1, borderColor: C.line, backgroundColor: C.card, color: C.bone, fontFamily: F[500], fontSize: 16 }} />
+        style={{ flex: 1, minWidth: 0, height: 48, paddingHorizontal: SP[3] + 2, borderRadius: R.md, borderWidth: 1, borderColor: C.line, backgroundColor: C.card, color: C.bone, fontFamily: F[500], fontSize: 16 }} />
       {(show ?? !!value.trim()) ? (
         <Press onPress={onSubmit} label={button} style={{ height: 48, paddingHorizontal: SP[4], borderRadius: R.md, backgroundColor: color, justifyContent: 'center' }}>
           <T v="label" color={onColor}>{button}</T>
@@ -55,8 +57,8 @@ export function FieldWithButton({ value, onChange, placeholder, button, color = 
 }
 
 /** The air conditioner's dial: a 270° arc filled to the target in the mode's colour, the target in the middle. */
-function Dial({ target, room, color, on }: { target: number; room: number | null; color: string; on: boolean }) {
-  const size = 200, sw = 12, r = (size - sw) / 2 - 4;
+function Dial({ target, room, color, on, size = 200 }: { target: number; room: number | null; color: string; on: boolean; size?: number }) {
+  const sw = 12, r = (size - sw) / 2 - 4;
   const f = (target - TARGET_MIN) / (TARGET_MAX - TARGET_MIN);
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }} accessibilityLabel={`Set to ${target} degrees${room != null ? `, room ${room} degrees` : ''}`}>
@@ -70,7 +72,7 @@ function Dial({ target, room, color, on }: { target: number; room: number | null
         })() : null}
       </Svg>
       <T v="eyebrow" color={on ? color : C.stone2}>{on ? 'Set to' : 'Off'}</T>
-      <T size={54} weight={700} tracking={-0.04} tabular color={on ? C.bone : C.stone}>{`${target}°`}</T>
+      <T size={Math.round(size * 0.27)} weight={700} tracking={-0.04} tabular color={on ? C.bone : C.stone} maxFontSizeMultiplier={1.15}>{`${target}°`}</T>
       {room != null ? <T v="footnote" color={C.stone}>{`Room ${room}°`}</T> : null}
     </View>
   );
@@ -81,6 +83,7 @@ export function DeviceSheet() {
   const { snap, send, act, say, cfg } = useHub();
   const { id, close } = useSheet();
   const nav = useNav();
+  const { width, fontScale } = useWindowDimensions();
   const [name, setName] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [station, setStation] = useState('');
@@ -97,6 +100,10 @@ export function DeviceSheet() {
   if (!snap || !D) return <Sheet open={false} onClose={close}>{null}</Sheet>;
 
   const t = tint(D);
+  // The sheet's content width (20 pt each side), less the card's padding: room for − and + beside the dial?
+  const inner = width - SP[5] * 2 - SP[3] * 2;
+  const dialSide = inner >= 200 + 52 * 2 + SP[2] * 2;
+  const dialSize = dialSide ? 200 : Math.min(200, inner);
   const [st, sf] = stateOf(D);
   const fav = (snap.favourites ?? []).includes(D.id);
   const draft = name ?? D.name;
@@ -125,6 +132,8 @@ export function DeviceSheet() {
   const sensor = isSensor(D) ? snap.sensors?.find(x => x.id === D.id) : undefined;
   const watched = isSensor(D) || D.type === 'camera';
   const canPower = !watched;
+  const stackHead = width - SP[5] * 2 - 52 - 14 - (watched ? 0 : 68) < 190 * Math.max(1, fontScale);
+  const power = canPower ? <Switch big label={`${D.name} power`} on={!!D.on} onChange={v => void send(D.id, isPlayer(D) && !v ? { on: false, media: null } : { on: v })} /> : null;
   const shownTarget = target ?? D.target ?? 24;
   const hv = HVAC.find(h => h[0] === D.hvac);
   const nudge = (d: number) => {
@@ -140,17 +149,31 @@ export function DeviceSheet() {
 
   return (
     <Sheet open onClose={close} label={`${D.name} panel`}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3] + 2 }}>
-        <IconWell icon={sensor?.icon ?? iconOf(D)} color={D.online === false ? C.red : t.iconFg} bg={D.online === false ? C.redTint : t.iconBg} size={52} radius={26} fill />
-        <View style={{ flex: 1, gap: 2 }}>
-          <T v="footnote" weight={600} color={C.stone}>{roomName}</T>
-          <T v="title" numberOfLines={2}>{D.name}</T>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <T v="callout" weight={600} color={sf} numberOfLines={1} style={{ flexShrink: 1 }}>{st}</T>
+      {/* The name beside the icon and the switch where it has room; on a small phone or with large text it gets a line
+          of its own under them, so a long name wraps by words instead of breaking. */}
+      {stackHead ? (
+        <View style={{ gap: SP[2] }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3] }}>
+            <IconWell icon={sensor?.icon ?? iconOf(D)} color={D.online === false ? C.red : t.iconFg} bg={D.online === false ? C.redTint : t.iconBg} size={48} radius={24} fill />
+            <T v="footnote" weight={600} color={C.stone} numberOfLines={1} style={{ flex: 1, minWidth: 0 }}>{roomName}</T>
+            {power}
+          </View>
+          <View style={{ gap: 2 }}>
+            <T v="title">{D.name}</T>
+            <T v="callout" weight={600} color={sf}>{st}</T>
           </View>
         </View>
-        {canPower ? <Switch big label={`${D.name} power`} on={!!D.on} onChange={v => void send(D.id, isPlayer(D) && !v ? { on: false, media: null } : { on: v })} /> : null}
-      </View>
+      ) : (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3] + 2 }}>
+          <IconWell icon={sensor?.icon ?? iconOf(D)} color={D.online === false ? C.red : t.iconFg} bg={D.online === false ? C.redTint : t.iconBg} size={52} radius={26} fill />
+          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+            <T v="footnote" weight={600} color={C.stone} numberOfLines={1}>{roomName}</T>
+            <T v="title" numberOfLines={3}>{D.name}</T>
+            <T v="callout" weight={600} color={sf} numberOfLines={2}>{st}</T>
+          </View>
+          {power}
+        </View>
+      )}
 
       {(D.type === 'dimmer' || has(D, 'brightness')) ? block('bri', 'Brightness',
         <Slider value={D.bri ?? 100} min={1} icon="light_mode" label="Brightness" color={D.on ? (D.color || C.amber) : C.stone3} onRelease={v => void send(D.id, { on: true, bri: v })} />,
@@ -185,13 +208,19 @@ export function DeviceSheet() {
 
       {D.type === 'climate' ? (
         <View style={{ gap: SP[5] }}>
-          <Card style={{ paddingVertical: SP[4], alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: SP[3] }}>
-            <IconButton icon="remove" label="Cooler" size={52} onPress={() => nudge(-1)} />
-            <Dial target={shownTarget} room={D.temp ?? null} color={hv?.[3] ?? C.blue} on={!!D.on} />
-            <IconButton icon="add" label="Warmer" size={52} onPress={() => nudge(1)} />
+          {/* The dial between − and + where they fit beside it; on a small phone, − and + sit under it. */}
+          <Card style={{ paddingVertical: SP[4], alignItems: 'center', flexDirection: dialSide ? 'row' : 'column', justifyContent: 'space-between', paddingHorizontal: SP[3], gap: dialSide ? 0 : SP[2] }}>
+            {dialSide ? <IconButton icon="remove" label="Cooler" size={52} onPress={() => nudge(-1)} /> : null}
+            <Dial target={shownTarget} room={D.temp ?? null} color={hv?.[3] ?? C.blue} on={!!D.on} size={dialSize} />
+            {dialSide ? <IconButton icon="add" label="Warmer" size={52} onPress={() => nudge(1)} /> : (
+              <View style={{ flexDirection: 'row', gap: SP[6] }}>
+                <IconButton icon="remove" label="Cooler" size={52} onPress={() => nudge(-1)} />
+                <IconButton icon="add" label="Warmer" size={52} onPress={() => nudge(1)} />
+              </View>
+            )}
           </Card>
           {block('hvac', 'Mode', <Segmented label="Mode" value={D.on ? D.hvac ?? null : null} options={HVAC.map(([id, label, icon, color]) => ({ id, label, icon, color }))} onChange={id => void send(D.id, { on: true, hvac: id as Dev['hvac'] })} />)}
-          {block('fan', 'Fan', <Segmented compact label="Fan speed" value={D.fanSpeed ?? null} color={C.blue} options={FAN_SPEEDS.map(([id, label]) => ({ id, label }))} onChange={id => void send(D.id, { fanSpeed: id as Dev['fanSpeed'] })} />)}
+          {block('fan', 'Fan', <Chips label="Fan speed" value={D.fanSpeed ?? null} color={C.blue} options={FAN_SPEEDS.map(([id, label]) => ({ id, label }))} onChange={id => void send(D.id, { fanSpeed: id as Dev['fanSpeed'] })} />)}
           {D.zones?.length ? <Zones D={D} /> : null}
         </View>
       ) : null}
@@ -419,7 +448,7 @@ function Zones({ D }: { D: Dev }) {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2] }}>
             {editing === z.n ? (
               <TextInput autoFocus value={draft} onChangeText={setDraft} onSubmitEditing={() => rename(z.n)} onBlur={() => rename(z.n)} placeholder={`Zone ${z.n}`} placeholderTextColor={C.stone3}
-                accessibilityLabel={`Name for zone ${z.n}`} returnKeyType="done" style={{ flex: 1, color: C.bone, fontFamily: F[700], fontSize: 15, paddingVertical: 2 }} />
+                accessibilityLabel={`Name for zone ${z.n}`} returnKeyType="done" style={{ flex: 1, minWidth: 0, color: C.bone, fontFamily: F[700], fontSize: 15, paddingVertical: 2 }} />
             ) : (
               <Press onPress={() => { setDraft(D.zoneNames?.[String(z.n)] ?? ''); setEditing(z.n); }} label={`${z.name}, rename`} style={{ flex: 1 }}>
                 <T v="headline">{z.name}</T>
@@ -440,10 +469,7 @@ function RouterPower({ P }: { P: NonNullable<ReturnType<typeof routerPanel>> }) 
   return (
     <View style={{ gap: SP[4] }}>
       {P.alert ? (
-        <Card tint={P.alert.color} style={{ padding: SP[3] + 2, flexDirection: 'row', gap: SP[3], alignItems: 'flex-start' }}>
-          <Icon name="power_off" size={20} color={P.alert.color} fill />
-          <T v="callout" weight={600} style={{ flex: 1 }}>{P.alert.text}</T>
-        </Card>
+        <Notice compact icon="power_off" color={P.alert.color} title={P.alert.text} />
       ) : null}
       <View style={{ flexDirection: 'row', gap: SP[2] }}>
         <Card style={{ flex: 1, padding: SP[3] + 2, gap: 2 }}>
@@ -462,7 +488,7 @@ function RouterPower({ P }: { P: NonNullable<ReturnType<typeof routerPanel>> }) 
           {P.supplies.map((x, i) => (
             <View key={x.name} accessible accessibilityLabel={`${x.name}: ${x.badge}`} style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3], paddingHorizontal: SP[4], paddingVertical: SP[3], borderTopWidth: i ? 1 : 0, borderTopColor: C.hairline }}>
               <Icon name={x.icon} size={20} color={x.color} fill />
-              <T v="body" weight={600} numberOfLines={1} style={{ flex: 1 }}>{x.name}</T>
+              <T v="body" weight={600} numberOfLines={2} style={{ flex: 1, minWidth: 0 }}>{x.name}</T>
               <Tag text={x.badge} color={x.color} />
             </View>
           ))}
@@ -473,7 +499,7 @@ function RouterPower({ P }: { P: NonNullable<ReturnType<typeof routerPanel>> }) 
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SP[2] }}>
             {P.temps.map(x => (
               <Card key={x.name} style={{ flexBasis: '47%', flexGrow: 1, padding: SP[3], gap: 2 }}>
-                <T v="micro" color={C.stone} numberOfLines={1}>{x.name}</T>
+                <T v="footnote" color={C.stone} numberOfLines={2}>{x.name}</T>
                 <T v="headline" color={x.color} tabular>{x.value}</T>
               </Card>
             ))}

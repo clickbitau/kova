@@ -23,11 +23,14 @@ function EntryRow({ e, first, onPress }: { e: Entry; first?: boolean; onPress: (
         <IconWell icon={e.icon} color={e.ok ? C.bone : tone} bg={e.ok ? C.selected : undefined} size={38} />
         <View style={{ position: 'absolute', right: -2, bottom: -2, width: 11, height: 11, borderRadius: 6, backgroundColor: tone, borderWidth: 2, borderColor: C.card }} />
       </View>
+      {/* Local or Cloud sits beside the name (it wraps under it when the name is long), so the name keeps the width. */}
       <View style={{ flex: 1, gap: 2, minWidth: 0 }}>
-        <T v="headline" numberOfLines={1}>{e.name}</T>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: SP[2], rowGap: 2 }}>
+          <T v="headline" numberOfLines={2} style={{ flexShrink: 1 }}>{e.name}</T>
+          <Tag text={e.kind} color={e.kind === 'Cloud' ? C.blue : C.stone} />
+        </View>
         <T v="footnote" color={e.ok ? C.stone : e.idle ? C.amber : C.redText} numberOfLines={2}>{sub}</T>
       </View>
-      <View style={{ alignSelf: 'center' }}><Tag text={e.kind} color={e.kind === 'Cloud' ? C.blue : C.stone} /></View>
       <Icon name="chevron_right" size={20} color={C.stone2} />
     </Press>
   );

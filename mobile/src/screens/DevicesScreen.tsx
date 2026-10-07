@@ -21,7 +21,7 @@ export function SearchField({ value, onChange, placeholder }: { value: string; o
       <Icon name="search" size={20} color={focus ? C.amber : C.stone2} />
       <TextInput value={value} onChangeText={onChange} placeholder={placeholder} placeholderTextColor={C.stone2} autoCorrect={false} autoCapitalize="none" returnKeyType="search"
         onFocus={() => setFocus(true)} onBlur={() => setFocus(false)} accessibilityLabel={placeholder}
-        style={{ flex: 1, color: C.bone, fontFamily: F[500], fontSize: 16, paddingVertical: 10 }} />
+        style={{ flex: 1, minWidth: 0, color: C.bone, fontFamily: F[500], fontSize: 16, paddingVertical: 10 }} />
       {value ? <IconButton icon="close" label="Clear search" size={34} tone="ghost" color={C.stone} onPress={() => onChange('')} /> : null}
     </View>
   );

@@ -115,12 +115,14 @@ export function Screen({ children, title, over, onBack, right, glow, onRefresh, 
           <ConnBanner />
           {head}
           {title ? (
-            <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: SP[3] }}>
-              <View style={{ flex: 1, gap: 2 }}>
+            // The buttons beside the title move under it when both don't fit (a small phone, large text), so the title keeps
+            // the whole width and wraps by words.
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end', justifyContent: 'space-between', columnGap: SP[3], rowGap: SP[2] }}>
+              <View style={{ flexGrow: 1, flexShrink: 1, maxWidth: '100%', gap: 2 }}>
                 {over ? <T v="footnote" weight={600} color={C.stone}>{over}</T> : null}
-                <T v="largeTitle" size={onBack ? 30 : 32}>{title}</T>
+                <T v="largeTitle" size={onBack ? 30 : 32} numberOfLines={2}>{title}</T>
               </View>
-              {right}
+              {right ? <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2], marginLeft: 'auto' }}>{right}</View> : null}
             </View>
           ) : null}
         </View>

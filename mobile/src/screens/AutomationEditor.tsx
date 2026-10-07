@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, TextInput, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePreventRemove, useRoute, type NavigationAction, type RouteProp } from '@react-navigation/native';
 import { C, F, R, SP, alpha } from '../theme';
@@ -273,7 +273,7 @@ function Part({ path, tag, kind, kinds, onKind, what, canRemove = true, children
           <IconWell icon={KIND_ICON[`${what}:${kind}`] ?? 'tune'} color={what === 'trigger' ? C.amber : what === 'condition' ? C.blue : C.green} size={30} />
           <Press onPress={() => pick({ type: 'list', title: `What kind of ${SUB[what]}`, options: kinds, value: kind, onPick: onKind })} label={`Kind of ${SUB[what]}: ${kindLabel}`} haptic="select"
             style={{ flex: 1, minHeight: 34, flexDirection: 'row', alignItems: 'center', gap: 2 }}>
-            <T v="headline" size={14.5} style={{ flexShrink: 1 }} numberOfLines={2}>{kindLabel}</T>
+            <T v="headline" size={14.5} style={{ flexShrink: 1 }} numberOfLines={3}>{kindLabel}</T>
             <Icon name="expand_more" size={18} color={C.stone2} />
           </Press>
           <Press onPress={() => { animateLayout(); setFolded(f => !f); }} haptic="select" label={folded ? 'Show the details' : 'Fold to one line'} style={{ width: 34, height: 34, borderRadius: R.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: C.control2 }}>
@@ -880,7 +880,7 @@ function DeviceSheet({ p, close }: { p: Extract<Picker, { type: 'device' }>; clo
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 12, paddingRight: 6, borderRadius: R.md, backgroundColor: C.card, borderWidth: 1, borderColor: C.line }}>
         <Icon name="search" size={20} color={C.stone2} />
         <TextInput value={q} onChangeText={setQ} placeholder="Search devices or rooms" placeholderTextColor={C.stone3} autoCorrect={false} autoCapitalize="none" accessibilityLabel="Search devices"
-          style={{ flex: 1, color: C.bone, fontFamily: F[400], fontSize: 16, paddingVertical: 11 }} />
+          style={{ flex: 1, minWidth: 0, color: C.bone, fontFamily: F[400], fontSize: 16, paddingVertical: 11 }} />
         {q ? <Press onPress={() => setQ('')} label="Clear search" style={{ padding: 6 }}><Icon name="close" size={19} color={C.stone2} /></Press> : null}
       </View>
       {groups.length ? (
@@ -1089,6 +1089,7 @@ export function AutomationEditor() {
   const { api, say } = useHub();
   const nav = useNav();
   const insets = useSafeAreaInsets();
+  const { fontScale } = useWindowDimensions();
   const all = automationsOf(s);
   const now = localNowOf(s);
   const [id, setId] = useState<string | undefined>(params.id);
@@ -1251,9 +1252,10 @@ export function AutomationEditor() {
           <ScrollView ref={scroll} keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: SP.gutter, paddingBottom: insets.bottom + 120, gap: 14 }}>
             {tab === 'history' && id ? (
               <>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  <View style={{ flex: 1 }}><Button label={busy === 'run' ? 'Running…' : 'Run now'} icon="play_arrow" onPress={() => void run(false)} /></View>
-                  <View style={{ flex: 1 }}><Button kind="secondary" label="Check, then run" icon="fact_check" onPress={() => void run(true)} /></View>
+                {/* Side by side where both fit on one line; each its own row on a small phone or with large text. */}
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  <View style={{ flexGrow: 1, flexBasis: 150 * Math.min(fontScale, 1.6) }}><Button full label={busy === 'run' ? 'Running…' : 'Run now'} icon="play_arrow" onPress={() => void run(false)} /></View>
+                  <View style={{ flexGrow: 1, flexBasis: 150 * Math.min(fontScale, 1.6) }}><Button full kind="secondary" label="Check, then run" icon="fact_check" onPress={() => void run(true)} /></View>
                 </View>
                 <T v="footnote" color={C.stone}>{dirty ? 'Runs the saved version, not your changes. ' : ''}Run now skips its conditions; Check, then run stops if one doesn’t hold.</T>
                 <History runs={runs} loading={loadingRuns} />
