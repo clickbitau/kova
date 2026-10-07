@@ -19,6 +19,8 @@ import type { Stack as StackParams } from './src/navigation';
 import { NATIVE_PAGES, routeFor } from './src/logic/links';
 import { Tabs } from './src/Tabs';
 import { ConnectScreen } from './src/screens/ConnectScreen';
+import { SignInAgainScreen } from './src/screens/SignInAgainScreen';
+import { display } from './src/logic/addresses';
 import { ModesScreen } from './src/screens/ModesScreen';
 import { ActivityScreen } from './src/screens/ActivityScreen';
 import { ThisPhoneScreen } from './src/screens/ThisPhoneScreen';
@@ -48,13 +50,18 @@ function Splash() {
   );
 }
 
-/** The hub didn't answer at launch: say so plainly, keep trying, and offer the two ways out. */
+/** The hub didn't answer at launch (or answers with errors): say so plainly, keep trying, and offer the ways out. */
 function CantReach() {
-  const { refresh, forget, cfg } = useHub();
+  const { refresh, forget, addresses, conn, link } = useHub();
   const insets = useSafeAreaInsets();
+  const remote = addresses.some(a => a.kind === 'remote');
+  const where = addresses.map(a => display(a.url)).join(', ');
+  const text = conn === 'hubError'
+    ? `${link.message ?? 'Your hub answers, but with an error.'} Kova keeps trying.`
+    : `Kova keeps trying ${where || 'your hub'}${remote ? ', at home and remotely' : ''}. ${remote ? 'Check this phone is online.' : 'Check this phone is on the home Wi-Fi.'}`;
   return (
     <View style={{ flex: 1, backgroundColor: C.page, padding: SP[6], paddingTop: insets.top + SP[6], paddingBottom: insets.bottom + SP[6], justifyContent: 'center', gap: SP[3] }}>
-      <Empty icon="cloud_off" tone={C.red} title="Can’t reach your hub" text={`Kova keeps trying ${cfg?.url ?? ''}. Check this phone is on the home Wi-Fi.`} action="Try again" onAction={() => void refresh()} />
+      <Empty icon={conn === 'hubError' ? 'warning' : 'cloud_off'} tone={conn === 'hubError' ? C.amber : C.red} title={conn === 'hubError' ? 'Your hub has a problem' : 'Can’t reach your hub'} text={text} action="Try again" onAction={() => void refresh()} />
       <Button kind="ghost" label="Connect to a different hub" onPress={() => forget()} />
     </View>
   );
@@ -91,7 +98,8 @@ function Home() {
 
   if (loading) return <Splash />;
   if (!cfg) return <ConnectScreen />;
-  if (!snap) return conn === 'offline' ? <CantReach /> : <NowSkeleton />;
+  if (conn === 'signedOut') return <SignInAgainScreen />;
+  if (!snap) return conn === 'offline' || conn === 'hubError' ? <CantReach /> : <NowSkeleton />;
   return (
     <SheetProvider>
       <CrashBoundary>

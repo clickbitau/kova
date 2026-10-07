@@ -111,7 +111,8 @@ export function snapshot(hub: Hub) {
     id: x.id, t: clock(x.at, tz), label: x.label, what: x.what, modeId: x.modeId ?? null, skipped: engine.skips.has(x.id),
   }));
   // Things that happened today that weren't in the plan: arrivals, people seen, overlays.
-  const marks = store.between(dayStart, now + 1).filter(e => e.kind === 'presence' || (e.kind === 'run' && (e.cause.kind === 'behaviour' || e.cause.kind === 'overlay')))
+  const marks = [...store.between(dayStart, now + 1, 'presence'), ...store.between(dayStart, now + 1, 'run').filter(e => e.cause.kind === 'behaviour' || e.cause.kind === 'overlay')]
+    .sort((a, b) => a.ts - b.ts || a.id - b.id)
     .slice(-6).map(e => ({ hour: localHour(e.ts, tz), label: e.kind === 'presence' ? e.what.replace(' arrived home', ' home').replace(' left home', ' left') : e.cause.kind === 'behaviour' ? 'Light the way' : e.cause.label }));
 
   const feed = store.feed(80);

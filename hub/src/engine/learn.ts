@@ -67,8 +67,23 @@ export class Learner {
     return this.store.between(from, to, 'state').filter(e => e.device && MANUAL.has(e.cause.kind));
   }
 
+  private memo: { key: string; cfg: HomeConfig; out: Suggestion[] } | null = null;
+
+  /**
+   * What to suggest from the last two weeks of history. Reading it is the slow part of every state snapshot (and
+   * the hub sends one on each change), so the answer is kept until something it reads changes: the home's config,
+   * a new manual change or mode start, the devices, or ten minutes passing (the window moves).
+   */
   suggestions(): Suggestion[] {
     const cfg = this.config.get();
+    const key = `${this.store.addedOf('state')}|${this.store.addedOf('mode')}|${this.devices().size}|${Math.floor(this.engine.now() / 600_000)}`;
+    if (this.memo && this.memo.cfg === cfg && this.memo.key === key) return this.memo.out;
+    const out = this.compute(cfg);
+    this.memo = { key, cfg, out };
+    return out;
+  }
+
+  private compute(cfg: HomeConfig): Suggestion[] {
     const tz = cfg.timezone;
     const now = this.engine.now();
     const from = now - DAYS * 86400_000;

@@ -28,29 +28,37 @@ export function Glow({ color, opacity = 0.22 }: { color: string; opacity?: numbe
 }
 
 /**
- * The link to the hub, when it isn't fine: "Reconnecting…" with a breathing dot while it's down, then
- * "Back online" for a moment. It sits in the page's flow (it never covers the header) and slides open.
+ * The link to the hub, when it isn't fine: "Can't reach your hub. Reconnecting…" with a breathing dot while
+ * nothing answers, "Your hub has a problem" while it answers with errors, then "Back online" for a moment. Not for
+ * a socket that's quietly reconnecting (logic/link.ts only says offline once nothing answers, twice), and never for
+ * signed out (that has its own screen). It sits in the page's flow (it never covers the header) and slides open.
  */
 export function ConnBanner() {
-  const { conn, refresh } = useHub();
-  const [show, setShow] = useState<'off' | 'down' | 'back'>(conn === 'offline' ? 'down' : 'off');
+  const { conn, link, refresh } = useHub();
+  const bad = conn === 'offline' || conn === 'hubError';
+  const [show, setShow] = useState<'off' | 'down' | 'back'>(bad ? 'down' : 'off');
   const was = useRef(conn);
   useEffect(() => {
-    if (conn === 'offline') setShow('down');
-    else if (conn === 'live' && was.current === 'offline') { setShow('back'); haptic.success(); const t = setTimeout(() => setShow('off'), 2200); was.current = conn; return () => clearTimeout(t); }
+    if (conn === 'offline' || conn === 'hubError') setShow('down');
+    else if (conn === 'live' && (was.current === 'offline' || was.current === 'hubError')) { setShow('back'); haptic.success(); const t = setTimeout(() => setShow('off'), 2200); was.current = conn; return () => clearTimeout(t); }
+    else if (conn === 'signedOut') setShow('off');
     was.current = conn;
   }, [conn]);
   const a = useRef(new Animated.Value(show === 'off' ? 0 : 1)).current;
   const rm = useReducedMotion();
   useEffect(() => { (show === 'off' ? tween(a, 0, { native: false, leaving: true }) : (rm ? tween(a, 1, { native: false }) : spring(a, 1, 'sheet', { native: false }))).start(); }, [show, a, rm]);
   const down = show === 'down';
+  const problem = down && conn === 'hubError';
+  const bg = problem ? C.amberTint : down ? C.redTint : C.greenTint;
+  const line = problem ? C.amberLine : down ? C.redLine : C.greenLine;
+  const fg = problem ? C.amber : down ? C.redText : C.green;
   return (
     <Animated.View accessibilityLiveRegion="polite" style={{ height: a.interpolate({ inputRange: [0, 1], outputRange: [0, 46] }), opacity: a, overflow: 'hidden' }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, height: 40, paddingLeft: 14, paddingRight: 6, borderRadius: 20, backgroundColor: down ? C.redTint : C.greenTint, borderWidth: 1, borderColor: down ? C.redLine : C.greenLine }}>
-        {down ? <PulseDot color={C.red} /> : <Icon name="check_circle" size={17} color={C.green} fill />}
-        <T v="labelSm" color={down ? C.redText : C.green} style={{ flex: 1 }}>{down ? 'Can’t reach your hub. Reconnecting…' : 'Back online'}</T>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, height: 40, paddingLeft: 14, paddingRight: 6, borderRadius: 20, backgroundColor: bg, borderWidth: 1, borderColor: line }}>
+        {problem ? <Icon name="warning" size={17} color={C.amber} fill /> : down ? <PulseDot color={C.red} /> : <Icon name="check_circle" size={17} color={C.green} fill />}
+        <T v="labelSm" color={fg} style={{ flex: 1 }} numberOfLines={1}>{problem ? (link.message ?? 'Your hub has a problem. Trying again…') : down ? 'Can’t reach your hub. Reconnecting…' : 'Back online'}</T>
         {down ? (
-          <IconButton icon="refresh" label="Try now" size={30} tone="ghost" color={C.redText} onPress={() => { haptic.light(); void refresh(); }} />
+          <IconButton icon="refresh" label="Try now" size={30} tone="ghost" color={fg} onPress={() => { haptic.light(); void refresh(); }} />
         ) : null}
       </View>
     </Animated.View>

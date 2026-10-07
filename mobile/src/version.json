@@ -2,8 +2,12 @@
   "//": "The Kova app's version (docs/VERSIONING.md). store: the X.Y.0 a store binary on this train carries (app.json version). version: what runs, store or over the air (X.Y.Z, PATCH only). train: the native runtime (app.json runtimeVersion). history: newest first; an over-the-air release adds an entry.",
   "train": "kova-mobile-0.2",
   "store": "0.2.0",
-  "version": "0.2.19",
+  "version": "0.2.20",
   "history": [
+    {
+      "version": "0.2.20",
+      "title": "Stays connected to the hub: reconnects by itself (at once back in the front or on a new network), notices a dead link, says “can’t reach” only when nothing answers, and tells signed out (sign in again with a code) from a hub problem"
+    },
     {
       "version": "0.2.19",
       "title": "Automations: build by hand anything the assistant can, with a live summary; one-time schedules (Schedule once, Scheduled and Done)"
