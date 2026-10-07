@@ -86,23 +86,31 @@ const INPUTS = new Set(['hdmi1', 'hdmi2', 'hdmi3', 'hdmi4', 'tv']);
  * Which TV each Helix box sits on: the one named in settings, else the only other TV in its room. Settings are by box
  * name; `aliases` gives the other names a box was known by (before Helix gave it its stable id or a new name), so a
  * home keeps its mappings.
+ *
+ * `home` keeps the guessing honest: only a room the home really has counts (not "unassigned" or a leftover id a
+ * device kept), and a TV or soundbar Kova reaches through several integrations counts once, as the combined device,
+ * never as each of its parts. Without it (tests), any room but "unassigned" counts.
  */
-export function helixScreens(devices: Iterable<Device>, screens: HelixLinkConfig['screens'] = {}, aliases: (box: Device) => string[] = () => []): HelixScreen[] {
+export function helixScreens(devices: Iterable<Device>, screens: HelixLinkConfig['screens'] = {}, aliases: (box: Device) => string[] = () => [],
+  home?: { rooms: string[]; skip: Set<string> }): HelixScreen[] {
   const all = [...devices];
+  const realRoom = (room?: string) => !!room && room !== 'unassigned' && (!home || home.rooms.includes(room));
+  // What settings name is used as it is; only a guess leaves out the parts of a combined device (and archived ones).
+  const guessable = (d: Device) => !home?.skip.has(d.id);
   const tvs = all.filter(d => d.type === 'tv' && d.adapter !== 'helix' && d.capabilities.includes('onoff'));
   const named = (box: string) => screens[box] ?? Object.entries(screens).find(([k]) => k.toLowerCase() === box.toLowerCase())?.[1];
   const out: HelixScreen[] = [];
   const boxes = all.filter(d => d.adapter === 'helix' && d.type === 'tv');
   for (const box of boxes) {
     const set = [box.original?.name, box.name, ...aliases(box)].filter((n): n is string => !!n).map(named).find(Boolean);
-    const inRoom = box.room && box.room !== 'unassigned' ? tvs.filter(t => t.room === box.room) : [];
+    const inRoom = realRoom(box.room) ? tvs.filter(t => guessable(t) && t.room === box.room) : [];
     // The TV named in settings, else the one in the box's room, else (one box, one TV in the home) that TV.
-    const tv = set?.tv ? tvs.find(t => t.id === set.tv) : inRoom.length === 1 ? inRoom[0] : !inRoom.length && boxes.length === 1 && tvs.length === 1 ? tvs[0] : undefined;
+    const tv = set?.tv ? tvs.find(t => t.id === set.tv) : inRoom.length === 1 ? inRoom[0] : !inRoom.length && boxes.length === 1 && tvs.filter(guessable).length === 1 ? tvs.find(guessable) : undefined;
     if (!tv) continue;
     const input = set?.input && INPUTS.has(set.input) && set.input !== 'helix' ? set.input : undefined;
     const bars = all.filter(isSoundbar);
-    const barsInRoom = tv.room && tv.room !== 'unassigned' ? bars.filter(b => b.room === tv.room) : [];
-    const bar = set?.soundbar ? bars.find(b => b.id === set.soundbar) : barsInRoom.length === 1 ? barsInRoom[0] : !barsInRoom.length && boxes.length === 1 && bars.length === 1 ? bars[0] : undefined;
+    const barsInRoom = realRoom(tv.room) ? bars.filter(b => guessable(b) && b.room === tv.room) : [];
+    const bar = set?.soundbar ? bars.find(b => b.id === set.soundbar) : barsInRoom.length === 1 ? barsInRoom[0] : !barsInRoom.length && boxes.length === 1 && bars.filter(guessable).length === 1 ? bars.find(guessable) : undefined;
     const adapterInput = set?.soundbarInput && SOUNDBAR_INPUTS.some(i => i.id === set.soundbarInput && i.id.startsWith('hdmi')) ? set.soundbarInput : 'hdmi1';
     out.push({
       playerId: box.address, tvDeviceId: tv.id, tvName: tv.name, ...(input ? { helixInput: input } : {}), inputs: TV_INPUTS,
@@ -313,7 +321,12 @@ export class HelixLink {
     return helix instanceof HelixAdapter ? helix.aliases(box.id) : [];
   };
 
-  screens(): HelixScreen[] { return helixScreens(this.hub.reg.devices.values(), this.o.helix()?.screens, this.aliases); }
+  screens(): HelixScreen[] {
+    const cfg = this.hub.config.get();
+    // Parts of a combined device, and archived ones, are never a box's TV or soundbar: the combined device stands for them.
+    const skip = new Set([...(cfg.combined ?? []).flatMap(c => c.members), ...Object.entries(cfg.devices ?? {}).filter(([, v]) => v?.archived).map(([id]) => id)]);
+    return helixScreens(this.hub.reg.devices.values(), this.o.helix()?.screens, this.aliases, { rooms: cfg.rooms.map(r => r.id), skip });
+  }
 
   /** Is this Helix's token? Constant time. */
   isToken(given: string): boolean {

@@ -339,6 +339,20 @@ test('Helix link: which TV a box is on, and Kova’s address', () => {
   // Two TVs (or two boxes): no guess.
   assert.deepEqual(helixScreens([box, tv, dev('tv9', 'bedroom', 'samsungtv')]), []);
 
+  // One TV seen through three integrations and combined; the box set up in settings; a laptop's Helix in a room
+  // the home doesn't have. The laptop gets no TV (not the leftover part of the one TV that shares its room), and
+  // the box's TV is the one in settings.
+  const real = dev('box1', 'theatre', 'helix', { address: 'd-1', name: 'Helix box' });
+  const laptop = dev('mac', 'unsorted', 'helix', { address: 'd-2', name: 'Helix on laptop' });
+  const parts = [dev('tv_local', 'theatre', 'samsungtv'), dev('tv_cast', 'unsorted', 'cast'), dev('tv_st', 'unassigned', 'smartthings')];
+  const one = dev('tv_combined', 'theatre', 'combined');
+  const home = { rooms: ['theatre'], skip: new Set(['tv_local', 'tv_cast', 'tv_st']) };
+  assert.deepEqual(helixScreens([real, laptop, ...parts, one], { 'Helix box': { tv: 'tv_combined' } }, () => [], home).map(s => [s.playerId, s.tvDeviceId]), [['d-1', 'tv_combined']]);
+  // Settings that name one of the parts are kept as they are.
+  assert.deepEqual(helixScreens([real, laptop, ...parts, one], { 'Helix box': { tv: 'tv_local' } }, () => [], home).map(s => [s.playerId, s.tvDeviceId]), [['d-1', 'tv_local']]);
+  // Without the home's rooms the leftover room would have paired them: the bug this guards.
+  assert.deepEqual(helixScreens([real, laptop, ...parts, one], { 'Helix box': { tv: 'tv_combined' } }).map(s => [s.playerId, s.tvDeviceId]), [['d-1', 'tv_combined'], ['d-2', 'tv_cast']]);
+
   // Kova's address: an IP literal on Helix's network, else a private one, else a tailnet one, else a unique-local IPv6 one.
   const nets = { eth0: [{ family: 'IPv4', address: '10.10.10.5', internal: false }], docker0: [{ family: 'IPv4', address: '172.17.0.1', internal: false }] } as any;
   assert.equal(kovaAddress('http://10.10.10.101:8090', 8140, nets), 'http://10.10.10.5:8140');
