@@ -44,7 +44,7 @@ export function DemoBanner() {
     <View accessibilityRole="summary" accessibilityLabel="Demo home. Nothing here is real." style={{ flexDirection: 'row', alignItems: 'center', gap: 10, height: 40, paddingLeft: 12, paddingRight: 4, borderRadius: 20, backgroundColor: C.amberTint, borderWidth: 1, borderColor: C.amberLine }}>
       <Icon name="science" size={17} color={C.amber} fill />
       <T v="labelSm" color={C.amber}>Demo home</T>
-      <T v="footnote" color={C.stone} numberOfLines={1} style={{ flex: 1 }}>Nothing here is real</T>
+      <T v="footnote" color={C.stone} numberOfLines={1} style={{ flex: 1 }}>Not a real home</T>
       <Press onPress={() => void leaveDemo()} label="Leave the demo and connect your hub" style={{ height: 32, justifyContent: 'center', paddingHorizontal: 12, borderRadius: 16, backgroundColor: C.control2 }}>
         <T v="labelSm" size={12.5} color={C.bone}>Connect a hub</T>
       </Press>

@@ -95,7 +95,7 @@ export interface DemoOverlay { id: string; name: string; icon: string; endsLabel
 export const DEMO_OVERLAYS: DemoOverlay[] = [
   { id: 'movie', name: 'Movie', icon: 'movie', endsLabel: 'Ends when the TV turns off',
     targets: { ...off(['lounge_main', 'kitchen_ceiling', 'kitchen_island']), lamp: { on: true, bri: 8, k: 2200, color: null }, lounge_down: { on: true, bri: 10 }, lounge_tv: { on: true, input: 'hdmi1' }, lounge_purifier: { mode: 'Sleep' } } },
-  { id: 'dinner', name: 'Dinner', icon: 'restaurant', endsLabel: 'Ends in 2 hours',
+  { id: 'dinner', name: 'Dinner', icon: 'kitchen', endsLabel: 'Ends in 2 hours',
     targets: { kitchen_island: { on: true, bri: 55 }, lamp: { on: true, bri: 40, k: 2700, color: null }, kitchen_speaker: { on: true, media: 'Jazz stream', vol: 20 } } },
   { id: 'party', name: 'Party', icon: 'celebration', endsLabel: 'Ends when you end it',
     targets: { ...on(['lounge_main', 'kitchen_ceiling', 'porch', 'path']), lamp: { on: true, bri: 100, k: null, color: '#0096ff' }, office_strip: { on: true, bri: 100, color: '#ff4fa0' }, lounge_speaker: { on: true, media: 'Party mix', vol: 45 }, kitchen_speaker: { on: true, media: 'Party mix', vol: 40 } } },

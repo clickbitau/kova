@@ -188,3 +188,11 @@ test('answers are copies: changing one does not change the demo home', () => {
   s.devices[0].name = 'changed';
   assert.notEqual(hub.snapshot().devices[0].name, 'changed');
 });
+
+test('every icon the demo home uses is in the app’s icon font', async () => {
+  const { ICON_CODES } = await import('../src/ui/icon-codes.ts');
+  const s = createDemoHub({ now: () => at(19, 15) }).snapshot();
+  const icons = [...s.rooms, ...s.modes, ...s.overlays, ...s.sources, ...s.integrations, ...s.activity, ...(s.insights ?? [])].map(x => x.icon);
+  if (s.weather) icons.push(s.weather.icon);
+  for (const i of icons) assert.ok(ICON_CODES[i], `icon ${i}`);
+});

@@ -80,7 +80,7 @@ export function MoreScreen() {
               <T v="footnote" color={C.stone}>It runs on this phone only. Nothing here is real, and nothing is sent anywhere.</T>
             </View>
           </View>
-          <Button icon="link" label="Leave the demo and connect your hub" onPress={() => leaveDemo()} />
+          <Button icon="link" label="Connect your own hub" onPress={() => leaveDemo()} />
         </Card>
       ) : <Card style={{ padding: SP[4], flexDirection: 'row', alignItems: 'center', gap: SP[3] }}>
         <IconWell icon="router" color={live ? C.green : conn === 'connecting' ? C.amber : C.red} size={40} />
