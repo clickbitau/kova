@@ -11,7 +11,7 @@ export type Stack = {
   ThisPhone: undefined;
   Automations: undefined;
   /** An automation by id, or a new one (optionally starting from a draft, such as a suggestion). */
-  AutomationEditor: { id?: string; draft?: Draft; tab?: 'edit' | 'history' } | undefined;
+  AutomationEditor: { id?: string; draft?: Draft; tab?: 'edit' | 'history'; /** Schedule once: the time first, then what to do. */ schedule?: boolean } | undefined;
   Customise: undefined;
   /** More → Sign in a browser: approve a browser's sign-in code; signed-in browsers. */
   Browsers: undefined;

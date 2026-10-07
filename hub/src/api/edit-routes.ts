@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { Hub } from '../hub.ts';
 import type { Command, HomeConfig, Rhythm, Targets } from '../model/types.ts';
 import { checkAutomation } from '../engine/automation-check.ts';
-import { upgradeAutomation } from '../engine/automations.ts';
+import { isOneTime, nextOnce, upgradeAutomation } from '../engine/automations.ts';
 const autoUpgrade = (a: object) => upgradeAutomation(a as Record<string, unknown>);
 import { cleanTarget, validRhythm } from '../engine/validate.ts';
 
@@ -101,7 +101,7 @@ export function registerEditRoutes(app: FastifyInstance, hub: Hub): void {
   // ---------------------------------------------------------- automations --
   // When (any trigger) / if (all conditions) / then (steps in order); engine/automations.ts runs them.
   const autos = () => hub.engine.automations.list();
-  const checkCtx = (self?: string) => ({ device: (id: string) => hub.reg.get(id), cfg: hub.config.get(), self });
+  const checkCtx = (self?: string) => ({ device: (id: string) => hub.reg.get(id), cfg: hub.config.get(), self, now: hub.engine.now() });
   const slug = (name: string) => `${name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 40) || 'automation'}_${randomUUID().slice(0, 4)}`;
   app.get('/api/automations', async () => ({ automations: autos().map(a => ({ ...a, lastRun: hub.engine.automations.lastRun(a.id) ?? null, running: hub.engine.automations.running(a.id) })) }));
   app.get<{ Params: { id: string } }>('/api/automations/:id', async (req, reply) => {
@@ -126,13 +126,28 @@ export function registerEditRoutes(app: FastifyInstance, hub: Hub): void {
   app.patch<{ Params: { id: string }; Body: { enabled?: boolean } }>('/api/automations/:id', async (req, reply) => {
     if (!autos().some(a => a.id === req.params.id)) return reply.code(404).send({ error: 'unknown automation' });
     if (typeof req.body?.enabled !== 'boolean') return reply.code(400).send({ error: 'enabled must be true or false' });
+    // A one-time schedule whose times have all gone by can't come back on without a new time.
+    const cur = autos().find(a => a.id === req.params.id)!;
+    if (req.body.enabled && isOneTime(cur) && nextOnce({ ...cur, enabled: true }, hub.config.get().timezone, hub.engine.now()) == null) {
+      return reply.code(400).send({ error: 'That time has passed: choose a later one' });
+    }
     return edit(c => { const x = c.automations!.find(y => y.id === req.params.id)!; Object.assign(x, autoUpgrade(x), { enabled: req.body.enabled! }); });
+  });
+  // Clear away one-time schedules that have run (or were missed).
+  app.post('/api/automations/clear-done', async () => {
+    const done = autos().filter(a => isOneTime(a) && a.triggers.every(t => t.kind === 'once' && t.firedAt)).map(a => a.id);
+    const r = edit(c => { c.automations = (c.automations ?? []).filter(x => !done.includes(x.id)); });
+    hub.engine.automations.prune();
+    return { cleared: done.length, ...r };
   });
   app.post<{ Params: { id: string } }>('/api/automations/:id/duplicate', async (req, reply) => {
     const a = autos().find(x => x.id === req.params.id);
     if (!a) return reply.code(404).send({ error: 'unknown automation' });
     const name = `${a.name} (copy)`.slice(0, 80), id = slug(name);
-    return { id, ...edit(c => { c.automations!.push({ ...structuredClone(a), id, name, enabled: false, origin: undefined }); }) };
+    return { id, ...edit(c => { const copy = structuredClone(a);
+      // A copy of a one-time schedule is a fresh one: not yet run.
+      for (const t of copy.triggers) if (t.kind === 'once') { delete t.firedAt; delete t.missed; }
+      c.automations!.push({ ...copy, id, name, enabled: false, origin: undefined }); }) };
   });
   app.delete<{ Params: { id: string } }>('/api/automations/:id', async (req, reply) => {
     if (!autos().some(a => a.id === req.params.id)) return reply.code(404).send({ error: 'unknown automation' });

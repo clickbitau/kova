@@ -373,3 +373,101 @@ test('automations saved by 0.7.6 (when / if / then) are rewritten in the new sha
     assert.ok(Array.isArray(saved.triggers), 'rewritten in the config');
   } finally { await t.hub.stop(); }
 });
+
+test('once: a one-time schedule runs at its local date and time, then switches itself off', async () => {
+  const h = await setup(21);
+  try {
+    // 2026-09-30, 21:00 in the demo home.
+    const id = await h.add({ name: 'Lamp at 21:30', triggers: [{ kind: 'once', at: '2026-09-30T21:30' }], actions: [{ kind: 'set', targets: { lamp: { on: true, bri: 40 } } }] });
+    let s = (await h.app.inject({ url: '/api/state' })).json();
+    let a = s.automations.find((x: { id: string }) => x.id === id);
+    assert.equal(s.localNow, '2026-09-30T21:00');
+    assert.deepEqual([a.oneTime, a.done, a.nextLabel, a.triggerLabels[0]], [true, false, 'today at 21:30', 'Once, today at 21:30']);
+    await h.later(29 * 60);
+    assert.equal(h.runs(id).length, 0);
+    await h.later(2 * 60);
+    assert.equal(h.runs(id).length, 1);
+    assert.equal(h.runs(id)[0].why, 'Scheduled for today at 21:30');
+    assert.equal(h.dev('lamp').bri, 40);
+    s = (await h.app.inject({ url: '/api/state' })).json();
+    a = s.automations.find((x: { id: string }) => x.id === id);
+    assert.deepEqual([a.enabled, a.done, a.nextAt, a.triggerLabels[0]], [false, true, null, 'Once, today at 21:30 (done)']);
+    assert.equal(typeof a.triggers[0].firedAt, 'number');
+    // Never again, even a day later at the same time.
+    await h.later(24 * 3600);
+    assert.equal(h.runs(id).length, 1);
+    // It can't come back on without a new time…
+    const on = await h.app.inject({ method: 'PATCH', url: `/api/automations/${id}`, payload: { enabled: true } });
+    assert.equal(on.statusCode, 400);
+    assert.match(on.json().error, /passed/);
+    // …and a copy is a fresh one, off, ready for a new time.
+    const dup = (await h.app.inject({ method: 'POST', url: `/api/automations/${id}/duplicate` })).json();
+    const copy = h.hub.engine.automations.list().find(x => x.id === dup.id)!;
+    assert.deepEqual([copy.enabled, 'firedAt' in copy.triggers[0]!], [false, false]);
+    // Clearing done ones removes the finished schedule, not the copy (it has no run yet).
+    const cl = (await h.app.inject({ method: 'POST', url: '/api/automations/clear-done' })).json();
+    assert.equal(cl.cleared, 1);
+    assert.deepEqual(h.hub.engine.automations.list().map(x => x.id), [dup.id]);
+  } finally { await h.close(); }
+});
+
+test('once: "in 20 minutes", ISO times with a zone, and refusing a time that has passed', async () => {
+  const h = await setup(21);
+  try {
+    const bad = await h.app.inject({ method: 'POST', url: '/api/automations', payload: { name: 'Too late', triggers: [{ kind: 'once', at: '2026-09-30T20:00' }], actions: [{ kind: 'set', targets: { lamp: { on: true } } }] } });
+    assert.equal(bad.statusCode, 400);
+    assert.match(bad.json().error, /passed/);
+    const nonsense = await h.app.inject({ method: 'POST', url: '/api/automations', payload: { name: 'What', triggers: [{ kind: 'once', at: 'soon' }], actions: [{ kind: 'set', targets: { lamp: { on: true } } }] } });
+    assert.equal(nonsense.statusCode, 400);
+    const inMin = await h.add({ name: 'In 20', triggers: [{ kind: 'once', inMinutes: 20 } as never], actions: [{ kind: 'set', targets: { lamp: { on: true } } }] });
+    assert.deepEqual(h.hub.engine.automations.list().find(x => x.id === inMin)!.triggers[0], { kind: 'once', at: '2026-09-30T21:20' });
+    // An instant with a zone is kept as the home's clock time.
+    const iso = await h.add({ name: 'ISO', triggers: [{ kind: 'once', at: new Date(h.clock.t + 3600_000).toISOString() }], actions: [{ kind: 'set', targets: { lamp: { on: false } } }] });
+    assert.equal((h.hub.engine.automations.list().find(x => x.id === iso)!.triggers[0] as { at: string }).at, '2026-09-30T22:00');
+    // Off (a draft), a past time may be saved.
+    await h.add({ name: 'Draft', enabled: false, triggers: [{ kind: 'once', at: '2026-09-29T08:00' }], actions: [{ kind: 'set', targets: { lamp: { on: true } } }] });
+    // Mixed with a regular trigger, once fires once and the automation stays on.
+    const mix = await h.add({ name: 'Mixed', triggers: [{ kind: 'once', at: '2026-09-30T21:05' }, { kind: 'every', minutes: 60 }], actions: [{ kind: 'set', targets: { dining: { on: true } } }] });
+    await h.later(6 * 60);
+    assert.equal(h.runs(mix).length, 1);
+    assert.equal(h.hub.engine.automations.list().find(x => x.id === mix)!.enabled, true);
+  } finally { await h.close(); }
+});
+
+test('once: due while Kova was off — runs on start within half an hour, otherwise recorded as missed', async () => {
+  const h = await setup(21);
+  try {
+    const soon = await h.add({ name: 'Soon', triggers: [{ kind: 'once', at: '2026-09-30T21:10' }], actions: [{ kind: 'set', targets: { lamp: { on: true } } }] });
+    const long = await h.add({ name: 'Long ago', triggers: [{ kind: 'once', at: '2026-09-30T21:05' }, { kind: 'once', at: '2026-09-30T23:00' }], actions: [{ kind: 'set', targets: { dining: { on: true } } }] });
+    // The hub is off from 21:00 to 21:40: no ticks, then it starts again.
+    h.clock.t += 40 * 60_000;
+    h.hub.engine.automations.hubStarted();
+    await settle();
+    assert.equal(h.runs(soon).length, 1);
+    assert.equal(h.runs(soon)[0].why, 'Scheduled for today at 21:10 (Kova was off then)');
+    assert.equal(h.dev('lamp').on, true);
+    assert.deepEqual([h.runs(long)[0].result, h.runs(long)[0].detail], ['skipped', 'missed: Kova was off then']);
+    const l = h.hub.engine.automations.list().find(x => x.id === long)!;
+    assert.deepEqual([l.enabled, (l.triggers[0] as { missed?: boolean }).missed], [true, true], 'its 23:00 time is still to come');
+    // Ticking on afterwards doesn't run either of them twice.
+    await h.later(60);
+    assert.equal(h.runs(soon).length, 1);
+    assert.equal(h.runs(long).length, 1);
+    await h.later(80 * 60);
+    assert.equal(h.runs(long).length, 2);
+    assert.equal(h.hub.engine.automations.list().find(x => x.id === long)!.enabled, false);
+  } finally { await h.close(); }
+});
+
+test('next run: time of day (on its days), every few minutes, and the soonest of several', async () => {
+  const h = await setup(21);
+  try {
+    // Wednesday 2026-09-30, 21:00.
+    const wk = await h.add({ name: 'Weekend 08:00', triggers: [{ kind: 'time', at: { kind: 'time', at: '08:00' }, days: [0, 6] }], actions: [{ kind: 'set', targets: { lamp: { on: true } } }] });
+    const ev = await h.add({ name: 'Every 45', triggers: [{ kind: 'every', minutes: 45 }, { kind: 'time', at: { kind: 'time', at: '23:00' } }], actions: [{ kind: 'set', targets: { lamp: { on: true } } }] });
+    const s = (await h.app.inject({ url: '/api/state' })).json();
+    const get = (id: string) => s.automations.find((x: { id: string }) => x.id === id);
+    assert.equal(get(wk).nextLabel, 'Sat 3 Oct at 08:00');
+    assert.equal(get(ev).nextLabel, 'today at 21:45', '21:00 is slot 28 of 45 min; the next is 21:45');
+  } finally { await h.close(); }
+});

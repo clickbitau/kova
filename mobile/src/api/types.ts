@@ -42,6 +42,14 @@ export interface DeviceState {
   childLock?: boolean;
   /** Ducted air conditioners (`zones`): each zone's damper, on or off and how far open (0–100). */
   zones?: { n: number; on: boolean; open: number | null }[] | null;
+  /** Grid power in W from a meter (positive importing, negative exporting) and whole-home use in W. */
+  grid?: number | null;
+  load?: number | null;
+  /** Room humidity % and light level in lux, where a device senses them. */
+  humidity?: number | null;
+  lux?: number | null;
+  /** Switches and readings the integration reports that Kova has no named field for (AC eco, sleep, turbo…), settable by name (`extras`). */
+  extras?: Record<string, boolean | number | string | null>;
   online?: boolean;
 }
 
@@ -147,6 +155,8 @@ export interface Snapshot {
   /** Alerts and warnings worth acting on, most urgent first. */
   insights?: Insight[];
   energy: EnergyToday | null;
+  /** The home's clock, "YYYY-MM-DDTHH:MM", for picking a date and time (one-time schedules). */
+  localNow?: string;
   demo?: boolean;
 }
 

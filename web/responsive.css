@@ -84,4 +84,29 @@
 
   /* iOS zooms into inputs under 16px; keep the page still. */
   input, select, textarea { font-size: 16px !important; }
+
+  /* The automation editor: less indent, nesting rails narrower, controls a full row when they need it,
+     Cancel/Save kept in reach at the bottom. */
+  [data-kova-ahead] h1 { font-size: 22px !important; }
+  [data-kova-acard] { padding: 14px 12px 6px !important; }
+  [data-kova-arail] { width: 12px !important; padding-left: 4px !important; }
+  [data-kova-ablock] { padding: 10px 10px 12px !important; }
+  [data-kova-aicon] { width: 24px !important; height: 24px !important; font-size: 16px !important; border-radius: 7px !important; }
+  [data-kova-afields], [data-kova-awords] { padding-left: 0 !important; }
+  [data-kova-afields] > [data-kova-afield] { min-width: 0 !important; }
+  [data-kova-afield] select, [data-kova-afield] input:not([type=range]):not([type=color]):not([type=number]), [data-kova-afield] textarea { width: 100%; }
+  [data-kova-ablock] button[aria-label="Move up"], [data-kova-ablock] button[aria-label="Move down"] { padding: 2px !important; }
+  [data-kova-afoot] {
+    position: sticky; bottom: 0; z-index: 15;
+    margin: 0 -16px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px)) !important;
+    background: rgba(14, 15, 16, 0.94);
+    -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  [data-kova-afoot] > div:first-child { flex-basis: 100% !important; min-width: 0 !important; }
+  [data-kova-afoot] > button { flex: 1; }
+  /* Scheduled and done rows: the buttons go under the words. */
+  [data-kova-asched] { flex-wrap: wrap; }
+  [data-kova-asched] > div:last-child { flex: 1 1 100% !important; justify-content: flex-start !important; padding-left: 100px; }
+  [data-kova-adone] > div:last-child { padding-left: 34px; }
 }

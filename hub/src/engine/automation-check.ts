@@ -1,15 +1,18 @@
 import type { Action, Automation, Command, Condition, Device, HomeConfig, NumericField, RunMode, StateMatch, Trigger } from '../model/types.ts';
 import { cleanTarget, rhythm } from './validate.ts';
 import { FIELD_CAP, PSEUDO_TARGET } from '../util/describe.ts';
+import { LOCAL_STAMP, localStamp, stampAt } from '../util/time.ts';
 
 // Checks an automation someone made or edited, against the home it's for, and cleans it: only known fields,
 // numbers in range, devices that exist and can do what's asked. Throws with a message a person can act on.
 
 export interface CheckCtx {
   device(id: string): Device | undefined;
-  cfg: Pick<HomeConfig, 'modes' | 'overlays' | 'people' | 'rooms'> & { automations?: { id: string }[] };
+  cfg: Pick<HomeConfig, 'modes' | 'overlays' | 'people' | 'rooms'> & { automations?: { id: string }[]; timezone?: string };
   /** The automation being edited (it can't run itself). */
   self?: string;
+  /** Now, for one-time schedules ("in 20 minutes", and refusing a time that has passed). Default: the clock. */
+  now?: number;
 }
 
 const FIELDS: NumericField[] = ['temp', 'target', 'power', 'energy', 'battery', 'bri', 'vol', 'grid', 'load', 'humidity', 'lux'];
@@ -100,6 +103,19 @@ export function checkTrigger(v: unknown, x: CheckCtx): Trigger {
       return { kind: 'overlay', overlay: String(t.overlay), event: t.event as 'starts' };
     }
     case 'hub': return { kind: 'hub', event: 'start' };
+    case 'once': {
+      const tz = x.cfg.timezone ?? 'UTC', now = x.now ?? Date.now();
+      const inMin = numOrUndef(t.inMinutes, 'In … minutes', 1, 366 * 1440);
+      let at: string;
+      if (inMin) at = localStamp(now + Math.round(inMin) * 60_000, tz);
+      else if (typeof t.at === 'string' && LOCAL_STAMP.test(t.at.trim())) at = t.at.trim();
+      // A full ISO time with a zone ("…Z", "…+08:00"): the home's own clock time for that instant.
+      else if (typeof t.at === 'string' && /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(t.at) && Number.isFinite(Date.parse(t.at))) at = localStamp(Date.parse(t.at), tz);
+      else return fail('Give a date and time for “once”, like "2026-10-08T15:30" (the home’s time), or inMinutes');
+      if (stampAt(at, tz) == null) fail(`${at} isn’t a real date and time`);
+      const firedAt = typeof t.firedAt === 'number' && Number.isFinite(t.firedAt) ? t.firedAt : undefined;
+      return { kind: 'once', at, ...(firedAt ? { firedAt } : {}), ...(firedAt && t.missed === true ? { missed: true } : {}) };
+    }
     default: return fail(`Unknown kind of trigger ${String(t.kind)}`);
   }
 }
@@ -238,6 +254,13 @@ export function checkAutomation(v: unknown, x: CheckCtx): Omit<Automation, 'id'>
   const triggers = list(b.triggers, 'Triggers').map(t => checkTrigger(t, x));
   if (!triggers.length) fail('Add at least one trigger: what starts it');
   if (triggers.length > 20) fail('Up to 20 triggers');
+  // A one-time schedule switched on has to have a time still to come; a time moved later goes off again.
+  const tz = x.cfg.timezone ?? 'UTC', now = x.now ?? Date.now();
+  for (const t of triggers) if (t.kind === 'once' && t.firedAt && (stampAt(t.at, tz) ?? 0) > now) { delete t.firedAt; delete t.missed; }
+  const onceOnly = triggers.every(t => t.kind === 'once');
+  if (onceOnly && b.enabled !== false && !triggers.some(t => t.kind === 'once' && !t.firedAt && (stampAt(t.at, tz) ?? 0) > now - 60_000)) {
+    fail('That time has passed: choose a later one');
+  }
   const conditions = list(b.conditions, 'Conditions').map(c => checkCondition(c, x));
   const actions = list(b.actions, 'Steps').map(a => checkAction(a, x));
   if (!actions.length) fail('Add at least one step: what it does');

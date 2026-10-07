@@ -229,36 +229,78 @@ document.write('<script src="/api/boot.js'+(t?"?token="+encodeURIComponent(t):""
 
 <sc-if value="{{ isAutos }}" hint-placeholder-val="{{ false }}">
 <sc-if value="{{ ae.open }}" hint-placeholder-val="{{ false }}">
-<div style="display:flex;flex-direction:column;gap:16px;max-width:980px">
-<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span onClick="{{ ae.cancel }}" role="button" aria-label="Back" style="font-family:'Material Symbols Rounded';font-size:24px;cursor:pointer;color:#a3a09a">arrow_back</span><h1 style="margin:0;font-size:26px;font-weight:700;letter-spacing:-0.02em;flex:1">{{ ae.title }}</h1>
-<sc-if value="{{ ae.canTry }}" hint-placeholder-val="{{ false }}"><div onClick="{{ ae.tryNow }}" style="padding:8px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:rgba(255,255,255,0.06);color:#f1efea;display:flex;align-items:center;gap:6px"><span style="font-family:'Material Symbols Rounded';font-size:18px">play_arrow</span>Run now</div></sc-if>
-<div onClick="{{ ae.save }}" style="padding:8px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:#f2b14c;color:#1a1408">Save</div></div>
-<sc-if value="{{ ae.canHistory }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:4px;padding:4px;border-radius:12px;background:#16171a;align-self:flex-start"><div onClick="{{ ae.tabEdit }}" style="padding:7px 14px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;background:{{ ae.editBg }}">Edit</div><div onClick="{{ ae.tabHistory }}" style="padding:7px 14px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;background:{{ ae.histBg }}">History</div></div></sc-if>
+<div data-kova-aedit style="display:flex;flex-direction:column;gap:16px;max-width:980px">
+<div data-kova-ahead style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><button type="button" onClick="{{ ae.cancel }}" aria-label="Back to automations" title="Back (Esc)" style="font:inherit;border:none;background:transparent;padding:4px;border-radius:8px;font-family:'Material Symbols Rounded';font-size:24px;cursor:pointer;color:#a3a09a" style-focus-visible="outline:2px solid #f2b14c;outline-offset:2px">arrow_back</button><div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><h1 style="margin:0;font-size:26px;font-weight:700;letter-spacing:-0.02em">{{ ae.title }}</h1><sc-if value="{{ ae.dirty }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;font-weight:700;color:#f2b14c;display:flex;align-items:center;gap:5px"><span style="width:6px;height:6px;border-radius:3px;background:#f2b14c"></span>Unsaved changes</span></sc-if></div>
+<sc-if value="{{ ae.canTry }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ ae.tryNow }}" style="font:inherit;border:none;padding:9px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:rgba(255,255,255,0.06);color:#f1efea;display:flex;align-items:center;gap:6px" style-focus-visible="outline:2px solid #f2b14c;outline-offset:2px"><span style="font-family:'Material Symbols Rounded';font-size:18px">play_arrow</span>Run now</button></sc-if>
+<button type="button" onClick="{{ ae.save }}" title="Save (Ctrl+S)" style="font:inherit;border:none;padding:9px 18px;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;background:#f2b14c;color:#1a1408" style-focus-visible="outline:2px solid #f7cb82;outline-offset:2px">{{ ae.saveLabel }}</button></div>
+<sc-if value="{{ ae.hasErr }}" hint-placeholder-val="{{ false }}"><div role="alert" style="display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:12px;background:rgba(255,107,94,0.1);border:1px solid rgba(255,107,94,0.4)"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#ff6b5e">error</span><div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><span style="font-size:13px;font-weight:700;color:#ff8a7e">Not saved</span><span style="font-size:13px;color:#f1efea;line-height:1.45">{{ ae.err }}</span></div></div></sc-if>
+<sc-if value="{{ ae.canHistory }}" hint-placeholder-val="{{ false }}"><div role="tablist" style="display:flex;gap:4px;padding:4px;border-radius:12px;background:#16171a;align-self:flex-start"><button type="button" role="tab" aria-selected="{{ ae.editSel }}" onClick="{{ ae.tabEdit }}" style="font:inherit;border:none;color:#f1efea;padding:7px 14px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;background:{{ ae.editBg }}" style-focus-visible="outline:2px solid #f2b14c">Edit</button><button type="button" role="tab" aria-selected="{{ ae.histSel }}" onClick="{{ ae.tabHistory }}" style="font:inherit;border:none;color:#f1efea;padding:7px 14px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;background:{{ ae.histBg }}" style-focus-visible="outline:2px solid #f2b14c">History</button></div></sc-if>
 <sc-if value="{{ ae.isEdit }}" hint-placeholder-val="{{ true }}">
-<div style="display:flex;flex-direction:column;gap:10px;padding:16px;border-radius:16px;background:#16171a">
-<input value="{{ ae.name }}" onChange="{{ ae.setName }}" placeholder="Name, e.g. Porch light at dusk" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px;padding:11px 12px;font-size:15px;font-weight:600">
-<input value="{{ ae.desc }}" onChange="{{ ae.setDesc }}" placeholder="What it’s for (optional)" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px">
-<select value="{{ ae.mode }}" onChange="{{ ae.setMode }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px"><sc-for list="{{ ae.modeOptions }}" as="o" hint-placeholder-count="4"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select>
+<div data-kova-asum aria-live="polite" style="display:flex;flex-direction:column;gap:6px;padding:16px 18px;border-radius:16px;background:linear-gradient(135deg,rgba(242,177,76,0.10),rgba(242,177,76,0.03));border:1px solid rgba(242,177,76,0.22)">
+<div style="display:flex;align-items:center;gap:8px"><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#f2b14c">auto_awesome</span><span style="font-size:11.5px;font-weight:800;color:#f2b14c;text-transform:uppercase;letter-spacing:0.07em">In plain words</span></div>
+<sc-for list="{{ ae.summary }}" as="l" hint-placeholder-count="3"><div style="font-size:14.5px;line-height:1.55;color:#f1efea"><span style="color:#f2b14c;font-weight:800">{{ l.lead }} </span>{{ l.text }}</div></sc-for>
+</div>
+<div style="display:flex;flex-direction:column;gap:12px;padding:16px 18px;border-radius:16px;background:#16171a">
+<input value="{{ ae.name }}" onChange="{{ ae.setName }}" placeholder="{{ ae.namePh }}" aria-label="Name" maxLength="80" style="padding:11px 12px;border-radius:10px;background:#141518;border:1px solid rgba(255,255,255,0.09);color:#f1efea;font:inherit;font-size:16px;font-weight:700;box-sizing:border-box;width:100%" style-focus="border-color:rgba(242,177,76,0.6);outline:none">
+<textarea value="{{ ae.desc }}" onChange="{{ ae.setDesc }}" placeholder="What it’s for (optional)" aria-label="Description" rows="2" maxLength="300" style="padding:9px 12px;border-radius:10px;background:#141518;border:1px solid rgba(255,255,255,0.09);color:#f1efea;font:inherit;font-size:13.5px;line-height:1.45;resize:vertical;box-sizing:border-box;width:100%" style-focus="border-color:rgba(242,177,76,0.6);outline:none"></textarea>
+<sc-if value="{{ ae.full }}" hint-placeholder-val="{{ true }}"><div data-kova-wrap style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start">
+<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:11.5px;color:#8a8781;font-weight:600">Switched</span><button type="button" role="switch" aria-checked="{{ ae.onAria }}" onClick="{{ ae.toggleOn }}" style="font:inherit;border:none;background:transparent;display:flex;align-items:center;gap:10px;cursor:pointer;color:#d8d5cf;font-size:13px;font-weight:600;padding:4px 0" style-focus-visible="outline:2px solid #f2b14c;outline-offset:2px;border-radius:8px"><span style="flex:none;width:36px;height:22px;border-radius:11px;padding:3px;background:{{ ae.onTrack }};box-sizing:border-box;display:block"><span style="display:block;width:16px;height:16px;border-radius:8px;background:#fff;transform:{{ ae.onKnob }};transition:transform .2s"></span></span>{{ ae.onLabel }}</button></div>
+<div style="display:flex;flex-direction:column;gap:6px;flex:1;min-width:240px"><span style="font-size:11.5px;color:#8a8781;font-weight:600">If it starts again while it’s still running</span><div role="group" aria-label="Run mode" style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ ae.runModes }}" as="c" hint-placeholder-count="4"><button type="button" onClick="{{ c.pick }}" aria-pressed="{{ c.pressed }}" style="font:inherit;font-size:12.5px;font-weight:700;padding:7px 12px;border-radius:999px;cursor:pointer;background:{{ c.bg }};color:{{ c.fg }};border:1px solid {{ c.bd }}" style-focus-visible="outline:2px solid #f2b14c;outline-offset:1px">{{ c.label }}</button></sc-for></div><span style="font-size:12px;color:#a3a09a;line-height:1.45">{{ ae.runHint }}</span></div>
+</div></sc-if>
+<sc-if value="{{ ae.quick }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ ae.toFull }}" style="font:inherit;border:none;background:transparent;padding:0;align-self:flex-start;font-size:12.5px;font-weight:700;color:#a3a09a;cursor:pointer;display:flex;align-items:center;gap:4px" style-focus-visible="outline:2px solid #f2b14c;border-radius:6px"><span style="font-family:'Material Symbols Rounded';font-size:16px">tune</span>More options: conditions, other triggers, run mode</button></sc-if>
 </div>
 <sc-if value="{{ ae.hasNotes }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:6px;padding:14px 16px;border-radius:14px;background:rgba(242,177,76,0.08);border:1px solid rgba(242,177,76,0.25)"><span style="font-size:13px;font-weight:700;color:#f2b14c">Converted from Home Assistant: left out</span><sc-for list="{{ ae.notes }}" as="n" hint-placeholder-count="2"><span style="font-size:12.5px;color:#d8d5cf;line-height:1.5">• {{ n }}</span></sc-for></div></sc-if>
-<div style="display:flex;flex-direction:column;gap:6px;padding:16px;border-radius:16px;background:#16171a">
-<sc-for list="{{ ae.rows }}" as="r" hint-placeholder-count="8">
-<sc-if value="{{ r.isHead }}" hint-placeholder-val="{{ false }}"><div style="padding-left:{{ r.pad }};margin-top:10px"><span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em;color:#f2b14c">{{ r.text }}</span></div></sc-if>
-<sc-if value="{{ r.isNote }}" hint-placeholder-val="{{ false }}"><div style="padding-left:{{ r.pad }};font-size:13px;color:#6f6d69">{{ r.text }}</div></sc-if>
-<sc-if value="{{ r.isAdd }}" hint-placeholder-val="{{ false }}"><div style="padding-left:{{ r.pad }}"><span onClick="{{ r.add }}" style="font-size:13px;font-weight:700;color:#f2b14c;cursor:pointer">{{ r.text }}</span></div></sc-if>
-<sc-if value="{{ r.isTarget }}" hint-placeholder-val="{{ false }}"><div style="padding-left:{{ r.pad }};display:flex;flex-wrap:wrap;gap:8px;align-items:center"><select value="{{ r.device }}" onChange="{{ r.setDevice }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px;flex:1 1 200px"><sc-for list="{{ r.devOptions }}" as="o" hint-placeholder-count="6"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select><select value="{{ r.act }}" onChange="{{ r.setAct }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px;flex:0 1 180px"><sc-for list="{{ r.actOptions }}" as="o" hint-placeholder-count="4"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select><span onClick="{{ r.remove }}" role="button" aria-label="Remove device" style="font-family:'Material Symbols Rounded';font-size:20px;color:#a3a09a;cursor:pointer">close</span></div></sc-if>
-<sc-if value="{{ r.isRow }}" hint-placeholder-val="{{ false }}"><div style="margin-left:{{ r.pad }};display:flex;flex-direction:column;gap:8px;padding:10px 12px;border-radius:12px;background:#1c1d20;border:1px solid rgba(255,255,255,0.05)">
-<div style="display:flex;gap:8px;align-items:center"><span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em;min-width:20px">{{ r.tag }}</span><select value="{{ r.kind }}" onChange="{{ r.setKind }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px;flex:1;min-width:0;background:#232428;font-weight:600"><sc-for list="{{ r.kindOptions }}" as="o" hint-placeholder-count="6"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select><span onClick="{{ r.up }}" role="button" aria-label="Move up" style="font-family:'Material Symbols Rounded';font-size:20px;color:#6f6d69;cursor:pointer">arrow_upward</span><span onClick="{{ r.down }}" role="button" aria-label="Move down" style="font-family:'Material Symbols Rounded';font-size:20px;color:#6f6d69;cursor:pointer">arrow_downward</span><sc-if value="{{ r.canRemove }}" hint-placeholder-val="{{ true }}"><span onClick="{{ r.remove }}" role="button" aria-label="Remove" style="font-family:'Material Symbols Rounded';font-size:20px;color:#a3a09a;cursor:pointer">delete</span></sc-if></div>
-<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end">
+<sc-for list="{{ ae.sections }}" as="sc" hint-placeholder-count="3">
+<section data-kova-acard aria-label="{{ sc.title }}" style="display:flex;flex-direction:column;padding:16px 18px 10px;border-radius:16px;background:#16171a;border:1px solid rgba(255,255,255,0.05)">
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px"><span style="width:34px;height:34px;border-radius:10px;background:#f2b14c;color:#1a1408;display:flex;align-items:center;justify-content:center;font-family:'Material Symbols Rounded';font-size:20px;flex:none">{{ sc.icon }}</span><div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0"><h2 style="margin:0;font-size:17px;font-weight:800;letter-spacing:-0.01em">{{ sc.title }}</h2><span style="font-size:12.5px;color:#a3a09a;line-height:1.4">{{ sc.sub }}</span></div><sc-if value="{{ sc.hasCount }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;font-weight:800;color:#a3a09a;padding:3px 9px;border-radius:999px;background:#232428">{{ sc.count }}</span></sc-if></div>
+<sc-for list="{{ sc.rows }}" as="r" hint-placeholder-count="3">
+<div style="display:flex;align-items:stretch">
+<sc-for list="{{ r.rails }}" as="l" hint-placeholder-count="0"><div data-kova-arail style="width:22px;flex:none;display:flex;padding-left:9px;box-sizing:border-box"><div style="width:2px;background:{{ l.c }};border-radius:1px"></div></div></sc-for>
+<div style="flex:1;min-width:0;padding-bottom:8px">
+<sc-if value="{{ r.isLane }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:6px;padding:4px 0 2px"><span style="font-family:'Material Symbols Rounded';font-size:16px;color:{{ r.color }}">{{ r.icon }}</span><span style="font-size:11.5px;font-weight:800;color:{{ r.color }};text-transform:uppercase;letter-spacing:0.07em">{{ r.text }}</span></div></sc-if>
+<sc-if value="{{ r.isNote }}" hint-placeholder-val="{{ false }}"><div style="font-size:13px;color:#6f6d69;padding:4px 2px">{{ r.text }}</div></sc-if>
+<sc-if value="{{ r.isAdd }}" hint-placeholder-val="{{ false }}"><select value="" onChange="{{ r.set }}" aria-label="{{ r.label }}" style="font:inherit;font-size:13px;font-weight:700;color:#f2b14c;background:transparent;border:1px dashed rgba(242,177,76,0.35);border-radius:10px;padding:8px 12px;cursor:pointer;max-width:100%" style-focus="border-color:#f2b14c;outline:none;background:rgba(242,177,76,0.06)"><option value="">{{ r.label }}</option><sc-for list="{{ r.options }}" as="o" hint-placeholder-count="4"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select></sc-if>
+<sc-if value="{{ r.isBlock }}" hint-placeholder-val="{{ false }}"><div data-kova-ablock style="display:flex;flex-direction:column;gap:10px;padding:10px 12px 12px;border-radius:13px;background:{{ r.bg }};border:1px solid {{ r.bd }}">
+<div style="display:flex;align-items:center;gap:8px;min-width:0">
+<span data-kova-aicon style="width:30px;height:30px;border-radius:9px;background:{{ r.iconBg }};color:{{ r.iconFg }};display:flex;align-items:center;justify-content:center;font-family:'Material Symbols Rounded';font-size:18px;flex:none">{{ r.icon }}</span>
+<sc-if value="{{ r.hasTag }}" hint-placeholder-val="{{ false }}"><span style="font-size:10.5px;font-weight:800;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em;padding:2px 7px;border-radius:6px;background:#2a2b2f;flex:none">{{ r.tag }}</span></sc-if>
+<sc-if value="{{ r.hasKind }}" hint-placeholder-val="{{ true }}"><select value="{{ r.kind }}" onChange="{{ r.setKind }}" aria-label="{{ r.kindLabel }}" style="flex:1;min-width:0;max-width:100%;background:transparent;border:1px solid transparent;border-radius:8px;color:#f1efea;font:inherit;font-size:14px;font-weight:700;padding:6px 4px;cursor:pointer;text-overflow:ellipsis" style-hover="background:#232428" style-focus="border-color:rgba(242,177,76,0.6);outline:none;background:#232428"><sc-for list="{{ r.kindOptions }}" as="o" hint-placeholder-count="6"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select></sc-if>
+<sc-if value="{{ r.title }}" hint-placeholder-val="{{ false }}"><span style="flex:1;min-width:0;font-size:14px;font-weight:700;padding:6px 4px">{{ r.title }}</span></sc-if>
+<sc-if value="{{ r.canMove }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ r.up }}" aria-label="Move up" title="Move up" style="font:inherit;border:none;background:transparent;padding:4px;border-radius:7px;font-family:'Material Symbols Rounded';font-size:19px;color:#6f6d69;cursor:pointer;flex:none" style-hover="color:#f1efea;background:#2a2b2f" style-focus-visible="outline:2px solid #f2b14c">arrow_upward</button><button type="button" onClick="{{ r.down }}" aria-label="Move down" title="Move down" style="font:inherit;border:none;background:transparent;padding:4px;border-radius:7px;font-family:'Material Symbols Rounded';font-size:19px;color:#6f6d69;cursor:pointer;flex:none" style-hover="color:#f1efea;background:#2a2b2f" style-focus-visible="outline:2px solid #f2b14c">arrow_downward</button></sc-if>
+<sc-if value="{{ r.canRemove }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ r.remove }}" aria-label="{{ r.removeLabel }}" title="{{ r.removeLabel }}" style="font:inherit;border:none;background:transparent;padding:4px;border-radius:7px;font-family:'Material Symbols Rounded';font-size:19px;color:#8a8781;cursor:pointer;flex:none" style-hover="color:#ff6b5e;background:rgba(255,107,94,0.1)" style-focus-visible="outline:2px solid #f2b14c">delete</button></sc-if>
+</div>
+<sc-if value="{{ r.hasWords }}" hint-placeholder-val="{{ false }}"><span data-kova-awords style="font-size:12.5px;color:#a3a09a;line-height:1.45;margin-top:-6px;padding-left:38px">{{ r.words }}</span></sc-if>
+<sc-if value="{{ r.hasFields }}" hint-placeholder-val="{{ false }}"><div data-kova-afields style="display:flex;flex-wrap:wrap;gap:10px 12px;align-items:flex-start;padding-left:38px">
 <sc-for list="{{ r.fields }}" as="f" hint-placeholder-count="3">
-<sc-if value="{{ f.isSel }}" hint-placeholder-val="{{ false }}"><label style="display:flex;flex-direction:column;gap:3px;flex:{{ f.wide }};min-width:120px"><span style="font-size:11px;color:#8a8781">{{ f.label }}</span><select value="{{ f.value }}" onChange="{{ f.set }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px"><sc-for list="{{ f.options }}" as="o" hint-placeholder-count="5"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select></label></sc-if>
-<sc-if value="{{ f.isNum }}" hint-placeholder-val="{{ false }}"><label style="display:flex;flex-direction:column;gap:3px;width:110px"><span style="font-size:11px;color:#8a8781">{{ f.label }} <span style="color:#6f6d69">{{ f.unit }}</span></span><input type="number" value="{{ f.value }}" onChange="{{ f.set }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px;width:100%;box-sizing:border-box"></label></sc-if>
-<sc-if value="{{ f.isText }}" hint-placeholder-val="{{ false }}"><label style="display:flex;flex-direction:column;gap:3px;flex:1 1 220px"><span style="font-size:11px;color:#8a8781">{{ f.label }}</span><input value="{{ f.value }}" onChange="{{ f.set }}" placeholder="{{ f.ph }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px"></label></sc-if>
-<sc-if value="{{ f.isTime }}" hint-placeholder-val="{{ false }}"><label style="display:flex;flex-direction:column;gap:3px"><span style="font-size:11px;color:#8a8781">{{ f.label }}</span><input type="time" value="{{ f.value }}" onChange="{{ f.set }}" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px"></label></sc-if>
-<sc-if value="{{ f.isChips }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:3px;flex:1 1 100%"><span style="font-size:11px;color:#8a8781">{{ f.label }}</span><div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ f.items }}" as="c" hint-placeholder-count="7"><div onClick="{{ c.toggle }}" style="min-width:30px;text-align:center;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer;background:{{ c.bg }};color:{{ c.fg }}">{{ c.label }}</div></sc-for></div></div></sc-if>
+<sc-if value="{{ f.isSub }}" hint-placeholder-val="{{ false }}"><div style="flex:1 1 100%;font-size:11px;font-weight:800;color:#8a8781;text-transform:uppercase;letter-spacing:0.07em;margin-top:2px;margin-bottom:-4px">{{ f.label }}</div></sc-if>
+<sc-if value="{{ f.isCtl }}" hint-placeholder-val="{{ false }}"><div data-kova-afield style="display:flex;flex-direction:column;gap:4px;flex:{{ f.flex }};min-width:{{ f.minw }};max-width:100%">
+<div style="display:flex;align-items:center;gap:4px;min-height:16px"><span style="font-size:11.5px;color:#8a8781;font-weight:600;flex:1">{{ f.label }} <span style="color:#6f6d69;font-weight:500">{{ f.unit }}</span></span><sc-if value="{{ f.removable }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ f.remove }}" aria-label="{{ f.removeLabel }}" title="{{ f.removeLabel }}" style="font:inherit;border:none;background:transparent;padding:0 2px;border-radius:5px;font-family:'Material Symbols Rounded';font-size:15px;color:#6f6d69;cursor:pointer;line-height:1" style-hover="color:#ff6b5e" style-focus-visible="outline:2px solid #f2b14c">close</button></sc-if></div>
+<sc-if value="{{ f.isSel }}" hint-placeholder-val="{{ false }}"><select value="{{ f.value }}" onChange="{{ f.set }}" aria-label="{{ f.aria }}" style="padding:9px 10px;border-radius:10px;background:#141518;border:1px solid rgba(255,255,255,0.09);color:#f1efea;font:inherit;font-size:13.5px;max-width:100%;min-width:0" style-focus="border-color:rgba(242,177,76,0.6);outline:none"><sc-for list="{{ f.options }}" as="o" hint-placeholder-count="5"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select></sc-if>
+<sc-if value="{{ f.isNum }}" hint-placeholder-val="{{ false }}"><input type="number" value="{{ f.value }}" onChange="{{ f.set }}" min="{{ f.min }}" max="{{ f.max }}" step="{{ f.step }}" aria-label="{{ f.aria }}" style="padding:9px 10px;border-radius:10px;background:#141518;border:1px solid rgba(255,255,255,0.09);color:#f1efea;font:inherit;font-size:13.5px;width:{{ f.width }};box-sizing:border-box" style-focus="border-color:rgba(242,177,76,0.6);outline:none"></sc-if>
+<sc-if value="{{ f.isRange }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:10px"><input type="range" value="{{ f.value }}" onChange="{{ f.set }}" min="{{ f.min }}" max="{{ f.max }}" step="{{ f.step }}" aria-label="{{ f.aria }}" style="flex:1;min-width:0"><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#f1efea;min-width:52px;text-align:right">{{ f.value }}{{ f.unit }}</span></div></sc-if>
+<sc-if value="{{ f.isText }}" hint-placeholder-val="{{ false }}"><input value="{{ f.value }}" onChange="{{ f.set }}" placeholder="{{ f.ph }}" aria-label="{{ f.aria }}" style="padding:9px 10px;border-radius:10px;background:#141518;border:1px solid rgba(255,255,255,0.09);color:#f1efea;font:inherit;font-size:13.5px;width:100%;box-sizing:border-box" style-focus="border-color:rgba(242,177,76,0.6);outline:none"></sc-if>
+<sc-if value="{{ f.isArea }}" hint-placeholder-val="{{ false }}"><textarea value="{{ f.value }}" onChange="{{ f.set }}" placeholder="{{ f.ph }}" aria-label="{{ f.aria }}" rows="2" maxLength="500" style="padding:9px 10px;border-radius:10px;background:#141518;border:1px solid rgba(255,255,255,0.09);color:#f1efea;font:inherit;font-size:13.5px;line-height:1.45;width:100%;box-sizing:border-box;resize:vertical" style-focus="border-color:rgba(242,177,76,0.6);outline:none"></textarea></sc-if>
+<sc-if value="{{ f.isTime }}" hint-placeholder-val="{{ false }}"><input type="time" value="{{ f.value }}" onChange="{{ f.set }}" aria-label="{{ f.aria }}" style="padding:8px 10px;border-radius:10px;background:#141518;border:1px solid rgba(255,255,255,0.09);color:#f1efea;font:inherit;font-size:13.5px;color-scheme:dark" style-focus="border-color:rgba(242,177,76,0.6);outline:none"></sc-if>
+<sc-if value="{{ f.isDate }}" hint-placeholder-val="{{ false }}"><input type="date" value="{{ f.value }}" min="{{ f.min }}" onChange="{{ f.set }}" aria-label="{{ f.aria }}" style="padding:8px 10px;border-radius:10px;background:#141518;border:1px solid rgba(255,255,255,0.09);color:#f1efea;font:inherit;font-size:13.5px;color-scheme:dark" style-focus="border-color:rgba(242,177,76,0.6);outline:none"></sc-if>
+<sc-if value="{{ f.isColor }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:8px"><input type="color" value="{{ f.value }}" onChange="{{ f.set }}" aria-label="{{ f.aria }}" style="width:44px;height:36px;padding:2px;border-radius:10px;background:#141518;border:1px solid rgba(255,255,255,0.09);cursor:pointer"><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#d8d5cf">{{ f.value }}</span></div></sc-if>
+<sc-if value="{{ f.isSeg }}" hint-placeholder-val="{{ false }}"><div role="group" aria-label="{{ f.label }}" style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ f.items }}" as="c" hint-placeholder-count="3"><button type="button" onClick="{{ c.pick }}" aria-pressed="{{ c.pressed }}" style="font:inherit;font-size:12.5px;font-weight:700;padding:7px 12px;border-radius:999px;cursor:pointer;background:{{ c.bg }};color:{{ c.fg }};border:1px solid {{ c.bd }}" style-focus-visible="outline:2px solid #f2b14c;outline-offset:1px">{{ c.label }}</button></sc-for></div></sc-if>
+<sc-if value="{{ f.isAdd }}" hint-placeholder-val="{{ false }}"><select value="" onChange="{{ f.set }}" aria-label="{{ f.aria }}" style="font:inherit;font-size:12.5px;font-weight:700;color:#f2b14c;background:transparent;border:1px dashed rgba(242,177,76,0.35);border-radius:10px;padding:8px 10px;cursor:pointer;max-width:100%" style-focus="border-color:#f2b14c;outline:none;background:rgba(242,177,76,0.06)"><option value="">{{ f.ph }}</option><sc-for list="{{ f.options }}" as="o" hint-placeholder-count="4"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select></sc-if>
+<sc-if value="{{ f.isNoteF }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;color:#a3a09a;line-height:1.45">{{ f.text }}</span></sc-if>
+<sc-if value="{{ f.hasHint }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;color:#6f6d69">{{ f.hint }}</span></sc-if>
+</div></sc-if>
 </sc-for>
-</div></div></sc-if>
+</div></sc-if>
+<sc-if value="{{ r.hasErr }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;color:#ffa094;display:flex;gap:6px;align-items:center;padding-left:38px"><span style="font-family:'Material Symbols Rounded';font-size:16px">error</span>{{ r.err }}</span></sc-if>
+</div></sc-if>
+</div>
+</div>
 </sc-for>
+</section>
+</sc-for>
+<div data-kova-afoot style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 0">
+<div style="flex:1;min-width:200px;font-size:12.5px;line-height:1.45"><sc-if value="{{ ae.hasErr }}" hint-placeholder-val="{{ false }}"><span style="color:#ff8a7e">{{ ae.err }}</span></sc-if><sc-if value="{{ ae.hasIssues }}" hint-placeholder-val="{{ false }}"><span style="color:#ffa094">{{ ae.issues }}</span></sc-if></div>
+<button type="button" onClick="{{ ae.cancel }}" style="font:inherit;border:none;padding:10px 16px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:rgba(255,255,255,0.06);color:#f1efea" style-focus-visible="outline:2px solid #f2b14c;outline-offset:2px">Cancel</button>
+<button type="button" onClick="{{ ae.save }}" style="font:inherit;border:none;padding:10px 20px;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;background:#f2b14c;color:#1a1408" style-focus-visible="outline:2px solid #f7cb82;outline-offset:2px">{{ ae.saveLabel }}</button>
 </div>
 </sc-if>
 <sc-if value="{{ ae.isHistory }}" hint-placeholder-val="{{ false }}">
@@ -272,14 +314,23 @@ document.write('<script src="/api/boot.js'+(t?"?token="+encodeURIComponent(t):""
 </div>
 </sc-if>
 <sc-if value="{{ aeClosed }}" hint-placeholder-val="{{ true }}">
-<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:12px"><div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;color:#a3a09a">{{ al.count }}</span><h1 style="margin:0;font-size:30px;font-weight:700;letter-spacing:-0.02em">Automations</h1></div><div onClick="{{ al.add }}" style="padding:8px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;padding:9px 16px;background:#f2b14c;color:#1a1408;display:flex;align-items:center;gap:6px"><span style="font-family:'Material Symbols Rounded';font-size:18px">add</span>New automation</div></div>
-<input value="{{ al.q }}" onInput="{{ al.setQ }}" placeholder="Search automations" style="padding:8px 10px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px;padding:10px 12px">
-<div style="display:flex;align-items:center;gap:10px;padding:6px 6px 6px 14px;border-radius:14px;background:#16171a;border:1px solid rgba(255,255,255,0.06)"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#f2b14c">auto_awesome</span><input value="{{ al.d }}" onInput="{{ al.setD }}" onKeyDown="{{ al.dKey }}" placeholder="Tell Kova what should happen — “all lights off at sunrise”" style="flex:1;background:transparent;border:none;outline:none;color:#f1efea;font:inherit;font-size:14px;padding:8px 0"><div onClick="{{ al.dSend }}" style="padding:8px 14px;border-radius:10px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;cursor:pointer">Make it</div></div>
+<div data-kova-wrap style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:12px"><div style="display:flex;flex-direction:column;gap:6px;flex:1;min-width:200px"><span style="font-size:13px;color:#a3a09a">{{ al.count }}</span><h1 style="margin:0;font-size:30px;font-weight:700;letter-spacing:-0.02em">Automations</h1></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" onClick="{{ al.once }}" style="font:inherit;border:none;padding:9px 16px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:rgba(255,255,255,0.07);color:#f1efea;display:flex;align-items:center;gap:6px" style-focus-visible="outline:2px solid #f2b14c;outline-offset:2px"><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#f2b14c">event</span>Schedule once</button><button type="button" onClick="{{ al.add }}" style="font:inherit;border:none;padding:9px 16px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:#f2b14c;color:#1a1408;display:flex;align-items:center;gap:6px" style-focus-visible="outline:2px solid #f7cb82;outline-offset:2px"><span style="font-family:'Material Symbols Rounded';font-size:18px">add</span>New automation</button></div></div>
+<input value="{{ al.q }}" onInput="{{ al.setQ }}" placeholder="Search automations and schedules" aria-label="Search automations" style="padding:10px 12px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font:inherit;font-size:13px" style-focus="border-color:rgba(242,177,76,0.6);outline:none">
+<div style="display:flex;align-items:center;gap:10px;padding:6px 6px 6px 14px;border-radius:14px;background:#16171a;border:1px solid rgba(255,255,255,0.06)"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#f2b14c">auto_awesome</span><input value="{{ al.d }}" onInput="{{ al.setD }}" onKeyDown="{{ al.dKey }}" aria-label="Tell Kova what should happen" placeholder="Tell Kova what should happen — “all lights off at sunrise”" style="flex:1;min-width:0;background:transparent;border:none;outline:none;color:#f1efea;font:inherit;font-size:14px;padding:8px 0"><button type="button" onClick="{{ al.dSend }}" style="font:inherit;border:none;padding:8px 14px;border-radius:10px;background:#f2b14c;color:#1a1408;font-size:13px;font-weight:700;cursor:pointer" style-focus-visible="outline:2px solid #f7cb82;outline-offset:2px">Make it</button></div>
 <sc-if value="{{ al.hasIdeas }}" hint-placeholder-val="{{ false }}"><sc-for list="{{ al.ideas }}" as="i" hint-placeholder-count="1">
 <div style="display:flex;flex-direction:column;gap:10px;padding:16px;border-radius:16px;background:rgba(242,177,76,0.07);border:1px solid rgba(242,177,76,0.25)">
 <div style="display:flex;gap:10px;align-items:flex-start"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#f2b14c">lightbulb</span><div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:0"><span style="font-size:12px;font-weight:700;color:#f2b14c">Suggested</span><span style="font-size:14px;font-weight:700">{{ i.name }}</span><span style="font-size:13px;color:#d8d5cf;line-height:1.5">{{ i.text }}</span><span style="font-size:12px;color:#a3a09a;line-height:1.5">{{ i.why }}</span></div></div>
 <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><div onClick="{{ i.dismiss }}" style="padding:8px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;color:#a3a09a">Not now</div><div onClick="{{ i.edit }}" style="padding:8px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:rgba(255,255,255,0.06);color:#f1efea">Change first</div><div onClick="{{ i.add }}" style="padding:8px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:#f2b14c;color:#1a1408">Add</div></div>
 </div></sc-for></sc-if>
+<sc-if value="{{ al.hasSched }}" hint-placeholder-val="{{ false }}"><section aria-label="Scheduled" style="display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:baseline;gap:10px"><h2 style="margin:0;font-size:17px;font-weight:800">Scheduled</h2><span style="font-size:12.5px;color:#a3a09a">Each runs once, then switches itself off</span></div>
+<div style="display:flex;flex-direction:column;background:#16171a;border-radius:16px;overflow:hidden;border:1px solid rgba(255,255,255,0.05)"><sc-for list="{{ al.sched }}" as="a" hint-placeholder-count="2">
+<div data-kova-asched style="display:flex;gap:14px;align-items:center;padding:12px 16px;border-top:1px solid rgba(255,255,255,0.05)">
+<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;width:86px;flex:none;padding:8px 6px;border-radius:12px;background:rgba(242,177,76,0.1)"><span style="font-size:11px;font-weight:800;color:#f2b14c;text-transform:uppercase;letter-spacing:0.05em;text-align:center;line-height:1.25">{{ a.day }}</span><span style="font-family:'JetBrains Mono',monospace;font-size:17px;font-weight:500;color:#f1efea">{{ a.time }}</span></div>
+<div onClick="{{ a.edit }}" style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:0;cursor:pointer"><span style="font-size:14.5px;font-weight:700">{{ a.name }}</span><span style="font-size:12.5px;color:#d8d5cf;line-height:1.45">{{ a.then }}</span><sc-if value="{{ a.hasCond }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:#a3a09a">{{ a.cond }}</span></sc-if><sc-if value="{{ a.off }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;font-weight:700;color:#a3a09a">{{ a.offLabel }}</span></sc-if></div>
+<div style="display:flex;gap:6px;flex:none;flex-wrap:wrap;justify-content:flex-end"><sc-if value="{{ a.off }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ a.toggle }}" style="font:inherit;border:none;padding:8px 12px;border-radius:10px;font-size:12.5px;font-weight:700;cursor:pointer;background:rgba(242,177,76,0.14);color:#f2b14c" style-focus-visible="outline:2px solid #f2b14c">Switch on</button></sc-if><button type="button" onClick="{{ a.edit }}" style="font:inherit;border:none;padding:8px 12px;border-radius:10px;font-size:12.5px;font-weight:700;cursor:pointer;background:rgba(255,255,255,0.06);color:#f1efea" style-focus-visible="outline:2px solid #f2b14c">Edit</button><button type="button" onClick="{{ a.cancel }}" style="font:inherit;border:none;padding:8px 12px;border-radius:10px;font-size:12.5px;font-weight:700;cursor:pointer;background:transparent;color:#ff8a7e" style-focus-visible="outline:2px solid #f2b14c">Cancel</button></div>
+</div></sc-for></div></section></sc-if>
+<sc-if value="{{ al.showAutosHead }}" hint-placeholder-val="{{ false }}"><h2 style="margin:6px 0 -4px;font-size:17px;font-weight:800">Automations</h2></sc-if>
 <sc-if value="{{ al.has }}" hint-placeholder-val="{{ false }}"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,420px),1fr));gap:12px">
 <sc-for list="{{ al.items }}" as="a" hint-placeholder-count="3">
 <div style="display:flex;flex-direction:column;gap:10px;padding:16px;border-radius:16px;background:#16171a;border:1px solid rgba(255,255,255,0.05)">
@@ -287,12 +338,20 @@ document.write('<script src="/api/boot.js'+(t?"?token="+encodeURIComponent(t):""
 <span style="font-size:12.5px;color:#d8d5cf;line-height:1.45"><span style="color:#f2b14c;font-weight:700">When </span>{{ a.when }}</span>
 <sc-if value="{{ a.hasCond }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;color:#a3a09a;line-height:1.45">{{ a.cond }}</span></sc-if>
 <span style="font-size:12.5px;color:#d8d5cf;line-height:1.45"><span style="color:#f2b14c;font-weight:700">Then </span>{{ a.then }}</span></div>
-<div onClick="{{ a.toggle }}" role="switch" aria-label="On" style="flex:none;width:36px;height:22px;border-radius:11px;padding:3px;background:{{ a.track }};cursor:pointer;box-sizing:border-box"><div style="width:16px;height:16px;border-radius:8px;background:#fff;transform:{{ a.knob }};transition:transform .2s"></div></div></div>
+<button type="button" onClick="{{ a.toggle }}" role="switch" aria-checked="{{ a.onLabel }}" aria-label="On" style="font:inherit;border:none;flex:none;width:36px;height:22px;border-radius:11px;padding:3px;background:{{ a.track }};cursor:pointer;box-sizing:border-box" style-focus-visible="outline:2px solid #f2b14c;outline-offset:2px"><span style="display:block;width:16px;height:16px;border-radius:8px;background:#fff;transform:{{ a.knob }};transition:transform .2s"></span></button></div>
 <div style="display:flex;gap:6px;align-items:center;font-size:12px;color:{{ a.statusFg }}"><span style="font-family:'Material Symbols Rounded';font-size:15px">history</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ a.status }}</span></div>
 <div style="display:flex;gap:14px;font-size:13px;font-weight:700;flex-wrap:wrap"><span onClick="{{ a.run }}" style="color:#f2b14c;cursor:pointer">Run now</span><span onClick="{{ a.edit }}" style="color:#d8d5cf;cursor:pointer">Edit</span><span onClick="{{ a.dup }}" style="color:#d8d5cf;cursor:pointer">Duplicate</span><span onClick="{{ a.remove }}" style="color:#ff6b5e;cursor:pointer">Delete</span></div>
 </div>
 </sc-for></div></sc-if>
-<sc-if value="{{ al.none }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:6px;padding:20px;border-radius:16px;background:#16171a"><span style="font-size:15px;font-weight:700">No automations yet</span><span style="font-size:13px;color:#a3a09a;line-height:1.5">Automations react to what happens at home: when the last person leaves, turn everything off; when the doorbell rings after dark, turn the porch light on for five minutes; when it gets hot, cool the bedroom before bedtime.</span></div></sc-if>
+<sc-if value="{{ al.noMatch }}" hint-placeholder-val="{{ false }}"><div style="padding:16px;border-radius:14px;background:#16171a;font-size:13px;color:#a3a09a">{{ al.noMatchText }}</div></sc-if>
+<sc-if value="{{ al.hasDone }}" hint-placeholder-val="{{ false }}"><section aria-label="Done" style="display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><button type="button" onClick="{{ al.toggleDone }}" aria-expanded="{{ al.doneExpanded }}" style="font:inherit;border:none;background:transparent;padding:4px 2px;display:flex;align-items:center;gap:4px;cursor:pointer;color:#f1efea;font-size:17px;font-weight:800;border-radius:8px" style-focus-visible="outline:2px solid #f2b14c">{{ al.doneLabel }}<span style="font-family:'Material Symbols Rounded';font-size:22px;color:#a3a09a">{{ al.doneIcon }}</span></button><span style="font-size:12.5px;color:#a3a09a;flex:1">One-time schedules that have run or were missed</span><button type="button" onClick="{{ al.clearDone }}" style="font:inherit;border:none;padding:7px 12px;border-radius:10px;font-size:12.5px;font-weight:700;cursor:pointer;background:rgba(255,255,255,0.06);color:#f1efea" style-focus-visible="outline:2px solid #f2b14c">Clear done</button></div>
+<sc-if value="{{ al.doneOpen }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;background:#16171a;border-radius:16px;overflow:hidden;border:1px solid rgba(255,255,255,0.05)"><sc-for list="{{ al.doneList }}" as="a" hint-placeholder-count="2">
+<div data-kova-asched data-kova-adone style="display:flex;gap:12px;align-items:center;padding:12px 16px;border-top:1px solid rgba(255,255,255,0.05)"><span style="font-family:'Material Symbols Rounded';font-size:22px;color:{{ a.fg }};flex:none">{{ a.icon }}</span><div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:0"><span style="font-size:14px;font-weight:700;color:#d8d5cf">{{ a.name }}</span><span style="font-size:12px;font-weight:700;color:{{ a.fg }}">{{ a.state }}</span><span style="font-size:12px;color:#8a8781;line-height:1.4">{{ a.then }}</span></div>
+<div style="display:flex;gap:6px;flex:none;flex-wrap:wrap;justify-content:flex-end"><button type="button" onClick="{{ a.again }}" style="font:inherit;border:none;padding:8px 12px;border-radius:10px;font-size:12.5px;font-weight:700;cursor:pointer;background:rgba(242,177,76,0.14);color:#f2b14c" style-focus-visible="outline:2px solid #f2b14c">Schedule again</button><button type="button" onClick="{{ a.remove }}" aria-label="Delete" style="font:inherit;border:none;padding:8px 10px;border-radius:10px;font-size:12.5px;font-weight:700;cursor:pointer;background:transparent;color:#ff8a7e" style-focus-visible="outline:2px solid #f2b14c">Delete</button></div></div>
+</sc-for></div></sc-if>
+</section></sc-if>
+<sc-if value="{{ al.none }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:6px;padding:20px;border-radius:16px;background:#16171a"><span style="font-size:15px;font-weight:700">No automations yet</span><span style="font-size:13px;color:#a3a09a;line-height:1.5">Automations react to what happens at home: when the last person leaves, turn everything off; when the doorbell rings after dark, turn the porch light on for five minutes; when it gets hot, cool the bedroom before bedtime. For something once at a later time (the AC off at 3 pm, a reminder tonight), use Schedule once.</span></div></sc-if>
 <sc-if value="{{ al.haHas }}" hint-placeholder-val="{{ false }}">
 <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px"><div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:17px;font-weight:700">From Home Assistant</span><span style="font-size:13px;color:#a3a09a">Converted ones start switched off, so they don’t run twice while Home Assistant still runs the originals.</span></div><sc-if value="{{ al.haCanAll }}" hint-placeholder-val="{{ false }}"><div onClick="{{ al.haAll }}" style="padding:8px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:#f2b14c;color:#1a1408">{{ al.haAllLabel }}</div></sc-if></div>
 <div style="background:#16171a;border-radius:16px;overflow:hidden"><sc-for list="{{ al.ha }}" as="h" hint-placeholder-count="3">
@@ -888,8 +947,71 @@ const actionOptions=(AD,sources)=>!AD?[]:AD.type==='fan'?[['{"mode":"Auto"}','Au
   :AD.type==='dimmer'?[['{"on":false}','Off'],...[5,10,25,50,78,100].map(b=>[JSON.stringify({on:true,bri:b}),`On at ${b}%`])]
   :[['{"on":true}','On'],['{"on":false}','Off']];
 // Automations: what starts one, and what an "if" can check.
-const AUTO_WHEN=[['becomes:offline','shuts down or goes offline'],['becomes:online','comes back online'],['becomes:on','switches on'],['becomes:off','switches off'],['event:person','sees a person'],['event:ring','rings'],['event:motion','detects motion'],['event:video-started','starts playing a video'],['event:music-started','starts playing music'],['event:stopped','stops playing']];
-const AUTO_IS=[['{"on":true}','is on'],['{"on":false}','is off'],['{"online":false}','is offline'],['{"online":true}','is online'],...['tv','hdmi1','hdmi2','hdmi3','hdmi4'].map(i=>[JSON.stringify({on:true,input:i}),`is on ${i==='tv'?'TV':'HDMI '+i.slice(4)}`])];
+// ---- Automations: what each device can be set to, matched on, read and send, from its capabilities and its state. ----
+// The hub's assistant can build anything automation-check.ts accepts; the editor offers the same, device by device.
+const TV_INPUTS=['hdmi1','hdmi2','hdmi3','hdmi4','tv'],BAR_INPUTS=['tv','hdmi1','hdmi2','bluetooth','wifi'];
+const SOUND_MODES=[['standard','Standard'],['surround','Surround'],['game','Game'],['adaptive','Adaptive']];
+const VAC_ACT=[['cleaning','cleaning'],['returning','returning to the dock'],['docked','docked'],['paused','paused'],['idle','idle'],['error','needing attention']];
+const NUM_READ=[['temp','Temperature','°C'],['target','Set temperature','°C'],['power','Power','W'],['energy','Energy today','kWh'],['battery','Battery','%'],['bri','Brightness','%'],['vol','Volume','%'],['grid','Grid power','W'],['load','Home power','W'],['humidity','Humidity','%'],['lux','Light level','lx']];
+const READ_CAP={temp:'climate',target:'climate',power:'power',energy:'energy',battery:'battery',bri:'brightness',vol:'volume'};
+const EVENT_NAMES={person:'sees a person',motion:'detects motion',ring:'rings','video-started':'starts a video','music-started':'starts music',paused:'pauses',resumed:'carries on playing',stopped:'stops playing',ended:'finishes playing','screen-asleep':'screen goes to sleep','screen-shutdown':'screen shuts down','screen-awake':'screen wakes up','internet-down':'internet goes down','internet-up':'internet comes back','new-device':'sees a new device join'};
+// State fields a command can't set (readings), and the ones the editor has its own control for.
+const RO_KEYS=new Set(['power','energy','grid','load','battery','temp','humidity','lux','pm25','airQuality','filterLife','track','online','fanLevelMax','zones','activity']);
+const SET_KEYS=['on','bri','k','color','vol','volStep','paused','media','shuffle','skip','input','muted','sound','night','mode','fanLevel','display','childLock','hvac','target','fanSpeed','zoneSet','extras'];
+const capsOf=d=>(d&&d.capabilities)||[];
+const hasCap=(d,c)=>capsOf(d).includes(c);
+const stOf=d=>(d&&d.state)||{};
+const isDoorbell=d=>hasCap(d,'doorbell')||/door\s*bell/i.test(`${d.name} ${d.id}`);
+const uniq=xs=>[...new Set(xs)];
+const withCur=(l,cur)=>cur!=null&&cur!==''&&!l.includes(cur)?[...l,cur]:l;
+const inputsOf=d=>!hasCap(d,'input')?[]:withCur(Array.isArray(d.inputs)?d.inputs.slice():hasCap(d,'sound')?BAR_INPUTS.slice():TV_INPUTS.slice(),stOf(d).input);
+const inputWord=(d,i)=>i==='tv'?(d&&hasCap(d,'sound')?'TV (eARC)':'TV'):INPUT_NAMES[i]||i;
+const modesOf=d=>withCur(Array.isArray(d.modes)?d.modes.slice():hasCap(d,'purifier')?['Auto','Sleep','Manual']:hasCap(d,'fanMode')?['Auto','Sleep']:[],stOf(d).mode);
+const soundsOf=d=>!hasCap(d,'sound')?[]:withCur(Array.isArray(d.sounds)?d.sounds.slice():SOUND_MODES.map(x=>x[0]),stOf(d).sound);
+const readingsOf=d=>NUM_READ.filter(([f])=>f in stOf(d)||(READ_CAP[f]&&hasCap(d,READ_CAP[f])));
+const eventsOf=d=>{if(Array.isArray(d.events))return d.events;const o=[];
+  if(d.type==='camera'||hasCap(d,'events')){if(isDoorbell(d))o.push('ring');o.push('person','motion')}
+  if(isPlayer(d)&&hasCap(d,'media'))o.push('video-started','music-started','paused','resumed','stopped','ended');
+  if(hasCap(d,'library'))o.push('screen-asleep','screen-shutdown','screen-awake');
+  if(d.type==='internet')o.push('internet-down','internet-up','new-device');
+  return uniq(o)};
+// What a "turns …" / "is …" can look at on a device.
+const matchKeysOf=d=>{const o=[];if(hasCap(d,'onoff')||!['camera','sensor'].includes(d.type))o.push('on');o.push('online');
+  if(isPlayer(d)||hasCap(d,'pause'))o.push('playing');if(hasCap(d,'mute'))o.push('muted');if(hasCap(d,'input'))o.push('input');
+  if(hasCap(d,'climate'))o.push('hvac');if(d.type==='vacuum'||hasCap(d,'vacuum'))o.push('activity');if(modesOf(d).length)o.push('mode');return o};
+// What "Set devices" can change on one device, or on every device a type:/room: target reaches.
+const setKeysOf=dl=>{const any=c=>dl.some(d=>hasCap(d,c)),K=[];
+  if(dl.some(d=>hasCap(d,'onoff')||!['camera','sensor'].includes(d.type)))K.push('on');
+  if(any('brightness'))K.push('bri');if(any('colorTemp'))K.push('k');if(any('color'))K.push('color');
+  if(any('volume'))K.push('vol','volStep');if(any('pause'))K.push('paused');if(any('media'))K.push('media');if(any('queue'))K.push('shuffle','skip');
+  if(any('input'))K.push('input');if(any('mute'))K.push('muted');if(any('sound'))K.push('sound','night');
+  if(any('fanMode'))K.push('mode');if(any('purifier'))K.push('fanLevel','display','childLock');
+  if(any('climate'))K.push('hvac','target','fanSpeed');
+  if(dl.length===1){const d=dl[0];if(hasCap(d,'zones'))(stOf(d).zones||[]).forEach(z=>K.push('zone:'+z.n))}
+  if(any('extras'))uniq(dl.flatMap(d=>Object.keys(stOf(d).extras||{}))).forEach(k=>K.push('x:'+k));
+  // Anything else a device lists in its state that isn't a reading: settable by name, as the assistant's "set" does.
+  if(dl.length===1)Object.entries(stOf(dl[0])).forEach(([k,v])=>{if(!SET_KEYS.includes(k)&&!RO_KEYS.has(k)&&['boolean','number','string'].includes(typeof v))K.push('g:'+k)});
+  return K};
+// A command's fields as the editor's keys: zones and extras one by one.
+const cmdKeys=cmd=>Object.entries(cmd||{}).flatMap(([k,v])=>k==='zoneSet'&&v&&typeof v==='object'?Object.keys(v).map(n=>'zone:'+n):k==='extras'&&v&&typeof v==='object'?Object.keys(v).map(x=>'x:'+x):[SET_KEYS.includes(k)?k:'g:'+k]);
+const cmdGet=(cmd,k)=>k.startsWith('zone:')?((cmd||{}).zoneSet||{})[k.slice(5)]:k.startsWith('x:')?((cmd||{}).extras||{})[k.slice(2)]:(cmd||{})[k.startsWith('g:')?k.slice(2):k];
+const cmdPut=(cmd,k,v)=>{if(k.startsWith('zone:')){cmd.zoneSet=cmd.zoneSet||{};cmd.zoneSet[k.slice(5)]=v}else if(k.startsWith('x:')){cmd.extras=cmd.extras||{};cmd.extras[k.slice(2)]=v}else cmd[k.startsWith('g:')?k.slice(2):k]=v};
+const cmdDel=(cmd,k)=>{if(k.startsWith('zone:')){if(cmd.zoneSet){delete cmd.zoneSet[k.slice(5)];if(!Object.keys(cmd.zoneSet).length)delete cmd.zoneSet}}else if(k.startsWith('x:')){if(cmd.extras){delete cmd.extras[k.slice(2)];if(!Object.keys(cmd.extras).length)delete cmd.extras}}else delete cmd[k.startsWith('g:')?k.slice(2):k]};
+const zoneName=(d,n)=>((d&&d.zoneNames)||{})[n]||`Zone ${n}`;
+// Local date-times as the hub writes them ("2026-10-08T15:30", the home's clock), done as plain arithmetic.
+const p2=n=>String(n).padStart(2,'0');
+const STAMP_RE=/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
+const stampMs=s=>{const m=STAMP_RE.exec(s||'');return m?Date.UTC(+m[1],m[2]-1,+m[3],+m[4],+m[5]):NaN};
+const msStamp=t=>{const d=new Date(t);return`${d.getUTCFullYear()}-${p2(d.getUTCMonth()+1)}-${p2(d.getUTCDate())}T${p2(d.getUTCHours())}:${p2(d.getUTCMinutes())}`};
+const WDAY=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],MONTH=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const stampWordsC=(st,now)=>{if(!STAMP_RE.test(st||''))return st||'';const d=st.slice(0,10),t=st.slice(11,16),today=now.slice(0,10),tom=msStamp(stampMs(now)+864e5).slice(0,10);
+  if(d===today)return`today at ${t}`;if(d===tom)return`tomorrow at ${t}`;const x=new Date(stampMs(st));return`${WDAY[x.getUTCDay()]} ${x.getUTCDate()} ${MONTH[x.getUTCMonth()]}${d.slice(0,4)!==today.slice(0,4)?' '+d.slice(0,4):''} at ${t}`};
+const cap1=s=>s?s[0].toUpperCase()+s.slice(1):s;
+const durW=s=>s>=3600&&s%3600===0?`${s/3600} h`:s>=60?`${Math.round(s/60)} min`:`${s} s`;
+// The home's clock now: the snapshot's localNow, moved on by however long ago it came (at most 10 min, in case clocks disagree).
+const homeNow=H=>H.localNow?msStamp(stampMs(H.localNow)+Math.min(6e5,Math.max(0,Date.now()-((H.home&&H.home.now)||Date.now())))):msStamp(Date.now()-new Date().getTimezoneOffset()*6e4);
+// A one-time schedule's first suggestion: about an hour from now, on the quarter hour.
+const onceDefault=now=>msStamp(Math.ceil((stampMs(now)+3600e3)/900e3)*900e3);
 const climateLine=d=>{const m=HVAC.find(h=>h[0]===d.hvac);const room=d.temp!=null?`room ${d.temp}°`:'';return d.on?[[m?m[1]:'On',d.target!=null?`${d.target}°`:'',room].filter(Boolean).join(' · '),m?m[3]:'#7cb8f0']:[['Off',room].filter(Boolean).join(' · '),'#a3a09a']};
 const VAC={cleaning:'Cleaning',returning:'Returning to dock',docked:'Docked',paused:'Paused',idle:'Idle',error:'Needs attention'};
 const fmt=h=>{const m=Math.round(h*60);return String(Math.floor(m/60)%24).padStart(2,'0')+':'+String(m%60).padStart(2,'0')};
@@ -978,7 +1100,13 @@ const PUSH_UI={insecure:['Notifications need HTTPS','Open Kova over https:// to 
 
 class Component extends DCLogic {
   state={hub:BOOT,conn:!!window.KOVA_BOOT,screen:this.props.startScreen??'home',room:null,drawer:null,tab:'simple',nameDraft:null,advanced:(this.props.depth??'Simple')==='Advanced',sel:'sunset',toast:null,undo:null,merging:false,merged:false,done:{},linked:{},q:'',camSel:null,push:pushBase(),mediaSel:null,actF:'all',inboxDone:{},iq:'',intF:'All',draft:'',chat:[{from:'kova',text:`Hi. ${BOOT.devices.filter(d=>isLight(d)&&d.state.on).length} lights are on and the home is in ${(BOOT.modes.find(m=>m.id===BOOT.current.modeId)||BOOT.modes[0]).name}. What do you need?`}],preview:null,pv:null,modeSel:null,igCat:null,igCfg:null,igPick:false,ig:null,igLoadErr:null,imp:null,impAutos:[],impFile:null,impKey:'',impPath:'',impBusy:null,impPct:0,impErr:null,impNeedKey:false,impNew:false,showCode:false};
-  componentDidMount(){this.connect();this._igLoad=this.loadInteg();this.loadImport();this.pushCheck();this.deepLink()}
+  componentDidMount(){this.connect();this._igLoad=this.loadInteg();this.loadImport();this.pushCheck();this.deepLink();this.autoKeys()}
+  // The automation editor: Esc goes back (asking first when there are changes), Ctrl/⌘+S saves; leaving the page with changes asks too.
+  autoKeys(){
+    document.addEventListener('keydown',e=>{const k=this._aeKeys;if(!k||!this.state.ae||this.state.screen!=='autos')return;
+      if((e.ctrlKey||e.metaKey)&&(e.key==='s'||e.key==='S')){e.preventDefault();if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();setTimeout(()=>this._aeKeys&&this._aeKeys.save(),0);return}
+      if(e.key==='Escape'&&!e.defaultPrevented&&!(document.activeElement&&document.activeElement.tagName==='SELECT')&&!document.documentElement.classList.contains('kova-nav-open'))k.back()});
+    window.addEventListener('beforeunload',e=>{if(this.state.ae&&this.state.ae.dirty){e.preventDefault();e.returnValue=''}})}
   async pushCheck(){const b=pushBase();this.setState({push:b});if(b!=='off')return;try{const reg=await swReady;const sub=await reg.pushManager.getSubscription();if(sub){this.setState({push:'on'});api('POST','/api/push/subscribe',{subscription:sub.toJSON()}).catch(()=>{})}}catch(e){}}
   async pushGo(){const st=this.state.push;
     if(st==='on'){api('POST','/api/push/test').then(r=>this.toast(r.push||r.ntfy?'Test sent':'Nothing was delivered')).catch(e=>this.err(e));return}
@@ -1366,32 +1494,128 @@ class Component extends DCLogic {
       addInteg:()=>{if(!s.igCat)this.loadInteg();this.setState(p=>({igPick:!p.igPick}))}};
   }
 
-  // Kova's own automations: the list, suggestions, Home Assistant ones to convert, and the editor (when / only if / then).
+  // Kova's own automations: the list (scheduled, automations, done), suggestions, Home Assistant ones to convert, and the editor (when / only if / then).
   kovaAutoVals(s,H,devs,RN){
-    const ALL=Object.values(devs).sort((a,b)=>(RN[a.room]||'').localeCompare(RN[b.room]||'')||a.name.localeCompare(b.name));
+    const RAW=Object.fromEntries((H.devices||[]).map(d=>[d.id,{...d,zoneNames:d.zoneNames}]));
+    const ALL=Object.values(RAW).sort((a,b)=>(RN[a.room]||'').localeCompare(RN[b.room]||'')||a.name.localeCompare(b.name));
     const ACT=ALL.filter(d=>d.type!=='camera'&&d.type!=='sensor');
-    const devOpts=l=>l.map(d=>({v:d.id,label:`${RN[d.room]?RN[d.room]+' · ':''}${d.name}`}));
-    const PLURAL={light:'lights',media:'media players',switch:'switches',outlet:'outlets',blind:'blinds',fan:'fans',ac:'AC units',tv:'TVs',speaker:'speakers',vacuum:'vacuums',lock:'locks',purifier:'purifiers',heater:'heaters'};
-    const PSEUDO=[...new Set(ACT.map(d=>d.type))].map(t=>({v:'type:'+t,label:'All '+(PLURAL[t]||t+'s')})).concat((H.rooms||[]).map(r=>({v:'room:'+r.id,label:'Every device in '+(r.name||r.id)})));
-    const targetOpts=devOpts(ACT).concat(PSEUDO);
-    const pseudoDevs=id=>{const[k,v]=(id||'').split(':');return k==='type'?ACT.filter(d=>d.type===v):k==='room'?ACT.filter(d=>d.room===v):null};
-    const targetActions=id=>{const m=pseudoDevs(id);if(!m)return actionOptions(devs[id],H.sources);const seen=new Set(),out=[];m.forEach(d=>actionOptions(d,H.sources).forEach(x=>{if(!seen.has(x[0])){seen.add(x[0]);out.push(x)}}));return out};
+    const devLabel=d=>`${RN[d.room]?RN[d.room]+' · ':''}${d.name}`;
+    const devOpts=(l,cur)=>{const o=l.map(d=>({v:d.id,label:devLabel(d)}));if(cur&&!/^(type|room):/.test(cur)&&!o.some(x=>x.v===cur))o.unshift({v:cur,label:RAW[cur]?devLabel(RAW[cur]):`${cur} (missing)`});return o};
+    const PLURAL={light:'lights',dimmer:'dimmers',media:'media players',tv:'TVs',fan:'fans and purifiers',plug:'plugs',vacuum:'vacuums',internet:'internet switches',climate:'air conditioners'};
+    // type:light reaches dimmers too and type:media reaches TVs, as the hub's typeMatch does.
+    const typeHit=(d,t)=>d.type===t||(t==='light'&&d.type==='dimmer')||(t==='media'&&d.type==='tv');
+    const pseudoDevs=id=>{const m=/^(type|room):(.+)$/.exec(id||'');return!m?null:m[1]==='type'?ACT.filter(d=>typeHit(d,m[2])):ACT.filter(d=>d.room===m[2])};
+    const pseudoName=id=>{const m=/^(type|room):(.+)$/.exec(id||'');return!m?null:m[1]==='room'?`Everything in ${RN[m[2]]||m[2]}`:`All ${PLURAL[m[2]]||m[2]+'s'}`};
+    const types=uniq(ACT.flatMap(d=>[d.type,d.type==='dimmer'?'light':null,d.type==='tv'?'media':null]).filter(Boolean));
+    const PSEUDO=types.map(t=>({v:'type:'+t,label:pseudoName('type:'+t)})).concat((H.rooms||[]).filter(r=>ACT.some(d=>d.room===r.id)).map(r=>({v:'room:'+r.id,label:pseudoName('room:'+r.id)})));
+    const targetDevs=id=>pseudoDevs(id)||(RAW[id]?[RAW[id]]:[]);
+    const nm=id=>RAW[id]?RAW[id].name:pseudoName(id)||id;
     const opts=l=>l.map(([v,label])=>({v,label}));
     const done=msg=>r=>this.toast(msg,this.undoFn(r&&r.undo));
-    const E=s.ae; // the automation being edited: {a, id, runs, tab}
+    const E=s.ae; // the automation being edited: {a, id, runs, tab, dirty, quick, named, err, tried}
+    // The home's clock now, as "YYYY-MM-DDTHH:MM" (the snapshot's, moved on by however long ago it came).
+    const nowSt=homeNow(H);
+    const nowMs=stampMs(nowSt);
+    const defaultOnce=()=>onceDefault(nowSt);
+    const people=H.people||[],modes=H.modes||[],overlays=H.overlays||[];
+    const peopleName=id=>(people.find(p=>p.id===id)||{}).name||id;
+    // ----------------------------------------------------------- words
+    const MATCH_WORD={on:v=>v?'on':'off',online:v=>v?'online':'offline',playing:v=>v?'playing':'not playing',muted:v=>v?'muted':'not muted',hvac:v=>`on ${(HVAC.find(h=>h[0]===v)||[0,v])[1].toLowerCase()}`,activity:v=>(VAC_ACT.find(x=>x[0]===v)||[0,v])[1],mode:v=>`on ${v}`};
+    const matchW=(m,id)=>{m=m||{};const parts=[];if(m.input)parts.push(`on ${inputWord(RAW[id],m.input)}`);else if(m.on!==undefined)parts.push(MATCH_WORD.on(m.on));
+      for(const k of ['online','playing','hvac','activity','muted','mode'])if(m[k]!==undefined&&m[k]!=='')parts.push(MATCH_WORD[k](m[k]));return parts.join(' and ')||'…'};
+    const readName=f=>((NUM_READ.find(x=>x[0]===f)||[0,f])[1]).toLowerCase();
+    const readUnit=f=>(NUM_READ.find(x=>x[0]===f)||[0,0,''])[2];
+    const rangeW=(a,b,f)=>{const u=readUnit(f),x=v=>`${v}${u&&u!=='°C'?' '+u:u}`;return a!=null&&b!=null?`between ${x(a)} and ${x(b)}`:a!=null?`above ${x(a)}`:b!=null?`below ${x(b)}`:'…'};
+    const SUN={sunrise:'sunrise',sunset:'sunset',dawn:'first light',dusk:'dusk'};
+    const rhW=r=>!r?'…':r.kind==='time'?r.at:`${r.offsetMin?`${Math.abs(r.offsetMin)} min ${r.offsetMin<0?'before':'after'} `:''}${r.kind==='sun'?SUN[r.event]||r.event:cap1(r.prayer)}`;
+    const daysW=d=>!d||!d.length||d.length===7?'':d.length===5&&[1,2,3,4,5].every(x=>d.includes(x))?'on weekdays':d.length===2&&d.includes(0)&&d.includes(6)?'at weekends':`on ${d.slice().sort().map(x=>WDAY[x]).join(', ')}`;
+    const forW=sec=>sec?` for ${durW(sec)}`:'';
+    const ONW={vacuum:['cleans','docks'],internet:['internet allowed','internet paused']};
+    const partW=(id,k,v)=>{const d=targetDevs(id)[0];
+      if(k.startsWith('zone:')){const n=k.slice(5);return`${zoneName(d,n)} ${v&&v.on===false?'closed':`open${v&&v.open!=null?' '+v.open+'%':''}`}`}
+      if(k.startsWith('x:')||k.startsWith('g:'))return`${human(k.slice(2)).toLowerCase()} ${typeof v==='boolean'?(v?'on':'off'):v}`;
+      switch(k){case 'on':{const w=ONW[d&&d.type]||['on','off'];return v===false?w[1]:w[0]}
+        case 'bri':return`${v}%`;case 'k':return`${v}K`;case 'color':return`colour ${v}`;case 'vol':return`volume ${v}%`;case 'volStep':return v<0?'volume down':'volume up';
+        case 'paused':return v?'paused':'carries on';case 'media':return v==null||v===''?'stops playing':`plays ${v}`;case 'shuffle':return v?'shuffled':'in order';case 'skip':return v<0?'previous song':'next song';
+        case 'input':return`on ${inputWord(d,v)}`;case 'muted':return v?'muted':'unmuted';case 'sound':return`${v} sound`;case 'night':return`night mode ${v?'on':'off'}`;
+        case 'mode':return`on ${v}`;case 'fanLevel':return`speed ${v}`;case 'display':return`display ${v?'on':'off'}`;case 'childLock':return`child lock ${v?'on':'off'}`;
+        case 'hvac':return((HVAC.find(h=>h[0]===v)||[0,v])[1]).toLowerCase();case 'target':return`${v}°`;case 'fanSpeed':return`fan ${v}`;default:return`${k} ${v}`}};
+    const cmdW=(id,cmd)=>{const ks=cmdKeys(cmd);return`${nm(id)} ${ks.length?ks.map(k=>partW(id,k,cmdGet(cmd,k))).join(', '):'(choose what to do)'}`};
+    const trigW=t=>{switch(t.kind){
+      case 'device':return`${nm(t.device)} ${t.to?`turns ${matchW(t.to,t.device)}`:`stops being ${matchW(t.from,t.device)}`}${t.to&&t.from?` from ${matchW(t.from,t.device)}`:''}${forW(t.forSec)}`;
+      case 'numeric':return`${nm(t.device)} ${readName(t.field)} goes ${rangeW(t.above,t.below,t.field)}${forW(t.forSec)}`;
+      case 'event':return`${nm(t.device)} ${EVENT_NAMES[t.event]||t.event||'…'}`;
+      case 'time':return`at ${[rhW(t.at),daysW(t.days)].filter(Boolean).join(' ')}`;
+      case 'once':return`once, ${stampWordsC(t.at,nowSt)}${t.missed?' (missed)':t.firedAt?' (done)':''}`;
+      case 'every':return`every ${durW((t.minutes||0)*60)}`;
+      case 'presence':{const p=t.person?peopleName(t.person):'someone';return t.event==='arrives'?`${p} comes home`:t.event==='leaves'?`${p} leaves`:t.event==='first-arrives'?'the first person comes home':'the last person leaves'}
+      case 'mode':return`${(modes.find(m=>m.id===t.mode)||{}).name||t.mode} starts`;
+      case 'overlay':return`${(overlays.find(o=>o.id===t.overlay)||{}).name||t.overlay} ${t.event==='ends'?'ends':'starts'}`;
+      case 'hub':return'Kova starts';default:return t.kind}};
+    const condW=c=>{switch(c.kind){
+      case 'device':return`${nm(c.device)} is ${matchW(c.is,c.device)}`;
+      case 'numeric':return`${nm(c.device)} ${readName(c.field)} is ${rangeW(c.above,c.below,c.field)}`;
+      case 'time':return[c.after&&c.before?`between ${rhW(c.after)} and ${rhW(c.before)}`:c.after?`after ${rhW(c.after)}`:c.before?`before ${rhW(c.before)}`:'',daysW(c.days)].filter(Boolean).join(' ')||'any time';
+      case 'presence':return c.who==='anyone'?(c.home!==false?'someone’s home':'nobody’s home'):c.who==='no-one'?(c.home!==false?'nobody’s home':'someone’s home'):`${peopleName(c.who)} is ${c.home!==false?'home':'out'}`;
+      case 'mode':return`in ${(c.modes||[]).map(m=>(modes.find(y=>y.id===m)||{}).name||m).join(' or ')||'…'}`;
+      case 'overlay':return`${c.overlay?(overlays.find(o=>o.id===c.overlay)||{}).name||c.overlay:'any overlay'} is ${c.active===false?'off':'on'}`;
+      case 'all':return(c.conditions||[]).map(condW).join(' and ')||'…';case 'any':return`either ${(c.conditions||[]).map(condW).join(' or ')||'…'}`;
+      case 'not':return`not (${(c.conditions||[]).map(condW).join(' and ')||'…'})`;default:return c.kind}};
+    const actW=a=>{switch(a.kind){
+      case 'set':return Object.entries(a.targets||{}).map(([id,c])=>cmdW(id,c)).join(', ')||'set devices (choose which)';
+      case 'delay':return`wait ${durW(a.seconds||0)}`;
+      case 'wait':return`wait until ${a.until?condW(a.until):'…'}${a.timeoutSec?` (at most ${durW(a.timeoutSec)}${a.stopOnTimeout?', then stop':''})`:''}`;
+      case 'notify':return`notify ${(a.people||[]).length?a.people.map(peopleName).join(' and '):'everyone'}: “${a.message||'…'}”`;
+      case 'overlay':return`${a.op==='end'?'end':'start'} ${(overlays.find(o=>o.id===a.overlay)||{}).name||a.overlay}`;
+      case 'if':return`if ${(a.conditions||[]).map(condW).join(' and ')||'…'}: ${(a.then||[]).map(actW).join('; ')||'nothing'}${(a.else||[]).length?`; otherwise ${a.else.map(actW).join('; ')}`:''}`;
+      case 'repeat':return`${a.times||'?'} times: ${(a.actions||[]).map(actW).join('; ')||'nothing'}`;
+      case 'ramp':return`ease ${readName(a.field)} ${a.from!=null?`from ${a.from} `:''}to ${a.to} over ${durW(a.overSec||0)}: ${Object.keys(a.targets||{}).map(nm).join(', ')||'…'}`;
+      case 'run':return`run ${((H.automations||[]).find(x=>x.id===a.automation)||{}).name||a.automation||'…'}`;
+      case 'stop':return'stop';default:return a.kind}};
+    const oneTimeOf=a=>(a.triggers||[]).length>0&&a.triggers.every(t=>t.kind==='once');
+    // A one-time schedule's name: what, and when ("Lamp on at 50%, tomorrow at 07:00").
+    const autoWhat=a=>{const x=(a.actions||[])[0];return!x?'Reminder':x.kind==='notify'?`Remind: ${x.message||'…'}`:cap1(actW(x))};
+    const nameOf=(what,w)=>{const when=w.startsWith('today ')?w.slice(6):w;const n=`${what}${!when?'':when.startsWith('at ')?` ${when}`:`, ${when}`}`;return n.length>80?`${what.slice(0,78-when.length-3)}…, ${when}`.slice(0,80):n};
+    // Every way the editor could have written a name for these steps at this time (the day words depend on when it was saved).
+    const autoNames=(a,at)=>{if(!STAMP_RE.test(at||''))return[];const what=autoWhat(a),t=at.slice(11,16),x=new Date(stampMs(at)),day=`${WDAY[x.getUTCDay()]} ${x.getUTCDate()} ${MONTH[x.getUTCMonth()]}`;
+      return[`at ${t}`,`today at ${t}`,`tomorrow at ${t}`,`${day} at ${t}`,`${day} ${at.slice(0,4)} at ${t}`].map(w=>nameOf(what,w))};
+    const autoName=a=>{const t=(a.triggers||[]).find(x=>x.kind==='once'),x=(a.actions||[])[0];
+      const what=autoWhat(a);
+      const w=t?stampWordsC(t.at,nowSt):'';const when=w.startsWith('today ')?w.slice(6):w;
+      const n=`${what}${!when?'':when.startsWith('at ')?` ${when}`:`, ${when}`}`;return n.length>80?`${what.slice(0,78-when.length-3)}…, ${when}`.slice(0,80):n};
+    // Next run of a clock-time or every-few-minutes trigger, for the list (sun and prayer times are the hub's to work out).
+    const nextClock=a=>{let best=null;for(const t of a.triggers||[]){let c=null;
+      if(t.kind==='time'&&t.at&&t.at.kind==='time'&&/^\d\d:\d\d$/.test(t.at.at)){for(let i=0;i<8&&!c;i++){const day=msStamp(nowMs+i*864e5).slice(0,10),wd=new Date(stampMs(day+'T00:00')).getUTCDay();if(t.days&&t.days.length&&!t.days.includes(wd))continue;const st=`${day}T${t.at.at}`;if(st>nowSt)c=st}}
+      else if(t.kind==='every'&&t.minutes>0){const mid=stampMs(nowSt.slice(0,10)+'T00:00'),k=Math.floor((nowMs-mid)/(t.minutes*6e4))+1;c=msStamp(mid+k*t.minutes*6e4)}
+      if(c&&(!best||c<best))best=c}return best};
     // ---------------------------------------------------------------- list
     const q=(s.aq||'').toLowerCase();
     const RES={done:['Ran','#7fd4a0'],stopped:['Ran','#7fd4a0'],skipped:['Skipped','#a3a09a'],cancelled:['Cancelled','#a3a09a'],failed:['Failed','#ff6b5e'],running:['Running','#f2b14c']};
-    const autos=(H.automations||[]).filter(a=>!q||[a.name,a.description,...(a.triggerLabels||[]),...(a.actionLabels||[])].join(' ').toLowerCase().includes(q)).map(a=>{
-      const on=a.enabled!==false,lr=a.lastRun,[rl,rc]=lr?RES[lr.result]||['','#a3a09a']:['Not run yet','#6f6d69'];
+    const match=a=>!q||[a.name,a.description,...(a.triggerLabels||[]),...(a.actionLabels||[])].join(' ').toLowerCase().includes(q);
+    const AUTOS=(H.automations||[]);
+    const isOT=a=>a.oneTime!==undefined?!!a.oneTime:oneTimeOf(a);
+    const isDone=a=>a.done!==undefined?!!a.done:isOT(a)&&a.triggers.every(t=>t.firedAt);
+    const del=(a,msg)=>api('DELETE','/api/automations/'+a.id).then(done(msg||`${a.name} deleted`)).catch(x=>this.err(x));
+    const autos=AUTOS.filter(a=>!isOT(a)&&match(a)).map(a=>{
+      const on=a.enabled!==false,lr=a.lastRun,[rl,rc]=lr?RES[lr.result]||['','#a3a09a']:['Not run yet','#6f6d69'];const nx=on&&!a.nextLabel?nextClock(a):null,nxL=on&&a.nextLabel?a.nextLabel:nx?stampWordsC(nx,nowSt):'';
       return{name:a.name,when:(a.triggerLabels||[]).join(' · or · '),cond:(a.conditionLabels||[]).length?'Only if '+a.conditionLabels.join(', '):'',then:(a.actionLabels||[]).join(' → '),
-        status:lr?`${rl} ${lr.atLabel}${lr.result==='skipped'&&lr.detail?' · '+lr.detail:lr.result==='failed'&&lr.detail?' · '+lr.detail:''}`:rl,statusFg:rc,running:a.running>0,
-        hasCond:(a.conditionLabels||[]).length>0,op:on?1:0.55,track:on?'#f2b14c':'#35363a',knob:on?'translateX(14px)':'none',fromHa:!!a.origin,
+        status:(lr?`${rl} ${lr.atLabel}${lr.result==='skipped'&&lr.detail?' · '+lr.detail:lr.result==='failed'&&lr.detail?' · '+lr.detail:''}`:rl)+(nxL?` · next ${nxL}`:''),statusFg:rc,running:a.running>0,
+        hasCond:(a.conditionLabels||[]).length>0,op:on?1:0.55,track:on?'#f2b14c':'#35363a',knob:on?'translateX(14px)':'none',fromHa:!!a.origin,onLabel:on?'true':'false',
         toggle:()=>api('PATCH','/api/automations/'+a.id,{enabled:!on}).then(done(`${a.name} ${on?'off':'on'}`)).catch(x=>this.err(x)),
         run:()=>api('POST',`/api/automations/${a.id}/run`).then(r=>this.toast(!r.ran?`${a.name}: ${r.why}`:r.running?`${a.name} is running`:`${a.name}: ${r.run&&r.run.result==='failed'?'failed':'done'}`)).catch(x=>this.err(x)),
         edit:()=>this.openAuto(a),
         dup:()=>api('POST',`/api/automations/${a.id}/duplicate`).then(done(`Copied ${a.name} (off until you turn it on)`)).catch(x=>this.err(x)),
-        remove:()=>api('DELETE','/api/automations/'+a.id).then(done(`${a.name} deleted`)).catch(x=>this.err(x))}});
+        remove:()=>del(a)}});
+    const onceAt=a=>((a.triggers||[]).filter(t=>t.kind==='once'&&!t.firedAt).map(t=>t.at).sort()[0])||'';
+    const sched=AUTOS.filter(a=>isOT(a)&&!isDone(a)&&match(a)).sort((x,y)=>(x.nextAt??Infinity)-(y.nextAt??Infinity)||onceAt(x).localeCompare(onceAt(y))).map(a=>{const on=a.enabled!==false,at=onceAt(a);
+      const lbl=a.nextLabel||(at?stampWordsC(at,nowSt):'');const day=lbl.replace(/ at \d\d:\d\d$/,''),time=(/(\d\d:\d\d)$/.exec(lbl)||[])[1]||'';
+      return{name:a.name,day:cap1(day),time,when:cap1(lbl),then:(a.actionLabels||[]).join(' → '),off:!on,offLabel:on?'':'Off: won’t run until it’s switched on',
+        hasCond:(a.conditionLabels||[]).length>0,cond:(a.conditionLabels||[]).length?'Only if '+a.conditionLabels.join(', '):'',
+        edit:()=>this.openAuto(a),cancel:()=>del(a,`Cancelled ${a.name}`),
+        toggle:()=>api('PATCH','/api/automations/'+a.id,{enabled:!on}).then(done(`${a.name} ${on?'off':'on'}`)).catch(x=>this.err(x))}});
+    const doneL=AUTOS.filter(a=>isOT(a)&&isDone(a)&&match(a)).map(a=>{const ts=(a.triggers||[]).filter(t=>t.kind==='once');const missed=ts.some(t=>t.missed);const last=ts.map(t=>t.at).sort().pop()||'';
+      return{name:a.name,state:missed?`Missed: Kova was off ${stampWordsC(last,nowSt)}`:`Ran ${stampWordsC(last,nowSt)}`,fg:missed?'#f2b14c':'#7fd4a0',icon:missed?'event_busy':'event_available',
+        then:(a.actionLabels||[]).join(' → '),again:()=>this.scheduleAgain(a),remove:()=>del(a)}});
     const ideas=(H.automationIdeas||[]).map(i=>({name:i.name,text:[(i.triggerLabels||[]).join(' or '),(i.conditionLabels||[]).length?'only if '+i.conditionLabels.join(', '):'',(i.actionLabels||[]).join(', ')].filter(Boolean).join(' → '),why:i.why,
       add:()=>api('POST','/api/automations',{name:i.name,enabled:true,mode:i.mode,triggers:i.triggers,conditions:i.conditions,actions:i.actions}).then(done(`${i.name} added`)).catch(x=>this.err(x)),
       edit:()=>this.openAuto({name:i.name,enabled:true,mode:i.mode,triggers:i.triggers,conditions:i.conditions,actions:i.actions}),
@@ -1402,134 +1626,331 @@ class Component extends DCLogic {
       stateFg:a.converted?'#7fd4a0':a.convertible?'#f2b14c':'#a3a09a',notes:a.notes.join(' · '),hasNotes:a.notes.length>0,canConvert:a.convertible&&!a.converted,
       convert:()=>this.convertHa([a.id])}));
     const haLeft=HA.filter(a=>a.convertible&&!a.converted).length;
-    const list={has:autos.length>0,none:!autos.length&&!(H.automations||[]).length,items:autos,ideas,hasIdeas:ideas.length>0,q:s.aq||'',setQ:e=>this.setState({aq:e.target.value}),
-      count:`${(H.automations||[]).length} automation${(H.automations||[]).length===1?'':'s'} · ${(H.automations||[]).filter(a=>a.enabled!==false).length} on`,
-      add:()=>this.openAuto(null),
+    const nAuto=AUTOS.filter(a=>!isOT(a)).length,nSched=AUTOS.filter(a=>isOT(a)&&!isDone(a)).length,nDone=AUTOS.filter(a=>isOT(a)&&isDone(a)).length;
+    const doneOpen=!!s.aDoneOpen;
+    const list={has:autos.length>0,none:!nAuto&&!nSched,items:autos,ideas,hasIdeas:ideas.length>0,q:s.aq||'',setQ:e=>this.setState({aq:e.target.value}),
+      count:[`${nAuto} automation${nAuto===1?'':'s'} · ${AUTOS.filter(a=>!isOT(a)&&a.enabled!==false).length} on`,nSched?`${nSched} scheduled`:''].filter(Boolean).join(' · '),
+      add:()=>this.openAuto(null),once:()=>this.openAuto(null,'edit',{quick:true}),
+      hasSched:sched.length>0,sched,schedCount:`${sched.length}`,showAutosHead:sched.length>0&&autos.length>0,
+      hasDone:doneL.length>0,doneList:doneL,doneOpen,doneLabel:`Done (${doneL.length})`,doneIcon:doneOpen?'expand_less':'expand_more',doneExpanded:doneOpen?'true':'false',
+      toggleDone:()=>this.setState({aDoneOpen:!doneOpen}),
+      clearDone:()=>api('POST','/api/automations/clear-done').then(r=>this.toast(`Cleared ${r.cleared} finished schedule${r.cleared===1?'':'s'}`,this.undoFn(r.undo))).catch(x=>this.err(x)),
+      noMatch:!!q&&!autos.length&&!sched.length&&!doneL.length,noMatchText:`Nothing matches “${s.aq||''}”`,
       d:s.adesc||'',setD:e=>this.setState({adesc:e.target.value}),dKey:e=>{if(e.key==='Enter'&&(s.adesc||'').trim())this.askAuto(s.adesc.trim())},dSend:()=>{if((s.adesc||'').trim())this.askAuto(s.adesc.trim())},
       haHas:HA.length>0,ha:haList,haLeft,haCanAll:haLeft>0,haAllLabel:`Convert ${haLeft}`,haAll:()=>this.convertHa(null)};
+    if(nDone===0&&doneOpen)setTimeout(()=>this.setState({aDoneOpen:false}),0);
+    this._aeKeys=null;
     if(!E)return{ae:{open:false},al:list,aeClosed:true};
     // --------------------------------------------------------------- editor
-    const A=E.a;
+    const A=E.a,QUICK=!!E.quick;
     const get=(o,p)=>p.reduce((x,k)=>x==null?x:x[k],o);
-    const edit=fn=>this.setState(st=>{const a=structuredClone(st.ae.a);fn(a);return{ae:{...st.ae,a,dirty:true}}});
+    const edit=fn=>this.setState(st=>{const a=structuredClone(st.ae.a);fn(a);return{ae:{...st.ae,a,dirty:true,err:null}}});
     const setAt=(p,v)=>edit(a=>{get(a,p.slice(0,-1))[p[p.length-1]]=v});
     const delAt=p=>edit(a=>{const l=get(a,p.slice(0,-1));if(Array.isArray(l))l.splice(p[p.length-1],1);else delete l[p[p.length-1]]});
     const pushAt=(p,v)=>edit(a=>{const l=get(a,p);if(Array.isArray(l))l.push(v);else{const parent=get(a,p.slice(0,-1));parent[p[p.length-1]]=[v]}});
     const moveAt=(p,d)=>edit(a=>{const l=get(a,p.slice(0,-1)),i=p[p.length-1],j=i+d;if(j<0||j>=l.length)return;[l[i],l[j]]=[l[j],l[i]]});
-    const firstDev=(ALL[0]||{}).id,firstAct=(ACT[0]||{}).id;
-    const people=H.people||[],modes=H.modes||[],overlays=H.overlays||[];
-    const STATES=[['{"on":true}','on'],['{"on":false}','off'],['{"online":false}','offline'],['{"online":true}','online'],['{"playing":true}','playing'],['{"playing":false}','not playing'],
-      ...['tv','hdmi1','hdmi2','hdmi3','hdmi4'].map(i=>[JSON.stringify({on:true,input:i}),`on ${i==='tv'?'TV':'HDMI '+i.slice(4)}`]),
-      ['{"on":true,"hvac":"cool"}','cooling'],['{"on":true,"hvac":"heat"}','heating'],['{"activity":"cleaning"}','cleaning'],['{"activity":"docked"}','docked'],['{"muted":true}','muted']];
-    const stateOpts=(cur)=>{const o=STATES.slice();if(cur&&!o.some(x=>x[0]===cur))o.push([cur,cur]);return opts(o)};
-    const FIELDS=[['temp','temperature'],['target','set temperature'],['power','power (W)'],['energy','energy today (kWh)'],['battery','battery (%)'],['bri','brightness (%)'],['vol','volume (%)']];
-    const EVENTS=[['person','sees a person'],['ring','rings'],['motion','detects motion'],['video-started','starts a video'],['music-started','starts music'],['paused','pauses'],['stopped','stops playing'],['internet-down','internet goes down'],['internet-up','internet comes back'],['new-device','a new device joins']];
-    const RH=[['time','At a time'],['sun:sunrise','Sunrise'],['sun:sunset','Sunset'],['sun:dawn','First light'],['sun:dusk','Dusk'],['prayer:fajr','Fajr'],['prayer:dhuhr','Dhuhr'],['prayer:asr','Asr'],['prayer:maghrib','Maghrib'],['prayer:isha','Isha']];
+    const READERS=ALL.filter(d=>readingsOf(d).length),EVENTERS=ALL.filter(d=>eventsOf(d).length);
+    const firstDev=(ALL.find(d=>matchKeysOf(d).includes('on')&&d.type!=='internet')||ALL[0]||{}).id,firstAct=(ACT.find(d=>isLight(d))||ACT[0]||{}).id;
+    // ---------------------------------------------------- field builders
+    // Each returns one control for the row it's in; the template shows them side by side and wraps on a phone.
+    const base={isCtl:true,label:'',unit:'',flex:'0 1 auto',minw:'0px',removable:false,hasHint:false,hint:'',aria:''};
+    const F={
+      sel:(label,value,options,set,o={})=>({...base,isSel:true,label,aria:label||o.aria||'Choose',value:value==null?'':String(value),options,set:e=>set(e.target.value),flex:o.wide?'1 1 220px':'0 1 auto',minw:o.wide?'180px':'120px',...o}),
+      num:(label,value,set,unit,o={})=>({...base,isNum:true,label,aria:label||o.aria||'Number',value:value==null||Number.isNaN(value)?'':String(value),unit:unit||'',min:o.min??'',max:o.max??'',step:o.step??'any',width:o.width||'96px',
+        set:e=>{const v=e.target.value;set(v===''?undefined:Number(v))},...o}),
+      range:(label,value,set,o)=>({...base,isRange:true,label,aria:label,unit:o.unit||'',value:String(value??o.min),min:o.min,max:o.max,step:o.step||1,flex:'1 1 220px',minw:'200px',
+        set:e=>set(Number(e.target.value)),...o}),
+      text:(label,value,set,ph,o={})=>({...base,isText:true,label,aria:label||ph||'Text',value:value??'',ph:ph||'',set:e=>set(e.target.value),flex:'1 1 220px',minw:'160px',...o}),
+      area:(label,value,set,ph,o={})=>({...base,isArea:true,label,aria:label||ph,value:value??'',ph:ph||'',set:e=>set(e.target.value),flex:'1 1 100%',minw:'100%',...o}),
+      time:(label,value,set,o={})=>({...base,isTime:true,label,aria:label||'Time',value:value||'',set:e=>{if(e.target.value)set(e.target.value)},...o}),
+      date:(label,value,set,o={})=>({...base,isDate:true,label,aria:label||'Date',value:value||'',min:o.min||'',set:e=>{if(e.target.value)set(e.target.value)},...o}),
+      color:(label,value,set,o={})=>({...base,isColor:true,label,aria:label||'Colour',value:/^#[0-9a-f]{6}$/i.test(value||'')?value:'#ffb060',set:e=>set(e.target.value),...o}),
+      // One of a few: pills, the chosen one lit. items: [[value, label]].
+      seg:(label,value,items,set,o={})=>({...base,isSeg:true,label,items:items.map(([v,l])=>{const on=String(v)===String(value);return{label:l,pressed:on?'true':'false',bg:on?'rgba(242,177,76,0.16)':'#141518',fg:on?'#f7cb82':'#d8d5cf',bd:on?'rgba(242,177,76,0.55)':'rgba(255,255,255,0.09)',pick:()=>set(v)}}),...o}),
+      // Several at once (days, people, modes): items [{label,on,toggle}].
+      chips:(label,items,o={})=>({...base,isSeg:true,label,flex:'1 1 100%',items:items.map(c=>({label:c.label,pressed:c.on?'true':'false',bg:c.on?'#f2b14c':'#141518',fg:c.on?'#1a1408':'#d8d5cf',bd:c.on?'#f2b14c':'rgba(255,255,255,0.09)',pick:c.toggle})),...o}),
+      // "+ Add …": a select whose first line is the prompt; picking adds.
+      add:(label,options,pick,o={})=>({...base,isAdd:true,label:'',aria:label,ph:label,options,set:e=>{if(e.target.value)pick(e.target.value)},...o}),
+      sub:(label,o={})=>({isSub:true,label,...o}),
+      note:(text,o={})=>({...base,isNoteF:true,text,flex:'1 1 100%',...o})};
+    const rm=(f,fn,what)=>({...f,removable:true,remove:fn,removeLabel:`Remove ${what||f.label||'this'}`});
+    const RH=[['time','At a clock time'],['sun:sunrise','Sunrise'],['sun:sunset','Sunset'],['sun:dawn','First light'],['sun:dusk','Dusk'],['prayer:fajr','Fajr'],['prayer:sunrise','Shuruq (sunrise)'],['prayer:dhuhr','Dhuhr'],['prayer:asr','Asr'],['prayer:maghrib','Maghrib'],['prayer:isha','Isha']];
     const rk=r=>!r?'time':r.kind==='time'?'time':`${r.kind}:${r.kind==='sun'?r.event:r.prayer}`;
     const mkR=(k,at,off)=>{const [kind,name]=k.split(':');return kind==='time'?{kind:'time',at:at||'21:00'}:kind==='sun'?{kind:'sun',event:name,...(off?{offsetMin:off}:{})}:{kind:'prayer',prayer:name,...(off?{offsetMin:off}:{})}};
-    // Fields: one row of inputs each. {t:'select'|'number'|'text'|'time'|'chips', label, value, options, set, items, wide}
-    const F={
-      sel:(label,value,options,set,wide)=>({isSel:true,label,value:value==null?'':String(value),options,set:e=>set(e.target.value),wide:wide?'1 1 220px':'0 1 auto'}),
-      num:(label,value,set,unit)=>({isNum:true,label,value:value==null?'':String(value),unit:unit||'',set:e=>{const v=e.target.value;set(v===''?undefined:Number(v))}}),
-      text:(label,value,set,ph)=>({isText:true,label,value:value||'',ph:ph||'',set:e=>set(e.target.value)}),
-      time:(label,value,set)=>({isTime:true,label,value:value||'21:00',set:e=>set(e.target.value)}),
-      chips:(label,items)=>({isChips:true,label,items})};
     const rhythmFields=(label,r,set)=>{const k=rk(r);return[F.sel(label,k,opts(RH),v=>set(mkR(v,r&&r.kind==='time'?r.at:'21:00',r&&r.offsetMin))),
-      k==='time'?F.time('',r&&r.at,v=>set({kind:'time',at:v})):F.num('min after (− before)',r&&r.offsetMin||0,v=>set({...r,offsetMin:Number(v)||0}))]};
-    const dayChips=(days,set)=>F.chips('Days',['S','M','T','W','T','F','S'].map((l,i)=>{const on=!days||!days.length||days.includes(i);return{label:l,bg:on&&days&&days.length?'#f2b14c':on?'#2a2b2f':'transparent',fg:on&&days&&days.length?'#1a1408':on?'#f1efea':'#6f6d69',
-      toggle:()=>{let d=days&&days.length?days.slice():[0,1,2,3,4,5,6];d=d.includes(i)?d.filter(x=>x!==i):[...d,i].sort();set(d.length===7?undefined:d)}}}));
-    const minsField=(label,sec,set)=>F.num(label,sec?Math.round(sec/60*10)/10:'',v=>set(v?Math.round(v*60):undefined),'min');
-    const NEW_T={device:()=>({kind:'device',device:firstDev,to:{on:true}}),numeric:()=>({kind:'numeric',device:firstDev,field:'temp',above:28}),event:()=>({kind:'event',device:firstDev,event:'person'}),
-      time:()=>({kind:'time',at:{kind:'time',at:'21:00'}}),every:()=>({kind:'every',minutes:15}),presence:()=>({kind:'presence',event:'arrives'}),mode:()=>({kind:'mode',mode:(modes[0]||{}).id}),
+      k==='time'?F.time('Time',r&&r.at||'21:00',v=>set({kind:'time',at:v})):F.num('Offset',r&&r.offsetMin||0,v=>set({...r,offsetMin:Math.round(v||0)||undefined}),'min',{step:5,hasHint:true,hint:'− before, + after'})]};
+    const dayChips=(days,set)=>F.chips('Days',['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((l,i)=>{const on=!days||!days.length||days.includes(i);return{label:l,on:!!(days&&days.length&&on),
+      toggle:()=>{let d=days&&days.length?days.slice():[0,1,2,3,4,5,6];d=d.includes(i)?d.filter(x=>x!==i):[...d,i].sort();set(d.length===7||!d.length?undefined:d)}}}),{hasHint:true,hint:days&&days.length?daysW(days):'Every day: pick days to limit it'});
+    const UNITS=[['s','seconds'],['min','minutes'],['h','hours']],MUL={s:1,min:60,h:3600};
+    const unitOf=sec=>sec&&sec%3600===0&&sec>=3600?'h':sec&&sec%60===0&&sec>=60?'min':sec?'s':'min';
+    const durFields=(label,sec,set,key,o={})=>{const u=(E.units||{})[key]||unitOf(sec),n=sec==null?'':Math.round(sec/MUL[u]*100)/100;
+      return[F.num(label,n,v=>set(v==null?undefined:Math.round(v*MUL[u])),'',{min:0,...o}),F.sel('',u,opts(UNITS),v=>{this.setState(st=>({ae:{...st.ae,units:{...(st.ae.units||{}),[key]:v}}}));if(sec!=null)set(Math.round(n*MUL[v]))},{aria:`${label} unit`,minw:'110px'})]};
+    // A device's state to look for: each part on its own, removable, with "+ Add" for the rest.
+    const MATCH_LABEL={on:'Power',online:'Connection',playing:'Playing',muted:'Sound',input:'Input',hvac:'Climate mode',activity:'Vacuum',mode:'Mode'};
+    const matchDefault=(k,d)=>({on:true,online:false,playing:true,muted:true,input:inputsOf(d)[0]||'tv',hvac:'cool',activity:'cleaning',mode:modesOf(d)[0]||'Auto'})[k];
+    const matchFields=(m,devId,setM,o={})=>{const d=RAW[devId]||{},M=m||{},avail=matchKeysOf(d),out=[];
+      const put=(k,v)=>{const n={...M,[k]:v};if(k==='input')delete n.on;setM(n)};const drop=k=>{const n={...M};delete n[k];setM(Object.keys(n).length?n:(o.optional?undefined:{}))};
+      for(const k of Object.keys(M)){const v=M[k];let f;
+        switch(k){case 'on':f=F.seg(MATCH_LABEL.on,v,[[true,'On'],[false,'Off']],x=>put(k,x));break;
+          case 'online':f=F.seg(MATCH_LABEL.online,v,[[true,'Online'],[false,'Offline']],x=>put(k,x));break;
+          case 'playing':f=F.seg(MATCH_LABEL.playing,v,[[true,'Playing'],[false,'Not playing']],x=>put(k,x));break;
+          case 'muted':f=F.seg(MATCH_LABEL.muted,v,[[true,'Muted'],[false,'Not muted']],x=>put(k,x));break;
+          case 'input':f=F.sel(MATCH_LABEL.input,v,withCur(inputsOf(d),v).map(i=>({v:i,label:inputWord(d,i)})),x=>put(k,x));break;
+          case 'hvac':f=F.seg(MATCH_LABEL.hvac,v,HVAC.map(h=>[h[0],h[1]]),x=>put(k,x));break;
+          case 'activity':f=F.sel(MATCH_LABEL.activity,v,opts(VAC_ACT.map(([a,l])=>[a,cap1(l)])),x=>put(k,x));break;
+          case 'mode':f=modesOf(d).length?F.sel(MATCH_LABEL.mode,v,withCur(modesOf(d),v).map(x=>({v:x,label:x})),x=>put(k,x)):F.text(MATCH_LABEL.mode,v,x=>put(k,x),'Mode name');break;
+          default:f=F.text(human(k),String(v),x=>put(k,x))}
+        out.push(rm(f,()=>drop(k),MATCH_LABEL[k]||k))}
+      const left=avail.filter(k=>!(k in M));
+      if(left.length)out.push(F.add(Object.keys(M).length?'+ and…':o.addLabel||'+ Choose a state',left.map(k=>({v:k,label:MATCH_LABEL[k]})),k=>put(k,matchDefault(k,d))));
+      return out};
+    // ----------------------------------------------- what Set devices can change
+    const PROP_LABEL={on:'Power',bri:'Brightness',k:'Colour temperature',color:'Colour',vol:'Volume',volStep:'Volume step',paused:'Pause',media:'Play',shuffle:'Shuffle',skip:'Skip',input:'Input',muted:'Mute',sound:'Sound mode',night:'Night mode',mode:'Mode',fanLevel:'Fan speed',display:'Display',childLock:'Child lock',hvac:'Climate mode',target:'Set temperature',fanSpeed:'Fan'};
+    const propLabel=(k,dl)=>k.startsWith('zone:')?zoneName(dl[0],k.slice(5)):k.startsWith('x:')||k.startsWith('g:')?human(k.slice(2)):PROP_LABEL[k]||human(k);
+    const MUSIC=(H.music||[]).map(m=>m.name||m.title).filter(Boolean),SOURCES=(H.sources||[]).map(x=>x.name);
+    const propDefault=(k,dl)=>{const d=dl[0]||{},st=stOf(d);if(k.startsWith('zone:'))return{on:true};if(k.startsWith('x:')){const v=(st.extras||{})[k.slice(2)];return typeof v==='boolean'?!v:v??true}
+      if(k.startsWith('g:')){const v=st[k.slice(2)];return typeof v==='boolean'?!v:v}
+      return({on:true,bri:50,k:3000,color:'#ffb060',vol:30,volStep:1,paused:true,media:dl.some(x=>hasCap(x,'library'))&&!SOURCES.length?'':SOURCES[0]||MUSIC[0]||'',shuffle:true,skip:1,input:uniq(dl.flatMap(inputsOf))[0]||'hdmi1',muted:true,
+        sound:'standard',night:true,mode:uniq(dl.flatMap(modesOf))[0]||'Auto',fanLevel:1,display:false,childLock:true,hvac:'cool',target:24,fanSpeed:'auto'})[k]};
+    const ON_LABELS={vacuum:['Clean','Dock'],internet:['Allowed','Paused']};
+    const propFields=(k,v,dl,set,id)=>{const d=dl[0]||{},lib=dl.some(x=>hasCap(x,'library')),queue=dl.some(x=>hasCap(x,'queue'));
+      if(k.startsWith('zone:')){const z=v||{};return[F.seg(propLabel(k,dl),z.on===false?'off':'on',[['on','Open'],['off','Closed']],x=>set(x==='off'?{on:false}:{...z,on:true})),
+        ...(z.on===false?[]:[F.num('Open',z.open,x=>set({...z,on:true,...(x==null?{open:undefined}:{open:Math.max(0,Math.min(100,Math.round(x)))})}),'%',{min:0,max:100,step:5,width:'84px'})])]}
+      if(k.startsWith('x:')||k.startsWith('g:')){const sv=k.startsWith('x:')?(stOf(d).extras||{})[k.slice(2)]:stOf(d)[k.slice(2)],t=typeof (v??sv);
+        return[t==='boolean'?F.seg(propLabel(k,dl),!!v,[[true,'On'],[false,'Off']],set):t==='number'?F.num(propLabel(k,dl),v,set):F.text(propLabel(k,dl),v==null?'':String(v),set)]}
+      switch(k){
+        case 'on':{const l=ON_LABELS[d.type]||['On','Off'];return[F.seg('Power',v!==false,[[true,l[0]],[false,l[1]]],set)]}
+        case 'bri':return[F.range('Brightness',v,set,{min:1,max:100,unit:'%'})];
+        case 'k':return[F.range('Colour temperature',v,set,{min:Math.min(2000,v||2000),max:Math.max(6500,v||6500),step:100,unit:'K'})];
+        case 'color':return[F.color('Colour',v,set)];
+        case 'vol':return[F.range('Volume',v,set,{min:0,max:100,unit:'%'})];
+        case 'volStep':return[F.seg('Volume step',v<0?-1:1,[[1,'Up a step'],[-1,'Down a step']],x=>set(Number(x)))];
+        case 'paused':return[F.seg('Playback',!!v,[[true,'Pause'],[false,'Carry on']],set)];
+        case 'shuffle':return[F.seg('Order',!!v,[[true,'Shuffle'],[false,'In order']],set)];
+        case 'skip':return[F.seg('Skip',v<0?-1:1,[[1,'Next song'],[-1,'Previous song']],x=>set(Number(x)))];
+        case 'muted':return[F.seg('Sound',!!v,[[true,'Mute'],[false,'Unmute']],set)];
+        case 'night':return[F.seg('Night mode',!!v,[[true,'On'],[false,'Off']],set)];
+        case 'display':return[F.seg('Display',!!v,[[true,'On'],[false,'Off']],set)];
+        case 'childLock':return[F.seg('Child lock',!!v,[[true,'Locked'],[false,'Unlocked']],set)];
+        case 'input':return[F.sel('Input',v,withCur(uniq(dl.flatMap(inputsOf)),v).map(i=>({v:i,label:inputWord(d,i)})),set)];
+        case 'sound':return[F.sel('Sound mode',v,withCur(uniq(dl.flatMap(soundsOf)).length?uniq(dl.flatMap(soundsOf)):SOUND_MODES.map(x=>x[0]),v).map(x=>({v:x,label:(SOUND_MODES.find(y=>y[0]===x)||[0,cap1(x)])[1]})),set)];
+        case 'mode':{const ms=withCur(uniq(dl.flatMap(modesOf)),v);return[ms.length?F.sel('Mode',v,ms.map(x=>({v:x,label:x})),set):F.text('Mode',v,set,'Mode name')]}
+        case 'fanLevel':{const max=Math.max(3,...dl.map(x=>stOf(x).fanLevelMax||0));return[F.seg('Fan speed',v,Array.from({length:max},(_,i)=>[i+1,String(i+1)]),x=>set(Number(x)))]}
+        case 'hvac':return[F.seg('Climate mode',v,HVAC.map(h=>[h[0],h[1]]),set)];
+        case 'target':return[F.num('Set temperature',v,set,'°C',{min:16,max:32,step:0.5,width:'90px'})];
+        case 'fanSpeed':return[F.seg('Fan',v,FANSPEEDS,set)];
+        case 'media':{
+          // What to play: one of the home's sources, Helix music, a station, or (a Helix box) a film or show to find.
+          const isSrc=SOURCES.includes(v),isMus=MUSIC.includes(v),isSt=typeof v==='string'&&/^station: /i.test(v);
+          const mode=v==null?'':isSrc?'src:'+v:isMus?'mus:'+v:isSt?'station':lib?'title':'custom';
+          const o=[{v:'',label:'Nothing: stop'},...SOURCES.map(n=>({v:'src:'+n,label:n})),...(queue?MUSIC.map(n=>({v:'mus:'+n,label:n.startsWith('Station')?n:`Helix: ${n}`})):[]),
+            ...(queue||MUSIC.length?[{v:'station',label:'A station (artist, album or song)…'}]:[]),...(lib?[{v:'title',label:'A film or show to find…'}]:[]),{v:'custom',label:'Something else (type it)…'}];
+          const pick=x=>set(x===''?null:x.startsWith('src:')||x.startsWith('mus:')?x.slice(4):x==='station'?'Station: ':x==='title'?'':(v&&mode==='custom'?v:''));
+          const out=[F.sel('Play',mode,o,pick,{wide:true})];
+          if(mode==='station')out.push(F.text('Station',v.replace(/^station: /i,''),x=>set('Station: '+x),'Artist, album or song'));
+          if(mode==='title')out.push(F.text('Title',v,set,'Search a film or show, e.g. Dune'));
+          if(mode==='custom')out.push(F.text('Name',v,set,'Source or playlist name'));
+          return out}
+        default:return[F.text(human(k),v==null?'':String(v),set)]}};
+    // ------------------------------------------------------------- kinds
+    const T_KINDS=[['device','A device changes','toggle_on'],['numeric','A reading crosses a value','speed'],['event','A device event','notifications_active'],['time','A time of day','schedule'],['once','Once, at a date and time','event'],['every','Every few minutes','update'],['presence','Someone comes or goes','person_pin_circle'],['mode','A mode starts','routine'],['overlay','An overlay starts or ends','layers'],['hub','Kova starts','power_settings_new']];
+    const C_KINDS=[['device','A device is…','toggle_on'],['numeric','A reading is…','speed'],['time','The time or day','schedule'],['presence','Who’s home','home'],['mode','The mode','routine'],['overlay','An overlay is on or off','layers'],['all','All of these','checklist'],['any','Any of these','call_split'],['not','None of these','block']];
+    const A_KINDS=[['set','Set devices','tune'],['delay','Wait a while','hourglass_top'],['wait','Wait until…','pending'],['notify','Send a notification','notifications'],['overlay','Start or end an overlay','layers'],['if','If … otherwise …','alt_route'],['repeat','Repeat','repeat'],['ramp','Ease a value over time','trending_up'],['run','Run another automation','play_circle'],['stop','Stop here','stop_circle']];
+    const A_QUICK=A_KINDS.filter(k=>['set','notify','overlay','delay'].includes(k[0]));
+    const kindIcon=(l,k)=>(l.find(x=>x[0]===k)||[0,0,'help'])[2];
+    const firstReading=id=>((readingsOf(RAW[id]||{})[0])||['temp'])[0];
+    // A new reading to compare: start from where it is now (units differ from reading to reading).
+    const reRange=x=>{const cur=stOf(RAW[x.device])[x.field];delete x.below;x.above=typeof cur==='number'?Math.round(cur):undefined};
+    const NEW_T={device:o=>({kind:'device',device:o&&RAW[o.device]?o.device:firstDev,to:{on:true}}),
+      numeric:o=>{const id=o&&RAW[o.device]&&readingsOf(RAW[o.device]).length?o.device:(READERS[0]||{}).id;const f=firstReading(id),cur=stOf(RAW[id])[f];return{kind:'numeric',device:id,field:f,above:typeof cur==='number'?Math.round(cur):undefined}},
+      event:o=>{const id=o&&RAW[o.device]&&eventsOf(RAW[o.device]).length?o.device:(EVENTERS[0]||{}).id;return{kind:'event',device:id,event:(eventsOf(RAW[id]||{})[0])||''}},
+      time:()=>({kind:'time',at:{kind:'time',at:'21:00'}}),once:()=>({kind:'once',at:defaultOnce()}),every:()=>({kind:'every',minutes:15}),presence:()=>({kind:'presence',event:'arrives'}),mode:()=>({kind:'mode',mode:(modes[0]||{}).id}),
       overlay:()=>({kind:'overlay',overlay:(overlays[0]||{}).id,event:'starts'}),hub:()=>({kind:'hub',event:'start'})};
-    const T_KINDS=[['device','A device changes'],['numeric','A reading goes above or below'],['event','A device event'],['time','A time of day'],['every','Every few minutes'],['presence','Someone comes or goes'],['mode','A mode starts'],['overlay','An overlay starts or ends'],['hub','Kova starts']];
-    const NEW_C={device:()=>({kind:'device',device:firstDev,is:{on:true}}),numeric:()=>({kind:'numeric',device:firstDev,field:'temp',above:25}),time:()=>({kind:'time',after:{kind:'time',at:'18:00'},before:{kind:'time',at:'23:00'}}),
-      presence:()=>({kind:'presence',who:'anyone',home:true}),mode:()=>({kind:'mode',modes:[(modes[0]||{}).id]}),overlay:()=>({kind:'overlay',active:true}),any:()=>({kind:'any',conditions:[NEW_C.device()]}),all:()=>({kind:'all',conditions:[NEW_C.device()]}),not:()=>({kind:'not',conditions:[NEW_C.device()]})};
-    const C_KINDS=[['device','A device is'],['numeric','A reading is above or below'],['time','The time or day'],['presence','Who’s home'],['mode','The mode'],['overlay','An overlay'],['any','Any of these'],['all','All of these'],['not','None of these']];
-    const NEW_A={set:()=>({kind:'set',targets:firstAct?{[firstAct]:JSON.parse((actionOptions(devs[firstAct],H.sources)[0]||['{"on":true}'])[0])}:{}}),delay:()=>({kind:'delay',seconds:300}),
-      ramp:()=>({kind:'ramp',targets:firstAct?{[firstAct]:{}}:{},field:'bri',to:100,overSec:3600}),
+    const NEW_C={device:o=>({kind:'device',device:o&&RAW[o.device]?o.device:firstDev,is:{on:true}}),
+      numeric:o=>{const id=o&&RAW[o.device]&&readingsOf(RAW[o.device]).length?o.device:(READERS[0]||{}).id;const f=firstReading(id),cur=stOf(RAW[id])[f];return{kind:'numeric',device:id,field:f,above:typeof cur==='number'?Math.round(cur):undefined}},
+      time:()=>({kind:'time',after:{kind:'time',at:'18:00'},before:{kind:'time',at:'23:00'}}),
+      presence:()=>({kind:'presence',who:'anyone',home:true}),mode:()=>({kind:'mode',modes:[(modes[0]||{}).id].filter(Boolean)}),overlay:()=>({kind:'overlay',active:true}),
+      any:o=>({kind:'any',conditions:o&&o.kind!=='any'&&o.kind!=='all'&&o.kind!=='not'?[o]:[NEW_C.device()]}),all:o=>({kind:'all',conditions:o&&!['any','all','not'].includes(o.kind)?[o]:[NEW_C.device()]}),not:o=>({kind:'not',conditions:o&&!['any','all','not'].includes(o.kind)?[o]:[NEW_C.device()]})};
+    const defaultCmd=id=>{const ks=setKeysOf(targetDevs(id));return ks.includes('on')?{on:true}:ks.length?{[ks[0]]:propDefault(ks[0],targetDevs(id))}:{on:true}};
+    const NEW_A={set:()=>({kind:'set',targets:firstAct?{[firstAct]:defaultCmd(firstAct)}:{}}),delay:()=>({kind:'delay',seconds:300}),
+      ramp:o=>({kind:'ramp',targets:o&&o.targets?Object.fromEntries(Object.keys(o.targets).map(k=>[k,{}])):firstAct?{[firstAct]:{}}:{},field:'bri',to:100,overSec:1800,stepSec:60}),
       wait:()=>({kind:'wait',until:NEW_C.device(),timeoutSec:600}),notify:()=>({kind:'notify',message:''}),overlay:()=>({kind:'overlay',overlay:(overlays[0]||{}).id,op:'start'}),
-      if:()=>({kind:'if',conditions:[NEW_C.device()],then:[],else:[]}),repeat:()=>({kind:'repeat',times:2,actions:[]}),run:()=>({kind:'run',automation:((H.automations||[]).find(x=>x.id!==E.id)||{}).id}),stop:()=>({kind:'stop'})};
-    const A_KINDS=[['set','Set devices'],['delay','Wait a while'],['wait','Wait until something is true'],['notify','Send a notification'],['overlay','Start or end an overlay'],['if','If … otherwise …'],['repeat','Repeat'],['ramp','Ease a value over time'],['run','Run another automation'],['stop','Stop here']];
-    const rows=[];
-    const row=(depth,tag,kinds,kind,path,fields,newOf,extra={})=>rows.push({isRow:true,pad:(depth*22)+'px',tag,kindOptions:opts(kinds),kind,setKind:e=>setAt(path,newOf[e.target.value]()),fields,
-      remove:()=>delAt(path),up:()=>moveAt(path,-1),down:()=>moveAt(path,1),...extra});
-    const head=(depth,text)=>rows.push({isHead:true,pad:(depth*22)+'px',text});
-    const add=(depth,text,fn)=>rows.push({isAdd:true,pad:(depth*22)+'px',text,add:fn});
-    // Triggers
+      if:()=>({kind:'if',conditions:[NEW_C.device()],then:[],else:[]}),repeat:()=>({kind:'repeat',times:2,actions:[]}),run:()=>({kind:'run',automation:(AUTOS.find(x=>x.id!==E.id)||{}).id}),stop:()=>({kind:'stop'})};
+    // ----------------------------------------------------------- checks
+    // The hub checks everything again on save (automation-check.ts); these catch the usual slips as you go.
+    const nonEmpty=l=>Array.isArray(l)&&l.length>0;
+    const trigErr=t=>{switch(t.kind){
+      case 'device':return!RAW[t.device]?'Choose a device':!t.to&&!t.from?'Say what state it turns to':t.to&&!Object.keys(t.to).length?'Choose what it turns to':'';
+      case 'numeric':return!RAW[t.device]?'Choose a device':t.above==null&&t.below==null?'Give a value to go above or below':t.above!=null&&t.below!=null&&t.above>=t.below?'“Above” has to be less than “below”':'';
+      case 'event':return!RAW[t.device]?'Choose a device':!(t.event||'').trim()?'Choose the event':'';
+      case 'every':return!(t.minutes>=1&&t.minutes<=1440)?'Every 1 to 1440 minutes':'';
+      case 'once':return!STAMP_RE.test(t.at||'')?'Pick a date and a time':!t.firedAt&&t.at<=nowSt&&A.enabled!==false&&(A.triggers||[]).every(x=>x.kind==='once')?'That time has passed: choose a later one':'';
+      case 'mode':return!t.mode?'Choose a mode':'';case 'overlay':return!t.overlay?'Choose an overlay':'';default:return''}};
+    const condErr=c=>{switch(c.kind){
+      case 'device':return!RAW[c.device]?'Choose a device':!c.is||!Object.keys(c.is).length?'Choose a state to look for':'';
+      case 'numeric':return!RAW[c.device]?'Choose a device':c.above==null&&c.below==null?'Give a value':c.above!=null&&c.below!=null&&c.above>=c.below?'“Above” has to be less than “below”':'';
+      case 'time':return!c.after&&!c.before&&!nonEmpty(c.days)?'Give a time or some days':'';
+      case 'mode':return!nonEmpty(c.modes)?'Choose at least one mode':'';
+      case 'all':case 'any':case 'not':return!nonEmpty(c.conditions)?'Add at least one condition to this group':'';default:return''}};
+    const targetsErr=a=>!Object.keys(a.targets||{}).length?'Choose at least one device':a.kind==='set'&&Object.entries(a.targets).some(([,c])=>!cmdKeys(c).length)?'Choose what each device should do':a.kind==='set'&&Object.values(a.targets).some(c=>c.media===''||/^station: *$/i.test(c.media||'x'))?'Type what to play':'';
+    const actErr=a=>{switch(a.kind){
+      case 'set':return targetsErr(a);
+      case 'ramp':return targetsErr(a)||(a.to==null?'Say what to ramp to':!(a.overSec>=10)?'A ramp takes at least 10 seconds':a.stepSec!=null&&a.stepSec<5?'Steps of at least 5 seconds':'');
+      case 'delay':return!(a.seconds>=1)?'Say how long to wait':'';
+      case 'notify':return!(a.message||'').trim()?'Write the notification':a.message.length>500?'Keep it under 500 characters':'';
+      case 'overlay':return!a.overlay?'Choose an overlay':'';
+      case 'if':return!nonEmpty(a.conditions)?'“If” needs at least one condition':!nonEmpty(a.then)&&!nonEmpty(a.else)?'Add a step to do':'';
+      case 'repeat':return!(a.times>=1&&a.times<=100)?'Repeat 1 to 100 times':!nonEmpty(a.actions)?'Add a step to repeat':'';
+      case 'run':return!a.automation?'Choose an automation':'';default:return''}};
+    const errs=[];
+    const note=(where,e)=>{if(e)errs.push(`${where}: ${e}`);return e};
+    // ------------------------------------------------------------- rows
+    // The editor is a flat list of rows; "rails" draw the nesting (if/else, repeat, groups, the devices of a step).
+    const RAIL={if:'rgba(242,177,76,0.45)',repeat:'rgba(124,184,240,0.45)',group:'rgba(201,160,240,0.45)',wait:'rgba(127,212,160,0.45)',target:'rgba(255,255,255,0.10)'};
+    const block=(rails,o)=>({isBlock:true,rails,bg:'#1c1d20',bd:'rgba(255,255,255,0.06)',iconBg:'rgba(242,177,76,0.13)',iconFg:'#f2b14c',hasTag:!!o.tag,tag:o.tag||'',hasKind:!!o.kindOptions,kindOptions:o.kindOptions||[],kind:o.kind||'',kindLabel:o.kindLabel||'Kind',
+      title:o.title||'',canMove:!!o.up,canRemove:!!o.remove,up:o.up,down:o.down,remove:o.remove,removeLabel:o.removeLabel||'Remove',hasWords:!!o.words,words:o.words?cap1(o.words):'',
+      fields:o.fields||[],hasFields:!!(o.fields&&o.fields.length),hasErr:!!o.err,err:o.err||'',icon:o.icon||'help',...o.extra});
+    const lane=(rails,text,icon,color)=>({isLane:true,rails,text,icon,color});
+    const addRow=(rails,label,options,pick)=>({isAdd:true,rails,label,options,set:e=>{if(e.target.value)pick(e.target.value)}});
+    const noteRow=(rails,text)=>({isNote:true,rails,text});
+    const rail=c=>({c});
+    const kindSwap=(list,old,k,make)=>{const n=make[k](old);if(old&&old.device&&n.device!==undefined&&RAW[old.device]&&k!=='numeric'&&k!=='event')n.device=old.device;return n};
+    // When
     const trigFields=(t,p)=>{const set=(k,v)=>setAt([...p,k],v);switch(t.kind){
-      case 'device':return[F.sel('Device',t.device,devOpts(ALL),v=>set('device',v),1),F.sel('turns',JSON.stringify(t.to||{}),stateOpts(t.to&&JSON.stringify(t.to)),v=>set('to',JSON.parse(v))),F.sel('from',t.from?JSON.stringify(t.from):'',[{v:'',label:'any state'},...stateOpts(t.from&&JSON.stringify(t.from))],v=>set('from',v?JSON.parse(v):undefined)),minsField('for',t.forSec,v=>set('forSec',v))];
-      case 'numeric':return[F.sel('Device',t.device,devOpts(ALL),v=>set('device',v),1),F.sel('reading',t.field,opts(FIELDS),v=>set('field',v)),F.num('above',t.above,v=>set('above',v)),F.num('below',t.below,v=>set('below',v)),minsField('for',t.forSec,v=>set('forSec',v))];
-      case 'event':return[F.sel('Device',t.device,devOpts(ALL),v=>set('device',v),1),F.sel('event',t.event,opts(EVENTS.some(x=>x[0]===t.event)?EVENTS:[...EVENTS,[t.event,t.event]]),v=>set('event',v))];
+      case 'device':return[F.sel('Device',t.device,devOpts(ALL,t.device),v=>edit(a=>{const x=get(a,p);x.device=v;const ok=matchKeysOf(RAW[v]||{});for(const m of ['to','from'])if(x[m]){for(const k of Object.keys(x[m]))if(!ok.includes(k))delete x[m][k];if(!Object.keys(x[m]).length)x[m]=m==='to'?{on:true}:undefined}}),{wide:true}),
+        F.sub('Turns'),...matchFields(t.to,t.device,v=>set('to',v),{optional:!!t.from,addLabel:'+ Choose a state'}),
+        F.sub('Only when it was (optional)'),...matchFields(t.from,t.device,v=>set('from',v),{optional:true,addLabel:'+ Any state before'}),
+        F.sub(''),...durFields('Stays so for',t.forSec,v=>set('forSec',v||undefined),p.join('.')+'.for',{hasHint:true,hint:'Blank: straight away'})];
+      case 'numeric':{const rs=readingsOf(RAW[t.device]||{}),u=readUnit(t.field);return[F.sel('Device',t.device,devOpts(READERS,t.device),v=>edit(a=>{const x=get(a,p);x.device=v;const r=readingsOf(RAW[v]||{});if(!r.some(y=>y[0]===x.field)){x.field=(r[0]||['temp'])[0];reRange(x)}}),{wide:true}),
+        F.sel('Reading',t.field,withCur(rs.map(r=>r[0]),t.field).map(f=>({v:f,label:cap1(readName(f))})),v=>edit(a=>{const x=get(a,p);x.field=v;reRange(x)})),
+        F.num('Goes above',t.above,v=>set('above',v),u),F.num('or below',t.below,v=>set('below',v),u),...durFields('For',t.forSec,v=>set('forSec',v||undefined),p.join('.')+'.for',{hasHint:true,hint:'Blank: straight away'})]}
+      case 'event':{const ev=eventsOf(RAW[t.device]||{}),other=!!t.event&&!ev.includes(t.event)||(E.otherEv||{})[p.join('.')];
+        return[F.sel('Device',t.device,devOpts(EVENTERS,t.device),v=>edit(a=>{const x=get(a,p);x.device=v;const e2=eventsOf(RAW[v]||{});if(!e2.includes(x.event))x.event=e2[0]||x.event}),{wide:true}),
+          F.sel('Event',other?'__other':t.event,[...ev.map(e=>({v:e,label:cap1(EVENT_NAMES[e]||e)})),{v:'__other',label:'Something else (type its name)…'}],v=>{if(v==='__other'){this.setState(st=>({ae:{...st.ae,otherEv:{...(st.ae.otherEv||{}),[p.join('.')]:true}}}));set('event',ev.includes(t.event)?'':t.event)}else{this.setState(st=>({ae:{...st.ae,otherEv:{...(st.ae.otherEv||{}),[p.join('.')]:false}}}));set('event',v)}},{wide:true}),
+          ...(other?[F.text('Event name',t.event,v=>set('event',v.trim()),'As the device sends it, e.g. doorbell-long')]:[])]}
       case 'time':return[...rhythmFields('When',t.at,v=>set('at',v)),dayChips(t.days,v=>set('days',v))];
-      case 'every':return[F.num('Every',t.minutes,v=>set('minutes',v),'min')];
-      case 'presence':return[F.sel('Who',t.event==='first-arrives'||t.event==='last-leaves'?'':t.person||'',[{v:'',label:'Anyone'},...people.map(p=>({v:p.id,label:p.name}))],v=>set('person',v||undefined)),F.sel('',t.event,opts([['arrives','comes home'],['leaves','leaves'],['first-arrives','first home (nobody was)'],['last-leaves','last one out']]),v=>set('event',v))];
-      case 'mode':return[F.sel('Mode',t.mode,modes.map(m=>({v:m.id,label:m.name})),v=>set('mode',v),1)];
-      case 'overlay':return[F.sel('Overlay',t.overlay,overlays.map(o=>({v:o.id,label:o.name})),v=>set('overlay',v),1),F.sel('',t.event,opts([['starts','starts'],['ends','ends']]),v=>set('event',v))];
+      case 'once':{const d=(t.at||'').slice(0,10),tm=(t.at||'').slice(11,16),put=(dd,tt)=>edit(a=>{const x=get(a,p);x.at=`${dd||d||nowSt.slice(0,10)}T${tt||tm||'09:00'}`;delete x.firedAt;delete x.missed});
+        const chip=(label,st)=>({label,on:t.at===st,toggle:()=>put(st.slice(0,10),st.slice(11,16))});
+        const today=nowSt.slice(0,10),tom=msStamp(nowMs+864e5).slice(0,10),q15=msStamp(nowMs+15*6e4),q60=msStamp(nowMs+60*6e4);
+        const chips=[chip('In 15 min',q15),chip('In 1 hour',q60),...(nowSt<`${today}T20:45`?[chip('Tonight 21:00',`${today}T21:00`)]:[]),chip('Tomorrow 07:00',`${tom}T07:00`)];
+        const status=t.missed?`Missed: Kova was off at ${stampWordsC(t.at,nowSt)}. Pick a new time to run it again.`:t.firedAt?`Went off ${stampWordsC(t.at,nowSt)}. Pick a new time to run it again.`:STAMP_RE.test(t.at||'')&&t.at>nowSt?`Runs ${stampWordsC(t.at,nowSt)}, then switches itself off.`:'';
+        return[F.date('Date',d,v=>put(v,null),{min:today}),F.time('Time',tm,v=>put(null,v)),F.chips('Quick picks',chips,{flex:'1 1 260px'}),...(status?[F.note(status)]:[])]}
+      case 'every':return[F.num('Every',t.minutes,v=>set('minutes',v==null?undefined:Math.round(v)),'min',{min:1,max:1440,step:1,hasHint:true,hint:'Counted from midnight'})];
+      case 'presence':{const anyone=t.event==='first-arrives'||t.event==='last-leaves';return[F.seg('',t.event,[['arrives','Comes home'],['leaves','Leaves'],['first-arrives','First one home'],['last-leaves','Last one out']],v=>edit(a=>{const x=get(a,p);x.event=v;if(v==='first-arrives'||v==='last-leaves')delete x.person})),
+        ...(anyone?[]:[F.sel('Who',t.person||'',[{v:'',label:'Anyone'},...people.map(x=>({v:x.id,label:x.name}))],v=>set('person',v||undefined))])]}
+      case 'mode':return[F.sel('Mode',t.mode,modes.map(m=>({v:m.id,label:m.name})),v=>set('mode',v),{wide:true})];
+      case 'overlay':return[F.sel('Overlay',t.overlay,overlays.map(o=>({v:o.id,label:o.name})),v=>set('overlay',v),{wide:true}),F.seg('',t.event,[['starts','Starts'],['ends','Ends']],v=>set('event',v))];
+      case 'hub':return[F.note('After an update or a power cut, when Kova comes back.')];
       default:return[]}};
-    head(0,'When');
-    (A.triggers||[]).forEach((t,i)=>row(0,i?'or':'',T_KINDS,t.kind,['triggers',i],trigFields(t,['triggers',i]),NEW_T));
-    add(0,'+ Add a trigger',()=>pushAt(['triggers'],NEW_T.device()));
-    // Conditions (nested)
+    // Only if (groups nest)
     const condFields=(c,p)=>{const set=(k,v)=>setAt([...p,k],v);switch(c.kind){
-      case 'device':return[F.sel('Device',c.device,devOpts(ALL),v=>set('device',v),1),F.sel('is',JSON.stringify(c.is||{}),stateOpts(c.is&&JSON.stringify(c.is)),v=>set('is',JSON.parse(v)))];
-      case 'numeric':return[F.sel('Device',c.device,devOpts(ALL),v=>set('device',v),1),F.sel('reading',c.field,opts(FIELDS),v=>set('field',v)),F.num('above',c.above,v=>set('above',v)),F.num('below',c.below,v=>set('below',v))];
-      case 'time':return[F.sel('From',c.after?'on':'',opts([['','any time'],['on','a time']]),v=>set('after',v?{kind:'time',at:'18:00'}:undefined)),...(c.after?rhythmFields('',c.after,v=>set('after',v)):[]),
-        F.sel('until',c.before?'on':'',opts([['','any time'],['on','a time']]),v=>set('before',v?{kind:'time',at:'23:00'}:undefined)),...(c.before?rhythmFields('',c.before,v=>set('before',v)):[]),dayChips(c.days,v=>set('days',v))];
-      case 'presence':return[F.sel('Who',c.who,[{v:'anyone',label:'Anyone'},{v:'no-one',label:'No one'},...people.map(p=>({v:p.id,label:p.name}))],v=>set('who',v)),F.sel('is',c.home===false?'out':'home',opts([['home','home'],['out','out']]),v=>set('home',v==='home'))];
-      case 'mode':return[F.chips('In',modes.map(m=>{const on=(c.modes||[]).includes(m.id);return{label:m.name,bg:on?'#f2b14c':'#2a2b2f',fg:on?'#1a1408':'#f1efea',toggle:()=>set('modes',on?c.modes.filter(x=>x!==m.id):[...(c.modes||[]),m.id])}}))];
-      case 'overlay':return[F.sel('Overlay',c.overlay||'',[{v:'',label:'Any overlay'},...overlays.map(o=>({v:o.id,label:o.name}))],v=>set('overlay',v||undefined),1),F.sel('is',c.active===false?'off':'on',opts([['on','on'],['off','off']]),v=>set('active',v==='on'))];
+      case 'device':return[F.sel('Device',c.device,devOpts(ALL,c.device),v=>edit(a=>{const x=get(a,p);x.device=v;const ok=matchKeysOf(RAW[v]||{});for(const k of Object.keys(x.is||{}))if(!ok.includes(k))delete x.is[k];if(!x.is||!Object.keys(x.is).length)x.is={on:true}}),{wide:true}),
+        F.sub('Is'),...matchFields(c.is,c.device,v=>set('is',v||{}))];
+      case 'numeric':{const rs=readingsOf(RAW[c.device]||{}),u=readUnit(c.field);return[F.sel('Device',c.device,devOpts(READERS,c.device),v=>edit(a=>{const x=get(a,p);x.device=v;const r=readingsOf(RAW[v]||{});if(!r.some(y=>y[0]===x.field)){x.field=(r[0]||['temp'])[0];reRange(x)}}),{wide:true}),
+        F.sel('Reading',c.field,withCur(rs.map(r=>r[0]),c.field).map(f=>({v:f,label:cap1(readName(f))})),v=>edit(a=>{const x=get(a,p);x.field=v;reRange(x)})),F.num('Above',c.above,v=>set('above',v),u),F.num('Below',c.below,v=>set('below',v),u)]}
+      case 'time':return[F.seg('From',c.after?'on':'',[['','Any time'],['on','A time']],v=>set('after',v?{kind:'time',at:'18:00'}:undefined)),...(c.after?rhythmFields('After',c.after,v=>set('after',v)):[]),
+        F.sub(''),F.seg('Until',c.before?'on':'',[['','Any time'],['on','A time']],v=>set('before',v?{kind:'time',at:'23:00'}:undefined)),...(c.before?rhythmFields('Before',c.before,v=>set('before',v)):[]),dayChips(c.days,v=>set('days',v))];
+      case 'presence':return[F.sel('Who',c.who,[{v:'anyone',label:'Anyone'},{v:'no-one',label:'No one'},...people.map(x=>({v:x.id,label:x.name}))],v=>set('who',v)),F.seg('Is',c.home===false?'out':'home',[['home','Home'],['out','Out']],v=>set('home',v==='home'))];
+      case 'mode':return[F.chips('In any of',modes.map(m=>{const on=(c.modes||[]).includes(m.id);return{label:m.name,on,toggle:()=>set('modes',on?c.modes.filter(x=>x!==m.id):[...(c.modes||[]),m.id])}}))];
+      case 'overlay':return[F.sel('Overlay',c.overlay||'',[{v:'',label:'Any overlay'},...overlays.map(o=>({v:o.id,label:o.name}))],v=>set('overlay',v||undefined),{wide:true}),F.seg('Is',c.active===false?'off':'on',[['on','On'],['off','Off']],v=>set('active',v==='on'))];
       default:return[]}};
-    const condRow=(c,pp,depth,tag,extra)=>{row(depth,tag,C_KINDS,c.kind,pp,condFields(c,pp),NEW_C,extra);
-      if(c.kind==='any'||c.kind==='all'||c.kind==='not'){condRows(c.conditions||[],[...pp,'conditions'],depth+1);add(depth+1,'+ Add to this group',()=>pushAt([...pp,'conditions'],NEW_C.device()))}};
-    const condRows=(list,p,depth)=>list.forEach((c,i)=>condRow(c,[...p,i],depth,i?'and':''));
-    head(0,'Only if');
-    if(!(A.conditions||[]).length)rows.push({isNote:true,pad:'0px',text:'Always: no conditions.'});
-    condRows(A.conditions||[],['conditions'],0);
-    add(0,'+ Add a condition',()=>pushAt(['conditions'],NEW_C.device()));
-    // Steps (nested)
-    const targetRows=(a,p,depth)=>{Object.entries(a.targets||{}).forEach(([id,cmd])=>{const o=targetActions(id);const cur=JSON.stringify(cmd);const os=o.some(x=>x[0]===cur)?o:[[cur,'(as set)'],...o];
-      rows.push({isTarget:true,pad:((depth+1)*22)+'px',device:id,devOptions:targetOpts,setDevice:e=>{const v=e.target.value;edit(x=>{const t=get(x,[...p,'targets']);const n={};for(const [k,c] of Object.entries(t))n[k===id?v:k]=k===id?JSON.parse((targetActions(v)[0]||['{"on":true}'])[0]):c;get(x,p).targets=n})},
-        act:cur,actOptions:opts(os),setAct:e=>setAt([...p,'targets',id],JSON.parse(e.target.value)),remove:()=>delAt([...p,'targets',id])})});
-      add(depth+1,'+ Add a target',()=>{const free=[...ACT.map(d=>d.id),...PSEUDO.map(x=>x.v)].find(id=>!(id in (a.targets||{})));if(free)setAt([...p,'targets',free],JSON.parse((targetActions(free)[0]||['{"on":true}'])[0]))})};
-    const actFields=(a,p)=>{const set=(k,v)=>setAt([...p,k],v);switch(a.kind){
-      case 'delay':{const u=a.seconds%3600===0&&a.seconds>=3600?'h':a.seconds%60===0&&a.seconds>=60?'min':'s';const n=u==='h'?a.seconds/3600:u==='min'?a.seconds/60:a.seconds;
-        return[F.num('For',n,v=>set('seconds',Math.round((v||0)*(u==='h'?3600:u==='min'?60:1)))),F.sel('',u,opts([['s','seconds'],['min','minutes'],['h','hours']]),v=>set('seconds',Math.round(n*(v==='h'?3600:v==='min'?60:1))))]}
-      case 'wait':return[minsField('At most',a.timeoutSec,v=>set('timeoutSec',v)),F.sel('then',a.stopOnTimeout?'stop':'carry',opts([['carry','carry on anyway'],['stop','stop']]),v=>set('stopOnTimeout',v==='stop'))];
-      case 'notify':return[F.text('Title',a.title,v=>set('title',v||undefined),'Optional'),F.text('Message',a.message,v=>set('message',v),'What it says'),
-        F.chips('To',[{label:'Everyone',bg:!(a.people||[]).length?'#f2b14c':'#2a2b2f',fg:!(a.people||[]).length?'#1a1408':'#f1efea',toggle:()=>set('people',undefined)},...people.map(pp=>{const on=(a.people||[]).includes(pp.id);return{label:pp.name,bg:on?'#f2b14c':'#2a2b2f',fg:on?'#1a1408':'#f1efea',toggle:()=>set('people',on?a.people.filter(x=>x!==pp.id):[...(a.people||[]),pp.id])}})])];
-      case 'overlay':return[F.sel('',a.op,opts([['start','Start'],['end','End']]),v=>set('op',v)),F.sel('Overlay',a.overlay,overlays.map(o=>({v:o.id,label:o.name})),v=>set('overlay',v),1)];
-      case 'ramp':{const u=a.overSec%3600===0&&a.overSec>=3600?'h':a.overSec%60===0&&a.overSec>=60?'min':'s';const n=u==='h'?a.overSec/3600:u==='min'?a.overSec/60:a.overSec;
-        return[F.sel('Ease',a.field,opts([['bri','brightness'],['vol','volume'],['target','set temperature']]),v=>set('field',v)),
-          F.num('From',a.from,v=>set('from',v||undefined)),F.num('To',a.to,v=>set('to',v)),
-          F.num('Over',n,v=>set('overSec',Math.round((v||0)*(u==='h'?3600:u==='min'?60:1)))),F.sel('',u,opts([['s','seconds'],['min','minutes'],['h','hours']]),v=>set('overSec',Math.round(n*(v==='h'?3600:v==='min'?60:1))))]}
-      case 'repeat':return[F.num('Times',a.times,v=>set('times',v))];
-      case 'run':return[F.sel('Automation',a.automation,(H.automations||[]).filter(x=>x.id!==E.id).map(x=>({v:x.id,label:x.name})),v=>set('automation',v),1)];
+    const rows={when:[],if:[],then:[]};
+    const condBlock=(R,c,pp,rails,tag,o={})=>{const isG=['any','all','not'].includes(c.kind);const e=note(o.where||'Only if',condErr(c));
+      R.push(block(rails,{icon:kindIcon(C_KINDS,c.kind),tag,kindOptions:opts(C_KINDS),kind:c.kind,kindLabel:'Kind of condition',words:isG?'':condW(c),err:e,
+        extra:{setKind:ev=>setAt(pp,kindSwap(null,c,ev.target.value,NEW_C))},fields:condFields(c,pp),...(o.fixed?{}:{up:()=>moveAt(pp,-1),down:()=>moveAt(pp,1),remove:()=>delAt(pp),removeLabel:'Remove condition'})}));
+      if(isG){const inner=[...rails,rail(RAIL.group)];(c.conditions||[]).forEach((k,i)=>condBlock(R,k,[...pp,'conditions',i],inner,i?(c.kind==='any'?'or':'and'):'',{where:o.where}));
+        R.push(addRow(inner,c.kind==='any'?'+ Or…':'+ And…',opts(C_KINDS),k=>pushAt([...pp,'conditions'],NEW_C[k]())))}};
+    // Then (if/else and repeat nest)
+    const targetBlocks=(R,a,p,rails)=>{const inner=[...rails,rail(RAIL.target)],ramp=a.kind==='ramp';
+      Object.entries(a.targets||{}).forEach(([id,cmd])=>{const dl=targetDevs(id),tp=[...p,'targets',id],d=dl[0];
+        const avail=setKeysOf(dl),have=cmdKeys(cmd);
+        const fields=ramp?[]:[...have.flatMap(k=>{const fs=propFields(k,cmdGet(cmd,k),dl,v=>edit(x=>{cmdPut(get(x,tp),k,v)}),id);return fs.map((f,i)=>i===0?rm(f,()=>edit(x=>{cmdDel(get(x,tp),k)}),propLabel(k,dl)):f)}),
+          ...(avail.filter(k=>!have.includes(k)).length?[F.add(have.length?'+ Also set…':'+ Choose what to set',avail.filter(k=>!have.includes(k)).map(k=>({v:k,label:propLabel(k,dl)})),k=>edit(x=>{cmdPut(get(x,tp),k,propDefault(k,dl))}))]:[])];
+        const others=[...devOpts(ACT,id).filter(o=>o.v===id||!(o.v in a.targets)),...PSEUDO.filter(o=>o.v===id||!(o.v in a.targets)).map(o=>({v:o.v,label:`${o.label} (now and later)`}))];
+        if(!others.some(o=>o.v===id))others.unshift({v:id,label:pseudoName(id)||`${id} (missing)`});
+        R.push(block(inner,{icon:d?ICON[d.type]||'devices':'devices',kindOptions:others,kind:id,kindLabel:'Device',words:ramp?'':cmdW(id,cmd).slice(nm(id).length+1),
+          extra:{bg:'#18191c',bd:'rgba(255,255,255,0.05)',iconBg:'rgba(124,184,240,0.13)',iconFg:'#7cb8f0',setKind:ev=>{const v=ev.target.value;edit(x=>{const t=get(x,[...p,'targets']);const n={};const ok=setKeysOf(targetDevs(v));
+            for(const [k,c] of Object.entries(t)){if(k!==id){n[k]=c;continue}if(ramp){n[v]={};continue}const kept={};for(const key of cmdKeys(c))if(ok.includes(key))cmdPut(kept,key,cmdGet(c,key));n[v]=cmdKeys(kept).length?kept:defaultCmd(v)}get(x,p).targets=n})}},
+          fields,remove:()=>delAt(tp),removeLabel:`Remove ${nm(id)}`}))});
+      const free=[...devOpts(ACT).filter(o=>!(o.v in (a.targets||{}))),...PSEUDO.filter(o=>!(o.v in (a.targets||{}))).map(o=>({v:o.v,label:`${o.label} (now and later)`}))];
+      if(free.length)R.push(addRow(inner,'+ Add a device',free,v=>setAt([...p,'targets',v],ramp?{}:defaultCmd(v))))};
+    const actFields=(a,p)=>{const set=(k,v)=>setAt([...p,k],v),key=p.join('.');switch(a.kind){
+      case 'delay':return durFields('For',a.seconds,v=>set('seconds',v),key);
+      case 'wait':return[...durFields('At most',a.timeoutSec,v=>edit(x=>{const y=get(x,p);if(v){y.timeoutSec=v;y.stopOnTimeout=!!y.stopOnTimeout}else{delete y.timeoutSec;delete y.stopOnTimeout}}),key,{hasHint:true,hint:'Blank: wait as long as it takes'}),
+        ...(a.timeoutSec?[F.seg('If it doesn’t happen by then',a.stopOnTimeout?'stop':'carry',[['carry','Carry on anyway'],['stop','Stop here']],v=>set('stopOnTimeout',v==='stop'))]:[])];
+      case 'notify':return[F.text('Title',a.title,v=>set('title',v||undefined),'Optional, e.g. Front door'),F.area('Message',a.message,v=>set('message',v),'What it says',{hasHint:true,hint:`${(a.message||'').length}/500`}),
+        F.chips('Send to',[{label:'Everyone',on:!(a.people||[]).length,toggle:()=>set('people',undefined)},...people.map(pp=>{const on=(a.people||[]).includes(pp.id);return{label:pp.name,on,toggle:()=>{const l=on?a.people.filter(x=>x!==pp.id):[...(a.people||[]),pp.id];set('people',l.length?l:undefined)}}})])];
+      case 'overlay':return[F.seg('',a.op,[['start','Start'],['end','End']],v=>set('op',v)),F.sel('Overlay',a.overlay,overlays.map(o=>({v:o.id,label:o.name})),v=>set('overlay',v),{wide:true})];
+      case 'ramp':{const u=a.field==='target'?'°C':'%';return[F.seg('Ease',a.field,[['bri','Brightness'],['vol','Volume'],['target','Set temperature']],v=>set('field',v)),
+        F.num('From',a.from,v=>set('from',v),u,{hasHint:true,hint:'Blank: where it is'}),F.num('To',a.to,v=>set('to',v),u),...durFields('Over',a.overSec,v=>set('overSec',v),key+'.over'),F.num('A step every',a.stepSec,v=>set('stepSec',v),'s',{min:5,step:5,hasHint:true,hint:'Default 60 s'})]}
+      case 'repeat':return[F.num('Times',a.times,v=>set('times',v==null?undefined:Math.round(v)),'×',{min:1,max:100,step:1})];
+      case 'run':return[F.sel('Automation',a.automation,AUTOS.filter(x=>x.id!==E.id).map(x=>({v:x.id,label:x.name})),v=>set('automation',v),{wide:true}),F.note('Runs its steps; its triggers and conditions are skipped.')];
+      case 'stop':return[F.note('Nothing after this runs.')];
       default:return[]}};
-    const actRows=(list,p,depth)=>{list.forEach((a,i)=>{const pp=[...p,i];row(depth,'',A_KINDS,a.kind,pp,actFields(a,pp),NEW_A);
-      if(a.kind==='set'||a.kind==='ramp')targetRows(a,pp,depth);
-      if(a.kind==='wait'&&a.until){head(depth+1,'Until');condRow(a.until,[...pp,'until'],depth+1,'',{canRemove:false})}
-      if(a.kind==='if'){head(depth+1,'If');condRows(a.conditions||[],[...pp,'conditions'],depth+1);add(depth+1,'+ Add a condition',()=>pushAt([...pp,'conditions'],NEW_C.device()));
-        head(depth+1,'Then');actRows(a.then||[],[...pp,'then'],depth+1);add(depth+1,'+ Add a step',()=>pushAt([...pp,'then'],NEW_A.set()));
-        head(depth+1,'Otherwise');actRows(a.else||[],[...pp,'else'],depth+1);add(depth+1,'+ Add a step',()=>pushAt([...pp,'else'],NEW_A.set()))}
-      if(a.kind==='repeat'){actRows(a.actions||[],[...pp,'actions'],depth+1);add(depth+1,'+ Add a step',()=>pushAt([...pp,'actions'],NEW_A.set()))}})};
-    head(0,'Then');
-    actRows(A.actions||[],['actions'],0);
-    add(0,'+ Add a step',()=>pushAt(['actions'],NEW_A.set()));
-    // History
+    const actBlocks=(R,list,p,rails,kinds)=>list.forEach((a,i)=>{const pp=[...p,i];const e=note(`Step ${i+1}`,actErr(a));
+      R.push(block(rails,{icon:kindIcon(A_KINDS,a.kind),tag:rails.length?'':String(i+1),kindOptions:opts(kinds),kind:a.kind,kindLabel:'Kind of step',words:a.kind==='set'||a.kind==='if'||a.kind==='repeat'?'':actW(a),err:e,
+        extra:{setKind:ev=>setAt(pp,kindSwap(null,a,ev.target.value,{...NEW_A,ramp:()=>NEW_A.ramp(a.kind==='set'?a:null)}))},fields:actFields(a,pp),up:()=>moveAt(pp,-1),down:()=>moveAt(pp,1),remove:()=>delAt(pp),removeLabel:`Remove step`}));
+      if(a.kind==='set'||a.kind==='ramp')targetBlocks(R,a,pp,rails);
+      if(a.kind==='wait'){const r=[...rails,rail(RAIL.wait)];R.push(lane(r,'Until','pending','#7fd4a0'));if(a.until)condBlock(R,a.until,[...pp,'until'],r,'',{fixed:true,where:`Step ${i+1}`})}
+      if(a.kind==='if'){const r=[...rails,rail(RAIL.if)];
+        R.push(lane(r,'If','alt_route','#f2b14c'));(a.conditions||[]).forEach((c,j)=>condBlock(R,c,[...pp,'conditions',j],r,j?'and':'',{where:`Step ${i+1}`}));R.push(addRow(r,'+ And…',opts(C_KINDS),k=>pushAt([...pp,'conditions'],NEW_C[k]())));
+        R.push(lane(r,'Then','subdirectory_arrow_right','#f2b14c'));actBlocks(R,a.then||[],[...pp,'then'],r,A_KINDS);if(!(a.then||[]).length)R.push(noteRow(r,'Nothing yet.'));R.push(addRow(r,'+ Add a step',opts(A_KINDS),k=>pushAt([...pp,'then'],NEW_A[k]())));
+        R.push(lane(r,'Otherwise','subdirectory_arrow_right','#a3a09a'));actBlocks(R,a.else||[],[...pp,'else'],r,A_KINDS);if(!(a.else||[]).length)R.push(noteRow(r,'Nothing: carry on.'));R.push(addRow(r,'+ Add a step',opts(A_KINDS),k=>pushAt([...pp,'else'],NEW_A[k]())))}
+      if(a.kind==='repeat'){const r=[...rails,rail(RAIL.repeat)];R.push(lane(r,`Do these ${a.times||'?'} times`,'repeat','#7cb8f0'));actBlocks(R,a.actions||[],[...pp,'actions'],r,A_KINDS);R.push(addRow(r,'+ Add a step',opts(A_KINDS),k=>pushAt([...pp,'actions'],NEW_A[k]())))}});
+    // When
+    (A.triggers||[]).forEach((t,i)=>{const p=['triggers',i],e=note('When',trigErr(t));
+      rows.when.push(block([],QUICK?{icon:'event',title:'Once, at',fields:trigFields(t,p),err:e}:{icon:kindIcon(T_KINDS,t.kind),tag:i?'or':'',kindOptions:opts(T_KINDS),kind:t.kind,kindLabel:'Kind of trigger',words:t.kind==='once'?'':trigW(t),err:e,
+        extra:{setKind:ev=>setAt(p,kindSwap(null,t,ev.target.value,NEW_T))},fields:trigFields(t,p),up:()=>moveAt(p,-1),down:()=>moveAt(p,1),remove:()=>delAt(p),removeLabel:'Remove trigger'}))});
+    if(!(A.triggers||[]).length){note('When','Add at least one trigger: what starts it');rows.when.push(noteRow([],'Nothing starts it yet. Add a trigger.'))}
+    if(!QUICK)rows.when.push(addRow([],'+ Add a trigger',opts(T_KINDS),k=>pushAt(['triggers'],NEW_T[k]())));
+    // Only if
+    if(!(A.conditions||[]).length)rows.if.push(noteRow([],'Always: no conditions.'));
+    (A.conditions||[]).forEach((c,i)=>condBlock(rows.if,c,['conditions',i],[],i?'and':''));
+    rows.if.push(addRow([],'+ Add a condition',opts(C_KINDS),k=>pushAt(['conditions'],NEW_C[k]())));
+    // Then
+    actBlocks(rows.then,A.actions||[],['actions'],[],QUICK?A_QUICK:A_KINDS);
+    if(!(A.actions||[]).length){note('Then','Add at least one step: what it does');rows.then.push(noteRow([],'It doesn’t do anything yet. Add a step.'))}
+    rows.then.push(addRow([],'+ Add a step',opts(QUICK?A_QUICK:A_KINDS),k=>pushAt(['actions'],NEW_A[k]())));
+    // A one-time schedule keeps a name the person wrote; only a name exactly as the editor made it follows what and when.
+    if(E.named===undefined){const n=(A.name||'').trim(),gen=!n||autoNames(A,E.nameAt).includes(n);setTimeout(()=>this.setState(st=>st.ae&&st.ae.named===undefined?{ae:{...st.ae,named:!gen}}:null),0)}
+    const oneTime=oneTimeOf(A),auto=autoName(A);
+    if(!(A.name||'').trim()&&!oneTime)errs.unshift('Name: give it a name');
+    const sections=[
+      {key:'when',title:QUICK?'When':'When',icon:'bolt',sub:QUICK?'Pick the day and time. It runs once, then switches itself off.':'Any one of these starts it.',rows:rows.when,count:(A.triggers||[]).length?String((A.triggers||[]).length):''},
+      ...(QUICK?[]:[{key:'if',title:'Only if',icon:'rule',sub:'Every one of these has to be true when it starts, or it’s skipped.',rows:rows.if,count:(A.conditions||[]).length?String(A.conditions.length):''}]),
+      {key:'then',title:QUICK?'What to do':'Then',icon:'play_arrow',sub:'Kova does these in order.',rows:rows.then,count:(A.actions||[]).length?String(A.actions.length):''}];
+    // The summary at the top, in plain words, as it stands now.
+    const summary=[{lead:'When',text:(A.triggers||[]).map(trigW).join(', or ')||'…'},...((A.conditions||[]).length?[{lead:'Only if',text:A.conditions.map(condW).join(', and ')}]:[]),
+      {lead:'Then',text:(A.actions||[]).map(actW).join('; then ')||'…'}].map(l=>({...l,text:cap1(l.text)+(/[.!?”…]$/.test(l.text)?'':'.')}));
+    // Body for the hub: what the editor holds, minus its own bookkeeping.
+    const body=()=>{const b=JSON.parse(JSON.stringify(A));if(!(b.name||'').trim()&&oneTimeOf(b))b.name=autoName(b);if(oneTimeOf(b)&&E.named===false)b.name=autoName(b);
+      const walk=l=>(l||[]).forEach(x=>{if(x.kind==='ramp')x.targets=Object.fromEntries(Object.keys(x.targets||{}).map(k=>[k,{}]));if(x.kind==='if'){walk(x.then);walk(x.else);if(!(x.else||[]).length)delete x.else}if(x.kind==='repeat')walk(x.actions)});
+      walk(b.actions);return b};
+    const RUN_MODES=[['single','Ignore','If it’s still running (in a wait or a delay), a new start is ignored.'],['restart','Start over','A new start cancels the run in progress and starts again.'],['queued','Queue','A new start runs after the one in progress finishes.'],['parallel','Alongside','A new start runs at the same time as the one in progress.']];
+    const rm_=RUN_MODES.find(m=>m[0]===(A.mode||'single'))||RUN_MODES[0];
+    const back=()=>{if(E.dirty&&!window.confirm('Leave without saving? Your changes will be lost.'))return;this.setState({ae:null})};
+    const save=()=>{if(errs.length){this.setState(st=>({ae:{...st.ae,tried:true,err:`Fix ${errs.length===1?'this':'these'} first: ${errs.slice(0,4).join(' · ')}${errs.length>4?` · and ${errs.length-4} more`:''}`}}));return}
+      const b=body();(E.id?api('PUT','/api/automations/'+E.id,b):api('POST','/api/automations',b)).then(r=>{this.setState({ae:null});done(E.id?`${b.name} saved`:QUICK||oneTimeOf(b)?`Scheduled: ${b.name}`:`${b.name} added`)(r)})
+        .catch(x=>this.setState(st=>st.ae?{ae:{...st.ae,tried:true,err:x.message||String(x)}}:null))};
+    this._aeKeys={back,save};
     const runs=(E.runs||[]).map(r=>{const [rl,rc]=RES[r.result]||['','#a3a09a'];return{when:new Date(r.at).toLocaleString('en-AU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}),why:r.why,result:rl,fg:rc,detail:r.detail||'',
       steps:(r.steps||[]).map(st=>({text:st.text,detail:st.detail||'',fg:st.ok?'#d8d5cf':'#ff6b5e',icon:st.ok?'check':'error'}))}});
-    const tab=E.tab||'edit';
-    return{al:list,aeClosed:false,ae:{open:true,title:E.id?'Edit automation':'New automation',name:A.name||'',setName:e=>setAt(['name'],e.target.value),desc:A.description||'',setDesc:e=>setAt(['description'],e.target.value||undefined),
-      mode:A.mode||'single',modeOptions:opts([['single','If it’s already running: ignore the new start'],['restart','If it’s already running: start over'],['queued','If it’s already running: run again after'],['parallel','If it’s already running: run alongside']]),setMode:e=>setAt(['mode'],e.target.value),
-      rows:rows.map(r=>r.isRow?{canRemove:true,...r}:r),
+    const tab=E.tab||'edit',on=A.enabled!==false;
+    return{al:list,aeClosed:false,ae:{open:true,title:QUICK?'Schedule once':E.id?(oneTime?'Edit schedule':'Edit automation'):oneTime?'New one-time schedule':'New automation',
+      name:A.name||'',namePh:oneTime?`Name (or leave it: “${auto}”)`:'Name, e.g. Porch light at dusk',setName:e=>{const v=e.target.value;this.setState(st=>({ae:{...st.ae,a:{...st.ae.a,name:v},dirty:true,named:!!v.trim(),err:null}}))},
+      desc:A.description||'',setDesc:e=>setAt(['description'],e.target.value||undefined),
+      quick:QUICK,full:!QUICK,toFull:()=>this.setState(st=>({ae:{...st.ae,quick:false}})),
+      onTrack:on?'#f2b14c':'#35363a',onKnob:on?'translateX(14px)':'none',onLabel:on?'On':'Off: kept, but doesn’t run',onAria:on?'true':'false',toggleOn:()=>setAt(['enabled'],!on),
+      runModes:RUN_MODES.map(([v,l])=>{const sel=(A.mode||'single')===v;return{label:l,pressed:sel?'true':'false',bg:sel?'rgba(242,177,76,0.16)':'#141518',fg:sel?'#f7cb82':'#d8d5cf',bd:sel?'rgba(242,177,76,0.55)':'rgba(255,255,255,0.09)',pick:()=>setAt(['mode'],v)}}),runHint:rm_[2],
+      summary,dirty:!!E.dirty,sections:sections.map(sc=>({...sc,hasCount:!!sc.count,rows:sc.rows.map(r=>({...r,hasRails:r.rails.length>0}))})),
+      hasErr:!!E.err,err:E.err||'',errCount:errs.length,hasIssues:errs.length>0&&!E.err&&!!(E.tried||E.dirty),issues:`${errs.length} thing${errs.length===1?'':'s'} to finish before saving`,
+      saveLabel:QUICK||(!E.id&&oneTime)?'Schedule':'Save',
       notes:(A.origin&&A.origin.notes)||[],hasNotes:!!(A.origin&&A.origin.notes&&A.origin.notes.length),
       isEdit:tab==='edit',isHistory:tab==='history',canHistory:!!E.id,runs,hasRuns:runs.length>0,noRuns:!runs.length,
       tabEdit:()=>this.setState(st=>({ae:{...st.ae,tab:'edit'}})),tabHistory:()=>this.setState(st=>({ae:{...st.ae,tab:'history'}})),
-      editBg:tab==='edit'?'#2a2b2f':'transparent',histBg:tab==='history'?'#2a2b2f':'transparent',
-      cancel:()=>this.setState({ae:null}),
-      save:()=>{const body=JSON.parse(JSON.stringify(A));(E.id?api('PUT','/api/automations/'+E.id,body):api('POST','/api/automations',body)).then(r=>{this.setState({ae:null});done(E.id?`${A.name} saved`:`${A.name} added`)(r)}).catch(x=>this.err(x))},
-      tryNow:E.id?()=>api('POST',`/api/automations/${E.id}/run`).then(r=>{this.toast(!r.ran?r.why:r.running?'Running: see History':'Ran it');this.openAuto((this.state.hub.automations||[]).find(x=>x.id===E.id),'history')}).catch(x=>this.err(x)):null,canTry:!!E.id}};
+      editBg:tab==='edit'?'#2a2b2f':'transparent',histBg:tab==='history'?'#2a2b2f':'transparent',editSel:tab==='edit'?'true':'false',histSel:tab==='history'?'true':'false',
+      cancel:back,save,
+      tryNow:E.id?()=>api('POST',`/api/automations/${E.id}/run`).then(r=>{this.toast(!r.ran?r.why:r.running?'Running: see History':'Ran it');this.openAuto((this.state.hub.automations||[]).find(x=>x.id===E.id),'history',{force:true})}).catch(x=>this.err(x)):null,canTry:!!E.id&&!E.dirty}};
   }
   // Settings: the home's details, people and presence, behaviours, notifications, access, the hub, advanced.
   settingsVals(s,H){
@@ -1590,11 +2011,32 @@ class Component extends DCLogic {
       if(scr)this.setState({screen:scr.action.screen});
     }).catch(x=>this.err(x));
   }
-  openAuto(a,tab){
-    const blank={name:'',enabled:true,mode:'single',triggers:[],conditions:[],actions:[]};
+  // Open the editor on an automation (or a new one). opts.quick: the "Schedule once" flow; opts.force: skip the unsaved-changes question.
+  openAuto(a,tab,opts={}){
+    const cur=this.state.ae;
+    if(cur&&cur.dirty&&!opts.force&&!window.confirm('Leave without saving? Your changes to the automation you’re editing will be lost.'))return;
+    const H=this.state.hub;
+    const nowSt=homeNow(H);
+    const soon=onceDefault(nowSt);
+    const blank=opts.quick?{name:'',enabled:true,mode:'single',triggers:[{kind:'once',at:soon}],conditions:[],actions:[]}:{name:'',enabled:true,mode:'single',triggers:[],conditions:[],actions:[]};
     const draft=a?{name:a.name,description:a.description,enabled:a.enabled!==false,mode:a.mode||'single',triggers:a.triggers||[],conditions:a.conditions||[],actions:a.actions||[],...(a.origin?{origin:a.origin}:{})}:blank;
-    this.setState({ae:{a:structuredClone(draft),id:a&&a.id||null,runs:[],tab:tab||'edit'},screen:'autos'});
+    if(opts.quick&&!a){const d=(H.devices||[]).find(x=>x.type==='light'||x.type==='dimmer')||(H.devices||[]).find(x=>x.type!=='camera'&&x.type!=='sensor');if(d)draft.actions=[{kind:'set',targets:{[d.id]:{on:false}}}]}
+    const once=(draft.triggers||[]).length>0&&draft.triggers.every(t=>t.kind==='once');
+    // A one-time schedule with one time, no conditions and a plain step opens in the simple "Schedule once" view.
+    const fits=once&&draft.triggers.length===1&&!(draft.conditions||[]).length&&(draft.actions||[]).every(x=>['set','notify','overlay','delay'].includes(x.kind));
+    const quick=!!opts.quick||(!!a&&(!!a.id||!!opts.again)&&fits&&!opts.full);
+    this.setState({ae:{a:structuredClone(draft),id:a&&a.id||null,runs:[],tab:tab||'edit',quick,named:opts.quick&&!a?false:undefined,nameAt:opts.nameAt||(once?draft.triggers[0].at:null),dirty:!!opts.again},screen:'autos'});
     if(a&&a.id)api('GET','/api/automations/'+a.id).then(r=>this.setState(st=>st.ae&&st.ae.id===a.id?{ae:{...st.ae,runs:r.runs||[]}}:null)).catch(()=>{});
+    setTimeout(()=>{try{const m=document.querySelector('[data-kova-main]');if(m)m.scrollIntoView({block:'start'});window.scrollTo({top:0})}catch(e){}},0);
+  }
+  // A finished one-time schedule, again: the same steps at a new time (saved as a new schedule; the finished one stays in Done until cleared).
+  scheduleAgain(a){
+    const H=this.state.hub;
+    const nowSt=homeNow(H);
+    const soon=onceDefault(nowSt);
+    const copy=structuredClone({name:a.name,description:a.description,enabled:true,mode:a.mode||'single',triggers:a.triggers||[],conditions:a.conditions||[],actions:a.actions||[]});
+    copy.triggers=copy.triggers.map((t,i)=>t.kind==='once'?{kind:'once',at:i===0?soon:t.at>nowSt?t.at:soon}:t);
+    this.openAuto(copy,'edit',{again:true,nameAt:((a.triggers||[]).find(t=>t.kind==='once')||{}).at});
   }
   convertHa(ids){
     api('POST','/api/import/ha/automations/convert',ids?{ids}:{}).then(r=>{

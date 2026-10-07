@@ -63,3 +63,35 @@ export function parseClock(at: string): number {
   const [h, m] = at.split(':').map(Number);
   return h + (m || 0) / 60;
 }
+
+/** A local date and time ("2026-10-08T15:30"), as one-time schedules keep it. */
+export const LOCAL_STAMP = /^(\d{4}-\d{2}-\d{2})T([01]\d|2[0-3]):([0-5]\d)$/;
+
+/** The local date and time of an instant in `tz`, to the minute. */
+export function localStamp(ms: number, tz: string): string {
+  const p = zonedParts(ms, tz);
+  return `${localDate(ms, tz)}T${String(p.h).padStart(2, '0')}:${String(p.mi).padStart(2, '0')}`;
+}
+
+/** The instant a local date and time ("2026-10-08T15:30") falls at in `tz`; null when it isn't one. */
+export function stampAt(stamp: string, tz: string): number | null {
+  const m = LOCAL_STAMP.exec(stamp);
+  if (!m) return null;
+  const ms = atLocal(m[1]!, Number(m[2]) + Number(m[3]) / 60, tz);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** A local date and time in words, near `now`: "today at 15:30", "tomorrow at 07:00", "Thu 15 Oct at 09:00". */
+export function stampWords(stamp: string, now: number, tz: string): string {
+  const m = LOCAL_STAMP.exec(stamp);
+  if (!m) return stamp;
+  const date = m[1]!, time = `${m[2]}:${m[3]}`, today = localDate(now, tz);
+  if (date === today) return `today at ${time}`;
+  if (date === addDays(today, 1)) return `tomorrow at ${time}`;
+  const [y, mo, d] = date.split('-').map(Number);
+  const wd = WEEKDAYS[new Date(Date.UTC(y!, mo! - 1, d!)).getUTCDay()];
+  return `${wd} ${d} ${MONTHS[mo! - 1]}${y !== Number(today.slice(0, 4)) ? ` ${y}` : ''} at ${time}`;
+}

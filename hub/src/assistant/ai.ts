@@ -7,9 +7,9 @@ import type { Store } from '../store/db.ts';
 import { ROOM_ICONS, type Automation, type Cause, type Command, type Device, type Targets } from '../model/types.ts';
 import { FIELD_CAP, isPlayer, pseudoLabel, targetLabel } from '../util/describe.ts';
 import { checkAutomation } from '../engine/automation-check.ts';
-import { actionWords, condWords, triggerWords } from '../engine/automations.ts';
+import { actionWords, condWords, nextOnce, triggerWords } from '../engine/automations.ts';
 import { slug } from '../tools/import-ha.ts';
-import { clock } from '../util/time.ts';
+import { clock, localDate, localStamp, stampWords } from '../util/time.ts';
 import { norm, type AskReply } from './assistant.ts';
 import type { JevAdvisor } from '../services/jev.ts';
 
@@ -210,7 +210,7 @@ export const TOOLS = [
   },
   {
     name: 'list_schedule',
-    description: 'List what the home has planned for the rest of tonight (mode changes and timed moments).',
+    description: 'List what the home has planned for the rest of tonight (mode changes and timed moments), and every one-time schedule still to come.',
     parameters: { type: 'object', properties: {} },
   },
   {
@@ -226,10 +226,11 @@ export const TOOLS = [
   {
     name: 'create_automation',
     description: `Create a home automation: "when" (triggers) starts it, every "if" (condition) must hold, then "then" (actions) run in order. It is saved and runs on its own from then on — only use it when the user asks for something ongoing or scheduled, not for a one-off change (use set_devices). Shapes:
-when: {kind:'time', at:'HH:MM' or {kind:'time', at:'HH:MM'} or {kind:'sun', event:'sunrise|sunset|dawn|dusk', offsetMin?:n} or {kind:'prayer', prayer:'fajr|sunrise|dhuhr|asr|maghrib|isha'}, days?:[0-6, 0=Sunday, empty=every day]} | {kind:'device', device:id, to?:{on?, online?, mode?, hvac?, input?, playing?, muted?}, from?:{...}, forSec?:n} | {kind:'numeric', device:id, field:'temp|target|power|energy|battery|bri|vol|grid|load|humidity|lux', above?:n, below?:n} | {kind:'event', device:id, event:string} | {kind:'every', minutes:n} | {kind:'presence', event:'arrives|leaves|first-arrives|last-leaves', person?:id} | {kind:'mode', mode:id} | {kind:'overlay', overlay:id, event:'starts|ends'} | {kind:'hub', event:'start'}
+when: {kind:'time', at:'HH:MM' or {kind:'time', at:'HH:MM'} or {kind:'sun', event:'sunrise|sunset|dawn|dusk', offsetMin?:n} or {kind:'prayer', prayer:'fajr|sunrise|dhuhr|asr|maghrib|isha'}, days?:[0-6, 0=Sunday, empty=every day]} | {kind:'device', device:id, to?:{on?, online?, mode?, hvac?, input?, playing?, muted?}, from?:{...}, forSec?:n} | {kind:'numeric', device:id, field:'temp|target|power|energy|battery|bri|vol|grid|load|humidity|lux', above?:n, below?:n} | {kind:'event', device:id, event:string} | {kind:'every', minutes:n} | {kind:'presence', event:'arrives|leaves|first-arrives|last-leaves', person?:id} | {kind:'mode', mode:id} | {kind:'overlay', overlay:id, event:'starts|ends'} | {kind:'hub', event:'start'} | {kind:'once', at:'YYYY-MM-DDTHH:MM' in the home's time} or {kind:'once', inMinutes:n} — ONE time only
 if: {kind:'device', device:id, is:{on?...}} | {kind:'numeric', device:id, field, above?, below?} | {kind:'time', after?/before?:'HH:MM' or a sun/prayer object as above, days?} | {kind:'presence', who:'anyone|no-one|person id', home:boolean} | {kind:'mode', modes:[id]} | {kind:'overlay', overlay?:id, active:boolean} | {kind:'all|any|not', conditions:[...]}
 then: {kind:'set', targets:{deviceId:{on:false, bri:50, ...same fields as set_devices + set}, or 'type:light'|'type:media'|'type:<device type>'|'room:<room id>' to reach EVERY matching device — including devices added later (use "type:light" for "all lights")}} | {kind:'delay', seconds:n} | {kind:'wait', until:condition, timeoutSec?:n, stopOnTimeout?:bool} | {kind:'notify', message:string, title?:string, people?:[ids]} | {kind:'overlay', overlay:id, op:'start|end'} | {kind:'if', conditions:[...], then:[...], else?:[...]} | {kind:'repeat', times:n, actions:[...]} | {kind:'ramp', targets:{same target map as set}, field:'bri'|'vol'|'target', to:number, from?:number, overSec:number, stepSec?:number} — gradual changes like brightness climbing over an hour | {kind:'run', automation:id} | {kind:'stop'}
 runMode: what a second start does while it's still running — single (ignore), restart (start over), queued (run after), parallel (alongside). Default single.
+One-time schedules: anything asked for once at a later time ("turn the AC off at 3pm", "in 20 minutes", "tomorrow at 7 open the blinds", "remind me tonight") is create_automation with only a once trigger — it runs once, then switches itself off. Name it after what it does and when ("AC off at 15:00"). Never use a daily time trigger for a one-off.
 Prefer ONE automation per intent: several triggers plus if/else branches beat overlapping automations. Check the Automations list first — update_automation an existing one rather than adding another.
 Only use device, person, mode and overlay ids from the home context; never invent them.`,
     parameters: {
@@ -501,7 +502,7 @@ export class Toolbox {
   readonly calls: { tool: string; args: unknown; ok: boolean; error?: string }[] = [];
   /** Mutating steps that succeeded — the learnable part of this ask. */
   readonly learned: LearnedStep[] = [];
-  /** False once any tool reports ok:false — such sessions aren't learned. */
+  /** False once any tool reports ok:false, or the ask made a one-time schedule — such sessions aren’t learned. */
   okAll = true;
   constructor(private ai: AiAssistant, private ctx: AiContext) {}
 
@@ -638,23 +639,28 @@ export class Toolbox {
           const e = this.ai.engine, tz = this.ai.config.get().timezone, now = e.now();
           const items = e.planner.itemsBetween(now, e.planner.kovaDayAt(now).end).filter(x => !e.skips.has(x.id)).slice(0, 10)
             .map(x => ({ at: clock(x.at, tz), label: x.label, ...(this.ai.lastShare?.names ? { what: x.what } : {}) }));
-          return JSON.stringify({ ok: true, items });
+          // One-time schedules still to come, whenever they are.
+          const once = e.automations.list().map(a => ({ a, at: nextOnce(a, tz, now) })).filter(x => x.at != null).sort((p, q) => p.at! - q.at!).slice(0, 10)
+            .map(x => ({ at: stampWords(localStamp(x.at!, tz), now, tz), automation: x.a.id, name: x.a.name }));
+          return JSON.stringify({ ok: true, items, once });
         }
         case 'create_automation': {
           try {
             const cfg = this.ai.config.get();
             const a = checkAutomation(
               { name: args.name, description: args.description, triggers: listArg(args.when), conditions: listArg(args.if), actions: listArg(args.then), mode: args.runMode, enabled: args.enabled },
-              { device: id => this.ai.reg.get(id), cfg });
+              { device: id => this.ai.reg.get(id), cfg, now: this.ai.engine.now() });
             const id = autoSlug(a.name);
             const undo = this.ai.config.update(c => { (c.automations ??= []).push({ id, ...a }); });
             this.undos.push(this.ai.engine.registerUndo(undo));
-            this.learned.push({ tool: 'create_automation', automation: a });
+            // A one-time schedule is tied to its date: replaying it later would make one already past.
+            if (!a.triggers.some(t => t.kind === 'once')) this.learned.push({ tool: 'create_automation', automation: a });
+            else this.okAll = false;
             this.ai.store.append({
               kind: 'system', device: null, feed: 'system', what: `Ask Kova made the automation “${a.name}”`,
               data: { automation: id }, cause: AI_CAUSE,
             });
-            const w = { reg: this.ai.reg, cfg };
+            const w = { reg: this.ai.reg, cfg, now: this.ai.engine.now() };
             const tgt = (tid: string, cmd: object) => { const d = this.ai.reg.get(tid); return d ? targetLabel(d, cmd as Command) : (pseudoLabel(tid, this.ai.config.get().rooms) ?? tid); };
             return JSON.stringify({ ok: true, id, name: a.name, when: a.triggers.map(t => triggerWords(t, w)), if: a.conditions.map(c => condWords(c, w)), then: a.actions.map(x => actionWords(x, w, tgt)) });
           } catch (e) { return JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e) }); }
@@ -671,7 +677,7 @@ export class Toolbox {
                 triggers: listArg(args.when) ?? cur.triggers, conditions: listArg(args.if) ?? cur.conditions,
                 actions: listArg(args.then) ?? cur.actions, mode: args.runMode ?? cur.mode, enabled: args.enabled ?? cur.enabled,
               },
-              { device: did => this.ai.reg.get(did), cfg });
+              { device: did => this.ai.reg.get(did), cfg, now: this.ai.engine.now() });
             const undo = this.ai.config.update(c => {
               const i = (c.automations ?? []).findIndex(x => x.id === id);
               if (i >= 0) c.automations![i] = { ...c.automations![i]!, ...a };
@@ -681,7 +687,7 @@ export class Toolbox {
               kind: 'system', device: null, feed: 'system', what: `Ask Kova changed the automation “${a.name}”`,
               data: { automation: id }, cause: AI_CAUSE,
             });
-            const w = { reg: this.ai.reg, cfg };
+            const w = { reg: this.ai.reg, cfg, now: this.ai.engine.now() };
             const tgt = (tid: string, cmd: object) => { const d = this.ai.reg.get(tid); return d ? targetLabel(d, cmd as Command) : (pseudoLabel(tid, this.ai.config.get().rooms) ?? tid); };
             return JSON.stringify({ ok: true, id, name: a.name, when: a.triggers.map(t => triggerWords(t, w)), if: a.conditions.map(c => condWords(c, w)), then: a.actions.map(x => actionWords(x, w, tgt)) });
           } catch (e) { return JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e) }); }
@@ -991,7 +997,7 @@ export class CloudAiEngine implements AiEngine {
 
 const SYSTEM = `You are Ask Kova, the assistant for a smart home hub. The hub's built-in parser couldn't handle this request, so it was passed to you.
 Use the tools to act: set_devices, start_overlay, end_overlay, explain_device, list_schedule, create_automation, update_automation, delete_automation, create_room, rename_room, delete_room, update_device, combine_devices, separate_devices, remember, forget, review_action. Only use device, room, overlay, mode and person ids from the home context below; never invent ids. When the user answers a question you just asked (yes, sure, the second one, do it), read the recent conversation to see what it refers to before answering.
-Anything asked to happen regularly, at a time, or when something else happens is an automation — build it with create_automation, then tell the user what it will do in the words the tool returns.
+Anything asked to happen regularly, at a time, or when something else happens is an automation — build it with create_automation, then tell the user what it will do in the words the tool returns. A single change later ("at 9pm", "in an hour") is a one-time schedule: create_automation with a once trigger.
 For destructive, broad, privacy-sensitive, security-sensitive, or hard-to-undo actions, call review_action first. If it says confirm, ask the user to confirm before acting; if it says block, do not do it. Do not use it for routine light, media, or climate changes.
 Ducted air conditioner zones are numbered; a zone only has a name when the state lists one. If a request names rooms for a zoned AC and the zones are unnamed, ask which zone number is which room instead of guessing.
 If the request can't be done with these tools or the shared context, say so plainly instead of guessing. Reply like a text message — plain text only, no markdown (never ** or # or \` characters — they show raw in the chat). Keep it short: a sentence or two usually; when listing several things, one item per line starting with "- ". Refer to automations and devices by their names, not their ids.`;
@@ -1028,7 +1034,7 @@ export class AiAssistant {
     const roomAlias = new Map(cfg.rooms.map((r, i) => [r.id, share.names ? r.id : `room${i + 1}`]));
     const shared: string[] = [];
     const lines: string[] = [];
-    lines.push(`Time now: ${clock(now, tz)}.`);
+    lines.push(`Time now: ${clock(now, tz)}, ${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][new Date(`${localDate(now, tz)}T12:00:00Z`).getUTCDay()]} ${localDate(now, tz)} (the home's time; one-time schedules use it as "${localStamp(now, tz)}").`);
     const mode = this.engine.mode();
     lines.push(`Current mode: ${mode.name}.`);
     const ov = this.engine.overlay && cfg.overlays.find(o => o.id === this.engine.overlay!.id);

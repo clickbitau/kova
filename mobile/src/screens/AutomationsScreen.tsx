@@ -1,23 +1,25 @@
 import { useCallback, useEffect, useState } from 'react';
 import { TextInput, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { C, F } from '../theme';
+import { C, F, R, SP } from '../theme';
 import { useHub, useSnap } from '../state/hub';
 import { useNav } from '../navigation';
 import { HubError } from '../api/client';
 import {
-  EXAMPLES, automationsOf, draftOf, filterAutomations, haState, haText, ideasOf, lastRunLine, runMessage, startRun, summary, withPending,
+  EXAMPLES, automationsOf, draftOf, filterAutomations, haState, haText, ideasOf, lastRunLine, localNowOf, runMessage, scheduleAgain, scheduleLine, sectionsOf, startRun, summary, withPending,
   type AutomationView, type RunAnswer, type HaAutomation, type Idea,
 } from '../logic/automations';
 import { Icon } from '../ui/Icon';
-import { Button, Card, Empty, Press, Sheet, Switch } from '../ui/kit';
+import { Card, Empty, IconWell, Press, Section, Sheet, Switch } from '../ui/kit';
 import { Screen } from '../ui/Screen';
 import { T } from '../ui/Text';
 import { Appear, animateLayout, haptic } from '../ui/motion';
 import { Confirm } from './AutomationEditor';
 
 // Automations: the home's own rules, each in words (When / Only if / Then) with an on/off switch and how its last
-// run went; Kova's suggestions above, Home Assistant ones to convert below. Live from the hub's snapshot.
+// run went; Kova's suggestions above, Home Assistant ones to convert below. One-time schedules have their own
+// sections: Scheduled (still to come, soonest first) above, and Done (folded away, to schedule again or clear)
+// below. Live from the hub's snapshot.
 
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
 
@@ -101,6 +103,76 @@ function IdeaCard({ i, onAdd, onChange, onDismiss }: { i: Idea; onAdd: () => voi
   );
 }
 
+const TONE = { amber: C.amber, stone: C.stone, green: C.green, red: C.red } as const;
+
+/** A one-time schedule still to come: when, in words and how long until; what it does; edit or cancel. */
+function ScheduleCard({ a, now, index, onEdit, onCancel, onTurnOn }: { a: AutomationView; now: string; index: number; onEdit: () => void; onCancel: () => void; onTurnOn: () => void }) {
+  const line = scheduleLine(a, now);
+  const w = summary(a);
+  return (
+    <Appear index={index}>
+      <Press onPress={onEdit} give="soft" label={`Edit ${a.name}, ${line.text}`} style={{ borderRadius: R.lg, backgroundColor: a.enabled ? C.card : C.inset, padding: 14, gap: 10, borderWidth: 1, borderColor: a.enabled ? C.amberLine : C.edge }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <IconWell icon="timer" color={a.enabled ? C.amber : C.stone} size={40} />
+          <View style={{ flex: 1, gap: 2 }}>
+            <T v="headline" numberOfLines={2}>{a.name}</T>
+            <T v="footnote" weight={700} color={TONE[line.tone]}>{line.text}</T>
+          </View>
+        </View>
+        <T v="footnote" color={C.bone2} numberOfLines={3}>{w.onlyIf ? `${w.then} · only if ${w.onlyIf}` : w.then}</T>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <SmallButton icon="edit" label="Edit" onPress={onEdit} />
+          {!a.enabled ? <SmallButton tone="amber" icon="schedule" label="Turn on" onPress={onTurnOn} /> : null}
+          <View style={{ flex: 1 }} />
+          <SmallButton icon="event_busy" label="Cancel" onPress={onCancel} />
+        </View>
+      </Press>
+    </Appear>
+  );
+}
+
+/** One-time schedules that have run (or were missed), folded away: schedule again, or clear them all. */
+function DoneSection({ list, now, onAgain, onDelete, onClear }: { list: AutomationView[]; now: string; onAgain: (a: AutomationView) => void; onDelete: (a: AutomationView) => void; onClear: () => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <View style={{ gap: 10 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <Press onPress={() => { animateLayout(); setOpen(v => !v); }} haptic="select" label={`${open ? 'Hide' : 'Show'} done schedules, ${list.length}`} style={{ flex: 1, minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <T v="heading">Done</T>
+          <View style={{ paddingVertical: 1, paddingHorizontal: 8, borderRadius: R.full, backgroundColor: C.control }}><T v="micro" color={C.stone}>{String(list.length)}</T></View>
+          <Icon name="expand_more" size={22} color={C.stone2} style={{ transform: [{ rotate: open ? '180deg' : '0deg' }] }} />
+        </Press>
+        <SmallButton icon="delete" label="Clear done" onPress={onClear} />
+      </View>
+      {open ? (
+        <Card style={{ overflow: 'hidden' }}>
+          {list.map((a, i) => {
+            const line = scheduleLine(a, now);
+            return (
+              <View key={a.id} style={{ padding: 14, gap: 8, borderTopWidth: i ? 1 : 0, borderTopColor: C.hairline }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <Icon name={line.tone === 'red' ? 'error' : 'check_circle'} size={18} color={TONE[line.tone]} />
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <T v="headline" size={14}>{a.name}</T>
+                    <T v="footnote" color={TONE[line.tone]}>{line.text}</T>
+                  </View>
+                </View>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <SmallButton icon="restart_alt" label="Schedule again" onPress={() => onAgain(a)} />
+                  <View style={{ flex: 1 }} />
+                  <Press onPress={() => onDelete(a)} label={`Delete ${a.name}`} style={{ width: 36, height: 36, borderRadius: R.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: C.control2 }}>
+                    <Icon name="delete" size={18} color={C.stone} />
+                  </Press>
+                </View>
+              </View>
+            );
+          })}
+        </Card>
+      ) : <T v="footnote" color={C.stone2}>One-time schedules that have gone off. They switch themselves off.</T>}
+    </View>
+  );
+}
+
 function HaSection({ list, onConvert }: { list: HaAutomation[]; onConvert: (ids: string[] | null) => void }) {
   const [all, setAll] = useState(false);
   const left = list.filter(a => haState(a).canConvert).length;
@@ -150,6 +222,8 @@ export function AutomationsScreen() {
   const [more, setMore] = useState<AutomationView | null>(null);
   const [del, setDel] = useState<AutomationView | null>(null);
   const [ha, setHa] = useState<HaAutomation[] | null>(null);
+  const [cancel, setCancel] = useState<AutomationView | null>(null);
+  const now = localNowOf(s);
 
   // On/off taps show at once; the snapshot confirms them (or the tap is put back if the hub refused).
   const { list: autos, settled } = withPending(automationsOf(s), pending);
@@ -158,8 +232,9 @@ export function AutomationsScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settled.join()]);
   const shown = filterAutomations(autos, q);
+  const { scheduled, regular, done } = sectionsOf(shown);
   const ideas = ideasOf(s);
-  const on = autos.filter(a => a.enabled).length;
+  const on = autos.filter(a => a.enabled && !a.done).length;
 
   // Home Assistant automations, when the hub has an import (503 when it can't import at all).
   const loadHa = useCallback(() => {
@@ -196,15 +271,37 @@ export function AutomationsScreen() {
     } catch (e) { say((e as Error).message, { error: true }); }
   };
   const open = (a: AutomationView) => nav.navigate('AutomationEditor', { id: a.id });
+  const newOne = () => nav.navigate('AutomationEditor', {});
+  const scheduleOnce = () => nav.navigate('AutomationEditor', { schedule: true });
+  const again = (a: AutomationView) => nav.navigate('AutomationEditor', { id: a.id, draft: scheduleAgain(draftOf(a), now) });
+  const clearDone = async () => {
+    try {
+      const r = await api<{ cleared: number; undo?: string }>('POST', '/api/automations/clear-done', {});
+      haptic.success();
+      say(r.cleared ? `Cleared ${plural(r.cleared, 'finished schedule')}` : 'Nothing to clear', { undo: r.undo });
+    } catch (e) { say((e as Error).message, { error: true }); }
+  };
+  const remove = (a: AutomationView, done: string) => void act('DELETE', `/api/automations/${encodeURIComponent(a.id)}`, undefined, done);
 
   return (
     <Screen gap={16} title="Automations" over={autos.length ? `${plural(autos.length, 'automation')} · ${on} on` : 'When something happens, do something'} onBack={() => nav.goBack()}
       right={
-          <Press onPress={() => nav.navigate('AutomationEditor', {})} label="New automation" style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 8, paddingLeft: 9, paddingRight: 12, borderRadius: 12, backgroundColor: C.amber }}>
+          <Press onPress={newOne} label="New automation" style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 8, paddingLeft: 9, paddingRight: 12, borderRadius: 12, backgroundColor: C.amber }}>
             <Icon name="add" size={19} color={C.onAmber} />
             <T size={13} weight={700} color={C.onAmber}>New</T>
           </Press>
         }>
+
+      <View style={{ flexDirection: 'row', gap: SP[2] }}>
+        <Press onPress={newOne} haptic="select" label="New automation: when something happens, do something" style={{ flex: 1, minHeight: 64, padding: 12, gap: 4, borderRadius: R.lg, backgroundColor: C.card, borderWidth: 1, borderColor: C.edge }}>
+          <Icon name="account_tree" size={20} color={C.amber} />
+          <T v="labelSm">New automation</T>
+        </Press>
+        <Press onPress={scheduleOnce} haptic="select" label="Schedule once: something at a date and time, one time" style={{ flex: 1, minHeight: 64, padding: 12, gap: 4, borderRadius: R.lg, backgroundColor: C.card, borderWidth: 1, borderColor: C.edge }}>
+          <Icon name="timer" size={20} color={C.amber} />
+          <T v="labelSm">Schedule once</T>
+        </Press>
+      </View>
 
       {autos.length > 3 ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 12, paddingRight: 6, borderRadius: 14, backgroundColor: C.card, borderWidth: 1, borderColor: C.line }}>
@@ -222,15 +319,29 @@ export function AutomationsScreen() {
           onDismiss={() => void act('POST', `/api/findings/${encodeURIComponent(`idea:${i.key}`)}/dismiss`, {}, 'Not suggested again')} />
       ))}
 
-      {shown.map((a, i) => (
-        <AutomationCard key={a.id} a={a} index={i} onToggle={v => void toggle(a, v)} onRun={() => void run(a)} onMore={() => setMore(a)} onOpen={() => open(a)} />
-      ))}
+      {scheduled.length ? (
+        <Section title="Scheduled" right={<T v="footnote" color={C.stone}>{`${scheduled.length} to come`}</T>}>
+          {scheduled.map((a, i) => (
+            <ScheduleCard key={a.id} a={a} now={now} index={i} onEdit={() => open(a)} onCancel={() => setCancel(a)} onTurnOn={() => void toggle(a, true)} />
+          ))}
+        </Section>
+      ) : null}
+
+      {regular.length ? (
+        <Section title={scheduled.length || done.length ? 'Automations' : undefined}>
+          {regular.map((a, i) => (
+            <AutomationCard key={a.id} a={a} index={i} onToggle={v => void toggle(a, v)} onRun={() => void run(a)} onMore={() => setMore(a)} onOpen={() => open(a)} />
+          ))}
+        </Section>
+      ) : null}
+
+      {done.length ? <DoneSection list={done} now={now} onAgain={again} onDelete={a => remove(a, `${a.name} deleted`)} onClear={() => void clearDone()} /> : null}
 
       {autos.length && !shown.length ? <Empty icon="search_off" title="Nothing matches" text={`No automation mentions “${q.trim()}”.`} /> : null}
 
       {!autos.length ? (
         <View style={{ gap: 12 }}>
-          <Empty icon="account_tree" title="No automations yet" text="An automation does something by itself: when something happens, and only if the time or who’s home is right." action="New automation" onAction={() => nav.navigate('AutomationEditor', {})} />
+          <Empty icon="account_tree" title="No automations yet" text="An automation does something by itself: when something happens, and only if the time or who’s home is right. Or schedule something once." action="New automation" onAction={newOne} />
           <Card style={{ padding: 14, gap: 10 }}>
             <T size={12} weight={800} color={C.stone2} upper tracking={0.05}>For example</T>
             {EXAMPLES.map(([icon, text]) => (
@@ -271,8 +382,11 @@ export function AutomationsScreen() {
       </Sheet>
       <Confirm open={!!del} title={`Delete ${del?.name ?? ''}?`} text="You can undo this for a few seconds afterwards." yes="Delete" danger
         onClose={() => setDel(null)}
-        onYes={() => { const a = del; setDel(null); if (a) void act('DELETE', `/api/automations/${encodeURIComponent(a.id)}`, undefined, `${a.name} deleted`); }} />
-      {autos.length ? <View style={{ alignItems: 'center' }}><Button kind="secondary" icon="add" label="New automation" onPress={() => nav.navigate('AutomationEditor', {})} /></View> : null}
+        onYes={() => { const a = del; setDel(null); if (a) remove(a, `${a.name} deleted`); }} />
+      <Confirm open={!!cancel} title={`Cancel ${cancel?.name ?? ''}?`} text={cancel ? `${scheduleLine(cancel, now).text}. It won’t go off. You can undo this for a few seconds.` : undefined} yes="Cancel the schedule" no="Keep it" danger
+        onClose={() => setCancel(null)}
+        onYes={() => { const a = cancel; setCancel(null); if (a) remove(a, `${a.name} cancelled`); }} />
+
       <View style={{ height: 40 }} />
     </Screen>
   );

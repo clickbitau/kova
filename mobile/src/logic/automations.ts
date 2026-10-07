@@ -1,15 +1,18 @@
 // Automations on the phone: the shapes the hub sends (hub/src/model/types.ts), and the editor's logic kept free
-// of React Native so the tests can run it under plain Node. The same rules as the web app's editor
-// (web/index.html, kovaAutoVals): the defaults per kind, the state and command choices, rhythms and days.
+// of React Native so the tests can run it under plain Node. Everything Kova's assistant can build
+// (hub/src/assistant/ai.ts: set_devices, create_automation) can be built here by hand, and what the hub accepts
+// (hub/src/engine/automation-check.ts) is what the editor offers: every field a device can be set to, state
+// matches, readings, events, every kind of trigger, condition and step, and one-time schedules.
 import type { Command, Device, Room } from '../api/types';
 
 // ------------------------------------------------------------------ shapes --
 
 export interface StateMatch { on?: boolean; online?: boolean; input?: string; hvac?: string; activity?: string; playing?: boolean; muted?: boolean; mode?: string }
-export type NumericField = 'temp' | 'target' | 'power' | 'energy' | 'battery' | 'bri' | 'vol' | 'grid' | 'load';
+export type NumericField = 'temp' | 'target' | 'power' | 'energy' | 'battery' | 'bri' | 'vol' | 'grid' | 'load' | 'humidity' | 'lux';
 export type SunEvent = 'sunrise' | 'sunset' | 'dawn' | 'dusk';
 export type Prayer = 'fajr' | 'sunrise' | 'dhuhr' | 'asr' | 'maghrib' | 'isha';
 export type Rhythm = { kind: 'time'; at: string } | { kind: 'sun'; event: SunEvent; offsetMin?: number } | { kind: 'prayer'; prayer: Prayer; offsetMin?: number };
+/** What to set each device (or every matching device: "type:light", "room:lounge") to. */
 export type Targets = Record<string, Command>;
 
 export type Trigger =
@@ -21,7 +24,9 @@ export type Trigger =
   | { kind: 'presence'; event: 'arrives' | 'leaves' | 'first-arrives' | 'last-leaves'; person?: string }
   | { kind: 'mode'; mode: string }
   | { kind: 'overlay'; overlay: string; event: 'starts' | 'ends' }
-  | { kind: 'hub'; event: 'start' };
+  | { kind: 'hub'; event: 'start' }
+  /** Once, at a date and time on the home's clock ("2026-10-08T15:30"). The hub stamps firedAt (and missed). */
+  | { kind: 'once'; at: string; firedAt?: number; missed?: boolean };
 
 export type Condition =
   | { kind: 'device'; device: string; is: StateMatch }
@@ -32,6 +37,7 @@ export type Condition =
   | { kind: 'overlay'; overlay?: string; active: boolean }
   | { kind: 'all' | 'any' | 'not'; conditions: Condition[] };
 
+export type RampField = 'bri' | 'vol' | 'target';
 export type Action =
   | { kind: 'set'; targets: Targets }
   | { kind: 'delay'; seconds: number }
@@ -40,6 +46,7 @@ export type Action =
   | { kind: 'overlay'; overlay: string; op: 'start' | 'end' }
   | { kind: 'if'; conditions: Condition[]; then: Action[]; else?: Action[] }
   | { kind: 'repeat'; times: number; actions: Action[] }
+  | { kind: 'ramp'; targets: Targets; field: RampField; to: number; from?: number; overSec: number; stepSec?: number }
   | { kind: 'run'; automation: string }
   | { kind: 'stop' };
 
@@ -70,6 +77,11 @@ interface Words { triggerLabels?: string[]; conditionLabels?: string[]; actionLa
 export interface AutomationView extends Automation, Words {
   lastRun: { at: number; atLabel: string; result: RunResult; why: string; detail: string | null } | null;
   running: number;
+  /** One-time schedules (every trigger is "once"): when the next one goes off, in words, and whether all have. */
+  oneTime?: boolean;
+  nextAt?: number | null;
+  nextLabel?: string | null;
+  done?: boolean;
 }
 /** A suggestion from the hub (an ordinary automation to add, change or dismiss). */
 export interface Idea extends Omit<Draft, 'enabled'>, Words { key: string; why: string }
@@ -114,6 +126,15 @@ export function pushAt<T>(o: T, p: Path, v: unknown): T {
   return setAt(o, p, Array.isArray(l) ? [...l, v] : [v]);
 }
 
+/** Put a copy of the list item at `p` right after it. */
+export function duplicateAt<T>(o: T, p: Path): T {
+  const l = getAt(o, p.slice(0, -1)), i = p[p.length - 1] as number;
+  if (!Array.isArray(l) || i < 0 || i >= l.length) return o;
+  const a = l.slice();
+  a.splice(i + 1, 0, clone(l[i]));
+  return setAt(o, p.slice(0, -1), a);
+}
+
 /** Move the list item at `p` up (-1) or down (+1); unchanged at either end. */
 export function moveAt<T>(o: T, p: Path, d: -1 | 1): T {
   const l = getAt(o, p.slice(0, -1)), i = p[p.length - 1] as number, j = i + d;
@@ -134,13 +155,32 @@ export function canMove(o: unknown, p: Path, d: -1 | 1): boolean {
 export type Opt<V = string> = { v: V; label: string };
 const opts = <V extends string>(l: [V, string][]): Opt<V>[] => l.map(([v, label]) => ({ v, label }));
 
-export const TRIGGER_KINDS = opts<Trigger['kind']>([['device', 'A device changes'], ['numeric', 'A reading goes above or below'], ['event', 'A device event'], ['time', 'A time of day'], ['every', 'Every few minutes'], ['presence', 'Someone comes or goes'], ['mode', 'A mode starts'], ['overlay', 'An overlay starts or ends'], ['hub', 'Kova starts']]);
+export const TRIGGER_KINDS = opts<Trigger['kind']>([['device', 'A device changes'], ['numeric', 'A reading goes above or below'], ['event', 'A device event'], ['time', 'A time of day'], ['once', 'Once, at a date and time'], ['every', 'Every few minutes'], ['presence', 'Someone comes or goes'], ['mode', 'A mode starts'], ['overlay', 'An overlay starts or ends'], ['hub', 'Kova starts']]);
 export const CONDITION_KINDS = opts<Condition['kind']>([['device', 'A device is'], ['numeric', 'A reading is above or below'], ['time', 'The time or day'], ['presence', 'Who’s home'], ['mode', 'The mode'], ['overlay', 'An overlay'], ['any', 'Any of these'], ['all', 'All of these'], ['not', 'None of these']]);
-export const ACTION_KINDS = opts<Action['kind']>([['set', 'Set devices'], ['delay', 'Wait a while'], ['wait', 'Wait until something is true'], ['notify', 'Send a notification'], ['overlay', 'Start or end an overlay'], ['if', 'If … otherwise …'], ['repeat', 'Repeat'], ['run', 'Run another automation'], ['stop', 'Stop here']]);
+export const ACTION_KINDS = opts<Action['kind']>([['set', 'Set devices'], ['ramp', 'Ramp gradually'], ['delay', 'Wait a while'], ['wait', 'Wait until something is true'], ['notify', 'Send a notification'], ['overlay', 'Start or end an overlay'], ['if', 'If … otherwise …'], ['repeat', 'Repeat'], ['run', 'Run another automation'], ['stop', 'Stop here']]);
 export const RUN_MODES = opts<RunMode>([['single', 'Ignore the new start'], ['restart', 'Start over'], ['queued', 'Run again after'], ['parallel', 'Run alongside']]);
 
-export const FIELDS = opts<NumericField>([['temp', 'temperature'], ['target', 'set temperature'], ['power', 'power (W)'], ['energy', 'energy today (kWh)'], ['battery', 'battery (%)'], ['bri', 'brightness (%)'], ['vol', 'volume (%)']]);
-export const EVENTS = opts([['person', 'sees a person'], ['ring', 'rings'], ['motion', 'detects motion'], ['video-started', 'starts a video'], ['music-started', 'starts music'], ['paused', 'pauses'], ['stopped', 'stops playing'], ['internet-down', 'internet goes down'], ['internet-up', 'internet comes back'], ['new-device', 'a new device joins']]);
+/** An icon for each kind of part, so a long automation can be scanned. */
+export const KIND_ICON: Record<string, string> = {
+  'trigger:device': 'toggle_on', 'trigger:numeric': 'thermostat', 'trigger:event': 'notifications_active', 'trigger:time': 'schedule', 'trigger:once': 'timer',
+  'trigger:every': 'autorenew', 'trigger:presence': 'person', 'trigger:mode': 'routine', 'trigger:overlay': 'layers', 'trigger:hub': 'power_settings_new',
+  'condition:device': 'toggle_on', 'condition:numeric': 'thermostat', 'condition:time': 'schedule', 'condition:presence': 'person', 'condition:mode': 'routine',
+  'condition:overlay': 'layers', 'condition:any': 'call_split', 'condition:all': 'fact_check', 'condition:not': 'block',
+  'action:set': 'tune', 'action:ramp': 'brightness_6', 'action:delay': 'timer', 'action:wait': 'pending', 'action:notify': 'notifications',
+  'action:overlay': 'layers', 'action:if': 'call_split', 'action:repeat': 'repeat', 'action:run': 'play_arrow', 'action:stop': 'stop',
+};
+
+export const FIELDS = opts<NumericField>([['temp', 'temperature (°C)'], ['target', 'set temperature (°C)'], ['humidity', 'humidity (%)'], ['lux', 'light level (lux)'], ['power', 'power (W)'], ['energy', 'energy today (kWh)'], ['grid', 'grid power (W, minus = exporting)'], ['load', 'home power use (W)'], ['battery', 'battery (%)'], ['bri', 'brightness (%)'], ['vol', 'volume (%)']]);
+const FIELD_WORD: Record<NumericField, string> = { temp: 'temperature', target: 'set temperature', power: 'power', energy: 'energy today', battery: 'battery', bri: 'brightness', vol: 'volume', grid: 'grid power', load: 'home power', humidity: 'humidity', lux: 'light level' };
+export const RAMP_FIELDS = opts<RampField>([['bri', 'Brightness'], ['vol', 'Volume'], ['target', 'Set temperature']]);
+const RAMP_CAP: Record<RampField, string> = { bri: 'brightness', vol: 'volume', target: 'climate' };
+
+export const EVENTS = opts([
+  ['person', 'sees a person'], ['motion', 'detects motion'], ['ring', 'rings (doorbell)'],
+  ['video-started', 'starts a video'], ['music-started', 'starts music'], ['paused', 'pauses'], ['resumed', 'carries on playing'], ['stopped', 'stops playing'], ['ended', 'finishes playing'],
+  ['screen-asleep', 'screen goes to sleep'], ['screen-shutdown', 'screen shuts down'], ['screen-awake', 'screen wakes up'],
+  ['internet-down', 'internet goes down'], ['internet-up', 'internet comes back'], ['internet-failover', 'switches to the backup connection'], ['new-device', 'a new device joins'], ['threat', 'blocks an attack'],
+]);
 export const PRESENCE_EVENTS = opts<'arrives' | 'leaves' | 'first-arrives' | 'last-leaves'>([['arrives', 'comes home'], ['leaves', 'leaves'], ['first-arrives', 'first home (nobody was)'], ['last-leaves', 'last one out']]);
 export const DAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 export const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -151,80 +191,324 @@ export function withCurrent<V extends string>(list: Opt<V>[], cur: V | undefined
 }
 export const labelOf = <V extends string>(list: Opt<V>[], v: V | undefined, fallback = '') => list.find(o => o.v === v)?.label ?? (v || fallback);
 
-// A device's state as one choice. The key is the match as JSON with its keys in a fixed order, so a match the
-// hub sends back ({ input, on }) finds its option ({ on, input }).
-const STATE_ORDER: (keyof StateMatch)[] = ['on', 'online', 'input', 'hvac', 'activity', 'playing', 'muted', 'mode'];
-export function stateKey(m: StateMatch | undefined): string {
-  if (!m) return '';
-  const o: Record<string, unknown> = {};
-  for (const k of STATE_ORDER) if (m[k] !== undefined) o[k] = m[k];
-  for (const k of Object.keys(m).sort()) if (!(k in o) && (m as Record<string, unknown>)[k] !== undefined) o[k] = (m as Record<string, unknown>)[k];
-  return JSON.stringify(o);
-}
-export const stateFromKey = (k: string): StateMatch | undefined => (k ? JSON.parse(k) as StateMatch : undefined);
+// ------------------------------------------------------------- devices ----
 
-const STATES: [StateMatch, string][] = [
-  [{ on: true }, 'on'], [{ on: false }, 'off'], [{ online: false }, 'offline'], [{ online: true }, 'online'], [{ playing: true }, 'playing'], [{ playing: false }, 'not playing'],
-  ...['tv', 'hdmi1', 'hdmi2', 'hdmi3', 'hdmi4'].map((i): [StateMatch, string] => [{ on: true, input: i }, `on ${i === 'tv' ? 'TV' : `HDMI ${i.slice(4)}`}`]),
-  [{ on: true, hvac: 'cool' }, 'cooling'], [{ on: true, hvac: 'heat' }, 'heating'], [{ activity: 'cleaning' }, 'cleaning'], [{ activity: 'docked' }, 'docked'], [{ muted: true }, 'muted'],
-];
-/** The states a device can be matched on, with the current one added when it's unusual. */
-export function stateOptions(cur?: StateMatch): Opt[] {
-  const l = STATES.map(([m, label]) => ({ v: stateKey(m), label }));
-  const k = stateKey(cur);
-  return k && !l.some(o => o.v === k) ? [...l, { v: k, label: stateWords(cur!) }] : l;
+type Dev = Pick<Device, 'id' | 'type' | 'capabilities'> & { name?: string; room?: string; state?: Partial<Device['state']>; zoneNames?: Record<string, string> };
+const has = (d: { capabilities?: string[] }, c: string) => (d.capabilities ?? []).includes(c);
+const isPlayerType = (t: string | undefined) => t === 'media' || t === 'tv';
+
+/** Devices a step can set (cameras and sensors only report). */
+export const canSet = (d: Pick<Device, 'type'>) => d.type !== 'camera' && d.type !== 'sensor';
+
+/** "type:light" / "room:lounge": every matching device, now and later. */
+export const PSEUDO = /^(type|room):(.+)$/;
+export const isPseudo = (id: string) => PSEUDO.test(id);
+const TYPE_WORDS: Record<string, string> = { light: 'All lights', dimmer: 'All dimmers', fan: 'All fans and purifiers', media: 'All media players', tv: 'All TVs', plug: 'All plugs', camera: 'All cameras', sensor: 'All sensors', vacuum: 'All vacuums', internet: 'Every device’s internet', climate: 'All air conditioners' };
+/** A pseudo-target in words: "All lights", "Everything in the Lounge"; null for a device id. */
+export function pseudoLabel(id: string, rooms: Pick<Room, 'id' | 'name'>[]): string | null {
+  const m = PSEUDO.exec(id);
+  if (!m) return null;
+  if (m[1] === 'room') return `Everything in ${rooms.find(r => r.id === m[2])?.name ?? m[2]}`;
+  return TYPE_WORDS[m[2]!] ?? `All ${m[2]}s`;
 }
-/** A match in words, for one the list doesn't have ("on, input hdmi2, muted"). */
-export function stateWords(m: StateMatch): string {
-  const known = STATES.find(([x]) => stateKey(x) === stateKey(m));
-  if (known) return known[1];
-  return Object.entries(m).map(([k, v]) => typeof v === 'boolean' ? (k === 'on' ? (v ? 'on' : 'off') : `${v ? '' : 'not '}${k}`) : `${k} ${v}`).join(', ') || 'any state';
+/** Does this device match a "type:" word? "light" includes dimmers, "media" includes TVs (as the hub has it). */
+export const typeMatch = (d: Pick<Device, 'type'>, t: string) => d.type === t || (t === 'light' && (d.type === 'light' || d.type === 'dimmer')) || (t === 'media' && isPlayerType(d.type));
+
+/** The groups a step can target: all of a type the home has, and each room with something settable in it. */
+export function pseudoTargets(devices: Pick<Device, 'type' | 'room'>[], rooms: Pick<Room, 'id' | 'name'>[]): Opt[] {
+  const settable = devices.filter(canSet);
+  const types = new Set<string>();
+  for (const d of settable) { types.add(d.type === 'dimmer' ? 'light' : d.type === 'tv' ? 'media' : d.type); if (d.type === 'tv') types.add('tv'); }
+  const order = ['light', 'media', 'tv', 'climate', 'fan', 'plug', 'vacuum', 'internet'];
+  const t = order.filter(x => types.has(x)).map(x => ({ v: `type:${x}`, label: TYPE_WORDS[x] ?? x }));
+  const r = rooms.filter(rm => settable.some(d => d.room === rm.id)).map(rm => ({ v: `room:${rm.id}`, label: `Everything in ${rm.name}` }));
+  return [...t, ...r];
 }
 
-type Dev = Pick<Device, 'id' | 'type' | 'capabilities'>;
-const has = (d: Dev, c: string) => (d.capabilities ?? []).includes(c);
-const isPlayer = (d: Dev) => d.type === 'media' || d.type === 'tv';
+/** What a type can usually do, for a group with no such device yet. */
+const TYPE_CAPS: Record<string, string[]> = {
+  light: ['onoff', 'brightness', 'colorTemp', 'color'], dimmer: ['onoff', 'brightness'], fan: ['onoff', 'fanMode'], media: ['onoff', 'media', 'volume', 'pause'],
+  tv: ['onoff', 'media', 'volume', 'input', 'mute'], plug: ['onoff'], camera: [], sensor: [], vacuum: ['onoff', 'vacuum'], internet: ['onoff'], climate: ['onoff', 'climate'],
+};
 
-/** What a step can set a device to: [command, words], as the web app offers them. */
-export function commandOptions(d: Dev | undefined, sources: { name: string }[]): [Command, string][] {
-  if (!d) return [];
-  if (d.type === 'fan') return [[{ mode: 'Auto' }, 'Auto'], [{ mode: 'Sleep' }, 'Sleep'], [{ on: false }, 'Off']];
-  if (d.type === 'climate') return [[{ on: true, hvac: 'cool', target: 24 }, 'Cool to 24°'], [{ on: true, hvac: 'heat', target: 21 }, 'Heat to 21°'], [{ on: true, hvac: 'auto', target: 23 }, 'Auto at 23°'], [{ on: false }, 'Off']];
-  if (d.type === 'internet') return [[{ on: false }, 'Pause internet'], [{ on: true }, 'Internet on']];
-  if (has(d, 'library')) return [[{ paused: true }, 'Pause'], [{ on: false, media: null }, 'Stop']];
-  if (isPlayer(d) && !has(d, 'media')) return [[{ on: false }, 'Off'], [{ on: true }, 'On']];
-  if (isPlayer(d)) return [[{ on: false, media: null }, 'Stop'], ...sources.map((s): [Command, string] => [{ on: true, media: s.name, vol: 30 }, `Play ${s.name} at 30%`])];
-  if (d.type === 'dimmer') return [[{ on: false }, 'Off'], ...[5, 10, 25, 50, 78, 100].map((b): [Command, string] => [{ on: true, bri: b }, `On at ${b}%`])];
-  return [[{ on: true }, 'On'], [{ on: false }, 'Off']];
+/** A target (a device or a group) as the editor needs it: what it can do, and the devices behind it. */
+export interface TargetInfo { id: string; label: string; caps: Set<string>; devices: Dev[]; type?: string; pseudo: boolean; missing: boolean }
+export function targetInfo(id: string, devices: Dev[], rooms: Pick<Room, 'id' | 'name'>[]): TargetInfo {
+  const m = PSEUDO.exec(id);
+  if (m) {
+    const list = devices.filter(d => canSet(d) && (m[1] === 'room' ? d.room === m[2] : typeMatch(d, m[2]!)));
+    const caps = new Set<string>(list.flatMap(d => d.capabilities ?? []));
+    if (!list.length && m[1] === 'type') for (const c of TYPE_CAPS[m[2]!] ?? ['onoff']) caps.add(c);
+    if (!list.length && m[1] === 'room') caps.add('onoff');
+    return { id, label: pseudoLabel(id, rooms)!, caps, devices: list, type: m[1] === 'type' ? m[2] : undefined, pseudo: true, missing: m[1] === 'room' && !rooms.some(r => r.id === m[2]) };
+  }
+  const d = devices.find(x => x.id === id);
+  return { id, label: d?.name ?? id, caps: new Set(d?.capabilities ?? []), devices: d ? [d] : [], type: d?.type, pseudo: false, missing: !d };
 }
-const cmdKey = (c: Command) => JSON.stringify(Object.keys(c).sort().reduce<Record<string, unknown>>((o, k) => { o[k] = (c as Record<string, unknown>)[k]; return o; }, {}));
-/** Command choices for a device as options keyed by JSON, with the current command kept when it isn't one of them. */
-export function commandChoices(d: Dev | undefined, sources: { name: string }[], cur?: Command): Opt[] {
-  const l = commandOptions(d, sources).map(([c, label]) => ({ v: cmdKey(c), label }));
-  if (cur && !l.some(o => o.v === cmdKey(cur))) l.unshift({ v: cmdKey(cur), label: commandWords(cur) });
+
+// ------------------------------------------------------------ commands ----
+
+export const INPUT_NAMES: Record<string, string> = { tv: 'TV', hdmi1: 'HDMI 1', hdmi2: 'HDMI 2', hdmi3: 'HDMI 3', hdmi4: 'HDMI 4', bluetooth: 'Bluetooth', wifi: 'Wi-Fi' };
+const TV_INPUTS = ['tv', 'hdmi1', 'hdmi2', 'hdmi3', 'hdmi4'];
+const BAR_INPUTS = ['tv', 'hdmi1', 'hdmi2', 'bluetooth', 'wifi'];
+export const SOUND_MODES = opts([['standard', 'Standard'], ['surround', 'Surround'], ['game', 'Game'], ['adaptive', 'Adaptive']]);
+export const HVAC_MODES = opts([['cool', 'Cool'], ['heat', 'Heat'], ['dry', 'Dry'], ['fan', 'Fan'], ['auto', 'Auto']]);
+export const FAN_SPEEDS = opts([['auto', 'Auto'], ['quiet', 'Quiet'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['turbo', 'Turbo']]);
+export const FAN_MODES = opts([['Auto', 'Auto'], ['Sleep', 'Sleep'], ['Manual', 'Manual']]);
+export const ACTIVITIES = opts([['cleaning', 'Cleaning'], ['returning', 'Returning'], ['docked', 'Docked'], ['paused', 'Paused'], ['idle', 'Idle'], ['error', 'Needs attention']]);
+const VAC_COMMANDS = opts([['cleaning', 'Clean'], ['returning', 'Go back to the dock'], ['paused', 'Pause']]);
+
+/** The inputs a device can switch to: a soundbar's (it has `sound`) or a TV's, with any it reports now. */
+export function inputsOf(t: { caps: Set<string>; devices: Dev[] }, cur?: string | null): Opt[] {
+  const base = t.caps.has('sound') ? BAR_INPUTS : TV_INPUTS;
+  const ids = [...base];
+  for (const d of t.devices) { const i = d.state?.input; if (typeof i === 'string' && i && !ids.includes(i)) ids.push(i); }
+  if (cur && !ids.includes(cur)) ids.push(cur);
+  return ids.map(v => ({ v, label: v === 'tv' && t.caps.has('sound') ? 'TV (eARC)' : INPUT_NAMES[v] ?? v }));
+}
+
+export type FieldKind = 'bool' | 'number' | 'choice' | 'color' | 'media' | 'zones' | 'extras';
+/** One thing a step can set on a device: how it's shown and what it can be. */
+export interface CmdField {
+  key: string; label: string; icon: string; kind: FieldKind;
+  min?: number; max?: number; step?: number; unit?: string;
+  /** For bool: the words for true and false ("On" / "Off", "Pause" / "Play"). */
+  yes?: string; no?: string;
+  options?: Opt[];
+}
+
+/** Every field a command can carry, in the order they're shown, and the capability each needs (the hub's FIELD_CAP). */
+export const CMD_ORDER = ['on', 'bri', 'k', 'color', 'hvac', 'target', 'fanSpeed', 'mode', 'fanLevel', 'activity', 'media', 'shuffle', 'paused', 'skip', 'vol', 'volStep', 'muted', 'input', 'sound', 'night', 'zoneSet', 'display', 'childLock', 'extras'] as const;
+export const FIELD_CAP: Record<string, string> = {
+  on: 'onoff', bri: 'brightness', k: 'colorTemp', color: 'color', mode: 'fanMode', media: 'media', vol: 'volume', paused: 'pause', input: 'input', skip: 'queue', shuffle: 'queue',
+  muted: 'mute', sound: 'sound', night: 'sound', volStep: 'volume', hvac: 'climate', target: 'climate', fanSpeed: 'climate', zoneSet: 'zones', extras: 'extras',
+  fanLevel: 'purifier', display: 'purifier', childLock: 'purifier', activity: 'vacuum',
+};
+const canDo = (caps: Set<string>, key: string) => {
+  const c = FIELD_CAP[key];
+  if (!c) return false;
+  if (caps.has(c)) return true;
+  if (key === 'color' && caps.has('colorTemp')) return true;
+  if (key === 'media' && caps.has('library')) return true;
+  return false;
+};
+
+/** The highest fan level among the devices (purifiers), default 3. */
+const levelMax = (devs: Dev[]) => { const m = Math.max(0, ...devs.map(d => Number(d.state?.fanLevelMax) || 0)); return m > 1 ? m : 3; };
+
+/** How each field is edited, for this target. */
+export function fieldSpec(key: string, t: TargetInfo, cur?: unknown): CmdField {
+  const choice = (label: string, icon: string, options: Opt[]): CmdField => ({ key, label, icon, kind: 'choice', options: typeof cur === 'string' ? withCurrent(options, cur) : options });
+  switch (key) {
+    case 'on': return { key, label: t.type === 'internet' ? 'Internet' : t.type === 'vacuum' ? 'Cleaning' : 'Power', icon: 'power_settings_new', kind: 'bool', yes: t.type === 'internet' ? 'Allowed' : t.type === 'vacuum' ? 'Clean' : 'On', no: t.type === 'internet' ? 'Paused' : t.type === 'vacuum' ? 'Dock' : 'Off' };
+    case 'bri': return { key, label: 'Brightness', icon: 'brightness_6', kind: 'number', min: 1, max: 100, step: 5, unit: '%' };
+    case 'k': return { key, label: 'Colour temperature', icon: 'wb_twilight', kind: 'number', min: 1500, max: 9000, step: 100, unit: 'K' };
+    case 'color': return { key, label: 'Colour', icon: 'lightbulb', kind: 'color' };
+    case 'hvac': return choice('Climate mode', 'ac_unit', HVAC_MODES);
+    case 'target': return { key, label: 'Set temperature', icon: 'thermostat', kind: 'number', min: 16, max: 32, step: 0.5, unit: '°C' };
+    case 'fanSpeed': return choice('Fan speed', 'mode_fan', FAN_SPEEDS);
+    case 'mode': {
+      const seen = t.devices.map(d => d.state?.mode).filter((m): m is string => typeof m === 'string' && !!m);
+      return choice('Mode', 'tune', [...FAN_MODES, ...[...new Set(seen)].filter(m => !FAN_MODES.some(o => o.v === m)).map(m => ({ v: m, label: m }))]);
+    }
+    case 'fanLevel': return { key, label: 'Fan level', icon: 'air', kind: 'number', min: 1, max: levelMax(t.devices), step: 1 };
+    case 'activity': return choice('Vacuum', 'cleaning_services', VAC_COMMANDS);
+    case 'media': return { key, label: t.caps.has('library') && !t.caps.has('media') ? 'Play a film or show' : 'Play', icon: 'play_arrow', kind: 'media' };
+    case 'shuffle': return { key, label: 'Shuffle', icon: 'shuffle', kind: 'bool', yes: 'Shuffled', no: 'In order' };
+    case 'paused': return { key, label: 'Pause', icon: 'pause', kind: 'bool', yes: 'Pause', no: 'Carry on' };
+    case 'skip': return { key, label: 'Skip', icon: 'skip_next', kind: 'choice', options: [{ v: '1', label: 'Next song' }, { v: '-1', label: 'Previous song' }] };
+    case 'vol': return { key, label: 'Volume', icon: 'volume_up', kind: 'number', min: 0, max: 100, step: 5, unit: '%' };
+    case 'volStep': return { key, label: 'Volume step', icon: 'volume_up', kind: 'choice', options: [{ v: '1', label: 'Up a step' }, { v: '-1', label: 'Down a step' }] };
+    case 'muted': return { key, label: 'Mute', icon: 'volume_off', kind: 'bool', yes: 'Muted', no: 'Unmuted' };
+    case 'input': return choice('Input', 'settings_input_hdmi', inputsOf(t, typeof cur === 'string' ? cur : undefined));
+    case 'sound': return choice('Sound mode', 'equalizer', SOUND_MODES);
+    case 'night': return { key, label: 'Night mode', icon: 'bedtime', kind: 'bool', yes: 'On', no: 'Off' };
+    case 'zoneSet': return { key, label: 'Zones', icon: 'apps', kind: 'zones' };
+    case 'display': return { key, label: 'Display', icon: 'light_mode', kind: 'bool', yes: 'On', no: 'Off' };
+    case 'childLock': return { key, label: 'Child lock', icon: 'lock', kind: 'bool', yes: 'Locked', no: 'Unlocked' };
+    case 'extras': return { key, label: 'Extra switches', icon: 'toggle_on', kind: 'extras' };
+    default: return { key, label: key, icon: 'tune', kind: typeof cur === 'boolean' ? 'bool' : typeof cur === 'number' ? 'number' : 'choice', yes: 'Yes', no: 'No', options: typeof cur === 'string' ? [{ v: cur, label: cur }] : [] };
+  }
+}
+
+/** The fields this target can be set to, in order, with any the command already has (so nothing it holds is hidden). */
+export function fieldsFor(t: TargetInfo, cmd: Command = {}): CmdField[] {
+  const c = cmd as Record<string, unknown>;
+  const keys: string[] = CMD_ORDER.filter(k => k in c || canDo(t.caps, k));
+  for (const k of Object.keys(c)) if (!keys.includes(k)) keys.push(k);
+  // Zones need zones to set; extras need named extras (from the device or the command).
+  return keys.filter(k => k in c || (k !== 'zoneSet' || zonesOf(t).length > 0) && (k !== 'extras' || extrasOf(t).length > 0)).map(k => fieldSpec(k, t, c[k]));
+}
+/** Fields not yet in the command: what "Add a setting" offers. */
+export const freeFields = (t: TargetInfo, cmd: Command = {}) => fieldsFor(t, cmd).filter(f => !(f.key in cmd));
+
+/** The zones of a ducted air conditioner, with their names. */
+export function zonesOf(t: TargetInfo, cur?: Command['zoneSet']): { n: string; name: string }[] {
+  const out = new Map<string, string>();
+  for (const d of t.devices) for (const z of (d.state?.zones as { n: number }[] | null | undefined) ?? []) out.set(String(z.n), d.zoneNames?.[String(z.n)] || `Zone ${z.n}`);
+  for (const n of Object.keys(cur ?? {})) if (!out.has(n)) out.set(n, t.devices.find(d => d.zoneNames?.[n])?.zoneNames?.[n] || `Zone ${n}`);
+  return [...out].sort((a, b) => Number(a[0]) - Number(b[0])).map(([n, name]) => ({ n, name }));
+}
+/** The extra switches and settings a device lists (AC eco, sleep, turbo…), with their kind from the value. */
+export function extrasOf(t: TargetInfo, cur?: Command['extras']): { key: string; kind: 'bool' | 'number' | 'text'; now?: unknown }[] {
+  const out = new Map<string, unknown>();
+  for (const d of t.devices) for (const [k, v] of Object.entries((d.state?.extras as Record<string, unknown> | undefined) ?? {})) if (!out.has(k)) out.set(k, v);
+  for (const [k, v] of Object.entries(cur ?? {})) out.set(k, v);
+  return [...out].map(([key, now]) => ({ key, now, kind: typeof now === 'number' ? 'number' : typeof now === 'string' ? 'text' : 'bool' }));
+}
+
+export interface MusicItem { name: string; kind: 'all' | 'loved' | 'playlist'; icon?: string }
+/** What a player can be told to play, in groups: stop, the home's sources, Helix music, a station, a film or show. */
+export function mediaChoices(t: TargetInfo, sources: { name: string }[], music: MusicItem[], cur?: string | null): Opt[] {
+  const l: Opt[] = [{ v: STOP_KEY, label: 'Nothing: stop playing' }];
+  if (t.caps.has('media')) for (const s of sources) l.push({ v: `src:${s.name}`, label: s.name });
+  if (t.caps.has('queue')) {
+    const m = music.length ? music : [{ name: 'Shuffle all', kind: 'all' as const }, { name: 'Loved', kind: 'loved' as const }];
+    for (const x of m) l.push({ v: `src:${x.name}`, label: x.kind === 'playlist' ? `Playlist: ${x.name}` : x.name });
+    l.push({ v: STATION_KEY, label: 'A station from an artist, album or song…' });
+  }
+  if (t.caps.has('library')) l.push({ v: TITLE_KEY, label: 'A film or show, by title…' });
+  if (typeof cur === 'string' && cur && !l.some(o => o.v === `src:${cur}`) && !cur.startsWith('Station: ')) l.push({ v: `src:${cur}`, label: cur });
   return l;
 }
+export const STOP_KEY = 'stop', STATION_KEY = 'station', TITLE_KEY = 'title';
+/** Which media choice a value is: stop, a station, a typed title (on a library player), or a named source. */
+export function mediaKey(v: string | null | undefined, t: TargetInfo, sources: { name: string }[], music: MusicItem[]): string {
+  if (v == null) return STOP_KEY;
+  if (v.startsWith('Station: ')) return STATION_KEY;
+  const named = sources.some(s => s.name === v) || music.some(m => m.name === v) || v === 'Shuffle all' || v === 'Loved';
+  if (!named && t.caps.has('library')) return TITLE_KEY;
+  return `src:${v}`;
+}
+/** The media value for a choice (keeping typed text where the choice takes text). */
+export function mediaFromKey(k: string, prev: string | null | undefined): string | null {
+  if (k === STOP_KEY) return null;
+  if (k === STATION_KEY) return prev?.startsWith('Station: ') ? prev : 'Station: ';
+  if (k === TITLE_KEY) return prev && !prev.startsWith('Station: ') ? prev : '';
+  return k.slice(4);
+}
+
+/** The value a field starts with when it's added: what the device is at now where that makes sense. */
+export function fieldDefault(key: string, t: TargetInfo, sources: { name: string }[] = [], music: MusicItem[] = []): unknown {
+  const now = (k: string) => t.devices.map(d => (d.state as Record<string, unknown> | undefined)?.[k]).find(v => v != null);
+  const num = (k: string, d: number) => { const v = Number(now(k)); return Number.isFinite(v) && now(k) != null ? v : d; };
+  switch (key) {
+    case 'on': return true;
+    case 'bri': return Math.max(1, Math.min(100, num('bri', 50)));
+    case 'k': return num('k', 2700);
+    case 'color': return typeof now('color') === 'string' ? now('color') : '#ffb46b';
+    case 'hvac': return (now('hvac') as string) || 'cool';
+    case 'target': return num('target', 24);
+    case 'fanSpeed': return (now('fanSpeed') as string) || 'auto';
+    case 'mode': return 'Auto';
+    case 'fanLevel': return 1;
+    case 'activity': return 'cleaning';
+    case 'media': return t.caps.has('media') && sources[0] ? sources[0].name : t.caps.has('queue') ? (music[0]?.name ?? 'Shuffle all') : '';
+    case 'shuffle': return true;
+    case 'paused': return true;
+    case 'skip': return 1;
+    case 'vol': return num('vol', 30);
+    case 'volStep': return 1;
+    case 'muted': return true;
+    case 'input': return inputsOf(t)[0]?.v ?? 'hdmi1';
+    case 'sound': return 'standard';
+    case 'night': return true;
+    case 'zoneSet': { const z = zonesOf(t)[0]; return z ? { [z.n]: { on: true, open: 100 } } : {}; }
+    case 'display': return true;
+    case 'childLock': return true;
+    case 'extras': { const e = extrasOf(t)[0]; return e ? { [e.key]: e.kind === 'bool' ? !(e.now === true) : e.now ?? '' } : {}; }
+    default: return true;
+  }
+}
+
+/** A command with a field added (at its default), set, or removed (undefined). */
+export function withField(cmd: Command, key: string, v: unknown): Command {
+  const c = { ...(cmd as Record<string, unknown>) };
+  if (v === undefined) delete c[key]; else c[key] = v;
+  return c as Command;
+}
+
+/** What a new row for this target starts as: on, where it can be, or its first setting. */
+export function firstCommand(t: TargetInfo | Dev | undefined, sources: { name: string }[] = [], music: MusicItem[] = []): Command {
+  if (!t) return { on: true };
+  const info: TargetInfo = 'caps' in t ? t : { id: t.id, label: t.name ?? t.id, caps: new Set(t.capabilities ?? []), devices: [t], type: t.type, pseudo: false, missing: false };
+  if (info.caps.has('onoff')) return { on: true };
+  const f = fieldsFor(info)[0];
+  return f ? { [f.key]: fieldDefault(f.key, info, sources, music) } as Command : { on: true };
+}
+
+/** A few common settings as one tap ("Off", "On at 50%", "Play Rain"), for this target. Each replaces the command. */
+export function presets(t: TargetInfo, sources: { name: string }[], music: MusicItem[] = []): [Command, string][] {
+  const c = t.caps, out: [Command, string][] = [];
+  if (t.type === 'internet') return [[{ on: false }, 'Pause internet'], [{ on: true }, 'Allow internet']];
+  if (t.type === 'vacuum') return [[{ on: true }, 'Clean'], [{ on: false }, 'Dock']];
+  if (c.has('climate')) out.push([{ on: true, hvac: 'cool', target: 24 }, 'Cool to 24°'], [{ on: true, hvac: 'heat', target: 21 }, 'Heat to 21°']);
+  if (c.has('fanMode') && !c.has('climate')) out.push([{ on: true, mode: 'Auto' }, 'Auto'], [{ on: true, mode: 'Sleep' }, 'Sleep']);
+  if (c.has('media') || c.has('queue') || c.has('library')) {
+    out.push([{ on: false, media: null }, 'Stop']);
+    if (c.has('pause')) out.push([{ paused: true }, 'Pause']);
+    if (c.has('media')) for (const s of sources.slice(0, 3)) out.push([{ on: true, media: s.name, vol: 30 }, `Play ${s.name}`]);
+    if (c.has('queue')) out.push([{ on: true, media: music.find(m => m.kind === 'all')?.name ?? 'Shuffle all', shuffle: true }, 'Shuffle all music']);
+    return out;
+  }
+  if (c.has('onoff')) out.push([{ on: false }, 'Off']);
+  if (c.has('brightness')) out.push(...[10, 50, 100].map((b): [Command, string] => [{ on: true, bri: b }, `On at ${b}%`]));
+  else if (c.has('onoff') && !c.has('climate')) out.push([{ on: true }, 'On']);
+  if (c.has('colorTemp')) out.push([{ on: true, k: 2700 }, 'Warm white'], [{ on: true, k: 5000 }, 'Daylight']);
+  return out;
+}
+
+// Old names, kept for anything that still offers a command as one choice.
+export const commandOptions = (d: Dev | undefined, sources: { name: string }[]): [Command, string][] => (d ? presets(targetInfo(d.id, [d], []), sources) : []);
+const cmdKey = (c: Command) => JSON.stringify(Object.keys(c).sort().reduce<Record<string, unknown>>((o, k) => { o[k] = (c as Record<string, unknown>)[k]; return o; }, {}));
 export const commandKey = cmdKey;
 export const commandFromKey = (k: string) => JSON.parse(k) as Command;
-/** A command in words, for one set elsewhere ("on, 40%"). */
-export function commandWords(c: Command): string {
-  const p: string[] = [];
-  if (c.on === true) p.push('On'); else if (c.on === false) p.push('Off');
-  if (c.bri != null) p.push(`${c.bri}%`);
-  if (c.k != null) p.push(`${c.k}K`);
-  if (c.hvac) p.push(c.hvac);
-  if (c.target != null) p.push(`${c.target}°`);
-  if (c.media) p.push(`play ${c.media}`);
-  if (c.vol != null) p.push(`volume ${c.vol}%`);
-  if (c.input) p.push(`input ${c.input}`);
-  if (c.mode) p.push(c.mode);
-  if (c.paused === true) p.push('Pause');
-  return p.join(', ') || 'As set';
-}
-/** The first thing a device can be set to (what a new row starts with). */
-export const firstCommand = (d: Dev | undefined, sources: { name: string }[]): Command => commandOptions(d, sources)[0]?.[0] ?? { on: true };
+export const sameCommand = (a: Command, b: Command) => cmdKey(a) === cmdKey(b);
 
-/** Swap one device in a step's targets for another, keeping its place; the new one starts on its first command. */
+const onOff = (v: unknown, yes: string, no: string) => (v ? yes : no);
+/** A command in words, every field it holds ("on, 40%, 2700K", "play Rain, volume 30%"). Never "as set". */
+export function commandWords(c: Command, zoneNames: Record<string, string> = {}): string {
+  const x = c as Record<string, unknown>, p: string[] = [];
+  for (const k of [...CMD_ORDER, ...Object.keys(x).filter(k => !(CMD_ORDER as readonly string[]).includes(k))]) {
+    if (!(k in x)) continue;
+    const v = x[k];
+    switch (k) {
+      case 'on': p.push(onOff(v, 'on', 'off')); break;
+      case 'bri': p.push(`${v}%`); break;
+      case 'k': p.push(`${v}K`); break;
+      case 'color': p.push(v ? `colour ${String(v)}` : 'no colour'); break;
+      case 'hvac': p.push(labelOf(HVAC_MODES, String(v)).toLowerCase()); break;
+      case 'target': p.push(`${v}°`); break;
+      case 'fanSpeed': p.push(`fan ${String(v)}`); break;
+      case 'mode': p.push(`${String(v)} mode`); break;
+      case 'fanLevel': p.push(`fan level ${v}`); break;
+      case 'activity': p.push(v === 'returning' || v === 'docked' ? 'back to the dock' : v === 'paused' ? 'pause cleaning' : 'clean'); break;
+      case 'media': p.push(v == null ? 'stop playing' : `play ${String(v) || '…'}`); break;
+      case 'shuffle': p.push(onOff(v, 'shuffled', 'in order')); break;
+      case 'paused': p.push(onOff(v, 'pause', 'carry on playing')); break;
+      case 'skip': p.push(Number(v) > 0 ? 'next song' : 'previous song'); break;
+      case 'vol': p.push(`volume ${v}%`); break;
+      case 'volStep': p.push(Number(v) > 0 ? 'volume up' : 'volume down'); break;
+      case 'muted': p.push(onOff(v, 'muted', 'unmuted')); break;
+      case 'input': p.push(`input ${INPUT_NAMES[String(v)] ?? String(v)}`); break;
+      case 'sound': p.push(`${labelOf(SOUND_MODES, String(v)).toLowerCase()} sound`); break;
+      case 'night': p.push(`night mode ${onOff(v, 'on', 'off')}`); break;
+      case 'zoneSet': p.push(zoneWords(v as Command['zoneSet'], zoneNames)); break;
+      case 'display': p.push(`display ${onOff(v, 'on', 'off')}`); break;
+      case 'childLock': p.push(`child lock ${onOff(v, 'on', 'off')}`); break;
+      case 'extras': for (const [ek, ev] of Object.entries((v as Record<string, unknown>) ?? {})) p.push(typeof ev === 'boolean' ? `${ek} ${ev ? 'on' : 'off'}` : `${ek} ${String(ev)}`); break;
+      default: p.push(typeof v === 'boolean' ? `${k} ${v ? 'on' : 'off'}` : `${k} ${typeof v === 'object' ? JSON.stringify(v) : String(v)}`);
+    }
+  }
+  return p.join(', ') || 'nothing yet';
+}
+/** Zones in words: "Living on at 50%, Zone 2 off". */
+export function zoneWords(z: Command['zoneSet'], names: Record<string, string> = {}): string {
+  const l = Object.entries(z ?? {}).sort((a, b) => Number(a[0]) - Number(b[0])).map(([n, s]) => `${names[n] || `zone ${n}`} ${s.on === false ? 'off' : s.on ? `on${s.open != null ? ` at ${s.open}%` : ''}` : s.open != null ? `${s.open}% open` : 'as it is'}`);
+  return l.join(', ') || 'no zones';
+}
+
+/** Swap one target in a step for another, keeping its place; the new one starts on its first command. */
 export function retarget(t: Targets, from: string, to: string, cmd: Command): Targets {
   if (from === to) return t;
   const o: Targets = {};
@@ -232,9 +516,140 @@ export function retarget(t: Targets, from: string, to: string, cmd: Command): Ta
   return o;
 }
 
+/** Keep what a command can carry over to a new target: the fields the new one can do. */
+export function carryCommand(cmd: Command, to: TargetInfo, sources: { name: string }[] = [], music: MusicItem[] = []): Command {
+  const kept: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(cmd)) if (canDo(to.caps, k)) kept[k] = v;
+  return Object.keys(kept).length ? kept as Command : firstCommand(to, sources, music);
+}
+
+/** The assistant's tool spells extra fields as { set: {...} }; the hub flattens them. Do the same when opening one. */
+export function flatCommand(c: Command): Command {
+  const x = c as Record<string, unknown>;
+  if (!x.set || typeof x.set !== 'object' || Array.isArray(x.set)) return c;
+  const { set, ...rest } = x;
+  return { ...rest, ...(set as Record<string, unknown>) } as Command;
+}
+
+// ------------------------------------------------------------ matches -----
+
+/** One thing a state match can look at, for this device. */
+export interface MatchField { key: keyof StateMatch; label: string; kind: 'bool' | 'choice'; yes?: string; no?: string; options?: Opt[] }
+const MATCH_ORDER: (keyof StateMatch)[] = ['on', 'online', 'input', 'hvac', 'activity', 'playing', 'muted', 'mode'];
+
+/** The parts of a device's state a trigger or condition can match on, from what it can do (and what the match has). */
+export function matchFields(d: Dev | undefined, m: StateMatch = {}): MatchField[] {
+  const caps = new Set(d?.capabilities ?? []);
+  const t: TargetInfo = d ? targetInfo(d.id, [d], []) : { id: '', label: '', caps, devices: [], pseudo: false, missing: true };
+  const want = (k: keyof StateMatch) => {
+    if (m[k] !== undefined) return true;
+    if (!d) return k === 'on' || k === 'online';
+    switch (k) {
+      case 'on': return caps.has('onoff') || d.type !== 'sensor' && d.type !== 'camera';
+      case 'online': return true;
+      case 'input': return caps.has('input');
+      case 'hvac': return caps.has('climate');
+      case 'activity': return caps.has('vacuum') || d.type === 'vacuum';
+      case 'playing': return isPlayerType(d.type) || caps.has('media') || caps.has('pause');
+      case 'muted': return caps.has('mute');
+      case 'mode': return caps.has('fanMode') || typeof d.state?.mode === 'string';
+    }
+  };
+  const out: MatchField[] = [];
+  for (const k of MATCH_ORDER) {
+    if (!want(k)) continue;
+    switch (k) {
+      case 'on': out.push({ key: k, label: d?.type === 'internet' ? 'Internet' : 'Power', kind: 'bool', yes: d?.type === 'internet' ? 'Allowed' : 'On', no: d?.type === 'internet' ? 'Paused' : 'Off' }); break;
+      case 'online': out.push({ key: k, label: 'Connection', kind: 'bool', yes: 'Online', no: 'Offline' }); break;
+      case 'input': out.push({ key: k, label: 'Input', kind: 'choice', options: inputsOf(t, m.input) }); break;
+      case 'hvac': out.push({ key: k, label: 'Climate mode', kind: 'choice', options: withCurrent(HVAC_MODES, m.hvac) }); break;
+      case 'activity': out.push({ key: k, label: 'Vacuum', kind: 'choice', options: withCurrent(ACTIVITIES, m.activity) }); break;
+      case 'playing': out.push({ key: k, label: 'Playing', kind: 'bool', yes: 'Playing', no: 'Not playing' }); break;
+      case 'muted': out.push({ key: k, label: 'Sound', kind: 'bool', yes: 'Muted', no: 'Not muted' }); break;
+      case 'mode': {
+        const seen = typeof d?.state?.mode === 'string' ? [d.state.mode] : [];
+        out.push({ key: k, label: 'Mode', kind: 'choice', options: withCurrent([...FAN_MODES, ...seen.filter(x => !FAN_MODES.some(o => o.v === x)).map(x => ({ v: x, label: x }))], m.mode) });
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+/** A match with one part set (or cleared with undefined); an empty match is undefined. */
+export function withMatch(m: StateMatch | undefined, k: keyof StateMatch, v: string | boolean | undefined): StateMatch | undefined {
+  const o: Record<string, unknown> = { ...(m ?? {}) };
+  if (v === undefined || v === '') delete o[k]; else o[k] = v;
+  return Object.keys(o).length ? o as StateMatch : undefined;
+}
+
+/** A match in words, as the hub says it ("on HDMI 2 and muted"). */
+export function matchWords(m: StateMatch | undefined): string {
+  if (!m) return 'anything';
+  const parts = [
+    m.input ? `on ${INPUT_NAMES[m.input] ?? m.input}` : m.on !== undefined ? (m.on ? 'on' : 'off') : '',
+    m.online !== undefined ? (m.online ? 'online' : 'offline') : '',
+    m.playing !== undefined ? (m.playing ? 'playing' : 'not playing') : '',
+    m.hvac ? `on ${m.hvac}` : '', m.activity ? m.activity : '', m.muted !== undefined ? (m.muted ? 'muted' : 'not muted') : '', m.mode ? `on ${m.mode}` : '',
+  ].filter(Boolean);
+  return parts.join(' and ') || 'anything';
+}
+
+// A match as one key, with its keys in a fixed order (kept for older callers and the tests).
+export function stateKey(m: StateMatch | undefined): string {
+  if (!m) return '';
+  const o: Record<string, unknown> = {};
+  for (const k of MATCH_ORDER) if (m[k] !== undefined) o[k] = m[k];
+  for (const k of Object.keys(m).sort()) if (!(k in o) && (m as Record<string, unknown>)[k] !== undefined) o[k] = (m as Record<string, unknown>)[k];
+  return JSON.stringify(o);
+}
+export const stateFromKey = (k: string): StateMatch | undefined => (k ? JSON.parse(k) as StateMatch : undefined);
+
+// ------------------------------------------------------------ readings ----
+
+/** The readings a device has (from what it reports and can do), with the current one kept. */
+export function readingsFor(d: Dev | undefined, cur?: NumericField): Opt<NumericField>[] {
+  if (!d) return withCurrent(FIELDS, cur);
+  const caps = new Set(d.capabilities ?? []), st = (d.state ?? {}) as Record<string, unknown>;
+  const ok = (f: NumericField) => {
+    if (f === cur || st[f] !== undefined) return true;
+    switch (f) {
+      case 'temp': case 'target': return caps.has('climate');
+      case 'power': return caps.has('power');
+      case 'energy': return caps.has('energy');
+      case 'battery': return caps.has('battery');
+      case 'bri': return caps.has('brightness');
+      case 'vol': return caps.has('volume');
+      default: return false;
+    }
+  };
+  const l = FIELDS.filter(f => ok(f.v));
+  return l.length ? l : withCurrent(FIELDS, cur);
+}
+/** A reading's unit, for the number boxes. */
+export const FIELD_UNIT: Record<NumericField, string> = { temp: '°C', target: '°C', power: 'W', energy: 'kWh', battery: '%', bri: '%', vol: '%', grid: 'W', load: 'W', humidity: '%', lux: 'lux' };
+
+// ------------------------------------------------------------- events -----
+
+/** The events a device sends, from its type and what it can do; everything when unknown. The current one is kept. */
+export function eventsFor(d: Dev | undefined, cur?: string): Opt[] {
+  if (!d) return withCurrent(EVENTS, cur);
+  const caps = new Set(d.capabilities ?? []);
+  const keys = new Set<string>();
+  if (d.type === 'camera') ['person', 'motion', 'ring'].forEach(k => keys.add(k));
+  if (d.type === 'sensor') ['motion', 'person'].forEach(k => keys.add(k));
+  if (isPlayerType(d.type) || caps.has('media') || caps.has('library')) ['video-started', 'music-started', 'paused', 'resumed', 'stopped', 'ended'].forEach(k => keys.add(k));
+  if (d.type === 'tv' || caps.has('library')) ['screen-asleep', 'screen-shutdown', 'screen-awake'].forEach(k => keys.add(k));
+  if (d.type === 'internet') ['internet-down', 'internet-up', 'internet-failover', 'new-device', 'threat'].forEach(k => keys.add(k));
+  if (caps.has('events') && !keys.size) ['person', 'motion', 'ring'].forEach(k => keys.add(k));
+  const l = keys.size ? EVENTS.filter(e => keys.has(e.v)) : EVENTS;
+  return withCurrent(l, cur);
+}
+export const eventWords = (e: string) => EVENTS.find(x => x.v === e)?.label ?? e;
+
 // ------------------------------------------------------------- rhythms -----
 
-export const RHYTHMS = opts([['time', 'At a time'], ['sun:sunrise', 'Sunrise'], ['sun:sunset', 'Sunset'], ['sun:dawn', 'First light'], ['sun:dusk', 'Dusk'], ['prayer:fajr', 'Fajr'], ['prayer:dhuhr', 'Dhuhr'], ['prayer:asr', 'Asr'], ['prayer:maghrib', 'Maghrib'], ['prayer:isha', 'Isha']]);
+export const RHYTHMS = opts([['time', 'At a time'], ['sun:sunrise', 'Sunrise'], ['sun:sunset', 'Sunset'], ['sun:dawn', 'First light'], ['sun:dusk', 'Dusk'], ['prayer:fajr', 'Fajr'], ['prayer:sunrise', 'Shuruq (prayer sunrise)'], ['prayer:dhuhr', 'Dhuhr'], ['prayer:asr', 'Asr'], ['prayer:maghrib', 'Maghrib'], ['prayer:isha', 'Isha']]);
 export const rhythmKey = (r: Rhythm | undefined) => !r || r.kind === 'time' ? 'time' : r.kind === 'sun' ? `sun:${r.event}` : `prayer:${r.prayer}`;
 /** A rhythm from its choice, keeping the clock time or the offset it had. */
 export function rhythmFromKey(k: string, prev?: Rhythm): Rhythm {
@@ -284,6 +699,124 @@ export function daysWords(days: number[] | undefined): string {
 /** Toggle an id in a list (modes, people). */
 export const toggleIn = (l: string[] | undefined, id: string) => (l ?? []).includes(id) ? (l ?? []).filter(x => x !== id) : [...(l ?? []), id];
 
+// ---------------------------------------------------------- one-time -------
+
+// One-time schedules are dates and times on the home's clock ("2026-10-08T15:30"), never the phone's: the hub
+// sends its own as `localNow`. Arithmetic is on that wall-clock time, as dates without a zone.
+const STAMP = /^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):([0-5]\d)$/;
+export interface StampParts { y: number; mo: number; d: number; h: number; mi: number }
+export function parseStamp(s: string | undefined | null): StampParts | null {
+  const m = STAMP.exec(s ?? '');
+  return m ? { y: +m[1], mo: +m[2], d: +m[3], h: +m[4], mi: +m[5] } : null;
+}
+const pad = (n: number) => String(n).padStart(2, '0');
+/** A stamp from parts, rolled over as a calendar would (32 Oct is 1 Nov, minute 75 is the next hour). */
+export function stampOf(y: number, mo: number, d: number, h: number, mi: number): string {
+  const t = new Date(Date.UTC(y, mo - 1, d, h, mi));
+  return `${t.getUTCFullYear()}-${pad(t.getUTCMonth() + 1)}-${pad(t.getUTCDate())}T${pad(t.getUTCHours())}:${pad(t.getUTCMinutes())}`;
+}
+export function addMinutes(s: string, n: number): string {
+  const p = parseStamp(s);
+  return p ? stampOf(p.y, p.mo, p.d, p.h, p.mi + n) : s;
+}
+export const dateOf = (s: string) => s.slice(0, 10);
+export const timeOf = (s: string) => s.slice(11, 16);
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+export const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const weekday = (y: number, mo: number, d: number) => new Date(Date.UTC(y, mo - 1, d)).getUTCDay();
+
+/** A stamp in words near now, as the hub says it: "today at 15:30", "tomorrow at 07:00", "Thu 15 Oct at 09:00". */
+export function onceWords(s: string, now: string): string {
+  const p = parseStamp(s), n = parseStamp(now);
+  if (!p || !n) return s || 'pick a time';
+  const time = timeOf(s), today = dateOf(now);
+  if (dateOf(s) === today) return `today at ${time}`;
+  if (dateOf(s) === dateOf(addMinutes(`${today}T00:00`, 1440))) return `tomorrow at ${time}`;
+  if (dateOf(s) === dateOf(addMinutes(`${today}T00:00`, -1440))) return `yesterday at ${time}`;
+  return `${WEEKDAYS[weekday(p.y, p.mo, p.d)]} ${p.d} ${MONTHS[p.mo - 1]}${p.y !== n.y ? ` ${p.y}` : ''} at ${time}`;
+}
+/** Minutes from now to the stamp (negative when it has passed). */
+export function minutesUntil(s: string, now: string): number {
+  const a = parseStamp(s), b = parseStamp(now);
+  if (!a || !b) return NaN;
+  return Math.round((Date.UTC(a.y, a.mo - 1, a.d, a.h, a.mi) - Date.UTC(b.y, b.mo - 1, b.d, b.h, b.mi)) / 60000);
+}
+/** "in 25 min", "in 3 h 10 min", "in 2 days"; "passed" once it has. */
+export function untilWords(s: string, now: string): string {
+  const m = minutesUntil(s, now);
+  if (!Number.isFinite(m)) return '';
+  if (m <= 0) return m === 0 ? 'now' : 'passed';
+  if (m < 60) return `in ${m} min`;
+  if (m < 24 * 60) { const h = Math.floor(m / 60), r = m % 60; return `in ${h} h${r ? ` ${r} min` : ''}`; }
+  const d = Math.round(m / 1440);
+  return `in ${d} day${d === 1 ? '' : 's'}`;
+}
+
+/** The quick choices for "once": in 15 min, in 1 h, tonight at 21:00 (while it's still to come), tomorrow at 07:00. */
+export function onceChips(now: string): { label: string; at: string }[] {
+  const p = parseStamp(now);
+  if (!p) return [];
+  const today = dateOf(now), tomorrow = dateOf(addMinutes(`${today}T00:00`, 1440));
+  const l = [{ label: 'In 15 min', at: addMinutes(now, 15) }, { label: 'In 1 h', at: addMinutes(now, 60) }];
+  if (`${today}T21:00` > addMinutes(now, 15)) l.push({ label: 'Tonight 21:00', at: `${today}T21:00` });
+  else l.push({ label: 'Tomorrow 21:00', at: `${tomorrow}T21:00` });
+  l.push({ label: 'Tomorrow 07:00', at: `${tomorrow}T07:00` });
+  return l;
+}
+/** The same clock time, next time it comes round (today if it's still ahead, else tomorrow): for "Schedule again". */
+export function nextSameTime(s: string, now: string): string {
+  const today = dateOf(now), t = timeOf(s) || '09:00';
+  const at = `${today}T${t}`;
+  return at > now ? at : `${dateOf(addMinutes(`${today}T00:00`, 1440))}T${t}`;
+}
+/** The weeks of a month as day numbers (null before the 1st and after the last), weeks starting on Sunday. */
+export function monthGrid(y: number, mo: number): (number | null)[][] {
+  const first = weekday(y, mo, 1), days = new Date(Date.UTC(y, mo, 0)).getUTCDate();
+  const cells: (number | null)[] = [...Array(first).fill(null), ...Array.from({ length: days }, (_, i) => i + 1)];
+  while (cells.length % 7) cells.push(null);
+  const weeks: (number | null)[][] = [];
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+  return weeks;
+}
+/** The month before or after ([year, month 1–12]). */
+export const shiftMonth = (y: number, mo: number, d: number): [number, number] => { const t = new Date(Date.UTC(y, mo - 1 + d, 1)); return [t.getUTCFullYear(), t.getUTCMonth() + 1]; };
+
+/** A one-time schedule: every trigger is "once". */
+export const isOneTime = (d: Pick<Draft, 'triggers'>) => d.triggers.length > 0 && d.triggers.every(t => t.kind === 'once');
+/** Where a once trigger stands: gone off, missed (Kova was off), passed without going off, or still to come. */
+export function onceState(t: Extract<Trigger, { kind: 'once' }>, now: string): 'done' | 'missed' | 'passed' | 'upcoming' {
+  if (t.missed) return 'missed';
+  if (t.firedAt) return 'done';
+  return now && t.at <= now ? 'passed' : 'upcoming';
+}
+/** A once trigger at a new time: not gone off yet. */
+export const onceAt = (at: string): Extract<Trigger, { kind: 'once' }> => ({ kind: 'once', at });
+/** "Schedule again": each once at its clock time's next turn, not gone off, switched on. */
+export function scheduleAgain(d: Draft, now: string): Draft {
+  return { ...d, enabled: true, triggers: d.triggers.map(t => (t.kind === 'once' ? onceAt(nextSameTime(t.at, now)) : t)) };
+}
+/** A one-time schedule switched on with every time gone by: the hub would refuse it, so say so before sending. */
+export function onceProblem(d: Draft, now: string): string | null {
+  if (!isOneTime(d) || !d.enabled || !now) return null;
+  return d.triggers.some(t => t.kind === 'once' && !t.firedAt && t.at > now) ? null : 'That time has passed: choose a later one';
+}
+
+/** The home's clock as "YYYY-MM-DDTHH:MM": the snapshot's localNow, else worked out from its time and timezone. */
+export function localNowOf(s: unknown): string {
+  const x = s as { localNow?: string; home?: { now?: number; timezone?: string } } | null;
+  if (x?.localNow && parseStamp(x.localNow)) return x.localNow;
+  const ms = x?.home?.now ?? Date.now();
+  try {
+    const f = new Intl.DateTimeFormat('en-GB', { timeZone: x?.home?.timezone || undefined, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+    const p = Object.fromEntries(f.formatToParts(new Date(ms)).map(q => [q.type, q.value]));
+    const st = `${p.year}-${p.month}-${p.day}T${p.hour === '24' ? '00' : p.hour}:${p.minute}`;
+    if (parseStamp(st)) return st;
+  } catch { /* no Intl time zones here */ }
+  const d = new Date(ms);
+  return stampOf(d.getFullYear(), d.getMonth() + 1, d.getDate(), d.getHours(), d.getMinutes());
+}
+
 // ------------------------------------------------------------ durations ----
 
 export type Unit = 's' | 'min' | 'h';
@@ -297,6 +830,13 @@ export const toSeconds = (n: number, unit: Unit) => Math.max(0, Math.round(n * (
 /** "for" and timeouts are kept in seconds and shown in minutes (one decimal). */
 export const secToMin = (sec: number | undefined) => sec ? Math.round(sec / 60 * 10) / 10 : undefined;
 export const minToSec = (min: number | undefined) => min ? Math.round(min * 60) : undefined;
+/** Seconds in words: "45 s", "5 min", "1 min 30 s", "2 h", "1 h 30 min". */
+export function durWords(s: number): string {
+  if (s < 60) return `${s} s`;
+  if (s % 3600 === 0) return `${s / 3600} h`;
+  if (s >= 3600 && s % 60 === 0) return `${Math.floor(s / 3600)} h ${(s % 3600) / 60} min`;
+  return s % 60 ? `${Math.floor(s / 60)} min ${s % 60} s` : `${s / 60} min`;
+}
 
 // ------------------------------------------------------------- defaults ----
 
@@ -306,10 +846,15 @@ export interface Ctx {
   /** The first device a step can set, and what it's set to first. */
   actDevice?: string;
   actCommand?: Command;
+  /** The first device that can ramp brightness (or volume, or temperature), and which. */
+  rampDevice?: string;
+  rampField?: RampField;
   mode?: string;
   overlay?: string;
   /** Another automation, for "run another automation". */
   other?: string;
+  /** The home's clock, for "once". */
+  now?: string;
 }
 
 export function newTrigger(kind: Trigger['kind'], c: Ctx): Trigger {
@@ -318,6 +863,7 @@ export function newTrigger(kind: Trigger['kind'], c: Ctx): Trigger {
     case 'numeric': return { kind, device: c.device ?? '', field: 'temp', above: 28 };
     case 'event': return { kind, device: c.device ?? '', event: 'person' };
     case 'time': return { kind, at: { kind: 'time', at: '21:00' } };
+    case 'once': return onceAt(c.now ? addMinutes(c.now, 60) : '');
     case 'every': return { kind, minutes: 15 };
     case 'presence': return { kind, event: 'arrives' };
     case 'mode': return { kind, mode: c.mode ?? '' };
@@ -341,6 +887,7 @@ export function newCondition(kind: Condition['kind'], c: Ctx): Condition {
 export function newAction(kind: Action['kind'], c: Ctx): Action {
   switch (kind) {
     case 'set': return { kind, targets: c.actDevice ? { [c.actDevice]: c.actCommand ?? { on: true } } : {} };
+    case 'ramp': { const f = c.rampField ?? 'bri'; return { kind, targets: c.rampDevice ? { [c.rampDevice]: { [f]: 100 } as Command } : {}, field: f, to: 100, overSec: 1800, stepSec: 60 }; }
     case 'delay': return { kind, seconds: 300 };
     case 'wait': return { kind, until: newCondition('device', c), timeoutSec: 600 };
     case 'notify': return { kind, message: '' };
@@ -357,12 +904,27 @@ export function newAction(kind: Action['kind'], c: Ctx): Action {
  * it's kept, so going from "a device changes" to "a reading crosses" keeps the device picked.
  */
 export function changeKind<P extends Trigger | Condition>(cur: P, fresh: P): P {
+  if (cur.kind === fresh.kind) return cur;
   const keep = ['device', 'field', 'above', 'below'] as const;
   const out = { ...fresh } as Record<string, unknown>;
   for (const k of keep) if (k in out && k in cur && (cur as Record<string, unknown>)[k] !== undefined) out[k] = (cur as Record<string, unknown>)[k];
   // Groups keep what was in them.
   if ('conditions' in fresh && 'conditions' in cur) out.conditions = (cur as { conditions: Condition[] }).conditions;
   return out as P;
+}
+/** The same for steps: set ⇄ ramp keep their devices, if ⇄ repeat keep the steps inside, wait keeps an if's condition. */
+export function changeActionKind(cur: Action, fresh: Action): Action {
+  if (cur.kind === fresh.kind) return cur;
+  if (fresh.kind === 'ramp' && cur.kind === 'set' && Object.keys(cur.targets).length) {
+    return { ...fresh, targets: Object.fromEntries(Object.keys(cur.targets).map(id => [id, { [fresh.field]: fresh.to } as Command])) };
+  }
+  if (fresh.kind === 'set' && cur.kind === 'ramp' && Object.keys(cur.targets).length) {
+    return { kind: 'set', targets: Object.fromEntries(Object.keys(cur.targets).map(id => [id, { [cur.field]: cur.to } as Command])) };
+  }
+  if (fresh.kind === 'repeat' && cur.kind === 'if') return { ...fresh, actions: cur.then };
+  if (fresh.kind === 'if' && cur.kind === 'repeat') return { ...fresh, then: cur.actions };
+  if (fresh.kind === 'wait' && cur.kind === 'if' && cur.conditions.length === 1) return { ...fresh, until: cur.conditions[0] };
+  return fresh;
 }
 
 export const isGroup = (c: Condition): c is { kind: 'all' | 'any' | 'not'; conditions: Condition[] } => c.kind === 'all' || c.kind === 'any' || c.kind === 'not';
@@ -371,14 +933,29 @@ export const isGroup = (c: Condition): c is { kind: 'all' | 'any' | 'not'; condi
 
 export const blankDraft = (): Draft => ({ name: '', enabled: true, mode: 'single', triggers: [], conditions: [], actions: [] });
 
-/** The editable part of an automation (or a suggestion), without what the hub adds for lists. */
+/** A one-time schedule to start from: once in an hour (on the home's clock), nothing to do yet. */
+export const scheduleDraft = (now: string): Draft => ({ ...blankDraft(), triggers: [onceAt(addMinutes(now, 60))] });
+
 const clone = <T,>(v: T): T => (v === undefined ? v : JSON.parse(JSON.stringify(v)) as T);
 
+/** Steps with any { set: {...} } spelling flattened, at every depth. */
+function flatActions(l: Action[]): Action[] {
+  return l.map(a => {
+    switch (a.kind) {
+      case 'set': case 'ramp': return { ...a, targets: Object.fromEntries(Object.entries(a.targets ?? {}).map(([k, c]) => [k, flatCommand(c)])) } as Action;
+      case 'if': return { ...a, then: flatActions(a.then ?? []), ...(a.else ? { else: flatActions(a.else) } : {}) };
+      case 'repeat': return { ...a, actions: flatActions(a.actions ?? []) };
+      default: return a;
+    }
+  });
+}
+
+/** The editable part of an automation (or a suggestion), without what the hub adds for lists. */
 export function draftOf(a: Partial<Automation> | Idea | null | undefined): Draft {
   if (!a) return blankDraft();
   const d: Draft = {
     name: a.name ?? '', enabled: 'enabled' in a ? a.enabled !== false : true, mode: a.mode ?? 'single',
-    triggers: clone(a.triggers ?? []), conditions: clone(a.conditions ?? []), actions: clone(a.actions ?? []),
+    triggers: clone(a.triggers ?? []), conditions: clone(a.conditions ?? []), actions: flatActions(clone(a.actions ?? [])),
   };
   if (a.description) d.description = a.description;
   if (a.origin) d.origin = clone(a.origin);
@@ -405,26 +982,125 @@ export function bodyOf(d: Draft): Draft {
 export const sameDraft = (a: Draft, b: Draft) => JSON.stringify(bodyOf(a)) === JSON.stringify(bodyOf(b));
 
 /** The context for new parts, from the home. */
-export function ctxOf(o: { devices: Dev[]; sources: { name: string }[]; modes: { id: string }[]; overlays: { id: string }[]; automations: { id: string }[]; self?: string | null }): Ctx {
+export function ctxOf(o: { devices: Dev[]; sources: { name: string }[]; music?: MusicItem[]; modes: { id: string }[]; overlays: { id: string }[]; automations: { id: string }[]; self?: string | null; now?: string }): Ctx {
   const act = o.devices.find(canSet);
+  const ramp = o.devices.find(d => has(d, 'brightness')) ?? o.devices.find(d => has(d, 'volume')) ?? o.devices.find(d => has(d, 'climate'));
   return {
-    device: o.devices[0]?.id, actDevice: act?.id, actCommand: act ? firstCommand(act, o.sources) : undefined,
-    mode: o.modes[0]?.id, overlay: o.overlays[0]?.id, other: o.automations.find(a => a.id !== o.self)?.id,
+    device: o.devices[0]?.id, actDevice: act?.id, actCommand: act ? firstCommand(act, o.sources, o.music) : undefined,
+    rampDevice: ramp?.id, rampField: ramp ? (has(ramp, 'brightness') ? 'bri' : has(ramp, 'volume') ? 'vol' : 'target') : undefined,
+    mode: o.modes[0]?.id, overlay: o.overlays[0]?.id, other: o.automations.find(a => a.id !== o.self)?.id, now: o.now,
   };
 }
-/** Devices a step can set (cameras and sensors only report). */
-export const canSet = (d: Pick<Device, 'type'>) => d.type !== 'camera' && d.type !== 'sensor';
+/** Can this device ramp this field? */
+export const canRamp = (d: Pick<Device, 'capabilities'>, f: RampField) => has(d, RAMP_CAP[f]);
+
+// ---------------------------------------------------------------- words ----
+
+/** The names the words need, from the home. */
+export interface Names {
+  devices: { id: string; name: string; zoneNames?: Record<string, string> }[];
+  rooms: Pick<Room, 'id' | 'name'>[];
+  people: { id: string; name: string }[];
+  modes: { id: string; name: string }[];
+  overlays: { id: string; name: string }[];
+  automations: { id: string; name: string }[];
+  now?: string;
+}
+const nm = (l: { id: string; name: string }[], id: string | undefined) => (id ? l.find(x => x.id === id)?.name ?? id : '');
+const dn = (n: Names, id: string) => pseudoLabel(id, n.rooms) ?? (id ? n.devices.find(d => d.id === id)?.name ?? id : 'a device');
+const range = (above?: number, below?: number) => above != null && below != null ? `between ${above} and ${below}` : above != null ? `above ${above}` : below != null ? `below ${below}` : '…';
+const forW = (s?: number) => (s ? ` for ${durWords(s)}` : '');
+const daysW = (days?: number[]) => { const w = daysWords(days); return w === 'every day' ? '' : w === 'weekdays' ? 'on weekdays' : w === 'weekends' ? 'at weekends' : `on ${w}`; };
+
+export function triggerText(t: Trigger, n: Names): string {
+  switch (t.kind) {
+    case 'device': return `${dn(n, t.device)} ${t.to ? `turns ${matchWords(t.to)}` : `stops being ${matchWords(t.from)}`}${t.to && t.from ? ` from ${matchWords(t.from)}` : ''}${forW(t.forSec)}`;
+    case 'numeric': return `${dn(n, t.device)} ${FIELD_WORD[t.field] ?? t.field} goes ${range(t.above, t.below)}${forW(t.forSec)}`;
+    case 'event': return `${dn(n, t.device)} ${eventWords(t.event)}`;
+    case 'time': return `at ${[rhythmWords(t.at), daysW(t.days)].filter(Boolean).join(' ')}`;
+    case 'once': { const w = n.now ? onceWords(t.at, n.now) : t.at; return `once, ${w}${t.missed ? ' (missed)' : t.firedAt ? ' (done)' : ''}`; }
+    case 'every': return `every ${durWords(t.minutes * 60)}`;
+    case 'presence': {
+      const p = t.person ? nm(n.people, t.person) : 'someone';
+      return t.event === 'arrives' ? `${p} comes home` : t.event === 'leaves' ? `${p} leaves` : t.event === 'first-arrives' ? 'the first person comes home' : 'the last person leaves';
+    }
+    case 'mode': return `${nm(n.modes, t.mode) || 'a mode'} starts`;
+    case 'overlay': return `${nm(n.overlays, t.overlay) || 'an overlay'} ${t.event === 'ends' ? 'ends' : 'starts'}`;
+    case 'hub': return 'Kova starts';
+  }
+}
+
+export function conditionText(c: Condition, n: Names): string {
+  switch (c.kind) {
+    case 'device': return `${dn(n, c.device)} is ${matchWords(c.is)}`;
+    case 'numeric': return `${dn(n, c.device)} ${FIELD_WORD[c.field] ?? c.field} is ${range(c.above, c.below)}`;
+    case 'time': return [c.after && c.before ? `between ${rhythmWords(c.after)} and ${rhythmWords(c.before)}` : c.after ? `after ${rhythmWords(c.after)}` : c.before ? `before ${rhythmWords(c.before)}` : '', daysW(c.days)].filter(Boolean).join(' ') || 'any time';
+    case 'presence': return c.who === 'anyone' ? (c.home ? 'someone’s home' : 'nobody’s home') : c.who === 'no-one' ? (c.home ? 'nobody’s home' : 'someone’s home') : `${nm(n.people, c.who)} is ${c.home ? 'home' : 'out'}`;
+    case 'mode': return c.modes.length ? `in ${c.modes.map(m => nm(n.modes, m)).join(' or ')}` : 'in a mode (pick one)';
+    case 'overlay': return `${c.overlay ? nm(n.overlays, c.overlay) : 'an overlay'} is ${c.active ? 'on' : 'off'}`;
+    case 'all': return c.conditions.map(k => conditionText(k, n)).join(' and ') || 'all of (nothing yet)';
+    case 'any': return c.conditions.length > 1 ? `either ${c.conditions.map(k => conditionText(k, n)).join(' or ')}` : c.conditions.map(k => conditionText(k, n)).join('') || 'any of (nothing yet)';
+    case 'not': return `not (${c.conditions.map(k => conditionText(k, n)).join(' or ') || 'nothing yet'})`;
+  }
+}
+
+export function targetText(id: string, cmd: Command, n: Names): string {
+  const z = n.devices.find(d => d.id === id)?.zoneNames;
+  return `${dn(n, id)}: ${commandWords(cmd, z)}`;
+}
+
+export function actionText(a: Action, n: Names): string {
+  const list = (l: Action[] | undefined) => (l ?? []).map(k => actionText(k, n)).join(', then ') || 'nothing';
+  switch (a.kind) {
+    case 'set': return Object.entries(a.targets).map(([id, c]) => `set ${targetText(id, c, n)}`).join('; ') || 'set devices (pick one)';
+    case 'ramp': return `ramp ${Object.keys(a.targets).map(id => dn(n, id)).join(', ') || '(pick a device)'} ${FIELD_WORD[a.field]}${a.from != null ? ` from ${a.from}` : ''} to ${a.to} over ${durWords(a.overSec)}`;
+    case 'delay': return `wait ${durWords(a.seconds)}`;
+    case 'wait': return `wait until ${conditionText(a.until, n)}${a.timeoutSec ? ` (at most ${durWords(a.timeoutSec)}${a.stopOnTimeout ? ', else stop' : ''})` : ''}`;
+    case 'notify': return `notify ${a.people?.length ? a.people.map(p => nm(n.people, p)).join(' and ') : 'everyone'}: “${a.title ? `${a.title}: ` : ''}${a.message || '…'}”`;
+    case 'overlay': return `${a.op === 'end' ? 'end' : 'start'} ${nm(n.overlays, a.overlay) || 'an overlay'}`;
+    case 'if': return `if ${a.conditions.map(c => conditionText(c, n)).join(' and ') || '…'}, ${list(a.then)}${a.else?.length ? `; otherwise ${list(a.else)}` : ''}`;
+    case 'repeat': return `${a.times} times: ${list(a.actions)}`;
+    case 'run': return `run ${nm(n.automations, a.automation) || 'another automation'}`;
+    case 'stop': return 'stop';
+  }
+}
+
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+/** The whole automation in plain words, as the editor's live summary. */
+export function draftSummary(d: Draft, n: Names): { when: string; onlyIf: string; then: string; sentence: string } {
+  const when = d.triggers.map(t => triggerText(t, n)).join(', or ');
+  const onlyIf = d.conditions.map(c => conditionText(c, n)).join(', and ');
+  const then = d.actions.map(a => actionText(a, n)).join(', then ');
+  const sentence = !d.triggers.length && !d.actions.length ? 'Add what starts it, then what it does.'
+    : `${isOneTime(d) ? cap(when) : when ? `When ${when}` : 'When (add a trigger)'}${onlyIf ? `, only if ${onlyIf}` : ''}: ${then || '(add a step)'}.`;
+  return { when: cap(when), onlyIf: cap(onlyIf), then: cap(then), sentence };
+}
+
+/** A name for a one-time schedule left unnamed, the way the assistant names them: "Lamp off at 15:00". */
+export function scheduleName(d: Draft, n: Names): string {
+  const once = d.triggers.find((t): t is Extract<Trigger, { kind: 'once' }> => t.kind === 'once');
+  const first = d.actions[0];
+  let what = 'Reminder';
+  if (first?.kind === 'set') {
+    const [id, c] = Object.entries(first.targets)[0] ?? [];
+    if (id) what = `${dn(n, id)} ${commandWords(c!).split(', ').slice(0, 2).join(', ')}`;
+  } else if (first?.kind === 'notify') what = first.title || (first.message ? first.message.slice(0, 40) : 'Reminder');
+  else if (first) what = cap(actionText(first, n)).slice(0, 50);
+  if (!once?.at) return what.slice(0, 80);
+  const w = n.now ? onceWords(once.at, n.now) : `${dateOf(once.at)} at ${timeOf(once.at)}`;
+  return `${what} ${w.startsWith('today ') ? w.slice(6) : w.startsWith('tomorrow') ? w : `on ${w}`}`.slice(0, 80);
+}
 
 // --------------------------------------------------------------- devices ---
 
 export interface DeviceSection { room: string; items: Opt[] }
 /** Devices to pick from, by room (rooms in the home's order), filtered by a search over name and room. */
-export function deviceSections(devices: Pick<Device, 'id' | 'name' | 'room' | 'type' | 'hidden'>[], rooms: Room[], q: string, only?: (d: Pick<Device, 'type'>) => boolean): DeviceSection[] {
+export function deviceSections(devices: Pick<Device, 'id' | 'name' | 'room' | 'type' | 'hidden'>[], rooms: Room[], q: string, only?: (d: Pick<Device, 'type' | 'capabilities'>) => boolean): DeviceSection[] {
   const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const name = (id: string) => rooms.find(r => r.id === id)?.name ?? (id || 'No room');
   const order = (id: string) => { const i = rooms.findIndex(r => r.id === id); return i < 0 ? rooms.length : i; };
   const by = new Map<string, Opt[]>();
-  for (const d of devices.filter(x => !only || only(x)).sort((a, b) => order(a.room) - order(b.room) || a.name.localeCompare(b.name))) {
+  for (const d of devices.filter(x => !only || only(x as Pick<Device, 'type' | 'capabilities'>)).sort((a, b) => order(a.room) - order(b.room) || a.name.localeCompare(b.name))) {
     const hay = `${d.name} ${name(d.room)}`.toLowerCase();
     if (words.some(w => !hay.includes(w))) continue;
     const l = by.get(d.room) ?? [];
@@ -433,8 +1109,10 @@ export function deviceSections(devices: Pick<Device, 'id' | 'name' | 'room' | 't
   }
   return [...by].map(([room, items]) => ({ room: name(room), items }));
 }
-/** "Lounge · Lamp", or the id with (missing) when the device is gone. */
-export function deviceLabel(id: string, devices: Pick<Device, 'id' | 'name' | 'room'>[], rooms: Room[]): string {
+/** "Lounge · Lamp", a group's words ("All lights"), or the id with (missing) when the device is gone. */
+export function deviceLabel(id: string, devices: Pick<Device, 'id' | 'name' | 'room'>[], rooms: Pick<Room, 'id' | 'name'>[]): string {
+  const p = pseudoLabel(id, rooms);
+  if (p) return p;
   const d = devices.find(x => x.id === id);
   if (!d) return id ? `${id} (missing)` : 'Pick a device';
   const r = rooms.find(x => x.id === d.room)?.name;
@@ -474,6 +1152,33 @@ export function summary(a: Words): { when: string; onlyIf: string; then: string 
   };
 }
 
+const viewOneTime = (a: AutomationView) => a.oneTime ?? isOneTime(a);
+const viewDone = (a: AutomationView) => a.done ?? (isOneTime(a) && a.triggers.every(t => t.kind === 'once' && !!t.firedAt));
+/** The list in three: one-time schedules still to come (soonest first), ordinary automations, and finished schedules. */
+export function sectionsOf(l: AutomationView[]): { scheduled: AutomationView[]; regular: AutomationView[]; done: AutomationView[] } {
+  const scheduled = l.filter(a => viewOneTime(a) && !viewDone(a));
+  // Switched on first, then the soonest: by the hub's nextAt, else by the stamp (they sort as text).
+  scheduled.sort((a, b) => (a.enabled === b.enabled ? 0 : a.enabled ? -1 : 1) || ((a.nextAt ?? Infinity) - (b.nextAt ?? Infinity) || 0) || onceStamp(a).localeCompare(onceStamp(b)));
+  const done = l.filter(a => viewOneTime(a) && viewDone(a)).sort((a, b) => lastFired(b) - lastFired(a));
+  return { scheduled, regular: l.filter(a => !viewOneTime(a)), done };
+}
+/** The next once time of a schedule as a stamp (for sorting and words when the hub hasn't said). */
+export const onceStamp = (a: Pick<Draft, 'triggers'>) => a.triggers.map(t => (t.kind === 'once' && !t.firedAt ? t.at : '')).filter(Boolean).sort()[0] ?? a.triggers.map(t => (t.kind === 'once' ? t.at : '')).filter(Boolean).sort().pop() ?? '';
+const lastFired = (a: Pick<Draft, 'triggers'>) => Math.max(0, ...a.triggers.map(t => (t.kind === 'once' ? t.firedAt ?? 0 : 0)));
+/** A schedule's line: "Today at 15:30 · in 25 min", "Off · was tomorrow at 07:00", "Ran today at 15:30", "Missed: …". */
+export function scheduleLine(a: AutomationView, now: string): { text: string; tone: 'amber' | 'stone' | 'green' | 'red' } {
+  const st = onceStamp(a), w = st ? onceWords(st, now) : '';
+  if (viewDone(a)) {
+    const missed = a.triggers.some(t => t.kind === 'once' && t.missed);
+    return missed ? { text: `Missed: Kova was off ${w}`, tone: 'red' } : { text: `Ran ${w}`, tone: 'green' };
+  }
+  if (!a.enabled) return { text: `Off · ${w}`, tone: 'stone' };
+  if (a.nextAt == null && st && st <= now && !a.nextLabel) return { text: `${cap(w)} · the time has passed`, tone: 'red' };
+  const label = a.nextLabel ?? w;
+  const until = st ? untilWords(st, now) : '';
+  return { text: `${cap(label)}${until && until !== 'passed' ? ` · ${until}` : ''}`, tone: 'amber' };
+}
+
 /** A Home Assistant automation's state: converted, can convert (with what's left out), or needs rebuilding. */
 export function haState(a: HaAutomation): { text: string; colour: string; canConvert: boolean } {
   if (a.converted) return { text: 'Converted', colour: '#7fd4a0', canConvert: false };
@@ -495,7 +1200,6 @@ export function withPending<A extends { id: string; enabled: boolean }>(l: A[], 
   return { list, settled };
 }
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 /** When a run happened, on the phone's clock: "1 Oct 07:05". */
 export function runTime(at: number): string {
   const d = new Date(at);
@@ -533,5 +1237,5 @@ export const EXAMPLES = [
   ['notifications', 'Tell me when the washing machine’s power drops (it’s done)'],
   ['directions_walk', 'Hall light on for 3 minutes when the camera sees someone after dark'],
   ['person', 'Everything off when the last person leaves'],
-  ['ac_unit', 'Air conditioner on when the lounge goes above 28°, only if someone’s home'],
+  ['timer', 'Once: the air conditioner off at 15:00 today'],
 ] as const;
