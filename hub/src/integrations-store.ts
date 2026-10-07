@@ -10,7 +10,7 @@ import { VeSyncClient, VeSyncError, VESYNC_HOSTS } from './adapters/vesync.ts';
 import { readRegisters } from './adapters/goodwe.ts';
 import { DEFAULT_PORTS, parseInfo } from './adapters/samsung-tv.ts';
 import { Warden } from './adapters/warden.ts';
-import { HelixApi } from './adapters/helix.ts';
+import { HelixApi, isScreen } from './adapters/helix.ts';
 
 /**
  * In-app setup for integrations.json: read it with secrets hidden, change one
@@ -257,8 +257,11 @@ const PROBES: Record<string, (cfg: Obj) => Promise<string>> = {
     if (!c.url) throw new Error('Enter Helix Server’s address first');
     if (!c.token) throw new Error('Pair with Helix first (below)');
     const h = new HelixApi(c);
-    const boxes = await h.boxes().catch(e => { throw new Error(`Couldn’t read Helix Server at ${h.url}: ${friendly(e)}`); });
-    return boxes.length ? `Connected. Boxes: ${boxes.map(b => `${b.name}${b.online ? '' : ' (offline)'}`).join(', ')}.` : 'Connected. No Helix box has used this server yet.';
+    const all = await h.players().catch(e => { throw new Error(`Couldn’t read Helix Server at ${h.url}: ${friendly(e)}`); });
+    const marked = all.some(p => typeof p.box === 'boolean');
+    const boxes = all.filter(p => !p.you && (marked ? p.box === true : isScreen(p)));
+    const state = (b: (typeof boxes)[number]) => b.online === false ? ' (offline)' : b.suspended ? ' (suspended)' : b.asleep ? ' (asleep)' : '';
+    return boxes.length ? `Connected. Boxes: ${boxes.map(b => `${b.name?.trim() || b.id}${state(b)}`).join(', ')}.` : 'Connected. No Helix box has used this server yet.';
   },
   async tapo(cfg) {
     const c = cfg as Integrations['tapo'] & object;
