@@ -283,7 +283,8 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
       this.emit('measure');
       return;
     }
-    this.apply(d, patch, { kind: 'device', label: `${d.integration}`, detail: 'changed at the device or in another app' });
+    // A sensor reports what it noticed; anything else was changed at the device or in another app.
+    this.apply(d, patch, isSensor(d) ? { kind: 'device', label: d.integration } : { kind: 'device', label: `${d.integration}`, detail: 'changed at the device or in another app' });
   }
 
   /** A momentary event from a device (camera saw a person, doorbell rang). */
