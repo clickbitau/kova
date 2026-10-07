@@ -4,7 +4,7 @@ import { C, F, R, SP, alpha } from '../theme';
 import { useHub, useSnap } from '../state/hub';
 import { useSheet } from '../state/sheet';
 import { useNav } from '../navigation';
-import { combineIdeasOf, devs, groupDevices, isLight, plural, toggleCommand, TYPES, type Dev } from '../logic/devices';
+import { combineIdeasOf, devs, groupDevices, isLight, isSensor, plural, toggleCommand, TYPES, type Dev } from '../logic/devices';
 import { Icon } from '../ui/Icon';
 import { Button, Empty, HScroll, IconButton, Pill, Press } from '../ui/kit';
 import { Screen } from '../ui/Screen';
@@ -36,7 +36,9 @@ export function DevicesScreen() {
   const [type, setType] = useState('all');
   const [q, setQ] = useState('');
   const [showHidden, setShowHidden] = useState(false);
-  const all = Object.values(devs(s));
+  // Sensors only report: they're on their own screen, not here or in the counts.
+  const all = Object.values(devs(s)).filter(d => !isSensor(d));
+  const sensors = (s.sensors ?? []).filter(x => !x.hidden).length;
   const groups = groupDevices(all, s.rooms, { room, type, q, showHidden });
   const visible = all.filter(d => !d.hidden);
   const lightsOn = visible.filter(d => isLight(d) && d.on).length;
@@ -50,6 +52,7 @@ export function DevicesScreen() {
   return (
     <Screen title="Devices" over={`${plural(visible.length, 'device')} · ${plural(lightsOn, 'light')} on`} right={
       <View style={{ flexDirection: 'row', gap: SP[2], paddingBottom: 4 }}>
+        {sensors ? <IconButton icon="sensors" label={`Sensors, ${sensors}`} onPress={() => nav.navigate('Sensors')} /> : null}
         <IconButton icon="tune" label="Customise home" onPress={() => nav.navigate('Customise')} />
         <IconButton icon="add" label="Add a device" tone="amber" onPress={add} />
       </View>

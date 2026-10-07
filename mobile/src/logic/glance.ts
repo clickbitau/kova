@@ -19,7 +19,7 @@ export function glanceCards(g: Glance | undefined): GlanceCard[] {
     const ts = g.inside.map(x => x.temp);
     out.push({
       key: 'inside', icon: 'thermostat', color: '#7cb8f0', label: 'Inside', device: g.inside[0].device,
-      value: ts.length === 1 ? `${ts[0]}°` : `${Math.min(...ts)}–${Math.max(...ts)}°`, sub: g.inside.map(x => `${x.name} ${x.temp}°`).join(' · '),
+      value: ts.length === 1 ? `${ts[0]}°` : `${Math.min(...ts)}–${Math.max(...ts)}°`, sub: g.inside.map(x => `${x.name} ${x.temp}°${x.humidity != null ? ` ${x.humidity}%` : ''}`).join(' · '),
     });
   }
   if (g.air.length) {

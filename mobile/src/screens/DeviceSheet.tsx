@@ -14,6 +14,8 @@ import { Icon } from '../ui/Icon';
 import { Button, Card, Group, IconButton, IconWell, Pill, HScroll, Press, Row, Section, Segmented, Sheet, Slider, Stat, Switch, SwitchRow, Tag } from '../ui/kit';
 import { T } from '../ui/Text';
 import { CameraStill } from './SecurityScreen';
+import { SensorReadings, WatchSettings } from './SensorPanel';
+import { isSensor } from '../logic/sensors';
 
 const TEMPS: [number, string, string][] = [[2200, '#ffb56b', 'Candle'], [2700, '#ffc98a', 'Warm'], [3000, '#ffd9a8', 'Soft'], [4000, '#fff1dc', 'Neutral'], [5000, '#f4f7ff', 'Daylight']];
 /** Inputs a TV with `input` can switch to. The one it's on is marked when the TV can say (through SmartThings). */
@@ -102,7 +104,9 @@ export function DeviceSheet() {
   const rooms = snap.rooms.some(r => r.id === D.room) ? snap.rooms : [...snap.rooms, { id: D.room, name: D.room === 'unassigned' ? 'No room' : D.room, icon: 'category' }];
   const roomName = rooms.find(r => r.id === D.room)?.name ?? '';
   const vac = D.type === 'vacuum' ? D.activity || (D.on ? 'cleaning' : 'docked') : null;
-  const canPower = !['camera', 'sensor'].includes(D.type);
+  const sensor = isSensor(D) ? snap.sensors?.find(x => x.id === D.id) : undefined;
+  const watched = isSensor(D) || D.type === 'camera';
+  const canPower = !watched;
   const shownTarget = target ?? D.target ?? 24;
   const hv = HVAC.find(h => h[0] === D.hvac);
   const nudge = (d: number) => {
@@ -119,7 +123,7 @@ export function DeviceSheet() {
   return (
     <Sheet open onClose={close} label={`${D.name} panel`}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3] + 2 }}>
-        <IconWell icon={ICON[D.type] ?? 'devices'} color={D.online === false ? C.red : t.iconFg} bg={D.online === false ? C.redTint : t.iconBg} size={52} radius={26} fill />
+        <IconWell icon={sensor?.icon ?? ICON[D.type] ?? 'devices'} color={D.online === false ? C.red : t.iconFg} bg={D.online === false ? C.redTint : t.iconBg} size={52} radius={26} fill />
         <View style={{ flex: 1, gap: 2 }}>
           <T v="footnote" weight={600} color={C.stone}>{roomName}</T>
           <T v="title" numberOfLines={2}>{D.name}</T>
@@ -297,13 +301,15 @@ export function DeviceSheet() {
         </View>
       ) : null}
 
-      {readings.length ? (
+      {sensor ? <SensorReadings v={sensor} /> : null}
+
+      {readings.length && !sensor ? (
         <View style={{ flexDirection: 'row', gap: SP[2] }}>
           {readings.map(([k, v, icon]) => <Stat key={k} label={k} value={v} icon={icon} />)}
         </View>
       ) : null}
 
-      {D.why ? (
+      {D.why && !watched ? (
         <Group>
           {[['help', 'Why it’s like this', D.why.now, C.stone], ['schedule', 'What’s next', D.why.next, C.amber]].map(([icon, k, v, fg], i) => (
             <View key={k} style={{ flexDirection: 'row', gap: SP[3], padding: SP[4], borderTopWidth: i ? 1 : 0, borderTopColor: C.hairline }}>
@@ -328,9 +334,10 @@ export function DeviceSheet() {
           <T v="footnote" weight={600} color={C.bone2}>Room</T>
           <HScroll>{rooms.map(r => <Pill key={r.id} icon={r.icon} label={r.name} on={r.id === D.room} onPress={() => r.id !== D.room && void settings({ room: r.id }, `Moved to ${r.name}`)} />)}</HScroll>
         </View>
+        {watched ? <WatchSettings D={D} /> : null}
         <Group>
           <SwitchRow first icon="star" iconFg={C.amber} title="Favourite" sub="Keep it on Now" on={fav} onChange={() => void settings({ favourite: !fav }, fav ? 'Removed from favourites' : 'Added to favourites')} />
-          <SwitchRow icon="visibility_off" iconFg={C.stone} title="Hide from lists" sub="It keeps working in modes" on={!!D.hidden} onChange={() => void settings({ hidden: !D.hidden }, D.hidden ? 'Shown in lists again' : 'Hidden from lists')} />
+          <SwitchRow icon="visibility_off" iconFg={C.stone} title="Hide from lists" sub={watched ? 'It keeps working in automations' : 'It keeps working in modes'} on={!!D.hidden} onChange={() => void settings({ hidden: !D.hidden }, D.hidden ? 'Shown in lists again' : 'Hidden from lists')} />
           <Row icon="routine" iconFg={C.bone} title="Used in" sub={D.usedIn?.length ? D.usedIn.map(u => u.name).join(' · ') : 'Not in any mode or overlay yet'} />
           {combo ? (
             <Row icon="join" iconFg={C.amber} title="One device, through two integrations" sub={`${combo.memberNames.join(' and ')}. Tap to separate them again.`}

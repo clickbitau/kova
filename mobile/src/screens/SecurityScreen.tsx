@@ -7,7 +7,9 @@ import { useNav } from '../navigation';
 import { hubUrl } from '../logic/connect';
 import { stateOf, devs, type Dev } from '../logic/devices';
 import { Icon } from '../ui/Icon';
-import { Avatar, Card, Empty, Press, PulseDot, Section, Skeleton } from '../ui/kit';
+import { Avatar, Card, Empty, Press, PulseDot, Section, Segmented, Skeleton, SwitchRow, Group } from '../ui/kit';
+import { decisionText, EV_WORD, quietText } from '../logic/sensors';
+import { isCamera, isSensor } from '../logic/sensors';
 import { Screen } from '../ui/Screen';
 import { T } from '../ui/Text';
 import { Appear } from '../ui/motion';
@@ -30,7 +32,7 @@ export function CameraStill({ uri, off, label }: { uri: string | null; off?: boo
 }
 
 /** A camera: its latest picture (shimmering until it comes), its name and last event; tap for live video. */
-function CameraCard({ c, uri, wide, index, onPress }: { c: Dev; uri: string | null; wide: boolean; index: number; onPress: () => void }) {
+function CameraCard({ c, uri, wide, index, onPress, room }: { c: Dev; uri: string | null; wide: boolean; index: number; onPress: () => void; room: string }) {
   const [st, fg] = stateOf(c);
   const off = c.online === false;
   const line = c.why?.now && !/No change/.test(c.why.now) ? c.why.now : st;
@@ -47,6 +49,7 @@ function CameraCard({ c, uri, wide, index, onPress }: { c: Dev; uri: string | nu
           </View>
           <View style={{ paddingVertical: SP[3], paddingHorizontal: SP[3] + 2, gap: 2 }}>
             <T v="headline" numberOfLines={1}>{c.name}</T>
+            <T v="micro" size={11} color={C.stone2} numberOfLines={1}>{room}</T>
             <T v="footnote" color={off ? C.red : line === st ? fg : C.stone} numberOfLines={1}>{line}</T>
           </View>
         </Card>
@@ -58,9 +61,14 @@ function CameraCard({ c, uri, wide, index, onPress }: { c: Dev; uri: string | nu
 /** Cameras (latest picture, tap for live), who's home, the network, and today's comings and goings. */
 export function SecurityScreen() {
   const s = useSnap();
-  const { cfg } = useHub();
+  const { cfg, act } = useHub();
   const nav = useNav();
   const all = devs(s);
+  const sec = s.security;
+  const putSec = (body: object, done: string) => act('PUT', '/api/security/settings', body, done);
+  const watchedRooms = s.rooms.filter(r => Object.values(all).some(d => d.room === r.id && (isCamera(d) || isSensor(d))));
+  // A camera's card: its latest event's picture when one was kept, else what it shows now.
+  const frameOf = (id: string) => sec?.recent.find(e => e.device === id && e.frame)?.frame ?? null;
   const cams = Object.values(all).filter(d => d.type === 'camera' && !d.hidden);
   const home = s.people.filter(p => p.home);
   const internet = all.warden_internet;
@@ -79,12 +87,63 @@ export function SecurityScreen() {
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SP[2] + 2 }}>
           {cams.map((c, i) => (
             <CameraCard key={c.id} c={c} index={i} wide={cams.length === 1 || (cams.length % 2 === 1 && i === cams.length - 1)} onPress={() => watch(c.id)}
-              uri={cfg ? `${hubUrl(cfg, `/api/devices/${encodeURIComponent(c.id)}/snapshot`, true)}${cfg.token ? '&' : '?'}t=${tick}` : null} />
+              room={s.rooms.find(r => r.id === c.room)?.name ?? 'No room'}
+              uri={cfg ? (frameOf(c.id) ? hubUrl(cfg, frameOf(c.id)!, true) : `${hubUrl(cfg, `/api/devices/${encodeURIComponent(c.id)}/snapshot`, true)}${cfg.token ? '&' : '?'}t=${tick}`) : null} />
           ))}
         </View>
       ) : (
         <Empty compact icon="videocam" title="No cameras yet" text="Link Google Nest to see your doorbell and cameras here." action="Set up" onAction={() => nav.navigate('Integration', { id: 'nest' })} />
       )}
+
+      {watchedRooms.length ? (
+        <Section title="Rooms" gap={SP[1]}>
+          {watchedRooms.map((r, i) => {
+            const rs = s.roomStatus?.[r.id];
+            const dot = rs?.occupied ? C.amber : rs?.active ? C.green : C.stone3;
+            return (
+              <View key={r.id} style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3], paddingVertical: SP[3], borderTopWidth: i ? 1 : 0, borderTopColor: C.hairline }}>
+                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: dot }} />
+                <T v="callout" weight={600} style={{ flex: 1 }}>{r.name}</T>
+                <T v="footnote" color={C.stone}>{rs?.last ? `${rs.occupied ? 'Someone there · ' : ''}${EV_WORD[rs.last.kind] ?? rs.last.kind} ${rs.last.atLabel}` : 'Nothing yet'}</T>
+              </View>
+            );
+          })}
+        </Section>
+      ) : null}
+
+      {sec ? (
+        <Section title="Alerts" gap={SP[2]}>
+          <T v="footnote" color={C.stone}>Someone at the door, or inside while nobody’s home, reaches your phones, naming the room. Motion only while nobody’s home, unless you ask.</T>
+          <Group>
+            <SwitchRow first icon="bedtime" iconFg={C.blue} color={C.blue} title="Quiet hours" sub={quietText(sec)} on={!!sec.quiet} onChange={v => void putSec({ quiet: v ? { from: '22:00', to: '07:00' } : null }, v ? 'Quiet hours 22:00 to 07:00' : 'Quiet hours off')} />
+          </Group>
+          {sec.quiet ? (
+            <Segmented compact label="Quiet hours" value={`${sec.quiet.from}-${sec.quiet.to}`} options={[['21:00', '07:00'], ['22:00', '07:00'], ['23:00', '06:30'], ['00:00', '06:00']].map(([a, b]) => ({ id: `${a}-${b}`, label: `${a}–${b}` }))}
+              onChange={id => { const [from, to] = id.split('-'); void putSec({ quiet: { from, to } }, `Quiet ${from} to ${to}`); }} />
+          ) : null}
+          <T v="footnote" weight={600} color={C.bone2}>Between alerts from a room</T>
+          <Segmented compact label="Between alerts from a room" value={String(sec.cooldownMin)} options={[1, 5, 10, 30].map(n => ({ id: String(n), label: `${n} min` }))} onChange={id => void putSec({ cooldownMin: Number(id) }, `At most one alert of a kind per room every ${id} min`)} />
+          {watchedRooms.map(r => (
+            <View key={r.id} style={{ gap: 6, padding: SP[3], borderRadius: R.md, backgroundColor: C.card }}>
+              <T v="label">{r.name}</T>
+              {(['person', 'motion'] as const).map(k => (
+                <View key={k} style={{ gap: 4 }}>
+                  <T v="micro" size={11} color={C.stone2}>{k === 'person' ? 'People' : 'Motion'}</T>
+                  <Segmented compact label={`${r.name} ${k} alerts`} value={sec.rooms[r.id]?.[k] ?? ''} options={[{ id: '', label: 'Default' }, { id: 'always', label: 'Always' }, { id: 'away', label: 'Away' }, { id: 'never', label: 'Never' }]}
+                    onChange={id => void putSec({ rooms: { [r.id]: { [k]: id || null } } }, `${r.name} · ${k === 'person' ? 'people' : 'motion'}: ${id || 'default'}`)} />
+                </View>
+              ))}
+            </View>
+          ))}
+          {sec.decisions.length ? sec.decisions.slice(0, 5).map((d, i) => (
+            <View key={`${d.at}-${i}`} style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2], paddingVertical: SP[2], borderTopWidth: i ? 1 : 0, borderTopColor: C.hairline }}>
+              <Icon name={d.sent ? 'notifications_active' : 'notifications_off'} size={16} color={d.sent ? C.green : C.stone2} />
+              <T v="footnote" color={C.bone2} style={{ flex: 1 }}>{decisionText(d, s.rooms)}</T>
+              <T mono size={11} color={C.stone2}>{d.atLabel}</T>
+            </View>
+          )) : null}
+        </Section>
+      ) : null}
 
       <Section title="Who’s home">
         {s.people.length ? (

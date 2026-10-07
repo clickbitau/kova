@@ -42,14 +42,25 @@ export interface DeviceState {
   childLock?: boolean;
   /** Ducted air conditioners (`zones`): each zone's damper, on or off and how far open (0–100). */
   zones?: { n: number; on: boolean; open: number | null }[] | null;
+  /** Where a device senses its room: humidity %, light in lux. */
+  humidity?: number | null;
+  lux?: number | null;
+  /** Motion sensors: moving now. Contact sensors: open. */
+  motion?: boolean | null;
+  open?: boolean | null;
   online?: boolean;
 }
 
 /** `skip`: 1 = next song, -1 = previous (speakers with `queue`). `volStep`: 1 = volume up a step, -1 = down. */
 export type Command = Partial<DeviceState> & { skip?: number; volStep?: number; /** Some zones of a ducted air conditioner, by number. */ zoneSet?: Record<string, { on?: boolean; open?: number }> };
 
+/** device: something to control; sensor: only reports; camera. (hub util/sensors.ts) */
+export type DeviceKind = 'device' | 'sensor' | 'camera';
+
 export interface Device {
   id: string;
+  /** Older hubs don't send it: then type 'sensor' is a sensor. */
+  kind?: DeviceKind;
   name: string;
   room: string;
   type: DeviceType;
@@ -100,7 +111,29 @@ export interface Finding { id: string; modeId: string; kind: string; icon: strin
 
 export interface ActivityRow { id: number; ts: number; t: string; type: string; icon: string; what: string; why: string; device?: string | null }
 
-export interface Integration { id: string; name: string; icon: string; kind: string; ok: boolean; note?: string; devices: number }
+export interface Integration { id: string; name: string; icon: string; kind: string; ok: boolean; note?: string; devices: number; sensors?: number }
+
+export type Trend = 'up' | 'down' | 'steady';
+export interface SensorReading { field: string; label: string; value: number | boolean | null; unit: string; text: string; trend: Trend | null; changedAt: number | null; changedLabel: string | null }
+/** A sensor as the hub shows it (services/sensors.ts). */
+export interface SensorView {
+  id: string; name: string; room: string; integration: string; type: DeviceType; kind: string; icon: string; hidden: boolean; outdoor: boolean;
+  readings: SensorReading[]; battery: number | null; lowBattery: boolean; online: boolean; seenAt: number | null; seenLabel: string | null; stale: boolean;
+}
+/** A room's climate and activity, from its sensors and cameras. */
+export interface RoomStatus {
+  temp: number | null; humidity: number | null; lux: number | null; tempFrom: string[]; outdoor: boolean; active: boolean; occupied: boolean;
+  last: { kind: string; at: number; atLabel: string; device: string; what: string } | null; open: string[]; sensors: number;
+}
+export type AlertWhen = 'always' | 'away' | 'never';
+/** One camera or sensor event, newest first, with its kept picture. */
+export interface TimelineEvent { id: number; at: number; t: string; room: string; roomName: string | null; device: string; kind: string; source: 'camera' | 'sensor'; outdoor: boolean; what: string; icon: string; frame: string | null }
+export interface SecurityState {
+  quiet: { from: string; to: string } | null; cooldownMin: number; rooms: Record<string, Partial<Record<string, AlertWhen>>>; quietNow: boolean; outdoorRooms: string[];
+  devices: Record<string, { outdoor: boolean; outdoorSet: boolean; alerts: Record<string, { when: AlertWhen; from: 'device' | 'room' | 'default' }> }>;
+  recent: TimelineEvent[];
+  decisions: { at: number; atLabel: string; room: string; device: string; kind: string; sent: boolean; why: string; title?: string }[];
+}
 
 /** A stream speakers can play by name. `loop`: a recording plays again from the start when it ends. */
 export interface MediaSource { name: string; icon: string; url?: string; loop?: boolean }
@@ -128,6 +161,10 @@ export interface Snapshot {
   speakerGroups: SpeakerGroup[];
   people: Person[];
   devices: Device[];
+  /** Sensors with their readings (hubs from 0.7.46). */
+  sensors?: SensorView[];
+  roomStatus?: Record<string, RoomStatus>;
+  security?: SecurityState;
   modes: ModeView[];
   current: { modeId: string; since?: number; until?: number; untilLabel: string; nextId: string; overlay: { id: string; name: string; icon: string; endsLabel: string } | null };
   day: { bands: { modeId: string; start: number; end: number }[] };
@@ -160,7 +197,7 @@ export interface AskReply {
 
 export interface Glance {
   outside: { temp: number; text: string; icon: string; feels?: number; humidity?: number; wind?: number; uv?: number; high?: number; low?: number; uvMax?: number | null; rain?: string | null } | null;
-  inside: { name: string; temp: number; device: string }[];
+  inside: { name: string; temp: number; humidity?: number; device: string; room?: string }[];
   air: { name: string; level: number; label: string; device: string }[];
 }
 export interface Insight { id: string; level: 'alert' | 'warning' | 'info'; icon: string; title: string; detail?: string; device?: string }

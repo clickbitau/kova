@@ -5,8 +5,10 @@ import type { Command, Device, Room } from '../api/types';
 
 // ------------------------------------------------------------------ shapes --
 
-export interface StateMatch { on?: boolean; online?: boolean; input?: string; hvac?: string; activity?: string; playing?: boolean; muted?: boolean; mode?: string }
-export type NumericField = 'temp' | 'target' | 'power' | 'energy' | 'battery' | 'bri' | 'vol' | 'grid' | 'load';
+export interface StateMatch { on?: boolean; online?: boolean; input?: string; hvac?: string; activity?: string; playing?: boolean; muted?: boolean; mode?: string; motion?: boolean; open?: boolean }
+export type NumericField = 'temp' | 'target' | 'power' | 'energy' | 'battery' | 'bri' | 'vol' | 'grid' | 'load' | 'humidity' | 'lux' | 'pm25';
+/** What a room's cameras and sensors notice (hub engine/rooms.ts). */
+export type RoomEvent = 'person' | 'motion' | 'ring' | 'vehicle' | 'animal' | 'package' | 'sound' | 'opened' | 'closed';
 export type SunEvent = 'sunrise' | 'sunset' | 'dawn' | 'dusk';
 export type Prayer = 'fajr' | 'sunrise' | 'dhuhr' | 'asr' | 'maghrib' | 'isha';
 export type Rhythm = { kind: 'time'; at: string } | { kind: 'sun'; event: SunEvent; offsetMin?: number } | { kind: 'prayer'; prayer: Prayer; offsetMin?: number };
@@ -16,6 +18,8 @@ export type Trigger =
   | { kind: 'device'; device: string; to?: StateMatch; from?: StateMatch; forSec?: number }
   | { kind: 'numeric'; device: string; field: NumericField; above?: number; below?: number; forSec?: number }
   | { kind: 'event'; device: string; event: string }
+  /** Anything a camera or sensor in the room notices; motion includes a person seen. */
+  | { kind: 'room'; room: string; event: RoomEvent }
   | { kind: 'time'; at: Rhythm; days?: number[] }
   | { kind: 'every'; minutes: number }
   | { kind: 'presence'; event: 'arrives' | 'leaves' | 'first-arrives' | 'last-leaves'; person?: string }
@@ -30,6 +34,8 @@ export type Condition =
   | { kind: 'presence'; who: string; home: boolean }
   | { kind: 'mode'; modes: string[] }
   | { kind: 'overlay'; overlay?: string; active: boolean }
+  /** A room had activity in the last withinMin minutes (default 10), or not. */
+  | { kind: 'room'; room: string; active: boolean; withinMin?: number }
   | { kind: 'all' | 'any' | 'not'; conditions: Condition[] };
 
 export type Action =
@@ -134,13 +140,15 @@ export function canMove(o: unknown, p: Path, d: -1 | 1): boolean {
 export type Opt<V = string> = { v: V; label: string };
 const opts = <V extends string>(l: [V, string][]): Opt<V>[] => l.map(([v, label]) => ({ v, label }));
 
-export const TRIGGER_KINDS = opts<Trigger['kind']>([['device', 'A device changes'], ['numeric', 'A reading goes above or below'], ['event', 'A device event'], ['time', 'A time of day'], ['every', 'Every few minutes'], ['presence', 'Someone comes or goes'], ['mode', 'A mode starts'], ['overlay', 'An overlay starts or ends'], ['hub', 'Kova starts']]);
-export const CONDITION_KINDS = opts<Condition['kind']>([['device', 'A device is'], ['numeric', 'A reading is above or below'], ['time', 'The time or day'], ['presence', 'Who’s home'], ['mode', 'The mode'], ['overlay', 'An overlay'], ['any', 'Any of these'], ['all', 'All of these'], ['not', 'None of these']]);
+export const TRIGGER_KINDS = opts<Trigger['kind']>([['device', 'A device changes'], ['numeric', 'A reading goes above or below'], ['event', 'A device event'], ['room', 'Something happens in a room'], ['time', 'A time of day'], ['every', 'Every few minutes'], ['presence', 'Someone comes or goes'], ['mode', 'A mode starts'], ['overlay', 'An overlay starts or ends'], ['hub', 'Kova starts']]);
+export const CONDITION_KINDS = opts<Condition['kind']>([['device', 'A device is'], ['numeric', 'A reading is above or below'], ['time', 'The time or day'], ['presence', 'Who’s home'], ['mode', 'The mode'], ['overlay', 'An overlay'], ['room', 'Activity in a room'], ['any', 'Any of these'], ['all', 'All of these'], ['not', 'None of these']]);
 export const ACTION_KINDS = opts<Action['kind']>([['set', 'Set devices'], ['delay', 'Wait a while'], ['wait', 'Wait until something is true'], ['notify', 'Send a notification'], ['overlay', 'Start or end an overlay'], ['if', 'If … otherwise …'], ['repeat', 'Repeat'], ['run', 'Run another automation'], ['stop', 'Stop here']]);
 export const RUN_MODES = opts<RunMode>([['single', 'Ignore the new start'], ['restart', 'Start over'], ['queued', 'Run again after'], ['parallel', 'Run alongside']]);
 
-export const FIELDS = opts<NumericField>([['temp', 'temperature'], ['target', 'set temperature'], ['power', 'power (W)'], ['energy', 'energy today (kWh)'], ['battery', 'battery (%)'], ['bri', 'brightness (%)'], ['vol', 'volume (%)']]);
-export const EVENTS = opts([['person', 'sees a person'], ['ring', 'rings'], ['motion', 'detects motion'], ['video-started', 'starts a video'], ['music-started', 'starts music'], ['paused', 'pauses'], ['stopped', 'stops playing'], ['internet-down', 'internet goes down'], ['internet-up', 'internet comes back'], ['new-device', 'a new device joins']]);
+export const FIELDS = opts<NumericField>([['temp', 'temperature'], ['target', 'set temperature'], ['power', 'power (W)'], ['energy', 'energy today (kWh)'], ['battery', 'battery (%)'], ['bri', 'brightness (%)'], ['vol', 'volume (%)'], ['humidity', 'humidity (%)'], ['lux', 'light level (lux)'], ['pm25', 'PM2.5']]);
+export const EVENTS = opts([['person', 'sees a person'], ['ring', 'rings'], ['motion', 'detects motion'], ['vehicle', 'sees a vehicle'], ['animal', 'sees an animal'], ['package', 'sees a package'], ['sound', 'hears a sound'], ['video-started', 'starts a video'], ['music-started', 'starts music'], ['paused', 'pauses'], ['stopped', 'stops playing'], ['internet-down', 'internet goes down'], ['internet-up', 'internet comes back'], ['new-device', 'a new device joins']]);
+/** What a room trigger starts on. */
+export const ROOM_EVENTS = opts<RoomEvent>([['motion', 'motion (or a person)'], ['person', 'a person'], ['ring', 'the doorbell'], ['opened', 'a door or window opens'], ['closed', 'a door or window closes'], ['package', 'a package'], ['vehicle', 'a vehicle'], ['animal', 'an animal'], ['sound', 'a sound']]);
 export const PRESENCE_EVENTS = opts<'arrives' | 'leaves' | 'first-arrives' | 'last-leaves'>([['arrives', 'comes home'], ['leaves', 'leaves'], ['first-arrives', 'first home (nobody was)'], ['last-leaves', 'last one out']]);
 export const DAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 export const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -167,6 +175,7 @@ const STATES: [StateMatch, string][] = [
   [{ on: true }, 'on'], [{ on: false }, 'off'], [{ online: false }, 'offline'], [{ online: true }, 'online'], [{ playing: true }, 'playing'], [{ playing: false }, 'not playing'],
   ...['tv', 'hdmi1', 'hdmi2', 'hdmi3', 'hdmi4'].map((i): [StateMatch, string] => [{ on: true, input: i }, `on ${i === 'tv' ? 'TV' : `HDMI ${i.slice(4)}`}`]),
   [{ on: true, hvac: 'cool' }, 'cooling'], [{ on: true, hvac: 'heat' }, 'heating'], [{ activity: 'cleaning' }, 'cleaning'], [{ activity: 'docked' }, 'docked'], [{ muted: true }, 'muted'],
+  [{ motion: true }, 'detecting motion'], [{ motion: false }, 'clear of motion'], [{ open: true }, 'open'], [{ open: false }, 'closed'],
 ];
 /** The states a device can be matched on, with the current one added when it's unusual. */
 export function stateOptions(cur?: StateMatch): Opt[] {
@@ -308,6 +317,8 @@ export interface Ctx {
   actCommand?: Command;
   mode?: string;
   overlay?: string;
+  /** The home's first room, for room triggers and conditions. */
+  room?: string;
   /** Another automation, for "run another automation". */
   other?: string;
 }
@@ -317,6 +328,7 @@ export function newTrigger(kind: Trigger['kind'], c: Ctx): Trigger {
     case 'device': return { kind, device: c.device ?? '', to: { on: true } };
     case 'numeric': return { kind, device: c.device ?? '', field: 'temp', above: 28 };
     case 'event': return { kind, device: c.device ?? '', event: 'person' };
+    case 'room': return { kind, room: c.room ?? '', event: 'motion' };
     case 'time': return { kind, at: { kind: 'time', at: '21:00' } };
     case 'every': return { kind, minutes: 15 };
     case 'presence': return { kind, event: 'arrives' };
@@ -334,6 +346,7 @@ export function newCondition(kind: Condition['kind'], c: Ctx): Condition {
     case 'presence': return { kind, who: 'anyone', home: true };
     case 'mode': return { kind, modes: c.mode ? [c.mode] : [] };
     case 'overlay': return { kind, active: true };
+    case 'room': return { kind, room: c.room ?? '', active: true, withinMin: 10 };
     case 'any': case 'all': case 'not': return { kind, conditions: [newCondition('device', c)] };
   }
 }
@@ -405,15 +418,15 @@ export function bodyOf(d: Draft): Draft {
 export const sameDraft = (a: Draft, b: Draft) => JSON.stringify(bodyOf(a)) === JSON.stringify(bodyOf(b));
 
 /** The context for new parts, from the home. */
-export function ctxOf(o: { devices: Dev[]; sources: { name: string }[]; modes: { id: string }[]; overlays: { id: string }[]; automations: { id: string }[]; self?: string | null }): Ctx {
+export function ctxOf(o: { devices: Dev[]; sources: { name: string }[]; modes: { id: string }[]; overlays: { id: string }[]; automations: { id: string }[]; rooms?: { id: string }[]; self?: string | null }): Ctx {
   const act = o.devices.find(canSet);
   return {
     device: o.devices[0]?.id, actDevice: act?.id, actCommand: act ? firstCommand(act, o.sources) : undefined,
-    mode: o.modes[0]?.id, overlay: o.overlays[0]?.id, other: o.automations.find(a => a.id !== o.self)?.id,
+    mode: o.modes[0]?.id, overlay: o.overlays[0]?.id, room: o.rooms?.[0]?.id, other: o.automations.find(a => a.id !== o.self)?.id,
   };
 }
 /** Devices a step can set (cameras and sensors only report). */
-export const canSet = (d: Pick<Device, 'type'>) => d.type !== 'camera' && d.type !== 'sensor';
+export const canSet = (d: Pick<Device, 'type'> & { kind?: string }) => d.type !== 'camera' && d.type !== 'sensor' && d.kind !== 'sensor';
 
 // --------------------------------------------------------------- devices ---
 

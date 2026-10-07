@@ -1,6 +1,7 @@
 // How a device looks and what tapping it does: the same rules as the phone web app (web/phone.html),
 // kept free of React Native so the tests can run them under plain Node.
 import type { Command, Device, DeviceState, Room, Snapshot } from '../api/types';
+import { isSensor } from './sensors.ts';
 
 /** A device with its state spread on top, the shape every screen works with. */
 export type Dev = Device & DeviceState;
@@ -31,6 +32,8 @@ export const has = (d: Pick<Device, 'capabilities'>, c: string) => (d.capabiliti
 
 const VAC: Record<string, string> = { cleaning: 'Cleaning', returning: 'Returning to dock', docked: 'Docked', paused: 'Paused', idle: 'Idle', error: 'Needs attention' };
 
+export { isSensor };
+
 export function devs(s: Pick<Snapshot, 'devices'>): Record<string, Dev> {
   const o: Record<string, Dev> = {};
   for (const d of s.devices) o[d.id] = { ...d, ...d.state, bri: d.state.bri ?? 100 };
@@ -44,7 +47,12 @@ const inputName = (d: Dev) => d.input ? (d.input === 'tv' ? (has(d, 'sound') ? '
 
 export function stateOf(d: Dev): [string, string] {
   if (d.id === 'warden_internet') return d.online === false ? ['Warden not answering', C.red] : d.on ? ['Internet up', C.green] : ['Internet down', C.red];
-  if (d.type === 'camera' || d.type === 'sensor') return d.online === false ? ['Offline', C.red] : ['Live', C.green];
+  if (isSensor(d)) {
+    if (d.online === false) return ['Not responding', C.red];
+    const parts = [d.open != null ? (d.open ? 'Open' : 'Closed') : '', d.motion != null ? (d.motion ? 'Motion' : 'Clear') : '', d.temp != null ? `${d.temp}°` : '', d.humidity != null ? `${Math.round(d.humidity)}%` : '', d.power != null ? `${Math.round(d.power)} W` : ''].filter(Boolean);
+    return [parts.slice(0, 2).join(' · ') || 'Reporting', d.open || d.motion ? C.amber : C.green];
+  }
+  if (d.type === 'camera') return d.online === false ? ['Offline', C.red] : ['Live', C.green];
   if (d.online === false) return ['Not responding', C.red];
   if (d.type === 'vacuum') {
     const a = d.activity || (d.on ? 'cleaning' : 'idle');
@@ -88,7 +96,7 @@ export function tint(d: Dev): { bg: string; border: string; iconBg: string; icon
  * Fans switch Auto/Sleep, a TV that plays its own library pauses and carries on, speakers start the first source.
  */
 export function toggleCommand(d: Dev, sources: { name: string }[]): Command | null {
-  if (d.type === 'sensor' || d.type === 'camera') return null;
+  if (isSensor(d) || d.type === 'camera') return null;
   if (d.type === 'fan') return { on: !d.on };
   if (d.type === 'vacuum') return { on: !d.on };
   if (has(d, 'library')) return d.on ? { paused: !d.paused } : null;
@@ -99,7 +107,7 @@ export function toggleCommand(d: Dev, sources: { name: string }[]): Command | nu
 
 /** The Now screen's favourites: the owner's list, or the first few visible lights and plugs. */
 export function favourites(s: Pick<Snapshot, 'favourites' | 'devices'>, all: Record<string, Dev>): Dev[] {
-  const ids = s.favourites ?? s.devices.filter(d => !d.hidden && (isLight(d) || d.type === 'plug')).slice(0, 4).map(d => d.id);
+  const ids = s.favourites ?? s.devices.filter(d => !d.hidden && !isSensor(d) && (isLight(d) || d.type === 'plug')).slice(0, 4).map(d => d.id);
   return ids.map(id => all[id]).filter((d): d is Dev => !!d);
 }
 
@@ -119,13 +127,14 @@ export interface DevGroup { id: string; name: string; icon: string; devices: Dev
 
 /**
  * The Devices screen: devices by room in the home's room order (then anything in no room), filtered by
- * room, type and a search over name, room and integration. Hidden devices only when asked for.
+ * room, type and a search over name, room and integration. Hidden devices only when asked for. Sensors never:
+ * they only report, and have a screen of their own.
  */
 export function groupDevices(all: Dev[], rooms: Room[], f: { room?: string; type?: string; q?: string; showHidden?: boolean }): DevGroup[] {
   const q = (f.q ?? '').trim().toLowerCase();
   const typeTest = TYPES.find(t => t.id === (f.type ?? 'all'))?.test ?? (() => true);
   const roomName = (id: string) => rooms.find(r => r.id === id)?.name ?? (id === 'unassigned' ? 'Other' : id);
-  const shown = all.filter(d => (f.showHidden || !d.hidden) && typeTest(d) && (!f.room || f.room === 'all' || d.room === f.room)
+  const shown = all.filter(d => !isSensor(d) && (f.showHidden || !d.hidden) && typeTest(d) && (!f.room || f.room === 'all' || d.room === f.room)
     && (!q || `${d.name} ${roomName(d.room)} ${d.integration}`.toLowerCase().includes(q)));
   const order = [...rooms.map(r => r.id), ...new Set(shown.map(d => d.room).filter(id => !rooms.some(r => r.id === id)))];
   return order.map(id => {

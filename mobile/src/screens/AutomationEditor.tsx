@@ -7,7 +7,7 @@ import { useHub, useSnap } from '../state/hub';
 import { useNav, type Stack } from '../navigation';
 import type { Device, Room } from '../api/types';
 import {
-  ACTION_KINDS, CONDITION_KINDS, DAYS, DAY_NAMES, EVENTS, FIELDS, PRESENCE_EVENTS, RESULT, RHYTHMS, RUN_MODES, TRIGGER_KINDS,
+  ACTION_KINDS, CONDITION_KINDS, DAYS, DAY_NAMES, EVENTS, ROOM_EVENTS, FIELDS, PRESENCE_EVENTS, RESULT, RHYTHMS, RUN_MODES, TRIGGER_KINDS,
   automationsOf, bodyOf, canMove, canSet, changeKind, clockOf, commandChoices, commandFromKey, commandKey, ctxOf, dayOn, deviceLabel, deviceSections,
   draftOf, firstCommand, isGroup, labelOf, minToSec, moveAt, newAction, newCondition, newTrigger, parseClock, pushAt, removeAt, retarget,
   rhythmFromKey, rhythmKey, runMessage, runTime, startRun, sameDraft, secToMin, setAt, splitSeconds, stateFromKey, stateKey, stateOptions, toSeconds, toggleDay, toggleIn,
@@ -268,6 +268,10 @@ function TriggerPart({ t, path, index }: { t: Trigger; path: Path; index: number
       <DeviceChoice value={t.device} onChange={v => f('device', v)} />
       <Field label="When it"><Select label="Event" value={t.event} options={withCurrent(EVENTS, t.event)} onChange={v => f('event', v)} /></Field>
     </>); break;
+    case 'room': body = (<>
+      <Field label="In"><Select label="Room" value={t.room} options={withCurrent(home.rooms.map(r => ({ v: r.id, label: r.name })), t.room)} onChange={v => f('room', v)} /></Field>
+      <Field label="When there’s"><Select label="What happens" value={t.event} options={withCurrent(ROOM_EVENTS, t.event)} onChange={v => f('event', v)} /></Field>
+    </>); break;
     case 'time': body = (<>
       <RhythmField label="At" value={t.at} onChange={r => f('at', r)} />
       <DayChips days={t.days} onChange={d => f('days', d)} />
@@ -345,6 +349,11 @@ function ConditionPart({ c, path, index, tag, fixed }: { c: Condition; path: Pat
         <Chips items={home.modes} on={id => c.modes.includes(id)} onToggle={id => f('modes', toggleIn(c.modes, id))} />
       </Field>
     ); break;
+    case 'room': body = (<>
+      <Field label="In"><Select label="Room" value={c.room} options={withCurrent(home.rooms.map(r => ({ v: r.id, label: r.name })), c.room)} onChange={v => f('room', v)} /></Field>
+      <Segs value={c.active === false ? 'still' : 'active'} options={[{ v: 'active', label: 'Some activity' }, { v: 'still', label: 'All still' }]} onChange={v => f('active', v === 'active')} />
+      <Field label="In the last"><Num label="Minutes" min={1} max={1440} value={c.withinMin ?? 10} onChange={v => f('withinMin', v ?? 10)} unit="min" /></Field>
+    </>); break;
     case 'overlay': body = (<>
       <Field label="Overlay"><Select label="Overlay" value={c.overlay ?? ''} options={withCurrent([{ v: '', label: 'Any overlay' }, ...home.overlays.map(o => ({ v: o.id, label: o.name }))], c.overlay)} onChange={v => f('overlay', v || undefined)} /></Field>
       <Segs value={c.active === false ? 'off' : 'on'} options={[{ v: 'on', label: 'Is on' }, { v: 'off', label: 'Is off' }]} onChange={v => f('active', v === 'on')} />
