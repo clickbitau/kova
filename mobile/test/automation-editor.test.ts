@@ -5,7 +5,7 @@ import {
   fieldDefault, fieldsFor, firstCommand, flatCommand, freeFields, inputsOf, isOneTime, localNowOf, matchFields, matchWords, mediaChoices, mediaFromKey, mediaKey,
   minutesUntil, monthGrid, newAction, newTrigger, nextSameTime, onceChips, onceProblem, onceState, onceWords, parseStamp, presets, pseudoLabel, pseudoTargets,
   readingsFor, scheduleAgain, scheduleDraft, scheduleLine, scheduleName, sectionsOf, shiftMonth, stampOf, targetInfo, triggerText, untilWords, withField, withMatch,
-  zoneWords, zonesOf, ctxOf, type AutomationView, type Draft, type Names,
+  zoneWords, zonesOf, ctxOf, canSet, changeKind, newCondition, roomEventsFor, roomNote, roomOptions, roomProblem, withinProblem, FIELD_UNIT, type AutomationView, type Draft, type Names,
 } from '../src/logic/automations.ts';
 
 // A home of every kind of device, shaped as the snapshot sends them.
@@ -140,8 +140,8 @@ test('readings and events: only what the device has', () => {
   assert.deepEqual(readingsFor(devices[11]).map(o => o.v), ['power', 'grid', 'load']);
   assert.deepEqual(readingsFor(devices[1]).map(o => o.v), ['power', 'energy']);
   assert.ok(readingsFor(devices[1], 'bri').some(o => o.v === 'bri'), 'the current one is kept');
-  assert.equal(readingsFor(undefined).length, 11);
-  assert.deepEqual(eventsFor(devices[9]).map(o => o.v), ['person', 'motion', 'ring']);
+  assert.equal(readingsFor(undefined).length, 12);
+  assert.deepEqual(eventsFor(devices[9]).map(o => o.v), ['person', 'motion', 'ring', 'vehicle', 'animal', 'package', 'sound'], 'a smart camera sees vehicles, animals and packages, and hears sounds');
   assert.deepEqual(eventsFor(devices[12]).map(o => o.v), ['internet-down', 'internet-up', 'internet-failover', 'new-device', 'threat']);
   assert.ok(eventsFor(devices[4]).some(o => o.v === 'screen-asleep'));
   assert.ok(eventsFor(devices[3]).some(o => o.v === 'ended') && eventsFor(devices[3]).some(o => o.v === 'resumed'));
@@ -324,4 +324,64 @@ test('words for parts the summary folds to', () => {
   assert.equal(triggerText({ kind: 'presence', event: 'arrives', person: 'sam' }, names), 'Sam comes home');
   assert.equal(conditionText({ kind: 'mode', modes: [] }, names), 'in a mode (pick one)');
   assert.equal(draftSummary({ name: '', enabled: true, mode: 'single', triggers: [], conditions: [], actions: [] }, names).sentence, 'Add what starts it, then what it does.');
+});
+
+// Sensors and cameras: they only report. Room triggers and conditions are what they tell.
+const sensorHome = [
+  dev('lamp', 'light', 'hall', ['onoff', 'brightness'], { on: false, bri: 40 }),
+  dev('pir', 'sensor', 'hall', [], { motion: false, lux: 30, battery: 80 }, { kind: 'sensor', name: 'Hall motion' }),
+  dev('contact', 'sensor', 'front', [], { open: false }, { kind: 'sensor', name: 'Front door sensor' }),
+  dev('bell', 'camera', 'front', ['events'], {}, { kind: 'camera', name: 'Doorbell', integration: 'Google Nest Doorbell' }),
+  dev('yardcam', 'camera', 'yard', ['events'], {}, { kind: 'camera', name: 'Yard camera', integration: 'Google Nest Camera' }),
+  dev('meter', 'plug', 'hall', ['power', 'energy'], { power: 120 }, { kind: 'sensor', name: 'Meter' }),
+  dev('air', 'sensor', 'bedroom', [], { pm25: 12, temp: 21 }, { kind: 'sensor', name: 'Air' }),
+];
+const sensorRooms = [{ id: 'lounge', name: 'Lounge', icon: 'weekend' }, { id: 'hall', name: 'Hall', icon: 'door_sliding' }, { id: 'front', name: 'Front door', icon: 'door_front' }, { id: 'yard', name: 'Yard', icon: 'yard' }];
+const sNames: Names = { ...names, devices: sensorHome, rooms: sensorRooms };
+
+test('room triggers: the events the room’s cameras and sensors can tell, in words', () => {
+  assert.deepEqual(roomEventsFor('hall', sensorHome).map(o => o.v), ['motion'], 'a motion sensor: motion');
+  assert.deepEqual(roomEventsFor('front', sensorHome).map(o => o.v), ['motion', 'person', 'ring', 'opened', 'closed', 'package', 'vehicle', 'animal', 'sound'], 'a doorbell rings; a door sensor opens and closes');
+  assert.ok(!roomEventsFor('yard', sensorHome).some(o => o.v === 'ring'), 'only doorbells ring');
+  assert.equal(roomEventsFor('lounge', sensorHome).length, 9, 'nothing there yet: everything');
+  assert.equal(roomEventsFor('hall', sensorHome, 'opened').pop()?.v, 'opened', 'the current one is kept');
+  assert.equal(triggerText({ kind: 'room', room: 'hall', event: 'motion' }, sNames), 'there’s motion in Hall');
+  assert.equal(triggerText({ kind: 'room', room: 'front', event: 'opened' }, sNames), 'a door or window opens in Front door');
+  assert.equal(draftSummary({ name: 'x', enabled: true, mode: 'single', triggers: [{ kind: 'room', room: 'front', event: 'package' }], conditions: [], actions: [] }, sNames).when, 'A package is seen in Front door');
+  assert.deepEqual(roomNote('front', sensorHome), { text: 'From Front door sensor and Doorbell.', warn: false });
+  assert.equal(roomNote('lounge', sensorHome)?.warn, true, 'nothing reports there: said so');
+  assert.equal(roomProblem('', sensorRooms), 'Choose a room.');
+  assert.equal(roomProblem('attic', sensorRooms), 'That room is gone: choose another.');
+  assert.equal(roomProblem('hall', sensorRooms), undefined);
+  assert.equal(roomOptions(sensorRooms, 'attic').pop()?.label, 'attic (missing)');
+  // New ones start on the first room with a camera or sensor; a device event becomes its room's.
+  const ctx = ctxOf({ devices: sensorHome, sources: [], modes: [], overlays: [], automations: [], rooms: sensorRooms });
+  assert.equal(ctx.room, 'hall');
+  assert.deepEqual(changeKind({ kind: 'event', device: 'bell', event: 'person' }, newTrigger('room', ctx), { devices: sensorHome, rooms: sensorRooms }), { kind: 'room', room: 'front', event: 'person' });
+});
+
+test('room conditions: some activity lately, or all still for a while', () => {
+  const ctx = ctxOf({ devices: sensorHome, sources: [], modes: [], overlays: [], automations: [], rooms: sensorRooms });
+  assert.deepEqual(newCondition('room', ctx), { kind: 'room', room: 'hall', active: true, withinMin: 10 });
+  assert.equal(conditionText({ kind: 'room', room: 'hall', active: true, withinMin: 10 }, sNames), 'there’s been activity in Hall in the last 10 min');
+  assert.equal(conditionText({ kind: 'room', room: 'hall', active: false, withinMin: 90 }, sNames), 'no activity in Hall for 1 h 30 min');
+  assert.equal(conditionText({ kind: 'room', room: 'hall', active: false }, sNames), 'no activity in Hall for 10 min', 'the hub’s default');
+  assert.equal(withinProblem(0), 'Within 1 to 1440 minutes.');
+  assert.equal(withinProblem(30), undefined);
+});
+
+test('sensors and cameras only report: never set, never in a group, their states and readings offered', () => {
+  assert.deepEqual(sensorHome.filter(canSet).map(d => (d as { id: string }).id), ['lamp'], 'a power meter is a sensor by the hub’s kind');
+  assert.deepEqual(pseudoTargets(sensorHome, sensorRooms).map(o => o.v), ['type:light', 'room:hall']);
+  assert.deepEqual(targetInfo('room:hall', sensorHome, sensorRooms).devices.map(d => d.id), ['lamp'], 'a room group never reaches its sensors');
+  assert.deepEqual(targetInfo('type:plug', sensorHome, sensorRooms).devices, [], 'nor does a type group');
+  assert.deepEqual(matchFields(sensorHome[1]).map(f => f.key), ['motion', 'online'], 'no power to match on a sensor');
+  assert.deepEqual(matchFields(sensorHome[2]).map(f => f.key), ['open', 'online']);
+  assert.ok(!matchFields(sensorHome[0]).some(f => f.key === 'motion'));
+  assert.equal(conditionText({ kind: 'device', device: 'pir', is: { motion: false } }, sNames), 'Hall motion is clear of motion');
+  assert.equal(triggerText({ kind: 'device', device: 'contact', to: { open: true }, forSec: 300 }, sNames), 'Front door sensor turns open for 5 min');
+  assert.deepEqual(readingsFor(sensorHome[6]).map(o => o.v), ['temp', 'pm25']);
+  assert.equal(FIELD_UNIT.pm25, 'µg/m³');
+  assert.equal(triggerText({ kind: 'numeric', device: 'air', field: 'pm25', above: 25 }, sNames), 'Air PM2.5 goes above 25');
+  assert.deepEqual(eventsFor(sensorHome[1]).map(o => o.v), ['person', 'motion']);
 });

@@ -13,10 +13,11 @@ import {
   localNowOf, matchFields, mediaChoices, mediaFromKey, mediaKey, minToSec, monthGrid, moveAt, newAction, newCondition, newTrigger, onceAt, onceChips, onceProblem, onceState, onceWords,
   parseClock, parseStamp, presets, pseudoTargets, pushAt, readingsFor, removeAt, retarget, rhythmFromKey, rhythmKey, runMessage, runTime, sameCommand, sameDraft, scheduleDraft,
   scheduleName, secToMin, setAt, shiftMonth, splitSeconds, stampOf, startRun, targetInfo, timeOf, toSeconds, toggleDay, toggleIn, triggerText, untilWords, withCurrent, withField,
-  withMatch, withOffset, zonesOf,
+  withMatch, withOffset, zonesOf, ACTIVE_MIN, roomEventsFor, roomNote, roomOptions, roomProblem, withinProblem,
   type Action, type AutomationRun, type CmdField, type Condition, type Ctx, type Draft, type MusicItem, type Names, type Opt, type Path, type RampField, type RunAnswer, type Rhythm,
   type StateMatch, type TargetInfo, type Trigger, type Unit,
 } from '../logic/automations';
+import { EV_ICON } from '../logic/sensors';
 import { Icon } from '../ui/Icon';
 import { Button, IconWell, Pill, Press, Segmented, Sheet, Switch } from '../ui/kit';
 import { Appear, animateLayout, haptic } from '../ui/motion';
@@ -30,7 +31,7 @@ import { T } from '../ui/Text';
 
 // --------------------------------------------------------------- pickers --
 
-type Only = (d: Pick<Device, 'type' | 'capabilities'>) => boolean;
+type Only = (d: Pick<Device, 'type' | 'capabilities' | 'kind'>) => boolean;
 type Picker =
   | { type: 'list'; title: string; options: Opt[]; value?: string; onPick: (v: string) => void; note?: string }
   | { type: 'device'; title: string; value?: string; only?: Only; groups?: boolean; onPick: (v: string) => void }
@@ -231,6 +232,13 @@ function Hint({ text, tone = 'stone', icon = 'info' }: { text: string; tone?: 's
   );
 }
 
+/** Under a room choice: the cameras and sensors that report there, or that nothing does yet. */
+function RoomNote({ room }: { room: string }) {
+  const { home } = useEd();
+  const n = roomNote(room, home.devices);
+  return n ? <Hint tone={n.warn ? 'amber' : 'stone'} icon={n.warn ? 'warning' : 'sensors'} text={n.text} /> : null;
+}
+
 // ------------------------------------------------------------- the tree ---
 
 const SUB: Record<string, string> = { trigger: 'trigger', condition: 'condition', action: 'step' };
@@ -400,6 +408,17 @@ function TriggerPart({ t, path, index }: { t: Trigger; path: Path; index: number
       if (!t.event.trim()) problem = 'Choose the event.';
       break;
     }
+    case 'room': {
+      const events = roomEventsFor(t.room, home.devices, t.event);
+      body = (<>
+        <Field label="In"><Select label="Room" icon="meeting_room" value={t.room} options={roomOptions(home.rooms, t.room)}
+          onChange={v => { const ev = roomEventsFor(v, home.devices); set(path, { ...t, room: v, event: ev.some(e => e.v === t.event) ? t.event : ev[0]!.v }); }} /></Field>
+        <Field label="When there’s"><Select label="What happens" icon={EV_ICON[t.event] ?? 'sensors'} value={t.event} options={events} onChange={v => f('event', v)} /></Field>
+        <RoomNote room={t.room} />
+      </>);
+      problem = roomProblem(t.room, home.rooms);
+      break;
+    }
     case 'time': body = (<>
       <RhythmField label="At" value={t.at} onChange={r => f('at', r)} />
       <DayChips days={t.days} onChange={d => f('days', d)} />
@@ -422,7 +441,7 @@ function TriggerPart({ t, path, index }: { t: Trigger; path: Path; index: number
   }
   return (
     <Part path={path} index={index} tag={index ? 'or' : undefined} what="trigger" kind={t.kind} kinds={TRIGGER_KINDS} words={triggerText(t, names)} problem={problem}
-      onKind={k => set(path, changeKind(t, newTrigger(k as Trigger['kind'], ctx)))}>
+      onKind={k => set(path, changeKind(t, newTrigger(k as Trigger['kind'], ctx), home))}>
       {body}
     </Part>
   );
@@ -486,6 +505,14 @@ function ConditionPart({ c, path, index, tag, fixed }: { c: Condition; path: Pat
         <Chips items={[...home.modes, ...c.modes.filter(m => !home.modes.some(x => x.id === m)).map(m => ({ id: m, name: m }))]} on={id => c.modes.includes(id)} onToggle={id => f('modes', toggleIn(c.modes, id))} />
       </Field>
     ); if (!c.modes.length) problem = 'Choose at least one mode.'; break;
+    case 'room': body = (<>
+      <Field label="In"><Select label="Room" icon="meeting_room" value={c.room} options={roomOptions(home.rooms, c.room)} onChange={v => f('room', v)} /></Field>
+      <Segs label="Activity or still" value={c.active === false ? 'still' : 'active'} options={[{ v: 'active', label: 'Some activity' }, { v: 'still', label: 'All still' }]} onChange={v => f('active', v === 'active')} />
+      <Field label={c.active === false ? 'For at least' : 'In the last'} note="A person, motion, the doorbell, or a door or window opening or closing.">
+        <Num label="Minutes" min={1} max={1440} value={c.withinMin ?? ACTIVE_MIN} onChange={v => f('withinMin', v ?? ACTIVE_MIN)} unit="min" />
+      </Field>
+      <RoomNote room={c.room} />
+    </>); problem = roomProblem(c.room, home.rooms) ?? withinProblem(c.withinMin); break;
     case 'overlay': body = (<>
       <Field label="Overlay"><Select label="Overlay" value={c.overlay ?? ''} options={withCurrent([{ v: '', label: 'Any overlay' }, ...home.overlays.map(o => ({ v: o.id, label: o.name }))], c.overlay)} onChange={v => f('overlay', v || undefined)} /></Field>
       <Segs label="On or off" value={c.active === false ? 'off' : 'on'} options={[{ v: 'on', label: 'Is on' }, { v: 'off', label: 'Is off' }]} onChange={v => f('active', v === 'on')} />
@@ -493,7 +520,7 @@ function ConditionPart({ c, path, index, tag, fixed }: { c: Condition; path: Pat
   }
   return (
     <Part path={path} index={index} tag={tag} what="condition" kind={c.kind} kinds={CONDITION_KINDS} canRemove={!fixed} words={conditionText(c, names)} problem={problem}
-      onKind={k => set(path, changeKind(c, newCondition(k as Condition['kind'], ctx)))}>
+      onKind={k => set(path, changeKind(c, newCondition(k as Condition['kind'], ctx), home))}>
       {body}
     </Part>
   );

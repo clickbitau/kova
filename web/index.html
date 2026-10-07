@@ -1051,11 +1051,11 @@ const actionOptions=(AD,sources)=>!AD?[]:AD.type==='fan'?[['{"mode":"Auto"}','Au
 const TV_INPUTS=['hdmi1','hdmi2','hdmi3','hdmi4','tv'],BAR_INPUTS=['tv','hdmi1','hdmi2','bluetooth','wifi'];
 const SOUND_MODES=[['standard','Standard'],['surround','Surround'],['game','Game'],['adaptive','Adaptive']];
 const VAC_ACT=[['cleaning','cleaning'],['returning','returning to the dock'],['docked','docked'],['paused','paused'],['idle','idle'],['error','needing attention']];
-const NUM_READ=[['temp','Temperature','°C'],['target','Set temperature','°C'],['power','Power','W'],['energy','Energy today','kWh'],['battery','Battery','%'],['bri','Brightness','%'],['vol','Volume','%'],['grid','Grid power','W'],['load','Home power','W'],['humidity','Humidity','%'],['lux','Light level','lx']];
+const NUM_READ=[['temp','Temperature','°C'],['target','Set temperature','°C'],['power','Power','W'],['energy','Energy today','kWh'],['battery','Battery','%'],['bri','Brightness','%'],['vol','Volume','%'],['grid','Grid power','W'],['load','Home power','W'],['humidity','Humidity','%'],['lux','Light level','lx'],['pm25','PM2.5','µg/m³']];
 const READ_CAP={temp:'climate',target:'climate',power:'power',energy:'energy',battery:'battery',bri:'brightness',vol:'volume'};
-const EVENT_NAMES={'power-supply-failed':'a power supply fails','power-supply-restored':'a power supply comes back','power-supply-changed':'a power supply changes',person:'sees a person',motion:'detects motion',ring:'rings','video-started':'starts a video','music-started':'starts music',paused:'pauses',resumed:'carries on playing',stopped:'stops playing',ended:'finishes playing','screen-asleep':'screen goes to sleep','screen-shutdown':'screen shuts down','screen-awake':'screen wakes up','internet-down':'internet goes down','internet-up':'internet comes back','new-device':'sees a new device join'};
+const EVENT_NAMES={'power-supply-failed':'a power supply fails','power-supply-restored':'a power supply comes back','power-supply-changed':'a power supply changes',person:'sees a person',motion:'detects motion',ring:'rings',vehicle:'sees a vehicle',animal:'sees an animal',package:'sees a package',sound:'hears a sound','video-started':'starts a video','music-started':'starts music',paused:'pauses',resumed:'carries on playing',stopped:'stops playing',ended:'finishes playing','screen-asleep':'screen goes to sleep','screen-shutdown':'screen shuts down','screen-awake':'screen wakes up','internet-down':'internet goes down','internet-up':'internet comes back','new-device':'sees a new device join'};
 // State fields a command can't set (readings), and the ones the editor has its own control for.
-const RO_KEYS=new Set(['power','energy','grid','load','battery','temp','humidity','lux','pm25','airQuality','filterLife','track','online','fanLevelMax','zones','activity']);
+const RO_KEYS=new Set(['motion','open','power','energy','grid','load','battery','temp','humidity','lux','pm25','airQuality','filterLife','track','online','fanLevelMax','zones','activity']);
 const SET_KEYS=['on','bri','k','color','vol','volStep','paused','media','shuffle','skip','input','muted','sound','night','mode','fanLevel','display','childLock','hvac','target','fanSpeed','zoneSet','extras'];
 const capsOf=d=>(d&&d.capabilities)||[];
 const hasCap=(d,c)=>capsOf(d).includes(c);
@@ -1070,18 +1070,21 @@ const soundsOf=d=>!hasCap(d,'sound')?[]:withCur(Array.isArray(d.sounds)?d.sounds
 const readingsOf=d=>NUM_READ.filter(([f])=>f in stOf(d)||(READ_CAP[f]&&hasCap(d,READ_CAP[f])));
 const eventsOf=d=>{if(Array.isArray(d.events))return d.events;const o=[];
   if(d.type==='camera'||hasCap(d,'events')){if(isDoorbell(d))o.push('ring');o.push('person','motion')}
+  // Smart cameras tell what they saw or heard, too.
+  if(d.type==='camera')o.push('vehicle','animal','package','sound');
   if(isPlayer(d)&&hasCap(d,'media'))o.push('video-started','music-started','paused','resumed','stopped','ended');
   if(hasCap(d,'library'))o.push('screen-asleep','screen-shutdown','screen-awake');
   if(d.type==='internet')o.push('internet-down','internet-up','new-device');
   if(Array.isArray(stOf(d).supplies))o.push('power-supply-failed','power-supply-restored','power-supply-changed');
   return uniq(o)};
 // What a "turns …" / "is …" can look at on a device.
-const matchKeysOf=d=>{const o=[];if(hasCap(d,'onoff')||!['camera','sensor'].includes(d.type))o.push('on');o.push('online');
+// Motion and door sensors: what they report (the key is in their state, even before they've said).
+const matchKeysOf=d=>{const o=[],st=stOf(d);if('motion' in st)o.push('motion');if('open' in st)o.push('open');if(hasCap(d,'onoff')||!isCam(d)&&!isSens(d))o.push('on');o.push('online');
   if(isPlayer(d)||hasCap(d,'pause'))o.push('playing');if(hasCap(d,'mute'))o.push('muted');if(hasCap(d,'input'))o.push('input');
   if(hasCap(d,'climate'))o.push('hvac');if(d.type==='vacuum'||hasCap(d,'vacuum'))o.push('activity');if(modesOf(d).length)o.push('mode');return o};
 // What "Set devices" can change on one device, or on every device a type:/room: target reaches.
 const setKeysOf=dl=>{const any=c=>dl.some(d=>hasCap(d,c)),K=[];
-  if(dl.some(d=>hasCap(d,'onoff')||!['camera','sensor'].includes(d.type)))K.push('on');
+  if(dl.some(d=>hasCap(d,'onoff')||!isCam(d)&&!isSens(d)))K.push('on');
   if(any('brightness'))K.push('bri');if(any('colorTemp'))K.push('k');if(any('color'))K.push('color');
   if(any('volume'))K.push('vol','volStep');if(any('pause'))K.push('paused');if(any('media'))K.push('media');if(any('queue'))K.push('shuffle','skip');
   if(any('input'))K.push('input');if(any('mute'))K.push('muted');if(any('sound'))K.push('sound','night');
@@ -1098,6 +1101,18 @@ const cmdGet=(cmd,k)=>k.startsWith('zone:')?((cmd||{}).zoneSet||{})[k.slice(5)]:
 const cmdPut=(cmd,k,v)=>{if(k.startsWith('zone:')){cmd.zoneSet=cmd.zoneSet||{};cmd.zoneSet[k.slice(5)]=v}else if(k.startsWith('x:')){cmd.extras=cmd.extras||{};cmd.extras[k.slice(2)]=v}else cmd[k.startsWith('g:')?k.slice(2):k]=v};
 const cmdDel=(cmd,k)=>{if(k.startsWith('zone:')){if(cmd.zoneSet){delete cmd.zoneSet[k.slice(5)];if(!Object.keys(cmd.zoneSet).length)delete cmd.zoneSet}}else if(k.startsWith('x:')){if(cmd.extras){delete cmd.extras[k.slice(2)];if(!Object.keys(cmd.extras).length)delete cmd.extras}}else delete cmd[k.startsWith('g:')?k.slice(2):k]};
 const zoneName=(d,n)=>((d&&d.zoneNames)||{})[n]||`Zone ${n}`;
+// Rooms: what their cameras and sensors tell (hub engine/rooms.ts), for room triggers and conditions.
+const ROOM_EVS=[['motion','motion (or a person)'],['person','a person'],['ring','the doorbell'],['opened','a door or window opens'],['closed','a door or window closes'],['package','a package'],['vehicle','a vehicle'],['animal','an animal'],['sound','a sound']];
+const ROOM_TRIG={motion:r=>`there’s motion in ${r}`,person:r=>`a person is seen in ${r}`,ring:r=>`the doorbell rings in ${r}`,opened:r=>`a door or window opens in ${r}`,closed:r=>`a door or window closes in ${r}`,package:r=>`a package is seen in ${r}`,vehicle:r=>`a vehicle is seen in ${r}`,animal:r=>`an animal is seen in ${r}`,sound:r=>`a sound is heard in ${r}`};
+const ACTIVE_MIN=10;
+const watchesRoom=d=>isCam(d)||isSens(d);
+const roomWatchers=(room,devs)=>devs.filter(d=>d.room===room&&watchesRoom(d));
+// A camera sees people, motion, vehicles, animals and packages and hears sounds (a doorbell rings); a motion sensor
+// sees motion; a door or window sensor opens and closes. A room with none of them yet offers everything.
+const roomEventsOf=(room,devs)=>{const k=new Set();for(const d of roomWatchers(room,devs)){const st=stOf(d);
+    if(isCam(d)){['person','motion','vehicle','animal','package','sound'].forEach(x=>k.add(x));if(isDoorbell(d)||/door\s*bell/i.test(d.integration||''))k.add('ring');continue}
+    if('motion' in st)k.add('motion');if('open' in st){k.add('opened');k.add('closed')}if(st.extras&&'detected' in st.extras)k.add('sound')}
+  return(k.size?ROOM_EVS.filter(e=>k.has(e[0])):ROOM_EVS).map(e=>e[0])};
 // Local date-times as the hub writes them ("2026-10-08T15:30", the home's clock), done as plain arithmetic.
 const p2=n=>String(n).padStart(2,'0');
 const STAMP_RE=/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
@@ -1758,7 +1773,8 @@ class Component extends DCLogic {
   kovaAutoVals(s,H,devs,RN){
     const RAW=Object.fromEntries((H.devices||[]).map(d=>[d.id,{...d,zoneNames:d.zoneNames}]));
     const ALL=Object.values(RAW).sort((a,b)=>(RN[a.room]||'').localeCompare(RN[b.room]||'')||a.name.localeCompare(b.name));
-    const ACT=ALL.filter(d=>d.type!=='camera'&&d.type!=='sensor');
+    // Sensors and cameras only report: never a step's target, and type:/room: groups never reach them.
+    const ACT=ALL.filter(d=>!isCam(d)&&!isSens(d));
     const devLabel=d=>`${RN[d.room]?RN[d.room]+' · ':''}${d.name}`;
     const devOpts=(l,cur)=>{const o=l.map(d=>({v:d.id,label:devLabel(d)}));if(cur&&!/^(type|room):/.test(cur)&&!o.some(x=>x.v===cur))o.unshift({v:cur,label:RAW[cur]?devLabel(RAW[cur]):`${cur} (missing)`});return o};
     const PLURAL={light:'lights',dimmer:'dimmers',media:'media players',tv:'TVs',fan:'fans and purifiers',plug:'plugs',vacuum:'vacuums',internet:'internet switches',climate:'air conditioners'};
@@ -1780,10 +1796,10 @@ class Component extends DCLogic {
     const people=H.people||[],modes=H.modes||[],overlays=H.overlays||[];
     const peopleName=id=>(people.find(p=>p.id===id)||{}).name||id;
     // ----------------------------------------------------------- words
-    const MATCH_WORD={on:v=>v?'on':'off',online:v=>v?'online':'offline',playing:v=>v?'playing':'not playing',muted:v=>v?'muted':'not muted',hvac:v=>`on ${(HVAC.find(h=>h[0]===v)||[0,v])[1].toLowerCase()}`,activity:v=>(VAC_ACT.find(x=>x[0]===v)||[0,v])[1],mode:v=>`on ${v}`};
-    const matchW=(m,id)=>{m=m||{};const parts=[];if(m.input)parts.push(`on ${inputWord(RAW[id],m.input)}`);else if(m.on!==undefined)parts.push(MATCH_WORD.on(m.on));
+    const MATCH_WORD={motion:v=>v?'detecting motion':'clear of motion',open:v=>v?'open':'closed',on:v=>v?'on':'off',online:v=>v?'online':'offline',playing:v=>v?'playing':'not playing',muted:v=>v?'muted':'not muted',hvac:v=>`on ${(HVAC.find(h=>h[0]===v)||[0,v])[1].toLowerCase()}`,activity:v=>(VAC_ACT.find(x=>x[0]===v)||[0,v])[1],mode:v=>`on ${v}`};
+    const matchW=(m,id)=>{m=m||{};const parts=[];for(const k of ['motion','open'])if(m[k]!==undefined)parts.push(MATCH_WORD[k](m[k]));if(m.input)parts.push(`on ${inputWord(RAW[id],m.input)}`);else if(m.on!==undefined)parts.push(MATCH_WORD.on(m.on));
       for(const k of ['online','playing','hvac','activity','muted','mode'])if(m[k]!==undefined&&m[k]!=='')parts.push(MATCH_WORD[k](m[k]));return parts.join(' and ')||'…'};
-    const readName=f=>((NUM_READ.find(x=>x[0]===f)||[0,f])[1]).toLowerCase();
+    const readName=f=>{const n=(NUM_READ.find(x=>x[0]===f)||[0,f])[1];return/^[A-Z]{2}/.test(n)?n:n.toLowerCase()};
     const readUnit=f=>(NUM_READ.find(x=>x[0]===f)||[0,0,''])[2];
     const rangeW=(a,b,f)=>{const u=readUnit(f),x=v=>`${v}${u&&u!=='°C'?' '+u:u}`;return a!=null&&b!=null?`between ${x(a)} and ${x(b)}`:a!=null?`above ${x(a)}`:b!=null?`below ${x(b)}`:'…'};
     const SUN={sunrise:'sunrise',sunset:'sunset',dawn:'first light',dusk:'dusk'};
@@ -1805,6 +1821,7 @@ class Component extends DCLogic {
       case 'device':return`${nm(t.device)} ${t.to?`turns ${matchW(t.to,t.device)}`:`stops being ${matchW(t.from,t.device)}`}${t.to&&t.from?` from ${matchW(t.from,t.device)}`:''}${forW(t.forSec)}`;
       case 'numeric':return`${nm(t.device)} ${readName(t.field)} goes ${rangeW(t.above,t.below,t.field)}${forW(t.forSec)}`;
       case 'event':return`${nm(t.device)} ${EVENT_NAMES[t.event]||t.event||'…'}`;
+      case 'room':{const r=RN[t.room]||t.room||'a room';return ROOM_TRIG[t.event]?ROOM_TRIG[t.event](r):`${t.event||'…'} in ${r}`}
       case 'time':return`at ${[rhW(t.at),daysW(t.days)].filter(Boolean).join(' ')}`;
       case 'once':return`once, ${stampWordsC(t.at,nowSt)}${t.missed?' (missed)':t.firedAt?' (done)':''}`;
       case 'every':return`every ${durW((t.minutes||0)*60)}`;
@@ -1819,6 +1836,7 @@ class Component extends DCLogic {
       case 'presence':return c.who==='anyone'?(c.home!==false?'someone’s home':'nobody’s home'):c.who==='no-one'?(c.home!==false?'nobody’s home':'someone’s home'):`${peopleName(c.who)} is ${c.home!==false?'home':'out'}`;
       case 'mode':return`in ${(c.modes||[]).map(m=>(modes.find(y=>y.id===m)||{}).name||m).join(' or ')||'…'}`;
       case 'overlay':return`${c.overlay?(overlays.find(o=>o.id===c.overlay)||{}).name||c.overlay:'any overlay'} is ${c.active===false?'off':'on'}`;
+      case 'room':{const r=RN[c.room]||c.room||'a room',m=durW((c.withinMin||ACTIVE_MIN)*60);return c.active===false?`no activity in ${r} for ${m}`:`there’s been activity in ${r} in the last ${m}`}
       case 'all':return(c.conditions||[]).map(condW).join(' and ')||'…';case 'any':return`either ${(c.conditions||[]).map(condW).join(' or ')||'…'}`;
       case 'not':return`not (${(c.conditions||[]).map(condW).join(' and ')||'…'})`;default:return c.kind}};
     const actW=a=>{switch(a.kind){
@@ -1946,12 +1964,14 @@ class Component extends DCLogic {
     const durFields=(label,sec,set,key,o={})=>{const u=(E.units||{})[key]||unitOf(sec),n=sec==null?'':Math.round(sec/MUL[u]*100)/100;
       return[F.num(label,n,v=>set(v==null?undefined:Math.round(v*MUL[u])),'',{min:0,...o}),F.sel('',u,opts(UNITS),v=>{this.setState(st=>({ae:{...st.ae,units:{...(st.ae.units||{}),[key]:v}}}));if(sec!=null)set(Math.round(n*MUL[v]))},{aria:`${label} unit`,minw:'110px'})]};
     // A device's state to look for: each part on its own, removable, with "+ Add" for the rest.
-    const MATCH_LABEL={on:'Power',online:'Connection',playing:'Playing',muted:'Sound',input:'Input',hvac:'Climate mode',activity:'Vacuum',mode:'Mode'};
-    const matchDefault=(k,d)=>({on:true,online:false,playing:true,muted:true,input:inputsOf(d)[0]||'tv',hvac:'cool',activity:'cleaning',mode:modesOf(d)[0]||'Auto'})[k];
+    const MATCH_LABEL={motion:'Motion',open:'Door or window',on:'Power',online:'Connection',playing:'Playing',muted:'Sound',input:'Input',hvac:'Climate mode',activity:'Vacuum',mode:'Mode'};
+    const matchDefault=(k,d)=>({motion:true,open:true,on:true,online:false,playing:true,muted:true,input:inputsOf(d)[0]||'tv',hvac:'cool',activity:'cleaning',mode:modesOf(d)[0]||'Auto'})[k];
     const matchFields=(m,devId,setM,o={})=>{const d=RAW[devId]||{},M=m||{},avail=matchKeysOf(d),out=[];
       const put=(k,v)=>{const n={...M,[k]:v};if(k==='input')delete n.on;setM(n)};const drop=k=>{const n={...M};delete n[k];setM(Object.keys(n).length?n:(o.optional?undefined:{}))};
       for(const k of Object.keys(M)){const v=M[k];let f;
-        switch(k){case 'on':f=F.seg(MATCH_LABEL.on,v,[[true,'On'],[false,'Off']],x=>put(k,x));break;
+        switch(k){case 'motion':f=F.seg(MATCH_LABEL.motion,v,[[true,'Detecting motion'],[false,'Clear']],x=>put(k,x));break;
+          case 'open':f=F.seg(MATCH_LABEL.open,v,[[true,'Open'],[false,'Closed']],x=>put(k,x));break;
+          case 'on':f=F.seg(MATCH_LABEL.on,v,[[true,'On'],[false,'Off']],x=>put(k,x));break;
           case 'online':f=F.seg(MATCH_LABEL.online,v,[[true,'Online'],[false,'Offline']],x=>put(k,x));break;
           case 'playing':f=F.seg(MATCH_LABEL.playing,v,[[true,'Playing'],[false,'Not playing']],x=>put(k,x));break;
           case 'muted':f=F.seg(MATCH_LABEL.muted,v,[[true,'Muted'],[false,'Not muted']],x=>put(k,x));break;
@@ -2013,23 +2033,36 @@ class Component extends DCLogic {
           return out}
         default:return[F.text(human(k),v==null?'':String(v),set)]}};
     // ------------------------------------------------------------- kinds
-    const T_KINDS=[['device','A device changes','toggle_on'],['numeric','A reading crosses a value','speed'],['event','A device event','notifications_active'],['time','A time of day','schedule'],['once','Once, at a date and time','event'],['every','Every few minutes','update'],['presence','Someone comes or goes','person_pin_circle'],['mode','A mode starts','routine'],['overlay','An overlay starts or ends','layers'],['hub','Kova starts','power_settings_new']];
-    const C_KINDS=[['device','A device is…','toggle_on'],['numeric','A reading is…','speed'],['time','The time or day','schedule'],['presence','Who’s home','home'],['mode','The mode','routine'],['overlay','An overlay is on or off','layers'],['all','All of these','checklist'],['any','Any of these','call_split'],['not','None of these','block']];
+    const T_KINDS=[['device','A device changes','toggle_on'],['numeric','A reading crosses a value','speed'],['event','A device event','notifications_active'],['room','Something happens in a room','sensors'],['time','A time of day','schedule'],['once','Once, at a date and time','event'],['every','Every few minutes','update'],['presence','Someone comes or goes','person_pin_circle'],['mode','A mode starts','routine'],['overlay','An overlay starts or ends','layers'],['hub','Kova starts','power_settings_new']];
+    const C_KINDS=[['device','A device is…','toggle_on'],['numeric','A reading is…','speed'],['time','The time or day','schedule'],['presence','Who’s home','home'],['mode','The mode','routine'],['overlay','An overlay is on or off','layers'],['room','Activity in a room','sensor_occupied'],['all','All of these','checklist'],['any','Any of these','call_split'],['not','None of these','block']];
     const A_KINDS=[['set','Set devices','tune'],['delay','Wait a while','hourglass_top'],['wait','Wait until…','pending'],['notify','Send a notification','notifications'],['overlay','Start or end an overlay','layers'],['if','If … otherwise …','alt_route'],['repeat','Repeat','repeat'],['ramp','Ease a value over time','trending_up'],['run','Run another automation','play_circle'],['stop','Stop here','stop_circle']];
     const A_QUICK=A_KINDS.filter(k=>['set','notify','overlay','delay'].includes(k[0]));
     const kindIcon=(l,k)=>(l.find(x=>x[0]===k)||[0,0,'help'])[2];
     const firstReading=id=>((readingsOf(RAW[id]||{})[0])||['temp'])[0];
     // A new reading to compare: start from where it is now (units differ from reading to reading).
+    // Rooms: a new room trigger or condition starts on the room of the device it came from, else the first room with a camera or sensor.
+    const ROOMS=H.rooms||[];
+    const firstRoom=(ROOMS.find(r=>roomWatchers(r.id,ALL).length)||ROOMS[0]||{}).id;
+    const roomFrom=o=>o&&o.device&&RAW[o.device]&&RN[RAW[o.device].room]!==undefined?RAW[o.device].room:o&&o.room&&RN[o.room]!==undefined?o.room:firstRoom;
+    const roomOpts=cur=>{const l=ROOMS.map(r=>({v:r.id,label:r.name}));if(cur&&RN[cur]===undefined)l.push({v:cur,label:`${cur} (missing)`});return l};
+    const roomEvOpts=(room,cur)=>withCur(roomEventsOf(room,ALL),cur).map(e=>({v:e,label:cap1((ROOM_EVS.find(x=>x[0]===e)||[0,e])[1])}));
+    const roomNoteF=room=>{if(!room)return[];const w=roomWatchers(room,ALL).map(d=>d.name);
+      return[F.note(w.length?`From ${w.length>2?`${w.slice(0,-1).join(', ')} and ${w[w.length-1]}`:w.join(' and ')}.`:'Nothing in this room reports activity yet: add a camera, or a motion or door sensor, there.')]};
+    const roomErr=room=>!room?'Choose a room':RN[room]===undefined?'That room is gone: choose another':'';
     const reRange=x=>{const cur=stOf(RAW[x.device])[x.field];delete x.below;x.above=typeof cur==='number'?Math.round(cur):undefined};
-    const NEW_T={device:o=>({kind:'device',device:o&&RAW[o.device]?o.device:firstDev,to:{on:true}}),
+    // A device's first state to look for: on, where it has power; a sensor's motion or door.
+    const firstMatch=id=>{const d=RAW[id]||{},k=matchKeysOf(d).find(x=>x!=='online')||(RAW[id]?'online':'on');return{[k]:matchDefault(k,d)}};
+    const NEW_T={device:o=>{const id=o&&RAW[o.device]?o.device:firstDev;return{kind:'device',device:id,to:firstMatch(id)}},
       numeric:o=>{const id=o&&RAW[o.device]&&readingsOf(RAW[o.device]).length?o.device:(READERS[0]||{}).id;const f=firstReading(id),cur=stOf(RAW[id])[f];return{kind:'numeric',device:id,field:f,above:typeof cur==='number'?Math.round(cur):undefined}},
       event:o=>{const id=o&&RAW[o.device]&&eventsOf(RAW[o.device]).length?o.device:(EVENTERS[0]||{}).id;return{kind:'event',device:id,event:(eventsOf(RAW[id]||{})[0])||''}},
+      room:o=>{const room=roomFrom(o),ev=roomEventsOf(room,ALL);return{kind:'room',room,event:o&&o.kind==='event'&&ev.includes(o.event)?o.event:ev[0]||'motion'}},
       time:()=>({kind:'time',at:{kind:'time',at:'21:00'}}),once:()=>({kind:'once',at:defaultOnce()}),every:()=>({kind:'every',minutes:15}),presence:()=>({kind:'presence',event:'arrives'}),mode:()=>({kind:'mode',mode:(modes[0]||{}).id}),
       overlay:()=>({kind:'overlay',overlay:(overlays[0]||{}).id,event:'starts'}),hub:()=>({kind:'hub',event:'start'})};
-    const NEW_C={device:o=>({kind:'device',device:o&&RAW[o.device]?o.device:firstDev,is:{on:true}}),
+    const NEW_C={device:o=>{const id=o&&RAW[o.device]?o.device:firstDev;return{kind:'device',device:id,is:firstMatch(id)}},
       numeric:o=>{const id=o&&RAW[o.device]&&readingsOf(RAW[o.device]).length?o.device:(READERS[0]||{}).id;const f=firstReading(id),cur=stOf(RAW[id])[f];return{kind:'numeric',device:id,field:f,above:typeof cur==='number'?Math.round(cur):undefined}},
       time:()=>({kind:'time',after:{kind:'time',at:'18:00'},before:{kind:'time',at:'23:00'}}),
       presence:()=>({kind:'presence',who:'anyone',home:true}),mode:()=>({kind:'mode',modes:[(modes[0]||{}).id].filter(Boolean)}),overlay:()=>({kind:'overlay',active:true}),
+      room:o=>({kind:'room',room:roomFrom(o),active:true,withinMin:ACTIVE_MIN}),
       any:o=>({kind:'any',conditions:o&&o.kind!=='any'&&o.kind!=='all'&&o.kind!=='not'?[o]:[NEW_C.device()]}),all:o=>({kind:'all',conditions:o&&!['any','all','not'].includes(o.kind)?[o]:[NEW_C.device()]}),not:o=>({kind:'not',conditions:o&&!['any','all','not'].includes(o.kind)?[o]:[NEW_C.device()]})};
     const defaultCmd=id=>{const ks=setKeysOf(targetDevs(id));return ks.includes('on')?{on:true}:ks.length?{[ks[0]]:propDefault(ks[0],targetDevs(id))}:{on:true}};
     const NEW_A={set:()=>({kind:'set',targets:firstAct?{[firstAct]:defaultCmd(firstAct)}:{}}),delay:()=>({kind:'delay',seconds:300}),
@@ -2043,6 +2076,7 @@ class Component extends DCLogic {
       case 'device':return!RAW[t.device]?'Choose a device':!t.to&&!t.from?'Say what state it turns to':t.to&&!Object.keys(t.to).length?'Choose what it turns to':'';
       case 'numeric':return!RAW[t.device]?'Choose a device':t.above==null&&t.below==null?'Give a value to go above or below':t.above!=null&&t.below!=null&&t.above>=t.below?'“Above” has to be less than “below”':'';
       case 'event':return!RAW[t.device]?'Choose a device':!(t.event||'').trim()?'Choose the event':'';
+      case 'room':return roomErr(t.room)||(!ROOM_EVS.some(e=>e[0]===t.event)?'Choose what happens':'');
       case 'every':return!(t.minutes>=1&&t.minutes<=1440)?'Every 1 to 1440 minutes':'';
       case 'once':return!STAMP_RE.test(t.at||'')?'Pick a date and a time':!t.firedAt&&t.at<=nowSt&&A.enabled!==false&&(A.triggers||[]).every(x=>x.kind==='once')?'That time has passed: choose a later one':'';
       case 'mode':return!t.mode?'Choose a mode':'';case 'overlay':return!t.overlay?'Choose an overlay':'';default:return''}};
@@ -2051,6 +2085,7 @@ class Component extends DCLogic {
       case 'numeric':return!RAW[c.device]?'Choose a device':c.above==null&&c.below==null?'Give a value':c.above!=null&&c.below!=null&&c.above>=c.below?'“Above” has to be less than “below”':'';
       case 'time':return!c.after&&!c.before&&!nonEmpty(c.days)?'Give a time or some days':'';
       case 'mode':return!nonEmpty(c.modes)?'Choose at least one mode':'';
+      case 'room':return roomErr(c.room)||(c.withinMin!=null&&!(c.withinMin>=1&&c.withinMin<=1440)?'Within 1 to 1440 minutes':'');
       case 'all':case 'any':case 'not':return!nonEmpty(c.conditions)?'Add at least one condition to this group':'';default:return''}};
     const targetsErr=a=>!Object.keys(a.targets||{}).length?'Choose at least one device':a.kind==='set'&&Object.entries(a.targets).some(([,c])=>!cmdKeys(c).length)?'Choose what each device should do':a.kind==='set'&&Object.values(a.targets).some(c=>c.media===''||/^station: *$/i.test(c.media||'x'))?'Type what to play':'';
     const actErr=a=>{switch(a.kind){
@@ -2077,7 +2112,7 @@ class Component extends DCLogic {
     const kindSwap=(list,old,k,make)=>{const n=make[k](old);if(old&&old.device&&n.device!==undefined&&RAW[old.device]&&k!=='numeric'&&k!=='event')n.device=old.device;return n};
     // When
     const trigFields=(t,p)=>{const set=(k,v)=>setAt([...p,k],v);switch(t.kind){
-      case 'device':return[F.sel('Device',t.device,devOpts(ALL,t.device),v=>edit(a=>{const x=get(a,p);x.device=v;const ok=matchKeysOf(RAW[v]||{});for(const m of ['to','from'])if(x[m]){for(const k of Object.keys(x[m]))if(!ok.includes(k))delete x[m][k];if(!Object.keys(x[m]).length)x[m]=m==='to'?{on:true}:undefined}}),{wide:true}),
+      case 'device':return[F.sel('Device',t.device,devOpts(ALL,t.device),v=>edit(a=>{const x=get(a,p);x.device=v;const ok=matchKeysOf(RAW[v]||{});for(const m of ['to','from'])if(x[m]){for(const k of Object.keys(x[m]))if(!ok.includes(k))delete x[m][k];if(!Object.keys(x[m]).length)x[m]=m==='to'?firstMatch(v):undefined}}),{wide:true}),
         F.sub('Turns'),...matchFields(t.to,t.device,v=>set('to',v),{optional:!!t.from,addLabel:'+ Choose a state'}),
         F.sub('Only when it was (optional)'),...matchFields(t.from,t.device,v=>set('from',v),{optional:true,addLabel:'+ Any state before'}),
         F.sub(''),...durFields('Stays so for',t.forSec,v=>set('forSec',v||undefined),p.join('.')+'.for',{hasHint:true,hint:'Blank: straight away'})];
@@ -2088,6 +2123,8 @@ class Component extends DCLogic {
         return[F.sel('Device',t.device,devOpts(EVENTERS,t.device),v=>edit(a=>{const x=get(a,p);x.device=v;const e2=eventsOf(RAW[v]||{});if(!e2.includes(x.event))x.event=e2[0]||x.event}),{wide:true}),
           F.sel('Event',other?'__other':t.event,[...ev.map(e=>({v:e,label:cap1(EVENT_NAMES[e]||e)})),{v:'__other',label:'Something else (type its name)…'}],v=>{if(v==='__other'){this.setState(st=>({ae:{...st.ae,otherEv:{...(st.ae.otherEv||{}),[p.join('.')]:true}}}));set('event',ev.includes(t.event)?'':t.event)}else{this.setState(st=>({ae:{...st.ae,otherEv:{...(st.ae.otherEv||{}),[p.join('.')]:false}}}));set('event',v)}},{wide:true}),
           ...(other?[F.text('Event name',t.event,v=>set('event',v.trim()),'As the device sends it, e.g. doorbell-long')]:[])]}
+      case 'room':return[F.sel('Room',t.room,roomOpts(t.room),v=>edit(a=>{const x=get(a,p);x.room=v;const ev=roomEventsOf(v,ALL);if(!ev.includes(x.event))x.event=ev[0]}),{wide:true}),
+        F.sel('When there’s',t.event,roomEvOpts(t.room,t.event),v=>set('event',v),{wide:true}),...roomNoteF(t.room)];
       case 'time':return[...rhythmFields('When',t.at,v=>set('at',v)),dayChips(t.days,v=>set('days',v))];
       case 'once':{const d=(t.at||'').slice(0,10),tm=(t.at||'').slice(11,16),put=(dd,tt)=>edit(a=>{const x=get(a,p);x.at=`${dd||d||nowSt.slice(0,10)}T${tt||tm||'09:00'}`;delete x.firedAt;delete x.missed});
         const chip=(label,st)=>({label,on:t.at===st,toggle:()=>put(st.slice(0,10),st.slice(11,16))});
@@ -2104,7 +2141,7 @@ class Component extends DCLogic {
       default:return[]}};
     // Only if (groups nest)
     const condFields=(c,p)=>{const set=(k,v)=>setAt([...p,k],v);switch(c.kind){
-      case 'device':return[F.sel('Device',c.device,devOpts(ALL,c.device),v=>edit(a=>{const x=get(a,p);x.device=v;const ok=matchKeysOf(RAW[v]||{});for(const k of Object.keys(x.is||{}))if(!ok.includes(k))delete x.is[k];if(!x.is||!Object.keys(x.is).length)x.is={on:true}}),{wide:true}),
+      case 'device':return[F.sel('Device',c.device,devOpts(ALL,c.device),v=>edit(a=>{const x=get(a,p);x.device=v;const ok=matchKeysOf(RAW[v]||{});for(const k of Object.keys(x.is||{}))if(!ok.includes(k))delete x.is[k];if(!x.is||!Object.keys(x.is).length)x.is=firstMatch(v)}),{wide:true}),
         F.sub('Is'),...matchFields(c.is,c.device,v=>set('is',v||{}))];
       case 'numeric':{const rs=readingsOf(RAW[c.device]||{}),u=readUnit(c.field);return[F.sel('Device',c.device,devOpts(READERS,c.device),v=>edit(a=>{const x=get(a,p);x.device=v;const r=readingsOf(RAW[v]||{});if(!r.some(y=>y[0]===x.field)){x.field=(r[0]||['temp'])[0];reRange(x)}}),{wide:true}),
         F.sel('Reading',c.field,withCur(rs.map(r=>r[0]),c.field).map(f=>({v:f,label:cap1(readName(f))})),v=>edit(a=>{const x=get(a,p);x.field=v;reRange(x)})),F.num('Above',c.above,v=>set('above',v),u),F.num('Below',c.below,v=>set('below',v),u)]}
@@ -2112,6 +2149,8 @@ class Component extends DCLogic {
         F.sub(''),F.seg('Until',c.before?'on':'',[['','Any time'],['on','A time']],v=>set('before',v?{kind:'time',at:'23:00'}:undefined)),...(c.before?rhythmFields('Before',c.before,v=>set('before',v)):[]),dayChips(c.days,v=>set('days',v))];
       case 'presence':return[F.sel('Who',c.who,[{v:'anyone',label:'Anyone'},{v:'no-one',label:'No one'},...people.map(x=>({v:x.id,label:x.name}))],v=>set('who',v)),F.seg('Is',c.home===false?'out':'home',[['home','Home'],['out','Out']],v=>set('home',v==='home'))];
       case 'mode':return[F.chips('In any of',modes.map(m=>{const on=(c.modes||[]).includes(m.id);return{label:m.name,on,toggle:()=>set('modes',on?c.modes.filter(x=>x!==m.id):[...(c.modes||[]),m.id])}}))];
+      case 'room':return[F.sel('Room',c.room,roomOpts(c.room),v=>set('room',v),{wide:true}),F.seg('',c.active===false?'still':'active',[['active','Some activity'],['still','All still']],v=>set('active',v==='active')),
+        F.num(c.active===false?'For at least':'In the last',c.withinMin??ACTIVE_MIN,v=>set('withinMin',v==null?undefined:Math.round(v)),'min',{min:1,max:1440,step:1,hasHint:true,hint:'A person, motion, the doorbell or a door'}),...roomNoteF(c.room)];
       case 'overlay':return[F.sel('Overlay',c.overlay||'',[{v:'',label:'Any overlay'},...overlays.map(o=>({v:o.id,label:o.name}))],v=>set('overlay',v||undefined),{wide:true}),F.seg('Is',c.active===false?'off':'on',[['on','On'],['off','Off']],v=>set('active',v==='on'))];
       default:return[]}};
     const rows={when:[],if:[],then:[]};

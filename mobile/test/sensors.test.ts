@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { alertRows, decisionText, groupSensors, isSensor, quietText, roomLine, sensorCard, sensorFlags, sparkPath, timelineRows } from '../src/logic/sensors.ts';
 import { devs, groupDevices, stateOf, toggleCommand } from '../src/logic/devices.ts';
-import { ctxOf, newCondition, newTrigger, stateOptions, canSet } from '../src/logic/automations.ts';
+import { ctxOf, matchFields, matchWords, newCondition, newTrigger, canSet } from '../src/logic/automations.ts';
 import { routeFor, NATIVE_PAGES } from '../src/logic/links.ts';
 import type { Device, Room, SecurityState, SensorView } from '../src/api/types.ts';
 
@@ -78,6 +78,12 @@ test('automations on the phone: room triggers and conditions, sensor states; not
   const ctx = ctxOf({ devices: [], sources: [], modes: [], overlays: [], automations: [], rooms });
   assert.deepEqual(newTrigger('room', ctx), { kind: 'room', room: 'lounge', event: 'motion' });
   assert.deepEqual(newCondition('room', ctx), { kind: 'room', room: 'lounge', active: true, withinMin: 10 });
-  assert.ok(stateOptions().some(o => o.label === 'open') && stateOptions().some(o => o.label === 'detecting motion'));
+  // Motion and open are offered as states only for the sensors that report them.
+  const motion = { id: 'm', type: 'sensor', capabilities: [], state: { motion: false, lux: 30 } } as never, door = { id: 'd', type: 'sensor', capabilities: [], state: { open: null } } as never;
+  assert.deepEqual(matchFields(motion).map(f => [f.key, f.yes]), [['motion', 'Detecting motion'], ['online', 'Online']]);
+  assert.deepEqual(matchFields(door).map(f => [f.key, f.yes, f.no]), [['open', 'Open', 'Closed'], ['online', 'Online', 'Offline']]);
+  assert.ok(!matchFields({ id: 'l', type: 'light', capabilities: ['onoff'], state: { on: true } } as never).some(f => f.key === 'motion' || f.key === 'open'));
+  assert.equal(matchWords({ motion: true }), 'detecting motion');
+  assert.equal(matchWords({ open: false }), 'closed');
   assert.equal(NATIVE_PAGES[routeFor('/phone.html?page=sensors').page!], 'Sensors');
 });

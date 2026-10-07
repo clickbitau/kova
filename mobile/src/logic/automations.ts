@@ -4,11 +4,16 @@
 // (hub/src/engine/automation-check.ts) is what the editor offers: every field a device can be set to, state
 // matches, readings, events, every kind of trigger, condition and step, and one-time schedules.
 import type { Command, Device, Room } from '../api/types';
+import { isCamera, isSensor } from './sensors.ts';
 
 // ------------------------------------------------------------------ shapes --
 
-export interface StateMatch { on?: boolean; online?: boolean; input?: string; hvac?: string; activity?: string; playing?: boolean; muted?: boolean; mode?: string }
-export type NumericField = 'temp' | 'target' | 'power' | 'energy' | 'battery' | 'bri' | 'vol' | 'grid' | 'load' | 'humidity' | 'lux';
+export interface StateMatch {
+  on?: boolean; online?: boolean; input?: string; hvac?: string; activity?: string; playing?: boolean; muted?: boolean; mode?: string;
+  /** Motion sensors: detecting motion now (true) or clear. Door and window sensors: open (true) or closed. */
+  motion?: boolean; open?: boolean;
+}
+export type NumericField = 'temp' | 'target' | 'power' | 'energy' | 'battery' | 'bri' | 'vol' | 'grid' | 'load' | 'humidity' | 'lux' | 'pm25';
 export type SunEvent = 'sunrise' | 'sunset' | 'dawn' | 'dusk';
 export type Prayer = 'fajr' | 'sunrise' | 'dhuhr' | 'asr' | 'maghrib' | 'isha';
 export type Rhythm = { kind: 'time'; at: string } | { kind: 'sun'; event: SunEvent; offsetMin?: number } | { kind: 'prayer'; prayer: Prayer; offsetMin?: number };
@@ -18,6 +23,13 @@ export type Targets = Record<string, Command>;
 /** What a room's cameras and sensors notice (hub engine/rooms.ts). */
 export type RoomEvent = 'person' | 'motion' | 'ring' | 'vehicle' | 'animal' | 'package' | 'sound' | 'opened' | 'closed';
 export const ROOM_EVENT_WORDS: Record<RoomEvent, string> = { motion: 'motion (or a person)', person: 'a person', ring: 'the doorbell', opened: 'a door or window opens', closed: 'a door or window closes', package: 'a package', vehicle: 'a vehicle', animal: 'an animal', sound: 'a sound' };
+/** A room trigger in words, after "When": "there’s motion in the Hall", "a door or window opens in the Front door". */
+const ROOM_TRIGGER_WORDS: Record<RoomEvent, (room: string) => string> = {
+  motion: r => `there’s motion in ${r}`, person: r => `a person is seen in ${r}`, ring: r => `the doorbell rings in ${r}`, opened: r => `a door or window opens in ${r}`,
+  closed: r => `a door or window closes in ${r}`, package: r => `a package is seen in ${r}`, vehicle: r => `a vehicle is seen in ${r}`, animal: r => `an animal is seen in ${r}`, sound: r => `a sound is heard in ${r}`,
+};
+/** How long a room counts as active after its last sign of someone, unless a condition says (hub engine/rooms.ts ACTIVE_MIN). */
+export const ACTIVE_MIN = 10;
 
 export type Trigger =
   | { kind: 'device'; device: string; to?: StateMatch; from?: StateMatch; forSec?: number }
@@ -163,28 +175,29 @@ export function canMove(o: unknown, p: Path, d: -1 | 1): boolean {
 export type Opt<V = string> = { v: V; label: string };
 const opts = <V extends string>(l: [V, string][]): Opt<V>[] => l.map(([v, label]) => ({ v, label }));
 
-export const TRIGGER_KINDS = opts<Trigger['kind']>([['device', 'A device changes'], ['numeric', 'A reading goes above or below'], ['event', 'A device event'], ['time', 'A time of day'], ['once', 'Once, at a date and time'], ['every', 'Every few minutes'], ['presence', 'Someone comes or goes'], ['mode', 'A mode starts'], ['overlay', 'An overlay starts or ends'], ['hub', 'Kova starts']]);
-export const CONDITION_KINDS = opts<Condition['kind']>([['device', 'A device is'], ['numeric', 'A reading is above or below'], ['time', 'The time or day'], ['presence', 'Who’s home'], ['mode', 'The mode'], ['overlay', 'An overlay'], ['any', 'Any of these'], ['all', 'All of these'], ['not', 'None of these']]);
+export const TRIGGER_KINDS = opts<Trigger['kind']>([['device', 'A device changes'], ['numeric', 'A reading goes above or below'], ['event', 'A device event'], ['room', 'Something happens in a room'], ['time', 'A time of day'], ['once', 'Once, at a date and time'], ['every', 'Every few minutes'], ['presence', 'Someone comes or goes'], ['mode', 'A mode starts'], ['overlay', 'An overlay starts or ends'], ['hub', 'Kova starts']]);
+export const CONDITION_KINDS = opts<Condition['kind']>([['device', 'A device is'], ['numeric', 'A reading is above or below'], ['time', 'The time or day'], ['presence', 'Who’s home'], ['mode', 'The mode'], ['overlay', 'An overlay'], ['room', 'Activity in a room'], ['any', 'Any of these'], ['all', 'All of these'], ['not', 'None of these']]);
 export const ACTION_KINDS = opts<Action['kind']>([['set', 'Set devices'], ['ramp', 'Ramp gradually'], ['delay', 'Wait a while'], ['wait', 'Wait until something is true'], ['notify', 'Send a notification'], ['overlay', 'Start or end an overlay'], ['if', 'If … otherwise …'], ['repeat', 'Repeat'], ['run', 'Run another automation'], ['stop', 'Stop here']]);
 export const RUN_MODES = opts<RunMode>([['single', 'Ignore the new start'], ['restart', 'Start over'], ['queued', 'Run again after'], ['parallel', 'Run alongside']]);
 
 /** An icon for each kind of part, so a long automation can be scanned. */
 export const KIND_ICON: Record<string, string> = {
-  'trigger:device': 'toggle_on', 'trigger:numeric': 'thermostat', 'trigger:event': 'notifications_active', 'trigger:time': 'schedule', 'trigger:once': 'timer',
+  'trigger:device': 'toggle_on', 'trigger:numeric': 'thermostat', 'trigger:event': 'notifications_active', 'trigger:room': 'sensors', 'trigger:time': 'schedule', 'trigger:once': 'timer',
   'trigger:every': 'autorenew', 'trigger:presence': 'person', 'trigger:mode': 'routine', 'trigger:overlay': 'layers', 'trigger:hub': 'power_settings_new',
   'condition:device': 'toggle_on', 'condition:numeric': 'thermostat', 'condition:time': 'schedule', 'condition:presence': 'person', 'condition:mode': 'routine',
-  'condition:overlay': 'layers', 'condition:any': 'call_split', 'condition:all': 'fact_check', 'condition:not': 'block',
+  'condition:overlay': 'layers', 'condition:room': 'sensor_occupied', 'condition:any': 'call_split', 'condition:all': 'fact_check', 'condition:not': 'block',
   'action:set': 'tune', 'action:ramp': 'brightness_6', 'action:delay': 'timer', 'action:wait': 'pending', 'action:notify': 'notifications',
   'action:overlay': 'layers', 'action:if': 'call_split', 'action:repeat': 'repeat', 'action:run': 'play_arrow', 'action:stop': 'stop',
 };
 
-export const FIELDS = opts<NumericField>([['temp', 'temperature (°C)'], ['target', 'set temperature (°C)'], ['humidity', 'humidity (%)'], ['lux', 'light level (lux)'], ['power', 'power (W)'], ['energy', 'energy today (kWh)'], ['grid', 'grid power (W, minus = exporting)'], ['load', 'home power use (W)'], ['battery', 'battery (%)'], ['bri', 'brightness (%)'], ['vol', 'volume (%)']]);
-const FIELD_WORD: Record<NumericField, string> = { temp: 'temperature', target: 'set temperature', power: 'power', energy: 'energy today', battery: 'battery', bri: 'brightness', vol: 'volume', grid: 'grid power', load: 'home power', humidity: 'humidity', lux: 'light level' };
+export const FIELDS = opts<NumericField>([['temp', 'temperature (°C)'], ['target', 'set temperature (°C)'], ['humidity', 'humidity (%)'], ['lux', 'light level (lux)'], ['pm25', 'PM2.5 (µg/m³)'], ['power', 'power (W)'], ['energy', 'energy today (kWh)'], ['grid', 'grid power (W, minus = exporting)'], ['load', 'home power use (W)'], ['battery', 'battery (%)'], ['bri', 'brightness (%)'], ['vol', 'volume (%)']]);
+const FIELD_WORD: Record<NumericField, string> = { temp: 'temperature', target: 'set temperature', power: 'power', energy: 'energy today', battery: 'battery', bri: 'brightness', vol: 'volume', grid: 'grid power', load: 'home power', humidity: 'humidity', lux: 'light level', pm25: 'PM2.5' };
 export const RAMP_FIELDS = opts<RampField>([['bri', 'Brightness'], ['vol', 'Volume'], ['target', 'Set temperature']]);
 const RAMP_CAP: Record<RampField, string> = { bri: 'brightness', vol: 'volume', target: 'climate' };
 
 export const EVENTS = opts([
   ['person', 'sees a person'], ['motion', 'detects motion'], ['ring', 'rings (doorbell)'],
+  ['vehicle', 'sees a vehicle'], ['animal', 'sees an animal'], ['package', 'sees a package'], ['sound', 'hears a sound'],
   ['video-started', 'starts a video'], ['music-started', 'starts music'], ['paused', 'pauses'], ['resumed', 'carries on playing'], ['stopped', 'stops playing'], ['ended', 'finishes playing'],
   ['screen-asleep', 'screen goes to sleep'], ['screen-shutdown', 'screen shuts down'], ['screen-awake', 'screen wakes up'],
   ['internet-down', 'internet goes down'], ['internet-up', 'internet comes back'], ['internet-failover', 'switches to the backup connection'], ['new-device', 'a new device joins'], ['threat', 'blocks an attack'],
@@ -202,12 +215,15 @@ export const labelOf = <V extends string>(list: Opt<V>[], v: V | undefined, fall
 
 // ------------------------------------------------------------- devices ----
 
-type Dev = Pick<Device, 'id' | 'type' | 'capabilities'> & { name?: string; room?: string; state?: Partial<Device['state']>; zoneNames?: Record<string, string> };
+type Dev = Pick<Device, 'id' | 'type' | 'capabilities'> & { kind?: Device['kind']; name?: string; integration?: string; room?: string; state?: Partial<Device['state']>; zoneNames?: Record<string, string> };
 const has = (d: { capabilities?: string[] }, c: string) => (d.capabilities ?? []).includes(c);
 const isPlayerType = (t: string | undefined) => t === 'media' || t === 'tv';
 
-/** Devices a step can set (cameras and sensors only report). */
-export const canSet = (d: Pick<Device, 'type'>) => d.type !== 'camera' && d.type !== 'sensor';
+/**
+ * Devices a step can set. Cameras and sensors only report: a sensor is the hub's kind (a power meter is a plug
+ * with nothing to control), or type sensor on an older hub.
+ */
+export const canSet = (d: Pick<Device, 'type'> & { kind?: Device['kind'] }) => !isCamera(d) && d.kind !== 'camera' && !isSensor(d);
 
 /** "type:light" / "room:lounge": every matching device, now and later. */
 export const PSEUDO = /^(type|room):(.+)$/;
@@ -224,7 +240,7 @@ export function pseudoLabel(id: string, rooms: Pick<Room, 'id' | 'name'>[]): str
 export const typeMatch = (d: Pick<Device, 'type'>, t: string) => d.type === t || (t === 'light' && (d.type === 'light' || d.type === 'dimmer')) || (t === 'media' && isPlayerType(d.type));
 
 /** The groups a step can target: all of a type the home has, and each room with something settable in it. */
-export function pseudoTargets(devices: Pick<Device, 'type' | 'room'>[], rooms: Pick<Room, 'id' | 'name'>[]): Opt[] {
+export function pseudoTargets(devices: (Pick<Device, 'type' | 'room'> & { kind?: Device['kind'] })[], rooms: Pick<Room, 'id' | 'name'>[]): Opt[] {
   const settable = devices.filter(canSet);
   const types = new Set<string>();
   for (const d of settable) { types.add(d.type === 'dimmer' ? 'light' : d.type === 'tv' ? 'media' : d.type); if (d.type === 'tv') types.add('tv'); }
@@ -550,7 +566,9 @@ export function flatCommand(c: Command): Command {
 
 /** One thing a state match can look at, for this device. */
 export interface MatchField { key: keyof StateMatch; label: string; kind: 'bool' | 'choice'; yes?: string; no?: string; options?: Opt[] }
-const MATCH_ORDER: (keyof StateMatch)[] = ['on', 'online', 'input', 'hvac', 'activity', 'playing', 'muted', 'mode'];
+const MATCH_ORDER: (keyof StateMatch)[] = ['motion', 'open', 'on', 'online', 'input', 'hvac', 'activity', 'playing', 'muted', 'mode'];
+/** Does the device report this part of its state (a motion or door sensor: the key is there, even before it's said)? */
+const reports = (d: Dev, k: string) => !!d.state && k in d.state;
 
 /** The parts of a device's state a trigger or condition can match on, from what it can do (and what the match has). */
 export function matchFields(d: Dev | undefined, m: StateMatch = {}): MatchField[] {
@@ -560,7 +578,8 @@ export function matchFields(d: Dev | undefined, m: StateMatch = {}): MatchField[
     if (m[k] !== undefined) return true;
     if (!d) return k === 'on' || k === 'online';
     switch (k) {
-      case 'on': return caps.has('onoff') || d.type !== 'sensor' && d.type !== 'camera';
+      case 'motion': case 'open': return reports(d, k);
+      case 'on': return caps.has('onoff') || canSet(d);
       case 'online': return true;
       case 'input': return caps.has('input');
       case 'hvac': return caps.has('climate');
@@ -574,6 +593,8 @@ export function matchFields(d: Dev | undefined, m: StateMatch = {}): MatchField[
   for (const k of MATCH_ORDER) {
     if (!want(k)) continue;
     switch (k) {
+      case 'motion': out.push({ key: k, label: 'Motion', kind: 'bool', yes: 'Detecting motion', no: 'Clear' }); break;
+      case 'open': out.push({ key: k, label: 'Door or window', kind: 'bool', yes: 'Open', no: 'Closed' }); break;
       case 'on': out.push({ key: k, label: d?.type === 'internet' ? 'Internet' : 'Power', kind: 'bool', yes: d?.type === 'internet' ? 'Allowed' : 'On', no: d?.type === 'internet' ? 'Paused' : 'Off' }); break;
       case 'online': out.push({ key: k, label: 'Connection', kind: 'bool', yes: 'Online', no: 'Offline' }); break;
       case 'input': out.push({ key: k, label: 'Input', kind: 'choice', options: inputsOf(t, m.input) }); break;
@@ -602,6 +623,8 @@ export function withMatch(m: StateMatch | undefined, k: keyof StateMatch, v: str
 export function matchWords(m: StateMatch | undefined): string {
   if (!m) return 'anything';
   const parts = [
+    m.motion !== undefined ? (m.motion ? 'detecting motion' : 'clear of motion') : '',
+    m.open !== undefined ? (m.open ? 'open' : 'closed') : '',
     m.input ? `on ${INPUT_NAMES[m.input] ?? m.input}` : m.on !== undefined ? (m.on ? 'on' : 'off') : '',
     m.online !== undefined ? (m.online ? 'online' : 'offline') : '',
     m.playing !== undefined ? (m.playing ? 'playing' : 'not playing') : '',
@@ -642,17 +665,19 @@ export function readingsFor(d: Dev | undefined, cur?: NumericField): Opt<Numeric
   return l.length ? l : withCurrent(FIELDS, cur);
 }
 /** A reading's unit, for the number boxes. */
-export const FIELD_UNIT: Record<NumericField, string> = { temp: '°C', target: '°C', power: 'W', energy: 'kWh', battery: '%', bri: '%', vol: '%', grid: 'W', load: 'W', humidity: '%', lux: 'lux' };
+export const FIELD_UNIT: Record<NumericField, string> = { temp: '°C', target: '°C', power: 'W', energy: 'kWh', battery: '%', bri: '%', vol: '%', grid: 'W', load: 'W', humidity: '%', lux: 'lux', pm25: 'µg/m³' };
 
 // ------------------------------------------------------------- events -----
 
+/** What a camera tells: people, motion, the doorbell, and (smart cameras) vehicles, animals, packages and sounds. */
+export const CAMERA_EVENTS = ['person', 'motion', 'ring', 'vehicle', 'animal', 'package', 'sound'];
 /** The events a device sends, from its type and what it can do; everything when unknown. The current one is kept. */
 export function eventsFor(d: Dev | undefined, cur?: string): Opt[] {
   if (!d) return withCurrent(EVENTS, cur);
   const caps = new Set(d.capabilities ?? []);
   const keys = new Set<string>();
-  if (d.type === 'camera') ['person', 'motion', 'ring'].forEach(k => keys.add(k));
-  if (d.type === 'sensor') ['motion', 'person'].forEach(k => keys.add(k));
+  if (d.type === 'camera') CAMERA_EVENTS.forEach(k => keys.add(k));
+  else if (isSensor(d) && (d.type === 'sensor' || reports(d, 'motion'))) ['motion', 'person'].forEach(k => keys.add(k));
   if (isPlayerType(d.type) || caps.has('media') || caps.has('library')) ['video-started', 'music-started', 'paused', 'resumed', 'stopped', 'ended'].forEach(k => keys.add(k));
   if (d.type === 'tv' || caps.has('library')) ['screen-asleep', 'screen-shutdown', 'screen-awake'].forEach(k => keys.add(k));
   if (d.type === 'internet') ['internet-down', 'internet-up', 'internet-failover', 'new-device', 'threat'].forEach(k => keys.add(k));
@@ -661,6 +686,54 @@ export function eventsFor(d: Dev | undefined, cur?: string): Opt[] {
   return withCurrent(l, cur);
 }
 export const eventWords = (e: string) => EVENTS.find(x => x.v === e)?.label ?? e;
+
+// --------------------------------------------------------------- rooms -----
+
+/** What a room trigger can start on, in the order the picker shows them. */
+export const ROOM_EVENTS: Opt<RoomEvent>[] = (['motion', 'person', 'ring', 'opened', 'closed', 'package', 'vehicle', 'animal', 'sound'] as RoomEvent[]).map(v => ({ v, label: ROOM_EVENT_WORDS[v] }));
+type Watcher = Pick<Device, 'id' | 'type'> & { kind?: Device['kind']; room?: string; name?: string; integration?: string; state?: Partial<Device['state']> };
+/** Cameras and sensors: what tells Kova something happened in a room. */
+export const watches = (d: Pick<Device, 'type'> & { kind?: Device['kind'] }) => isCamera(d) || d.kind === 'camera' || isSensor(d);
+/** The cameras and sensors in a room. */
+export const roomWatchers = <D extends Watcher>(room: string, devices: D[]): D[] => devices.filter(d => d.room === room && watches(d));
+const doorbell = (d: Watcher) => /door\s*bell/i.test(`${d.integration ?? ''} ${d.name ?? ''} ${d.id}`);
+
+/**
+ * What can happen in a room, from the cameras and sensors in it (hub engine/rooms.ts): a camera sees people,
+ * motion, vehicles, animals, packages and hears sounds (a doorbell rings); a motion sensor sees motion; a door or
+ * window sensor opens and closes. A room with none of them yet offers everything. The current one is kept.
+ */
+export function roomEventsFor(room: string, devices: Watcher[], cur?: RoomEvent): Opt<RoomEvent>[] {
+  const w = roomWatchers(room, devices), keys = new Set<RoomEvent>();
+  for (const d of w) {
+    if (isCamera(d) || d.kind === 'camera') { (['person', 'motion', 'vehicle', 'animal', 'package', 'sound'] as RoomEvent[]).forEach(k => keys.add(k)); if (doorbell(d)) keys.add('ring'); continue; }
+    if (reports(d as Dev, 'motion')) keys.add('motion');
+    if (reports(d as Dev, 'open')) { keys.add('opened'); keys.add('closed'); }
+    if ((d.state?.extras as Record<string, unknown> | undefined)?.detected !== undefined) keys.add('sound');
+  }
+  const l = keys.size ? ROOM_EVENTS.filter(e => keys.has(e.v)) : ROOM_EVENTS;
+  return withCurrent(l, cur);
+}
+/** The rooms to pick from: the home's, in its order, with a gone one kept (and said so). */
+export function roomOptions(rooms: Pick<Room, 'id' | 'name'>[], cur?: string): Opt[] {
+  const l = rooms.map(r => ({ v: r.id, label: r.name }));
+  return cur && !rooms.some(r => r.id === cur) ? [...l, { v: cur, label: `${cur} (missing)` }] : l;
+}
+/** What's wrong with a room trigger or condition's room, if anything. */
+export function roomProblem(room: string, rooms: Pick<Room, 'id'>[]): string | undefined {
+  if (!room) return 'Choose a room.';
+  if (!rooms.some(r => r.id === room)) return 'That room is gone: choose another.';
+  return undefined;
+}
+/** Under the room: what reports there ("From the Doorbell and the Hall motion sensor"), or that nothing does yet. */
+export function roomNote(room: string, devices: Watcher[]): { text: string; warn: boolean } | null {
+  if (!room) return null;
+  const w = roomWatchers(room, devices).map(d => d.name ?? d.id);
+  if (!w.length) return { text: 'Nothing in this room reports activity yet: add a camera, or a motion or door sensor, there.', warn: true };
+  return { text: `From ${w.length > 2 ? `${w.slice(0, -1).join(', ')} and ${w[w.length - 1]}` : w.join(' and ')}.`, warn: false };
+}
+/** A room condition's minutes, as the hub takes them (1 to 1440). */
+export const withinProblem = (min: number | undefined) => min != null && !(min >= 1 && min <= 1440) ? 'Within 1 to 1440 minutes.' : undefined;
 
 // ------------------------------------------------------------- rhythms -----
 
@@ -922,10 +995,17 @@ export function newAction(kind: Action['kind'], c: Ctx): Action {
  * Change a part's kind. Where the two kinds share a field that means the same (a device, a reading),
  * it's kept, so going from "a device changes" to "a reading crosses" keeps the device picked.
  */
-export function changeKind<P extends Trigger | Condition>(cur: P, fresh: P): P {
+export function changeKind<P extends Trigger | Condition>(cur: P, fresh: P, home?: { devices: Watcher[]; rooms: Pick<Room, 'id'>[] }): P {
   if (cur.kind === fresh.kind) return cur;
   const keep = ['device', 'field', 'above', 'below'] as const;
   const out = { ...fresh } as Record<string, unknown>;
+  // From a device to its room: "the doorbell sees a person" becomes "a person in the Front door".
+  if (fresh.kind === 'room' && 'device' in cur && home) {
+    const d = home.devices.find(x => x.id === cur.device);
+    if (d?.room && home.rooms.some(r => r.id === d.room)) out.room = d.room;
+    const ev = (cur as { event?: string }).event;
+    if (cur.kind === 'event' && 'event' in out && ev && ROOM_EVENTS.some(e => e.v === ev)) out.event = ev;
+  }
   for (const k of keep) if (k in out && k in cur && (cur as Record<string, unknown>)[k] !== undefined) out[k] = (cur as Record<string, unknown>)[k];
   // Groups keep what was in them.
   if ('conditions' in fresh && 'conditions' in cur) out.conditions = (cur as { conditions: Condition[] }).conditions;
@@ -1001,13 +1081,16 @@ export function bodyOf(d: Draft): Draft {
 export const sameDraft = (a: Draft, b: Draft) => JSON.stringify(bodyOf(a)) === JSON.stringify(bodyOf(b));
 
 /** The context for new parts, from the home. */
-export function ctxOf(o: { devices: Dev[]; sources: { name: string }[]; music?: MusicItem[]; modes: { id: string }[]; overlays: { id: string }[]; automations: { id: string }[]; self?: string | null; now?: string }): Ctx {
+export function ctxOf(o: { devices: Dev[]; sources: { name: string }[]; music?: MusicItem[]; modes: { id: string }[]; overlays: { id: string }[]; automations: { id: string }[]; rooms?: Pick<Room, 'id'>[]; self?: string | null; now?: string }): Ctx {
   const act = o.devices.find(canSet);
+  // Room triggers and conditions start on the first room with a camera or sensor in it, else the first room.
+  const rooms = o.rooms ?? [];
+  const room = (rooms.find(r => o.devices.some(d => (d as Watcher).room === r.id && watches(d))) ?? rooms[0])?.id;
   const ramp = o.devices.find(d => has(d, 'brightness')) ?? o.devices.find(d => has(d, 'volume')) ?? o.devices.find(d => has(d, 'climate'));
   return {
     device: o.devices[0]?.id, actDevice: act?.id, actCommand: act ? firstCommand(act, o.sources, o.music) : undefined,
     rampDevice: ramp?.id, rampField: ramp ? (has(ramp, 'brightness') ? 'bri' : has(ramp, 'volume') ? 'vol' : 'target') : undefined,
-    mode: o.modes[0]?.id, overlay: o.overlays[0]?.id, other: o.automations.find(a => a.id !== o.self)?.id, now: o.now,
+    mode: o.modes[0]?.id, overlay: o.overlays[0]?.id, room, other: o.automations.find(a => a.id !== o.self)?.id, now: o.now,
   };
 }
 /** Can this device ramp this field? */
@@ -1046,7 +1129,7 @@ export function triggerText(t: Trigger, n: Names): string {
     case 'mode': return `${nm(n.modes, t.mode) || 'a mode'} starts`;
     case 'overlay': return `${nm(n.overlays, t.overlay) || 'an overlay'} ${t.event === 'ends' ? 'ends' : 'starts'}`;
     case 'hub': return 'Kova starts';
-    case 'room': return `${ROOM_EVENT_WORDS[t.event] ?? t.event} in ${nm(n.rooms, t.room) || 'a room'}`;
+    case 'room': { const r = nm(n.rooms, t.room) || 'a room'; return ROOM_TRIGGER_WORDS[t.event]?.(r) ?? `${t.event} in ${r}`; }
   }
 }
 
@@ -1061,7 +1144,7 @@ export function conditionText(c: Condition, n: Names): string {
     case 'all': return c.conditions.map(k => conditionText(k, n)).join(' and ') || 'all of (nothing yet)';
     case 'any': return c.conditions.length > 1 ? `either ${c.conditions.map(k => conditionText(k, n)).join(' or ')}` : c.conditions.map(k => conditionText(k, n)).join('') || 'any of (nothing yet)';
     case 'not': return `not (${c.conditions.map(k => conditionText(k, n)).join(' or ') || 'nothing yet'})`;
-    case 'room': return `${c.active === false ? 'all still' : 'activity'} in ${nm(n.rooms, c.room) || 'a room'}${c.active === false ? '' : ` in the last ${c.withinMin ?? 10} min`}`;
+    case 'room': { const r = nm(n.rooms, c.room) || 'a room', m = c.withinMin ?? ACTIVE_MIN; return c.active === false ? `no activity in ${r} for ${durWords(m * 60)}` : `there’s been activity in ${r} in the last ${durWords(m * 60)}`; }
   }
 }
 
