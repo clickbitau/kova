@@ -349,9 +349,9 @@ export class HelixLink {
         if (st.online === false) state.on = false;
         else if (typeof st.on === 'boolean') state.on = st.on;
         if (typeof st.online === 'boolean') state.online = st.online;
-        // A TV's source is read back where something (SmartThings) can, else it's the one last switched to through Kova.
-        const input = typeof st.input === 'string' && st.input ? st.input : !bar ? change?.input : undefined;
-        if (input) state.input = input;
+        // Only an input read back from the device, never the one asked for: Helix skips its own switch when the
+        // input it wants is already the one here. A TV that can't say has none.
+        if (typeof st.input === 'string' && st.input) state.input = st.input;
         if (bar) {
           if (typeof st.vol === 'number' && Number.isFinite(st.vol)) state.volume = Math.max(0, Math.min(100, Math.round(st.vol)));
           if (typeof st.muted === 'boolean') state.muted = st.muted;

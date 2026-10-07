@@ -450,7 +450,9 @@ export class SamsungTvAdapter implements Adapter {
           for (let attempt = 0; attempt < 2; attempt++) {
             if (!(await via.setTvInput(tv, cmd.input))) break;
             const on = await this.inputNow(tv, via);
-            if (on === undefined || on === null || on === cmd.input) return { input: cmd.input };
+            // Kept as state only when read back: Helix skips its own switch when the TV says it's already there.
+            if (on === cmd.input) return { input: cmd.input };
+            if (on === undefined || on === null) return { input: null };
             this.ctx?.log(`${tv.cfg.host}: asked for ${cmd.input} through SmartThings, still on ${on}`);
           }
         } catch (err) { this.ctx?.log(`${tv.cfg.host}: SmartThings source failed (${(err as Error).message}), pressing the remote key`); }

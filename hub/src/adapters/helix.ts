@@ -68,10 +68,15 @@ export interface HelixPlayer {
   online?: boolean; asleep?: boolean; suspended?: boolean;
   /** What Helix can do with it: notify, sleep, wake, soundbar… */
   capabilities?: string[];
-  playback?: { state?: string; item?: HelixItem | null; positionMs?: number; durationMs?: number; title?: string } | null;
+  /** Null while idle; else what plays, for which profile, playing or paused, where (ms), updatedAt (Unix ms). */
+  playback?: { item?: HelixItem | null; profile?: { id: string; name: string } | null; state?: 'playing' | 'paused' | string; positionMs?: number; durationMs?: number; updatedAt?: number } | null;
+  /** Unix seconds. */
+  lastSeenAt?: number;
+  remoteUrl?: string;
+  tv?: { deviceId?: string; name?: string } | null;
   soundbar?: { deviceId?: string; name?: string } | null;
-  /** Other ids the box is known by (addr:<ip>), and its address. */
-  aliases?: string[]; address?: string;
+  /** The box's address (an addr:<ip> id is an alias of the stable one); other ids it's known by, where Helix says. */
+  address?: string; aliases?: string[];
 }
 
 export interface BoxState {
@@ -120,8 +125,8 @@ export function profileProblem(e: unknown, profile: string): string | null {
   return null;
 }
 
-/** A title as Helix's playback events and /v1/resolve describe it. */
-export interface HelixItem { id: string; kind: string; title: string; show?: string; season?: number; episode?: number; year?: number }
+/** A title as Helix describes it (players, playback events, resolve). kind: "music" (a track, album or artist), the library kind ("movie", "episode"), or for a title from outside the library "music", "video" or "". */
+export interface HelixItem { id: string; kind: string; title: string; year?: number; genres?: string[]; rating?: string | number; hdr?: string | boolean; show?: string; showId?: string; season?: number; episode?: number }
 /** One event on Helix's live feed (`GET /v1/events` as Server-Sent Events). */
 export interface PlaybackEvent {
   type: string; at?: number;
@@ -167,9 +172,13 @@ export class HelixApi {
     return (await lanJson<T>(this.url + path, { method: 'POST', body, token: this.o.token, headers: helixHeaders(this.profile) })).json;
   }
   /** Every paired device Helix knows, boxes and others (`box`, `you`). */
-  async players(): Promise<HelixPlayer[]> {
-    const r = await this.get<{ players?: HelixPlayer[] } | HelixPlayer[]>('/v1/players');
-    return (Array.isArray(r) ? r : r?.players ?? []).filter(p => p && typeof p.id === 'string');
+  async players(): Promise<HelixPlayer[]> { return (await this.playersPage()).players; }
+  /** `GET /v1/players`: the players, and the feed's last event id then (where to follow the feed from). */
+  async playersPage(): Promise<{ players: HelixPlayer[]; lastId?: string }> {
+    const r = await this.get<{ players?: HelixPlayer[]; lastId?: number } | HelixPlayer[]>('/v1/players');
+    const players = (Array.isArray(r) ? r : r?.players ?? []).filter(p => p && typeof p.id === 'string');
+    const lastId = !Array.isArray(r) && typeof r?.lastId === 'number' && Number.isFinite(r.lastId) ? String(r.lastId) : undefined;
+    return { players, ...(lastId !== undefined ? { lastId } : {}) };
   }
   /** A box's screen right now (a live hop to the box): volume, mute, browse or what plays, asleep. Never for a suspended box. */
   state(boxId: string): Promise<BoxState> { return this.get(`/v1/boxes/${encodeURIComponent(boxId)}/state`, 5000); }
@@ -439,7 +448,8 @@ export class HelixAdapter implements Adapter {
 
   private caps(b: Box): Device['capabilities'] {
     const sleeps = this.can(b, 'sleep') || this.can(b, 'wake');
-    return ['onoff', 'media', ...(b.soundbar ? [] : ['volume', 'mute'] as const), 'pause', 'library', ...(sleeps ? ['extras'] as const : [])] as Device['capabilities'];
+    const own = b.soundbar ? [] : [...(this.can(b, 'volume', true) ? ['volume'] as const : []), ...(this.can(b, 'mute', true) ? ['mute'] as const : [])];
+    return ['onoff', 'media', ...own, 'pause', 'library', ...(sleeps ? ['extras'] as const : [])] as Device['capabilities'];
   }
 
   /** Whether the screen is asleep (or the box suspended), as the `asleep` extra: set it to put the box to sleep or wake it. */
@@ -455,7 +465,10 @@ export class HelixAdapter implements Adapter {
   /** Read the players: which boxes there are, and (from a current Helix) whether each is awake and what it plays. */
   async refreshBoxes(): Promise<void> {
     try {
-      const all = await this.api.players();
+      const page = await this.api.playersPage();
+      const all = page.players;
+      // The feed is followed from where this list stands, so nothing between the two is missed or counted twice.
+      if (this.cursor === undefined && page.lastId !== undefined) this.cursor = page.lastId;
       const marked = all.some(p => typeof p.box === 'boolean');
       const players = all.filter(p => !p.you && (marked ? p.box === true : isScreen(p)));
       const taken = new Set<string>();
@@ -467,7 +480,7 @@ export class HelixAdapter implements Adapter {
         const caps = Array.isArray(p.capabilities) ? p.capabilities.map(String) : null;
         const b: Box = {
           id: p.id, kovaId: k.kovaId, name, online: p.online !== false, asleep: !!p.asleep, suspended: !!p.suspended,
-          caps, soundbar: !!p.soundbar || !!caps?.includes('soundbar'),
+          caps, soundbar: !!p.soundbar?.deviceId || !!p.soundbar?.name,
         };
         const old = this.boxes.get(b.kovaId);
         if (!old || old.id !== b.id || old.name !== b.name || old.soundbar !== b.soundbar || JSON.stringify(old.caps) !== JSON.stringify(b.caps)) fresh.push(b);
@@ -511,9 +524,9 @@ export class HelixAdapter implements Adapter {
     const st = String(pb?.state ?? '').toLowerCase();
     const item = pb?.item ?? undefined;
     const kind = item?.kind === 'music' ? 'music' : 'video';
-    if (b.online && (st === 'playing' || st === 'paused') && (item?.title || pb?.title || cur.media)) {
+    if (b.online && (st === 'playing' || st === 'paused') && (item?.title || cur.media)) {
       this.fromScreen.delete(b.kovaId);
-      this.observe(b.kovaId, { ...cur, on: true, media: item?.title || pb?.title || cur.media || '', paused: st === 'paused', online: true }, kind, episodeTag(item));
+      this.observe(b.kovaId, { ...cur, on: true, media: item?.title || cur.media || '', paused: st === 'paused', online: true }, kind, episodeTag(item));
     } else if (!this.fromScreen.has(b.kovaId)) {
       this.observe(b.kovaId, { ...cur, on: false, media: null, paused: false, online: b.online }, kind);
     } else if (cur.online !== b.online) {

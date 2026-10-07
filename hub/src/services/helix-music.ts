@@ -78,18 +78,21 @@ export function shuffled<T>(a: T[], random = Math.random): T[] {
   return out;
 }
 
-/** The content type of a song Helix serves: what it says, else the format asked for (a lossy original passes through as it is). */
-function typeOf(format: AudioFormat, said: { contentType?: string; mime?: string; codec?: string } | undefined, codec?: string): string {
-  const t = said?.contentType || said?.mime;
-  if (t && /^audio\//.test(t)) return t;
-  const c = (said?.codec || codec || '').toLowerCase();
-  if (format === 'flac') {
-    if (/mp3|mpeg/.test(c)) return 'audio/mpeg';
-    if (/aac|m4a|mp4|alac/.test(c)) return 'audio/mp4';
-    if (/opus|ogg|vorbis/.test(c)) return 'audio/ogg';
-    return 'audio/flac';
-  }
-  return 'audio/aac';
+/**
+ * The content type of a song as Helix serves it: by the `format` it answers ("flac", "mp3", "aac"; "" is the original
+ * file, typed by the song's own codec).
+ */
+export function typeOf(served: string | undefined, codec?: string): string {
+  const f = (served ?? '').toLowerCase();
+  if (f === 'flac') return 'audio/flac';
+  if (f === 'mp3') return 'audio/mpeg';
+  if (f === 'aac') return 'audio/aac';
+  const c = (codec ?? '').toLowerCase();
+  if (/mp3|mpeg/.test(c)) return 'audio/mpeg';
+  if (/aac|m4a|mp4|alac/.test(c)) return 'audio/mp4';
+  if (/opus|ogg|vorbis/.test(c)) return 'audio/ogg';
+  if (/wav/.test(c)) return 'audio/wav';
+  return 'audio/flac';
 }
 
 /** A song URL Helix signed, kept until shortly before it runs out. */
@@ -368,16 +371,18 @@ export class HelixMusic {
     if (cached && cached.until > this.now) { this.apply(t, cached); return 'ok'; }
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        const r = await this.post<{ url?: string; path?: string; artUrl?: string | null; ttl?: number; expiresAt?: string; contentType?: string; mime?: string; codec?: string }>(
+        // Helix answers url (absolute), path, expiresAt (Unix seconds), profile, format ("" = the original file), maxRate,
+        // artUrl and artPath (null without a cover).
+        const r = await this.post<{ url?: string; path?: string; artUrl?: string | null; artPath?: string | null; expiresAt?: number; format?: string }>(
           `/v1/items/${encodeURIComponent(id)}/play-url`, { format, maxRate: 48000, ttl: SIGNED_TTL_S, profile: h.profile });
         const url = r.url && /^https?:\/\//.test(r.url) ? r.url : r.path ? `${h.url}${r.path}` : null;
         if (!url) return 'drop';
-        const ttl = Math.max(60, Math.min(86_400, Number(r.ttl) || SIGNED_TTL_S)) * 1000;
-        const ends = Date.parse(r.expiresAt ?? '');
-        const lasts = Number.isFinite(ends) && ends > this.now ? Math.min(ends - this.now, ttl) : ttl;
+        const ends = typeof r.expiresAt === 'number' && Number.isFinite(r.expiresAt) ? r.expiresAt * 1000 : NaN;
+        const lasts = Number.isFinite(ends) && ends > this.now ? ends - this.now : SIGNED_TTL_S * 1000;
+        const cover = r.artUrl ?? r.artPath;
         const s: Signed = {
-          url, contentType: typeOf(format, r, this.codecOf.get(t)),
-          art: r.artUrl === undefined ? undefined : r.artUrl === null ? null : abs(h.url, r.artUrl),
+          url, contentType: typeOf(r.format, this.codecOf.get(t)),
+          art: cover === undefined ? undefined : cover === null ? null : abs(h.url, cover),
           until: this.now + Math.max(30_000, lasts - Math.min(RESIGN_BEFORE_MS, lasts / 4)),
         };
         this.signedCache.set(key, s);

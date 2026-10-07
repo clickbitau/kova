@@ -509,6 +509,11 @@ export class SmartThingsAdapter implements Adapter {
     await this.api('POST', `/devices/${encodeURIComponent(b.st)}/commands`, { commands });
     if (cmd.sound) b.sound = cmd.sound;
     if (cmd.night !== undefined) b.night = cmd.night;
+    // The input as the bar reads it back afterwards, not the one asked for (the next poll catches up).
+    if (cmd.input) {
+      const now = await this.read(b).catch(() => null);
+      return { input: now?.input ?? null };
+    }
     // A volume step lands where the bar says: shown a step on straight away (Helix's on-screen volume reads it), and
     // read back a moment later to be sure.
     if (cmd.volStep) {
@@ -582,6 +587,8 @@ export class SmartThingsAdapter implements Adapter {
     if (cmd.on === false) c('switch', 'off');
     if (!commands.length) return;
     await this.api('POST', `/devices/${encodeURIComponent(t.st)}/commands`, { commands });
+    // The source as the TV reads it back afterwards, not the one asked for (null until it says).
+    if (cmd.input) return { input: (await this.tvStatus(t).catch(() => null))?.input ?? null };
   }
 
   status(): AdapterStatus {

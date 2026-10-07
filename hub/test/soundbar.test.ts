@@ -134,6 +134,10 @@ test('Samsung soundbar through SmartThings: found on the account, read, and powe
     // Polling keeps the sound mode Kova set (SmartThings can't say it).
     await adapter['poll']();
     assert.deepEqual({ sound: reg.get(id)!.state.sound, night: reg.get(id)!.state.night, input: reg.get(id)!.state.input, muted: reg.get(id)!.state.muted }, { sound: 'surround', night: true, input: 'tv', muted: true });
+    // A TV's source switched through SmartThings is kept as the TV reads it back afterwards, in Kova's (Helix's) ids.
+    await reg.command('smarttv_tvs90d', { input: 'hdmi2' }, you);
+    assert.equal(st.tv.input, 'HDMI2');
+    assert.equal(reg.get('smarttv_tvs90d')!.state.input, 'hdmi2');
   } finally {
     await reg.stop();
     await st.close();

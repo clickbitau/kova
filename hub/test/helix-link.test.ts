@@ -31,10 +31,10 @@ async function fakeHelix(o: { reachable?: boolean; devices?: boolean } = {}) {
       if (req.headers.authorization !== `Bearer ${TOKEN}`) return send(401, { error: 'unauthorized' });
       assert.equal(req.headers['x-helix-client'], `kova/${KOVA_VERSION}`);
       const u = new URL(req.url!, 'http://x');
-      if (u.pathname === '/v1/players') return send(200, { players: [
-        { id: LOUNGE, name: 'Lounge Helix', client: 'helix-tv', box: true, online: true, capabilities: ['notify'] },
-        { id: BED, name: 'Bedroom Helix', client: 'helix-tv', box: true, online: true, capabilities: ['notify'] },
-        { id: 'd-3333333333333333', name: 'Kova', box: false, you: true },
+      if (u.pathname === '/v1/players') return send(200, { lastId: 7, players: [
+        { id: LOUNGE, name: 'Lounge Helix', client: 'helix-tv', box: true, online: true, lastSeenAt: 1_791_000_000, capabilities: ['play', 'pause', 'resume', 'stop', 'seek', 'next', 'previous', 'volume', 'mute', 'tracks', 'notify', 'sleep', 'wake'], playback: null },
+        { id: BED, name: 'Bedroom Helix', client: 'helix-tv', box: true, online: true, lastSeenAt: 1_791_000_000, capabilities: ['play', 'pause', 'resume', 'stop', 'seek', 'next', 'previous', 'volume', 'mute', 'tracks', 'notify', 'sleep', 'wake'], playback: null },
+        { id: 'd-3333333333333333', name: 'Kova', client: `kova/${KOVA_VERSION}`, box: false, you: true, online: true, lastSeenAt: 1_791_000_000, capabilities: [], playback: null },
       ] });
       if (u.pathname === '/v1/client/features') return send(200, { players: { enabled: true, music: true, notices: true, devices: s.devices } });
       if (/^\/v1\/boxes\/[^/]+\/state$/.test(u.pathname)) return send(200, { mode: 'browse' });
@@ -45,7 +45,11 @@ async function fakeHelix(o: { reachable?: boolean; devices?: boolean } = {}) {
       if (req.method === 'GET' && u.pathname === '/v1/integrations/kova') {
         s.gets++;
         const last = puts.at(-1)?.body;
-        return send(200, { url: last?.url, reachable: s.reachable, autoSwitch: true, sleepOff: false, screens: last?.screens ?? [] });
+        // As Helix answers: unlinked, or linked with the screens it keeps (empty fields left out, never the token).
+        if (!last) return send(200, { linked: false, reachable: false, screens: [], autoSwitch: true, sleepOff: true });
+        const keep = ['playerId', 'tvDeviceId', 'tvName', 'helixInput', 'inputs', 'soundbarDeviceId', 'soundbarName', 'soundbarTvInput', 'soundbarAdapterInput'];
+        const screens = (last.screens ?? []).map((x: Record<string, unknown>) => Object.fromEntries(Object.entries(x).filter(([k, v]) => keep.includes(k) && (k === 'playerId' || k === 'tvDeviceId' || (v !== '' && v != null)))));
+        return send(200, { linked: true, reachable: s.reachable, url: last.url, autoSwitch: true, sleepOff: false, screens });
       }
       send(404, { error: 'not found' });
     });
@@ -182,14 +186,17 @@ test('Helix link: after pairing Kova tells Helix where it is, a token and which 
     assert.equal(at('lounge_bar').inputChangedBy, 'Helix remote');
     for (const d of st.devices) delete d.state.inputChangedAt;
     assert.deepEqual(st, { devices: [
-      { id: 'lounge_tv', name: 'Lounge TV', type: 'tv', state: { on: true, online: true, input: 'hdmi3', inputChangedBy: 'helix-auto' } },
+      { id: 'lounge_tv', name: 'Lounge TV', type: 'tv', state: { on: true, online: true, inputChangedBy: 'helix-auto' } },
       { id: 'lounge_bar', name: 'Soundbar', type: 'soundbar', state: { on: true, online: true, input: 'hdmi1', volume: 20, muted: true, mode: 'surround', nightMode: true, inputChangedBy: 'Helix remote' } },
     ] });
     // Someone changes the TV's input in Kova's app: Helix sees it wasn't its own switching.
     await app.inject({ method: 'POST', url: '/api/devices/lounge_tv', headers: { authorization: 'Bearer master' }, payload: { input: 'hdmi4' } });
     tvs.got.pop();
     const st2 = (await app.inject({ method: 'GET', url: '/api/state', headers: helix })).json();
-    assert.deepEqual([st2.devices[0].state.input, st2.devices[0].state.inputChangedBy], ['hdmi4', 'You']);
+    assert.deepEqual([st2.devices[0].state.input, st2.devices[0].state.inputChangedBy], [undefined, 'You']);
+    // A TV that reads its input back reports it, in Helix's ids; Kova never reports the one it only asked for.
+    tvs.ctx.report('lounge_tv', { input: 'hdmi4' });
+    assert.equal((await app.inject({ method: 'GET', url: '/api/state', headers: helix })).json().devices[0].state.input, 'hdmi4');
     // …and with the soundbar's own remote (read back as a change at the device).
     tvs.ctx.report('lounge_bar', { input: 'bluetooth' });
     const st3 = (await app.inject({ method: 'GET', url: '/api/state', headers: helix })).json();

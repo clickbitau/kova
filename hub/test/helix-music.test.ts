@@ -30,7 +30,8 @@ const track = (n: number, o: Record<string, unknown> = {}) => ({
  * Kova must send on every call (query or X-Helix-Profile); `locked` answers 403 for it. `noFile`: songs Helix has no
  * file for (play-url 404s them); `broken`: songs play-url fails on (500). `music: false`: Helix has music turned off.
  */
-async function fakeHelix(n = 60, o: { modern?: boolean; profile?: string; locked?: boolean; noFile?: number[]; broken?: number[]; music?: boolean } = {}) {
+async function fakeHelix(n = 60, o: { modern?: boolean; profile?: string; locked?: boolean; noFile?: number[]; broken?: number[]; music?: boolean; clock?: () => number } = {}) {
+  const clock = o.clock ?? Date.now;
   const profile = o.profile ?? 'default';
   const lib = Array.from({ length: n }, (_, i) => track(i + 1));
   const seen: string[] = [];
@@ -60,7 +61,20 @@ async function fakeHelix(n = 60, o: { modern?: boolean; profile?: string; locked
         if (pu && o.noFile?.includes(Number(pu[1].slice(1)))) { signed.push({ id: pu[1], body }); return send(404, { error: 'this song has no file' }); }
         if (pu && o.broken?.includes(Number(pu[1].slice(1)))) { signed.push({ id: pu[1], body }); return send(500, { error: 'transcoder fell over' }); }
         // Covers come with the song for even songs; the rest are signed through /v1/art-urls.
-        if (pu) { signed.push({ id: pu[1], body }); return send(200, { url: `${base}/v1/play/${pu[1]}?sig=abc${pu[1]}`, path: `/v1/play/${pu[1]}?sig=abc${pu[1]}`, expiresAt: '2026-10-01T09:00:00Z', format: body.format, maxRate: body.maxRate, ...(Number(pu[1].slice(1)) % 2 ? {} : { artUrl: `/v1/images/p${pu[1].slice(1)}?w=600&sig=art${pu[1]}` }) }); }
+        if (pu) {
+          // Helix's answer: url (absolute), path, expiresAt (Unix seconds), profile, format ("" = the original file: a
+          // FLAC within maxRate, or a lossy file, for "flac"), maxRate, artUrl and artPath (null without a cover).
+          signed.push({ id: pu[1], body });
+          const n = Number(pu[1].slice(1)), t = lib[n - 1];
+          const ttl = Math.max(60, Math.min(86_400, body.ttl ?? 21_600));
+          const art = n % 2 ? null : `/v1/images/p${n}?w=600&sig=art${pu[1]}`;
+          return send(200, {
+            url: `${base}/v1/play/${pu[1]}?sig=abc${pu[1]}`, path: `/v1/play/${pu[1]}?sig=abc${pu[1]}`,
+            expiresAt: Math.floor(clock() / 1000) + ttl, profile: body.profile ?? 'default',
+            format: body.format === 'flac' && t ? '' : body.format ?? '', maxRate: body.maxRate ?? 0,
+            artUrl: art ? `${base}${art}` : null, artPath: art,
+          });
+        }
         if (p === '/v1/art-urls') { artSigned.push(...body.urls); return send(200, { urls: body.urls.map((u: string) => `${u}&sig=batch`) }); }
         const pl = /^\/v1\/music\/tracks\/([^/]+)\/played$/.exec(p);
         if (pl) { played.push({ id: pl[1], body }); return send(200, { ok: true, counted: true, duplicate: false }); }
@@ -713,7 +727,7 @@ test('Signing: a song with no file is skipped and the window stays full; a song 
 
 test('Signing: a signed URL is reused while it lasts (another queue, another speaker of the same format) and asked for again before it runs out', async () => {
   let now = Date.parse('2026-10-07T10:00:00Z');
-  const h = await fakeHelix(10, { modern: true });
+  const h = await fakeHelix(10, { modern: true, clock: () => now });
   const music = new HelixMusic(() => ({ url: h.url, token: TOKEN }), { random: seq(), now: () => now });
   try {
     const a = (await music.queueFor('Loved', { format: 'flac' }))!;

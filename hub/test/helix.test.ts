@@ -15,6 +15,19 @@ import { helixScreens } from '../src/services/helix-link.ts';
 
 const webRoot = resolve(import.meta.dirname, '../../web');
 const BOX = 'd-0123456789abcdef';
+/** What Helix says a box can do. */
+const BOX_CAPS = ['play', 'pause', 'resume', 'stop', 'seek', 'next', 'previous', 'volume', 'mute', 'tracks', 'notify', 'sleep', 'wake'];
+
+/**
+ * A /v1/players entry exactly as Helix sends it: id, name, client, box, online, lastSeenAt (Unix s), capabilities and
+ * playback always; address, remoteUrl, tv, soundbar, you, asleep and suspended only when set.
+ */
+function wire(p: HelixPlayer): Record<string, unknown> {
+  const out: Record<string, unknown> = { id: p.id, name: p.name ?? '', client: p.client ?? '', box: !!p.box, online: !!p.online, lastSeenAt: p.lastSeenAt ?? 0, capabilities: p.capabilities ?? [], playback: p.playback ?? null };
+  for (const k of ['address', 'remoteUrl', 'tv', 'soundbar'] as const) if (p[k]) out[k] = p[k];
+  for (const k of ['you', 'asleep', 'suspended'] as const) if (p[k]) out[k] = true;
+  return out;
+}
 
 async function listen(handler: (req: http.IncomingMessage, body: any, send: (code: number, j?: unknown) => void, res: http.ServerResponse) => void) {
   const server = http.createServer((req, res) => {
@@ -40,9 +53,9 @@ async function fakeHelix(o: { profile?: string; locked?: boolean } = {}) {
     approved: false, polls: 0,
     box: { mode: 'browse', screen: 'Library', volume: 40, muted: false } as BoxState,
     players: [
-      { id: BOX, name: 'Lounge Helix', client: 'helix-tv', box: true, online: true, asleep: false, suspended: false, capabilities: ['notify', 'sleep', 'wake'], playback: null },
-      { id: 'd-aaaaaaaaaaaaaaaa', name: 'Kova', client: `kova/${KOVA_VERSION}`, box: false, you: true, online: true },
-      { id: 'd-bbbbbbbbbbbbbbbb', name: 'Phone', client: 'helix-mobile', box: false, online: true },
+      { id: BOX, name: 'Lounge Helix', client: 'helix-tv', box: true, online: true, lastSeenAt: 1_791_000_000, capabilities: BOX_CAPS, playback: null, address: '192.168.1.40' },
+      { id: 'd-aaaaaaaaaaaaaaaa', name: 'Kova', client: `kova/${KOVA_VERSION}`, box: false, you: true, online: true, lastSeenAt: 1_791_000_000, capabilities: [], playback: null },
+      { id: 'd-bbbbbbbbbbbbbbbb', name: 'Phone', client: 'helix-mobile', box: false, online: true, lastSeenAt: 1_791_000_000, capabilities: [], playback: null },
     ] as HelixPlayer[],
     control: [] as { verb: string; body: any }[],
     streams: [] as { res: http.ServerResponse; lastId?: string; after?: string | null }[],
@@ -85,7 +98,7 @@ async function fakeHelix(o: { profile?: string; locked?: boolean } = {}) {
       res.on('close', () => { const i = s.streams.indexOf(st); if (i >= 0) s.streams.splice(i, 1); });
       return;
     }
-    if (p === '/v1/players' && req.method === 'GET') { s.playersReads++; return send(200, { players: s.players }); }
+    if (p === '/v1/players' && req.method === 'GET') { s.playersReads++; return send(200, { players: s.players.map(wire), lastId: s.seq }); }
     const bs = /^\/v1\/boxes\/([^/]+)\/state$/.exec(p);
     if (bs) {
       s.stateReads++;
@@ -121,6 +134,7 @@ async function fakeHelix(o: { profile?: string; locked?: boolean } = {}) {
   /** Publish an event, as Helix does: the event's data plus type and at. `id` repeats one (a replay). */
   publish = (type, data, id) => {
     const n = id ?? ++s.seq;
+    if (type.startsWith('playback.')) data = { profile: null, state: type === 'playback.paused' ? 'paused' : 'playing', positionMs: 0, durationMs: 0, ...data };
     for (const st of s.streams) st.res.write(`id: ${n}\nevent: ${type}\ndata: ${JSON.stringify({ ...data, type, at: Date.now() })}\n\n`);
   };
   const drop = () => { for (const st of s.streams.splice(0)) st.res.end(); };
@@ -244,11 +258,15 @@ test('Helix: pair with a code, boxes are TVs, play by name, pause for the doorbe
 test('Helix feed: events replayed after a reconnect count once; players are read again only when the feed says so; reset reads them', { timeout: 20_000 }, async () => {
   const hx = await fakeHelix();
   const t = await testHub(20);
+  hx.s.seq = 41;
   const adapter = new HelixAdapter({ url: hx.url, token: hx.TOKEN, rooms: { 'Lounge Helix': 'lounge' }, pollSec: 0 });
   try {
     await t.hub.reg.addAdapter(adapter);
     const id = boxDeviceId('Lounge Helix');
     await waitFor('live', () => adapter.following && hx.s.streams.length === 1);
+    // The feed is followed from the lastId /v1/players gave.
+    assert.equal(hx.s.streams[0].after, '41');
+    assert.equal(hx.s.streams[0].lastId, '41');
     await new Promise(r => setTimeout(r, 300));
     const events: string[] = [];
     t.hub.reg.on('event', e => events.push(e.type));
@@ -270,7 +288,7 @@ test('Helix feed: events replayed after a reconnect count once; players are read
     hx.publish('playback.started', { player: { id: 'd-cccccccccccccccc', name: 'Den' }, item: hx.items.dune });
     await waitFor('players read for an unknown box', () => hx.s.playersReads === reads + 2);
     // Helix lost the history: it says reset, and Kova reads the players (and what they play) again.
-    hx.box(BOX).playback = { state: 'paused', item: hx.items.dune };
+    hx.box(BOX).playback = { item: hx.items.dune, profile: { id: 'default', name: 'Default' }, state: 'paused', positionMs: 61_000, durationMs: 9_960_000, updatedAt: Date.now() };
     hx.s.streams[0].res.write(`id: 900\nevent: reset\ndata: {}\n\n`);
     await waitFor('reset read', () => hx.s.playersReads === reads + 3);
     await waitFor('caught up from players', () => t.dev(id).media === 'Dune: Part Two' && t.dev(id).paused === true);
@@ -362,7 +380,7 @@ test('Helix suspended box: never polled; "play X" wakes it (Wake-on-LAN through 
 test('Helix box with a soundbar: no box volume (the soundbar’s is the one); notices only where Helix offers them, within its limits', { timeout: 15_000 }, async () => {
   const hx = await fakeHelix();
   hx.box(BOX).soundbar = { deviceId: 'lounge_bar', name: 'Soundbar' };
-  hx.box(BOX).capabilities = ['sleep', 'wake', 'soundbar'];
+  hx.box(BOX).capabilities = BOX_CAPS.filter(c => c !== 'notify');
   const t = await testHub(20);
   const adapter = new HelixAdapter({ url: hx.url, token: hx.TOKEN, rooms: { 'Lounge Helix': 'lounge' }, pollSec: 0, feed: false });
   try {
@@ -373,7 +391,7 @@ test('Helix box with a soundbar: no box volume (the soundbar’s is the one); no
     // Without notify in its capabilities: no card.
     await adapter.notice(d, { title: 'Someone’s at the door' });
     assert.equal(hx.s.control.length, 0);
-    hx.box(BOX).capabilities = ['notify', 'sleep', 'wake', 'soundbar'];
+    hx.box(BOX).capabilities = BOX_CAPS;
     await adapter.refreshBoxes();
     await adapter.notice(d, { title: 'x'.repeat(200), body: 'y'.repeat(500), seconds: 600 });
     const n = hx.s.control.at(-1)!;
@@ -457,6 +475,7 @@ test('Helix boxes: a box Helix re-keys from its address to its stable id keeps i
   const legacyName = 'Helix box 192.168.1.30';
   const legacyId = boxDeviceId(legacyName);
   hx.box(BOX).name = '';
+  hx.box(BOX).address = '192.168.1.30';
   hx.box(BOX).id = 'addr:192.168.1.30';
   const t = await testHub(20);
   const rooms = { [legacyName]: 'lounge' };
@@ -466,7 +485,6 @@ test('Helix boxes: a box Helix re-keys from its address to its stable id keeps i
     await t.hub.reg.addAdapter(adapter);
     assert.deepEqual(t.hub.reg.list().filter(d => d.adapter === 'helix').map(d => [d.id, d.address, d.room]), [[legacyId, 'addr:192.168.1.30', 'lounge']]);
     // Helix gives it its stable id and a name, with the address as an alias: same Kova device, settings kept.
-    hx.box('addr:192.168.1.30').aliases = ['addr:192.168.1.30'];
     hx.box('addr:192.168.1.30').name = 'Living room box';
     hx.box('addr:192.168.1.30').id = BOX;
     await adapter.refreshBoxes();
@@ -502,7 +520,7 @@ test('Helix boxes: a home upgrading from a Kova that kept no boxes keeps the id 
   t.hub.store.set('deviceState', { [legacyId]: { on: false, online: true } });
   writeFileSync(join(dir, 'unused'), '');
   hx.box(BOX).name = 'Bedroom box';
-  hx.box(BOX).aliases = ['addr:192.168.1.31'];
+  hx.box(BOX).address = '192.168.1.31';
   const t2 = await testHub(21);
   try {
     // A fresh registry that has seen the legacy id before.
