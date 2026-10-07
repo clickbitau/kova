@@ -105,6 +105,8 @@ export function NowScreen() {
               <View style={{ flexDirection: 'row', gap: SP[4], marginTop: SP[1] }}>
                 {i.device ? <Press onPress={() => sheet.open(i.device!)} label={`Open ${i.title}`}><T v="labelSm">Open</T></Press> : null}
                 <Press onPress={() => void act('POST', `/api/insights/${encodeURIComponent(i.id)}/snooze`, { hours: 24 }, 'Hidden for a day')} label="Not now"><T v="labelSm" color={C.stone}>Not now</T></Press>
+                {/* Hidden for as long as it stays exactly so; a change, or its coming back later, shows again. */}
+                <Press onPress={() => void act('POST', `/api/insights/${encodeURIComponent(i.id)}/snooze`, { untilItChanges: true }, 'Hidden while it stays like this')} label="That’s expected"><T v="labelSm" color={C.stone}>That’s expected</T></Press>
               </View>
             </View>
           </Card>

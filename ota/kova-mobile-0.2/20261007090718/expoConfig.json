@@ -1,7 +1,7 @@
 {
   "name": "Kova",
   "slug": "kova",
-  "version": "0.2.18",
+  "version": "0.2.26",
   "runtimeVersion": "kova-mobile-0.2",
   "updates": {
     "enabled": true,
@@ -164,24 +164,24 @@
     },
     "kovaHistory": [
       {
-        "version": "0.2.18",
-        "title": "Tuya link: show the QR, not the raw code text"
+        "version": "0.2.26",
+        "title": "Alerts: “That’s expected” hides one for as long as it stays like that"
       },
       {
-        "version": "0.2.17",
-        "title": "Tuya: link with Smart Life QR; fix animation crash and stuck Ask box"
+        "version": "0.2.25",
+        "title": "Where the home is: paste a Google Maps link or coordinates, check it on a map, drag the pin and size the arriving-and-leaving circle; phones follow the new circle"
       },
       {
-        "version": "0.2.16",
-        "title": "Fix a render crash when toggling a device (JS vs native animation mix); the reconnect banner now clears when requests succeed; camera screen matches the app’s style"
+        "version": "0.2.23",
+        "title": "The router’s power: watts, each power supply with what’s wrong, redundancy, temperatures and fans, on the Router and Internet panels; power supply events in automations"
       },
       {
-        "version": "0.2.15",
-        "title": "Native camera screen, native add-a-device"
+        "version": "0.2.22",
+        "title": "Settings has Software update for the hub and the app; rooms go to No room when deleted, groups of rooms, archive and combine devices, and edit modes, overlays and moments in the app"
       },
       {
-        "version": "0.2.14",
-        "title": "Crash reporting: the app reports its own crashes to the hub, with the screen it was on"
+        "version": "0.2.21",
+        "title": "Sensors get their own screen (readings, trends, batteries) and leave Devices; cameras show their room and what they saw, with the picture from each moment; alert choices per camera and room, quiet hours"
       }
     ]
   },

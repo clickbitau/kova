@@ -92,3 +92,28 @@ test('insights on a hub: in the snapshot, snoozed, and told once when they first
     assert.equal((await app.inject({ method: 'POST', url: '/api/insights/x/snooze', payload: { hours: 0 } })).statusCode, 400);
   } finally { await app.close(); await t.hub.stop(); }
 });
+
+test('“That’s expected”: hidden for as long as it stays so, back when it changes or returns later, and undoable', async () => {
+  const t = await testHub(12);
+  const app = await buildServer(t.hub, { webRoot });
+  const ids = async () => ((await app.inject({ url: '/api/state' })).json().insights as { id: string }[]).map(i => i.id);
+  try {
+    t.hub.reg.get('lamp')!.state.filterLife = 15;
+    assert.ok((await ids()).includes('filter:lamp'));
+    assert.equal((await app.inject({ method: 'POST', url: '/api/insights/filter:lamp/snooze', payload: { untilItChanges: true } })).statusCode, 200);
+    // Long past any snooze: still hidden while it stays so.
+    t.clock.t += 60 * 86400_000;
+    assert.ok(!(await ids()).includes('filter:lamp'));
+    assert.deepEqual(t.hub.insights.hiddenWhileSame(), ['filter:lamp']);
+    // Undo shows it again.
+    assert.equal((await app.inject({ method: 'DELETE', url: '/api/insights/filter:lamp/snooze' })).statusCode, 200);
+    assert.ok((await ids()).includes('filter:lamp'));
+    // Hidden again; then it goes away (filter changed), and coming back later is news.
+    await app.inject({ method: 'POST', url: '/api/insights/filter:lamp/snooze', payload: { untilItChanges: true } });
+    t.hub.reg.get('lamp')!.state.filterLife = 100;
+    assert.ok(!(await ids()).includes('filter:lamp'));
+    assert.deepEqual(t.hub.insights.hiddenWhileSame(), [], 'forgotten once it was gone');
+    t.hub.reg.get('lamp')!.state.filterLife = 10;
+    assert.ok((await ids()).includes('filter:lamp'), 'back, and shown');
+  } finally { await app.close(); await t.hub.stop(); }
+});

@@ -133,10 +133,17 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
   });
 
   // Not now: an alert or warning on the Now page goes quiet for so many hours (24 by default).
-  app.post<{ Params: { id: string }; Body: { hours?: number } }>('/api/insights/:id/snooze', async (req, reply) => {
+  // hours: 1 to 720; or untilItChanges: hidden for as long as it stays exactly so ("that's expected").
+  app.post<{ Params: { id: string }; Body: { hours?: number; untilItChanges?: boolean } }>('/api/insights/:id/snooze', async (req, reply) => {
+    const forGood = req.body?.untilItChanges === true;
     const hours = req.body?.hours == null ? 24 : Number(req.body.hours);
-    if (!Number.isFinite(hours) || hours < 1 || hours > 720) return bad(reply, 'hours is 1 to 720');
-    hub.insights.snooze(req.params.id, hours);
+    if (!forGood && (!Number.isFinite(hours) || hours < 1 || hours > 720)) return bad(reply, 'hours is 1 to 720');
+    hub.insights.snooze(req.params.id, hours, forGood);
+    hub.emit('changed');
+    return { ok: true };
+  });
+  app.delete<{ Params: { id: string } }>('/api/insights/:id/snooze', async req => {
+    hub.insights.unsnooze(req.params.id);
     hub.emit('changed');
     return { ok: true };
   });

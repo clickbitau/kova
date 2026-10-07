@@ -181,6 +181,9 @@ export function insights(x: InsightInputs): Insight[] {
  * Keeps what insights need over time: when devices went offline, what the owner snoozed, and which insights were
  * already pushed. Emits `new` for an alert or warning (with `push`) the first time it appears, not while snoozed.
  */
+/** A snooze that lasts for as long as the insight stays exactly so. */
+const HIDDEN_WHILE_SAME = Number.MAX_SAFE_INTEGER;
+
 export class Insights extends EventEmitter<{ new: [Insight] }> {
   private offlineSince = new Map<string, number>();
   private openSince = new Map<string, number>();
@@ -206,20 +209,38 @@ export class Insights extends EventEmitter<{ new: [Insight] }> {
 
   private snoozes(): Record<string, number> { return this.store.get<Record<string, number>>('insight-snooze') ?? {}; }
 
-  /** Snooze one for so many hours (24 by default). Snoozes past are forgotten. */
-  snooze(id: string, hours = 24): void {
+  /**
+   * Snooze one for so many hours (24 by default), or, with `untilItChanges`, for as long as it stays exactly so: the
+   * owner says it's expected (a power supply left unplugged on purpose). An insight's id carries what's wrong, so a
+   * change shows again, and once it's gone a later return is news too. Snoozes past are forgotten.
+   */
+  snooze(id: string, hours = 24, untilItChanges = false): void {
     const t = this.inputs().now;
     const s = Object.fromEntries(Object.entries(this.snoozes()).filter(([, until]) => until > t));
-    s[id] = t + Math.max(1, Math.min(24 * 30, hours)) * 3600_000;
+    s[id] = untilItChanges ? HIDDEN_WHILE_SAME : t + Math.max(1, Math.min(24 * 30, hours)) * 3600_000;
     this.store.set('insight-snooze', s);
   }
+
+  /** Show one again that was hidden or snoozed. */
+  unsnooze(id: string): void {
+    const s = { ...this.snoozes() };
+    delete s[id];
+    this.store.set('insight-snooze', s);
+  }
+
+  /** Ids hidden for as long as they stay so (for Settings, to show them again). */
+  hiddenWhileSame(): string[] { return Object.entries(this.snoozes()).filter(([, v]) => v === HIDDEN_WHILE_SAME).map(([k]) => k); }
 
   private all(): Insight[] { return insights({ ...this.inputs(), devices: this.reg.list(), offlineSince: this.offlineSince, openSince: this.openSince }); }
 
   /** What to show now (snoozed ones left out), and tell listeners about new ones worth a push. */
   current(): Insight[] {
     const t = this.inputs().now, sn = this.snoozes();
-    const list = this.all().filter(i => !(sn[i.id] > t));
+    const all = this.all(), now = new Set(all.map(i => i.id));
+    // Hidden while it stays so: gone now, so forget it, and if it comes back that's news.
+    const gone = Object.entries(sn).filter(([id, v]) => v === HIDDEN_WHILE_SAME && !now.has(id)).map(([id]) => id);
+    if (gone.length) { const keep = { ...sn }; for (const id of gone) delete keep[id]; this.store.set('insight-snooze', keep); }
+    const list = all.filter(i => !(sn[i.id] > t));
     const ids = new Set(list.map(i => i.id));
     // The first look after starting only remembers (a restart doesn't re-send everything).
     for (const i of list) if (!this.seen.has(i.id) && !this.first && i.push && i.level !== 'info') this.emit('new', i);
