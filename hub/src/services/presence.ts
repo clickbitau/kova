@@ -50,8 +50,15 @@ const SOURCE_BASE: Record<PresenceSourceKind, number> = {
   warden: 0.84,
   router: 0.68,
   ping: 0.58,
+  camera: 0.3,
   other: 0.7,
 };
+
+/** An indoor camera seeing someone counts this long, and only this much, against a phone dropping off the network. */
+export const INDOOR_HINT_MS = 15 * 60_000;
+export const INDOOR = 'Indoor camera (someone moving, not who)';
+/** How strong the hint is: a person seen is a little more than motion. Kept weak so it only tips close calls. */
+const INDOOR_STRENGTH = { person: 0.18, motion: 0.1 } as const;
 
 interface SourceReading {
   kind: PresenceSourceKind;
@@ -104,6 +111,9 @@ export class Presence {
   private keys: Record<string, string>;
   private learning: Learning;
   private polling = false;
+  /** The latest indoor camera sighting: a hint that someone's in, never who. */
+  private indoor: { at: number; kind: 'person' | 'motion' } | null = null;
+  private offRooms: (() => void) | null = null;
   /** For the Integrations screen. */
   private last: { router?: { seen: number; total: number } | { error: string }; routerName?: 'Warden'; ping?: { up: number; total: number } } = {};
 
@@ -137,6 +147,10 @@ export class Presence {
     }
     // Make sure every person has a key for phone automations.
     this.ensureKeys();
+    // Indoor cameras: someone moving inside is weak evidence that whoever was home still is (engine/rooms.ts).
+    const onRoom = (ev: { source: string; outdoor: boolean; kind: string; at: number }) => this.sighting(ev);
+    this.hub.engine.rooms.on('activity', onRoom);
+    this.offRooms = () => this.hub.engine.rooms.off('activity', onRoom);
     const every = (this.opts.pollSec ?? 30) * 1000;
     if (every > 0 && this.net.size) {
       void this.poll();
@@ -145,7 +159,26 @@ export class Presence {
     }
   }
 
-  stop(): void { if (this.timer) clearInterval(this.timer); this.timer = null; }
+  stop(): void { if (this.timer) clearInterval(this.timer); this.timer = null; this.offRooms?.(); this.offRooms = null; }
+
+  /**
+   * An indoor camera saw a person or motion. It can't say who, so it never marks anyone home or away by itself:
+   * it only adds a weak "someone's still in" vote for people who are home when their phone drops off the network
+   * (iPhones leave Wi-Fi while asleep), within INDOOR_HINT_MS. Outdoor cameras and doorbells don't count.
+   */
+  sighting(ev: { source: string; outdoor: boolean; kind: string; at: number }): void {
+    if (ev.source !== 'camera' || ev.outdoor || (ev.kind !== 'person' && ev.kind !== 'motion')) return;
+    // A person outranks motion while it's fresh.
+    if (this.indoor && this.indoor.kind === 'person' && ev.kind === 'motion' && ev.at - this.indoor.at < INDOOR_HINT_MS / 3) return;
+    this.indoor = { at: ev.at, kind: ev.kind };
+  }
+
+  /** The indoor hint as a reading for someone who's home, while it's fresh. */
+  private indoorReading(personId: string): SourceReading | null {
+    const i = this.indoor;
+    if (!i || this.now - i.at > INDOOR_HINT_MS || this.hub.engine.people[personId]?.home === false) return null;
+    return { kind: 'camera', source: INDOOR, home: true, strength: INDOOR_STRENGTH[i.kind] * decay(this.now - i.at, INDOOR_HINT_MS / 2), at: i.at };
+  }
 
   // ---------------------------------------------------------- phone keys --
 
@@ -249,7 +282,9 @@ export class Presence {
         }
         // Home sightings apply at once. Absence is debounced, then becomes away evidence.
         if (!seen && n.home && t - n.lastSeen < this.awayMs) continue;
-        const d = await this.apply(id, readings, { learn: true });
+        // Someone moving inside softens an absence a little (it can't say who, so it never decides alone).
+        const hint = !seen ? this.indoorReading(id) : null;
+        const d = await this.apply(id, hint ? [...readings, hint] : readings, { learn: true });
         n.home = d.home;
       }
     } finally {
@@ -280,6 +315,7 @@ export class Presence {
   }
 
   private reliability(personId: string, kind: PresenceSourceKind): number {
+    if (kind === 'camera') return 1;
     return this.learning[personId]?.[kind]?.reliability ?? 0.82;
   }
 
@@ -289,6 +325,8 @@ export class Presence {
     const by = this.learning[personId] ??= {};
     let changed = false;
     for (const e of evidence) {
+      // A camera hint isn't about anyone in particular: nothing to learn about it per person.
+      if (e.kind === 'camera') continue;
       const row = by[e.kind] ??= { reliability: 0.82, correct: 0, contradicted: 0, updatedAt: this.now };
       const agree = e.home === outcome;
       const step = agree ? 0.06 * e.weight : 0.18 * e.weight;

@@ -2,9 +2,10 @@ import type { Engine } from '../engine/engine.ts';
 import type { HelixMusic } from '../services/helix-music.ts';
 import type { Registry } from '../devices/registry.ts';
 import type { ConfigStore } from '../engine/config.ts';
-import type { Cause, Device, Overlay, Targets } from '../model/types.ts';
+import type { Cause, Device, Overlay, RoomEventKind, Targets } from '../model/types.ts';
 import { isLight, isPlayer } from '../util/describe.ts';
-import { clock } from '../util/time.ts';
+import { clock, localDate, atLocal } from '../util/time.ts';
+import { isCamera, isDoorbell, isSensor, reading, type ReadingField } from '../util/sensors.ts';
 
 // Ask Kova, built in: a deterministic intent parser that runs on the hub.
 // No AI, nothing leaves the home. Requests are parsed into an Intent first,
@@ -37,7 +38,13 @@ export type Intent =
   /** "next song", "previous song in the kitchen". */
   | { kind: 'skip'; delta: 1 | -1; label: string; devices: string[] }
   /** "what's playing?", "what song is this?" */
-  | { kind: 'nowPlaying' };
+  | { kind: 'nowPlaying' }
+  /** "anything at the front door?", "was there motion in the garage today?": from cameras and sensors, by room. */
+  | { kind: 'roomEvents'; room: string; label: string; kinds: RoomEventKind[] | null; now: boolean }
+  /** "what's the temperature in the bedroom?", "how humid is the lounge?" */
+  | { kind: 'reading'; room: string; label: string; field: ReadingField }
+  /** "is the garage door open?" */
+  | { kind: 'contact'; devices: string[]; label: string };
 
 /** A follow-up the user can tap, executed by POST /api/ask/act. */
 export type AskAction =
@@ -127,6 +134,30 @@ export class Assistant {
     return ids.size ? { label: cap(phrase.trim()), has: d => ids.has(d.id) } : null;
   }
 
+  /**
+   * A room from words: its name or id, part of its name ("front" for "Front door"), a room named in them
+   * ("the backyard" for "Backyard"), or "the door": the room with the doorbell.
+   */
+  private roomFrom(phrase: string): { id: string; name: string } | null {
+    const p = norm(phrase).replace(/^(the|my|our)\s+/, '').replace(/\s+(camera|cam|area|room)$/, '').trim();
+    if (!p) return null;
+    const rooms = [...this.rooms()].sort((a, b) => b.name.length - a.name.length);
+    const squash = (x: string) => x.replace(/\s+/g, '');
+    const hit = rooms.find(r => norm(r.name) === p || norm(r.id) === p || squash(norm(r.name)) === squash(p))
+      ?? rooms.find(r => p.includes(norm(r.name)) || norm(r.name).includes(p) || squash(norm(r.name)).includes(squash(p)) || squash(p).includes(squash(norm(r.name))));
+    if (hit) return hit;
+    // "the door": wherever the doorbell is.
+    if (/\bdoor\b/.test(p)) {
+      const bell = this.reg.list().find(d => isCamera(d) && isDoorbell(d));
+      const r = bell && this.rooms().find(x => x.id === bell.room);
+      if (r) return r;
+    }
+    // A camera's name ("the driveway camera").
+    const cam = this.reg.list().find(d => (isCamera(d) || isSensor(d)) && norm(d.name).includes(p));
+    const r = cam && this.rooms().find(x => x.id === cam.room);
+    return r ?? null;
+  }
+
   /** Understand a request without doing anything. */
   parse(q: string): Intent | null {
     const t = norm(q);
@@ -141,6 +172,34 @@ export class Assistant {
     }
     // A message that is only a greeting — "hey turn the lights on" still parses as a command.
     if (/^(hi+|hello+|hey+|yo|hiya|howdy|morning|good (morning|afternoon|evening))( there)?( kova)?$/.test(t)) return { kind: 'greeting' };
+    // "is the garage door open?", "is the front door closed"
+    const ct = t.match(/^(?:is|are) (?:the |my )?(.+?) (open|closed|shut)$/);
+    if (ct) {
+      const p = norm(ct[1]);
+      const ds = this.reg.list().filter(d => isSensor(d) && typeof d.state.open === 'boolean' && (norm(d.name).includes(p) || p.includes(norm(d.name)) || norm(`${this.roomName(d.room)} ${d.name}`).includes(p) || norm(this.roomName(d.room)) === p));
+      if (ds.length) return { kind: 'contact', devices: ds.map(d => d.id), label: ds.length === 1 ? ds[0].name : cap(ct[1]) };
+    }
+    // "what's the temperature in the bedroom", "how warm is the baby room", "how humid is it in the lounge"
+    const rd = t.match(/^(?:whats|what is|hows|how is|how)\s+(?:the\s+)?(temperature|temp|humidity|humid|warm|hot|cold|cool|bright|light level)\b(?:\s+is\s+it)?(?:\s+(?:in|at|of))?\s+(?:the\s+)?(.+)$/)
+      ?? t.match(/^(?:is it|its)\s+(warm|hot|cold|humid)\s+(?:in|at)\s+(?:the\s+)?(.+)$/);
+    if (rd) {
+      const room = this.roomFrom(rd[2].replace(/^(?:it\s+)?(?:in|at)\s+(?:the\s+)?/, '').replace(/^is\s+(?:it\s+)?(?:in\s+)?(?:the\s+)?/, ''));
+      const field: ReadingField = /humid/.test(rd[1]) ? 'humidity' : /bright|light/.test(rd[1]) ? 'lux' : 'temp';
+      if (room) return { kind: 'reading', room: room.id, label: room.name, field };
+    }
+    // "anything at the front door?", "was there motion in the backyard?", "has anyone been in the garage today"
+    const re = t.match(/^(?:(?:is|was|were|has|have|did)\s+)?(?:there\s+)?(?:been\s+)?(?:any\s*(?:one|body|thing)?|some\s*(?:one|body)|anybody|anyone|anything|any|someone|somebody|who|what|what happened|whats happened|whats been happening|whats happening|motion|movement|activity|people|a person|a car|a package|a delivery)\b(.*)$/);
+    if (re && /\b(at|in|on|by|outside|near)\b/.test(re[1]) && !/\b(on|playing)$/.test(t)) {
+      const rest = re[1];
+      const where = rest.match(/\b(?:at|in|on|by|outside|near)\s+(?:the\s+)?(.+?)(?:\s+(today|tonight|now|right now|lately|recently|just now|this morning|this evening))?$/);
+      const room = where ? this.roomFrom(where[1]) : null;
+      if (room) {
+        const k = `${rest} ${t}`;
+        const kinds: RoomEventKind[] | null = /\b(motion|movement|moving)\b/.test(k) ? ['motion', 'person'] : /\b(package|parcel|delivery)\b/.test(k) ? ['package'] : /\b(car|vehicle)\b/.test(k) ? ['vehicle']
+          : /\b(animal|dog|cat)\b/.test(k) ? ['animal'] : /\b(door|window) (open|opened)\b|\bopened\b/.test(k) ? ['opened', 'closed'] : /\b(one|body|person|people|visitor|someone|anyone)\b/.test(k) ? ['person', 'ring', 'motion'] : null;
+        return { kind: 'roomEvents', room: room.id, label: room.name, kinds, now: /^is\b|\b(now|right now|just now)\b/.test(t) };
+      }
+    }
     if (/^who(s| is)?\b.*\b(home|in|here|out)\b/.test(t)) return { kind: 'whoHome' };
     if (/^why\b/.test(t)) {
       const m = t.match(/^why (?:is|are|did) (?:the )?(.+?)(?: (?:on|off|playing|turn on|come on))?$/);
@@ -247,6 +306,9 @@ export class Assistant {
       case 'music': return ['Play', `“${i.words}”${i.station ? ' station' : ''}${i.shuffle && !i.station ? ' on shuffle' : ''}`, i.devices.length ? i.label : 'Which speaker?'];
       case 'skip': return [i.delta > 0 ? 'Next song' : 'Previous song', i.label];
       case 'nowPlaying': return ['Now playing'];
+      case 'roomEvents': return ['Cameras and sensors', i.label];
+      case 'reading': return [i.field === 'humidity' ? 'Humidity' : i.field === 'lux' ? 'Light' : 'Temperature', i.label];
+      case 'contact': return ['Open or closed', i.label];
       case 'greeting': return ['Greeting'];
     }
   }
@@ -361,11 +423,65 @@ export class Assistant {
         const r = await this.engine.applyMany(Object.fromEntries(i.devices.map(id => [id, { paused: !i.resume }])), { ...CAUSE, label: i.resume ? 'Carry on' : 'Pause' });
         return reply(i.resume ? `Carrying on: ${i.label}.` : `Paused: ${i.label}.`, 'Device control', { undo: r.changed.length ? r.undo : undefined });
       }
+      case 'roomEvents': return this.roomEventsReply(i);
+      case 'reading': {
+        const ds = this.reg.list().filter(d => d.room === i.room && !d.hidden && d.state.online !== false && reading(d, i.field));
+        const sensors = ds.filter(isSensor);
+        const from = sensors.length ? sensors : ds;
+        if (!from.length) return reply(`Nothing in the ${i.label} measures ${i.field === 'humidity' ? 'humidity' : i.field === 'lux' ? 'the light' : 'the temperature'}.`, 'Built-in · nothing left your home');
+        const vals = from.map(d => reading(d, i.field)!.value as number);
+        const v = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length * 10) / 10;
+        const text = i.field === 'humidity' ? `${Math.round(v)}% humidity` : i.field === 'lux' ? `${Math.round(v)} lux` : `${v}°`;
+        const hum = i.field === 'temp' ? from.map(d => d.state.humidity).filter((x): x is number => typeof x === 'number') : [];
+        return reply(`It’s ${text} in the ${i.label}${hum.length ? `, ${Math.round(hum.reduce((a, b) => a + b, 0) / hum.length)}% humidity` : ''}${from.length > 1 ? ` (from ${from.length} ${sensors.length ? 'sensors' : 'devices'})` : ` (${from[0].name})`}.`, 'Built-in · nothing left your home');
+      }
+      case 'contact': {
+        const ds = i.devices.map(id => this.reg.get(id)!).filter(Boolean);
+        const open = ds.filter(d => d.state.open === true), off = ds.filter(d => d.state.online === false);
+        if (ds.length === 1) {
+          const d = ds[0];
+          return reply(d.state.online === false ? `${d.name} isn’t answering, so I can’t tell.` : `${d.name} is ${d.state.open ? 'open' : 'closed'}.`, 'Built-in · nothing left your home');
+        }
+        return reply(open.length ? `${list(open.map(d => d.name))} ${open.length === 1 ? 'is' : 'are'} open.` : `All closed${off.length ? ` (${list(off.map(d => d.name))} isn’t answering)` : ''}.`, 'Built-in · nothing left your home');
+      }
       case 'status': {
         const now = this.engine.planner.modeAt(this.engine.now());
         return reply(`The home is in ${now.mode.name} until ${clock(now.until, tz)}, then ${now.next.name}.`, 'From your modes');
       }
     }
+  }
+
+  /** What a room's cameras and sensors saw: now, or today (with the last time before that when today was quiet). */
+  private roomEventsReply(i: Extract<Intent, { kind: 'roomEvents' }>): AskReply {
+    const cfg = this.config.get(), tz = cfg.timezone, t = this.engine.now();
+    const rooms = this.engine.rooms;
+    const watchers = this.reg.list().filter(d => d.room === i.room && (isCamera(d) || (isSensor(d) && (typeof d.state.motion === 'boolean' || typeof d.state.open === 'boolean'))));
+    const src: Source = 'From the activity log';
+    const acts = [{ label: 'Open Security', action: { type: 'screen' as const, screen: 'security' } }];
+    const reply = (text: string): AskReply => ({ text, source: src, actions: acts, understood: true });
+    if (!watchers.length) return reply(`There’s no camera or sensor in the ${i.label}, so I can’t tell.`);
+    // "at the front door", "in the garage"
+    const where = `${/door|porch|gate|drive/i.test(i.label) ? 'at' : 'in'} the ${i.label}`;
+    const kinds = i.kinds ?? undefined;
+    const ago = (at: number) => { const m = Math.round((t - at) / 60_000); return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : `at ${clock(at, tz)}`; };
+    const name = (id: string) => this.reg.get(id)?.name ?? 'A camera';
+    const WORDS: Record<string, [string, string]> = { person: ['a person', 'people'], motion: ['motion', 'motion'], ring: ['the doorbell', 'the doorbell'], vehicle: ['a vehicle', 'vehicles'], animal: ['an animal', 'animals'], package: ['a package', 'packages'], sound: ['a sound', 'sounds'], opened: ['a door opening', 'doors opening'], closed: ['a door closing', 'doors closing'] };
+    if (i.now) {
+      const st = rooms.status(i.room);
+      const last = rooms.latest(i.room, kinds ?? ['person', 'motion', 'ring', 'opened', 'closed', 'package', 'vehicle', 'animal'], t - 10 * 60_000);
+      const DID: Record<string, string> = { person: 'saw a person', motion: 'noticed motion', ring: 'rang', vehicle: 'saw a vehicle', animal: 'saw an animal', package: 'saw a package', sound: 'heard a sound', opened: 'opened', closed: 'closed' };
+      if (last) return reply(`Yes: ${name(last.device)} ${DID[last.kind] ?? last.kind} ${ago(last.at)}.`);
+      if (st.occupied) return reply(`A motion sensor ${where} says someone’s moving there now.`);
+    }
+    const midnight = atLocal(localDate(t, tz), 0, tz);
+    const today = rooms.summary(i.room, midnight).filter(x => !kinds || kinds.includes(x.kind));
+    if (today.length) {
+      const parts = today.map(x => `${WORDS[x.kind]?.[0] ?? x.kind}${x.count > 1 ? ` ${x.count} times` : ''} (${x.count > 1 ? 'last ' : ''}${clock(x.last, tz)})`);
+      return reply(`${i.now ? 'Nothing in the last 10 minutes. ' : ''}Today ${where}: ${list(parts)}.`);
+    }
+    const before = rooms.latest(i.room, kinds ?? ['person', 'motion', 'ring', 'opened', 'closed', 'package', 'vehicle', 'animal']);
+    const what = kinds?.includes('motion') ? 'No motion' : kinds?.includes('person') ? 'Nobody' : 'Nothing';
+    return reply(`${what} ${where} today.${before ? ` The last was ${WORDS[before.kind]?.[0] ?? before.kind} ${localDate(before.at, tz) === localDate(t - 86400_000, tz) ? 'yesterday' : `on ${new Date(before.at).toLocaleDateString('en-AU', { weekday: 'long', timeZone: tz })}`} at ${clock(before.at, tz)}.` : ''}`);
   }
 
   async act(a: AskAction): Promise<{ text: string; undo?: string }> {

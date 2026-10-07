@@ -88,7 +88,8 @@ export class Notifier {
 
   start(): void {
     const onEvent = (e: DeviceEvent) => {
-      if (e.type === 'ring' && this.rule('doorbell')) this.track(this.onRing(e));
+      // The doorbell's own message; whether it goes is the camera's alert choice and cooldown (services/security.ts).
+      if (e.type === 'ring' && this.rule('doorbell') && this.hub.security.allowRing(e)) this.track(this.onRing(e));
       if (e.device.adapter === 'warden' && this.rule('network')) this.track(this.onNetwork(e));
     };
     this.hub.reg.on('event', onEvent);

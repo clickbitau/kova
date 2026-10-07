@@ -57,6 +57,9 @@ export function targetLabel(d: Device, t: Command): string {
 
 /** Activity-feed sentence for a single device change: "Lamp dimmed to 78%". */
 export function changeSentence(d: Device, prev: Command, next: Command): string {
+  // Sensors: a door or window, motion.
+  if (typeof next.open === 'boolean') return `${d.name} ${next.open ? 'opened' : 'closed'}`;
+  if (typeof next.motion === 'boolean') return `${d.name}: ${next.motion ? 'motion' : 'clear'}`;
   if (d.type === 'vacuum') {
     const a = next.activity ?? (next.on === true ? 'cleaning' : next.on === false ? 'returning' : undefined);
     const says: Record<string, string> = { cleaning: 'started cleaning', returning: 'heading back to its dock', docked: 'docked', paused: 'paused', idle: 'stopped', error: 'needs attention' };

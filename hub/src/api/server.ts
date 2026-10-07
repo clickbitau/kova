@@ -34,6 +34,7 @@ import { SetupError, type IntegrationsManager } from '../integrations-store.ts';
 import type { HaImport } from '../import/ha-scan.ts';
 import { registerImportRoutes } from './import-routes.ts';
 import { registerHomeRoutes } from './home-routes.ts';
+import { registerSecurityRoutes } from './security-routes.ts';
 import { registerLanAppRoutes } from './lan-apps-routes.ts';
 import { registerAppLinkRoutes } from './app-link.ts';
 import { AppUpdates, registerAppUpdateRoutes } from './app-updates.ts';
@@ -543,6 +544,7 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
   registerEditRoutes(app, hub);
   registerImportRoutes(app, opts.haImport, hub);
   registerHomeRoutes(app, hub);
+  registerSecurityRoutes(app, hub);
   registerLanAppRoutes(app, { integrations: opts.integrations, helixLink: opts.helixLink, ...opts.lanApps });
   if (opts.otaDir) registerAppUpdateRoutes(app, new AppUpdates(opts.otaDir));
   registerAppLinkRoutes(app, {

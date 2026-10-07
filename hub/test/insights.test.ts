@@ -64,7 +64,7 @@ test('the home at a glance: outside with rain, inside temperatures, the air wors
     dev('p1', 'fan', { airQuality: 1, online: true }, { name: 'Bedroom purifier' }),
     dev('p2', 'fan', { airQuality: 2, online: true }, { name: 'Lounge purifier' }),
   ], { weather: { current: { temp: 21, text: 'Sunny', icon: 'sunny' }, today: { high: 24, low: 15, uvMax: 6, rain: { from: at(15), mm: 2, chance: null } } } }));
-  assert.deepEqual(g.inside, [{ name: 'Lounge', temp: 20.8, device: 'ac' }]);
+  assert.deepEqual(g.inside, [{ name: 'Lounge', room: 'lounge', temp: 20.8, device: 'ac' }]);
   assert.deepEqual(g.air.map(a => [a.name, a.label]), [['Lounge purifier', 'Moderate'], ['Bedroom purifier', 'Good']]);
   assert.equal(g.outside!.rain, 'Might rain from about 15:00 (2 mm)');
   assert.deepEqual([g.outside!.high, g.outside!.low], [24, 15]);

@@ -15,6 +15,8 @@ import type { HomeConfig } from './model/types.ts';
 import type { Weather } from './services/weather.ts';
 import { Energy } from './services/energy.ts';
 import type { HelixMusic } from './services/helix-music.ts';
+import { SensorHistory } from './services/sensors.ts';
+import { Security, type SecurityOptions } from './services/security.ts';
 
 export interface HubOptions {
   dbPath: string;
@@ -27,6 +29,8 @@ export interface HubOptions {
   weather?: Weather;
   /** How often to sample power for the Energy screen; 0 disables it (tests call sample()). */
   energyMs?: number;
+  /** Camera alerts and event frames (services/security.ts): where frames are kept, and timings for tests. */
+  security?: SecurityOptions;
 }
 
 /** Wires the hub's parts together. One per home. */
@@ -53,6 +57,10 @@ export class Hub extends EventEmitter<{ changed: [] }> {
   readonly insights: Insights;
   /** Devices reached through several integrations, shown as one (adapters/combined.ts). */
   readonly combined: CombinedAdapter;
+  /** Sensors' readings over the day: trends, last changed and last reported (services/sensors.ts). */
+  readonly sensors: SensorHistory;
+  /** Smart camera and sensor alerts, and the frames kept for camera events (services/security.ts). */
+  readonly security: Security;
   /** Helix music on any speaker (services/helix-music.ts), once Helix is set up. */
   music: HelixMusic | null = null;
   /** Updating the hub itself (services/updates.ts); null without an updater set up (tests, Docker). */
@@ -99,6 +107,8 @@ export class Hub extends EventEmitter<{ changed: [] }> {
     }));
     this.reg.on('measure', () => this.emit('changed'));
     this.weather?.on('changed', () => this.emit('changed'));
+    this.sensors = new SensorHistory(this.reg, this.store, () => this.engine.now());
+    this.security = new Security(this, opts.security ?? {});
   }
 
   async start(): Promise<void> {
@@ -108,6 +118,7 @@ export class Hub extends EventEmitter<{ changed: [] }> {
     // Combined devices too: they're made of devices other integrations announce.
     await this.reg.addAdapter(this.combined);
     this.engine.start(this.opts.tickMs ?? 1000);
+    this.security.start();
     this.energy.start(this.opts.energyMs ?? (this.opts.tickMs === 0 ? 0 : 60_000));
     this.weather?.start(this.config.get());
     // A new location or timezone in Settings: the forecast for the new place.
@@ -115,6 +126,8 @@ export class Hub extends EventEmitter<{ changed: [] }> {
   }
 
   async stop(): Promise<void> {
+    await this.security.stop();
+    this.sensors.flush();
     this.engine.stop();
     this.energy.stop();
     this.weather?.stop();

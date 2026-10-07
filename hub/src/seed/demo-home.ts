@@ -1,9 +1,10 @@
-import type { HomeConfig, Targets } from '../model/types.ts';
+import type { Capability, HomeConfig, Targets } from '../model/types.ts';
 import type { DeviceInfo } from '../adapters/sdk.ts';
 
 // A demo home modelled on a real one (the owner's former Home Assistant setup):
 // 28 devices, 10 rooms, the routines rebuilt as 5 modes, 2 moments,
-// 6 overlays and 1 behaviour. Used by the virtual adapter and first-run config.
+// 6 overlays and 1 behaviour, plus a few sensors (climate, motion, doors) and
+// the solar inverter. Used by the virtual adapter and first-run config.
 
 type Row = [id: string, name: string, room: string, type: DeviceInfo['type'], integration: string];
 const T = 'Tuya (local)';
@@ -39,20 +40,30 @@ const ROWS: Row[] = [
   ['solar_inverter', 'Solar inverter', 'garage', 'sensor', 'GoodWe (simulated)'],
 ];
 
+/** Sensors: they only report, nothing to control. Readings are where a home's might be on a mild day. */
+const SENSORS: DeviceInfo[] = [
+  { id: 'lounge_climate', name: 'Climate sensor', room: 'lounge', state: { temp: 22.4, humidity: 48, battery: 86, online: true } },
+  { id: 'master_climate', name: 'Climate sensor', room: 'master', state: { temp: 21.2, humidity: 52, battery: 64, online: true } },
+  { id: 'baby_climate', name: 'Climate sensor', room: 'baby', state: { temp: 23.1, humidity: 45, battery: 14, online: true } },
+  { id: 'kitchen_motion', name: 'Motion sensor', room: 'kitchen', state: { motion: false, lux: 140, temp: 22.9, battery: 92, online: true } },
+  { id: 'front_contact', name: 'Front door sensor', room: 'front', state: { open: false, battery: 78, online: true } },
+  { id: 'garage_contact', name: 'Garage door', room: 'garage', state: { open: false, battery: 55, online: true } },
+].map(d => ({ ...d, type: 'sensor' as const, integration: 'Zigbee (simulated)', address: `demo.${d.id}`, capabilities: d.state.battery != null ? ['events' as const, 'battery' as const] : ['events' as const] }));
+
 /** The demo home's simulated solar array (about 3 kW, like the real one). */
 export const DEMO_SOLAR = { id: 'solar_inverter', lat: -31.95, lon: 115.86, peakW: 2900, tz: 'Australia/Perth' };
 
 export function demoDevices(): DeviceInfo[] {
-  return ROWS.map(([id, name, room, type, integration]) => ({
+  return [...ROWS.map(([id, name, room, type, integration]): DeviceInfo => ({
     id, name, room, type, integration, address: `demo.${id}`,
-    capabilities: id === 'solar_inverter' ? ['power', 'energy'] : type === 'dimmer' ? (id === 'lamp' ? ['onoff', 'brightness', 'colorTemp', 'color'] : ['onoff', 'brightness']) : type === 'fan' ? ['onoff', 'fanMode', 'purifier'] : [],
+    capabilities: (id === 'solar_inverter' ? ['power', 'energy'] : type === 'dimmer' ? (id === 'lamp' ? ['onoff', 'brightness', 'colorTemp', 'color'] : ['onoff', 'brightness']) : type === 'fan' ? ['onoff', 'fanMode', 'purifier'] : []) as Capability[],
     state: type === 'fan' ? { on: true, mode: 'Auto', fanLevel: 2, fanLevelMax: 3, display: true, childLock: false }
       : type === 'media' || type === 'tv' ? { on: false, media: null, vol: 30 }
       : type === 'dimmer' ? { on: false, bri: 100, k: id === 'lamp' ? 3000 : null, color: null }
       : type === 'plug' ? { on: true, power: 14 }
       : type === 'camera' || type === 'sensor' ? { online: true }
       : { on: false },
-  }));
+  })), ...SENSORS.map(d => ({ ...d, state: { ...d.state } }))];
 }
 
 const LIGHTS = ROWS.filter(r => r[3] === 'light' || r[3] === 'dimmer').map(r => r[0]);
