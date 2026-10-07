@@ -239,7 +239,7 @@ export function registerEditRoutes(app: FastifyInstance, hub: Hub): void {
   // ---------------------------------------------------------- automations --
   // When (any trigger) / if (all conditions) / then (steps in order); engine/automations.ts runs them.
   const autos = () => hub.engine.automations.list();
-  const checkCtx = (self?: string) => ({ device: (id: string) => hub.reg.get(id), cfg: hub.config.get(), self, now: hub.engine.now() });
+  const checkCtx = (self?: string) => ({ device: (id: string) => hub.reg.get(id), cfg: hub.config.get(), self, now: hub.engine.now(), media: (m: string) => hub.mediaProblem(m) });
   const slug = (name: string) => `${name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 40) || 'automation'}_${randomUUID().slice(0, 4)}`;
   app.get('/api/automations', async () => ({ automations: autos().map(a => ({ ...a, lastRun: hub.engine.automations.lastRun(a.id) ?? null, running: hub.engine.automations.running(a.id) })) }));
   app.get<{ Params: { id: string } }>('/api/automations/:id', async (req, reply) => {

@@ -20,8 +20,8 @@ import type { NewLogEntry } from '../store/db.ts';
  * `<KOVA_DATA>/backups/`, owner-only, newest N kept.
  */
 
-/** Folders under KOVA_DATA that hold pairings and fabrics; losing them means re-pairing devices. */
-export const PAIRING_DIRS = ['homekit', 'homekit-controller', 'matter', 'matter-bridge', 'samsungtv', 'push'] as const;
+/** Folders under KOVA_DATA that hold pairings and fabrics (losing them means re-pairing devices), and the owner's announcement clips. */
+export const PAIRING_DIRS = ['homekit', 'homekit-controller', 'matter', 'matter-bridge', 'samsungtv', 'push', 'clips'] as const;
 export const DATA_FILES = ['integrations.json', 'home.json'] as const;
 /** aircast's folder also holds logs; only its config is backed up. */
 const AIRCAST_DIR = 'aircast';

@@ -212,6 +212,14 @@ export function MediaScreen() {
         ) : <Empty compact icon="speaker_group" tone={C.blue} title="No speaker groups" text="Play speakers of any brand as one." action="Make one" onAction={() => setEditGroup('new')} />}
       </Section>
 
+      {s.devices.some(d => d.canAnnounce) ? (
+        <Section title="Announcements" caption gap={SP[2]}>
+          <Card style={{ overflow: 'hidden' }}>
+            <Row first icon="campaign" iconFg={C.blue} title="Speaker loudness" sub="One level sounds the same in every room" onPress={() => nav.navigate('SpeakerLoudness')} />
+          </Card>
+        </Section>
+      ) : null}
+
       {s.sources.length ? (
         <Section title="Sources" caption gap={SP[2]}>
           <Card style={{ overflow: 'hidden' }}>

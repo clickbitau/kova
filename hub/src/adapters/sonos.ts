@@ -1,5 +1,6 @@
 import dgram from 'node:dgram';
-import type { Adapter, AdapterContext, AdapterStatus, AudioFormat, Queue, QueueTrack } from './sdk.ts';
+import type { Adapter, AdapterContext, AdapterStatus, AudioFormat, Clip, Queue, QueueTrack } from './sdk.ts';
+import { mmss } from '../devices/registry.ts';
 import type { Command, Device, DeviceState, Track } from '../model/types.ts';
 
 // Sonos speakers over their local UPnP/SOAP API on port 1400. No cloud, no account.
@@ -9,6 +10,7 @@ const RC = 'urn:schemas-upnp-org:service:RenderingControl:1';
 const PATHS: Record<string, string> = { [AVT]: '/MediaRenderer/AVTransport/Control', [RC]: '/MediaRenderer/RenderingControl/Control' };
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const unesc = (s: string) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
 const tag = (xml: string, name: string) => xml.match(new RegExp(`<(?:\\w+:)?${name}>([\\s\\S]*?)</(?:\\w+:)?${name}>`))?.[1];
 
 interface Speaker {
@@ -241,6 +243,81 @@ export class SonosAdapter implements Adapter {
       }
     }));
     this.lastError = failed ? `${failed} speaker${failed === 1 ? '' : 's'} not responding` : null;
+  }
+
+  // ---------------------------------------------------------- announcements --
+
+  /**
+   * What a speaker is on, to put back after an announcement: its transport's URI and metadata (its own queue, a radio
+   * station, the Sonos group it follows), the track and the place in it, its play mode and whether it was playing.
+   * Asked of the speaker, so it covers what the Sonos app started too.
+   */
+  async snapshotPlayback(device: Device): Promise<unknown | null> {
+    const s = this.speakers.get(device.id);
+    if (!s) return null;
+    const [mi, pi, ti, ts] = await Promise.all([
+      this.soap(s.host, AVT, 'GetMediaInfo', { InstanceID: 0 }),
+      this.soap(s.host, AVT, 'GetPositionInfo', { InstanceID: 0 }),
+      this.soap(s.host, AVT, 'GetTransportInfo', { InstanceID: 0 }),
+      this.soap(s.host, AVT, 'GetTransportSettings', { InstanceID: 0 }).catch(() => ''),
+    ]);
+    const uri = unesc(tag(mi, 'CurrentURI') ?? '');
+    if (!uri) return null;
+    return {
+      uri, meta: unesc(tag(mi, 'CurrentURIMetaData') ?? ''), state: tag(ti, 'CurrentTransportState') ?? 'STOPPED',
+      track: Number(tag(pi, 'Track') ?? 0), rel: tag(pi, 'RelTime') ?? '', playMode: tag(ts, 'PlayMode') ?? 'NORMAL',
+      queue: s.queue, media: s.media,
+    };
+  }
+
+  /** An announcement on this speaker alone (out of its Sonos group for now), played once as a file, not as radio. */
+  async playClip(device: Device, clip: Clip): Promise<DeviceState> {
+    const s = this.speakers.get(device.id);
+    if (!s) throw new Error(`Unknown Sonos speaker ${device.id}`);
+    await this.soap(s.host, AVT, 'BecomeCoordinatorOfStandaloneGroup', { InstanceID: 0 }).catch(() => {});
+    const meta = '<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">'
+      + `<item id="-1" parentID="-1" restricted="true"><res protocolInfo="http-get:*:${esc(clip.contentType)}:*">${esc(clip.url)}</res><dc:title>${esc(clip.title)}</dc:title><upnp:class>object.item.audioItem.musicTrack</upnp:class></item></DIDL-Lite>`;
+    await this.soap(s.host, AVT, 'SetAVTransportURI', { InstanceID: 0, CurrentURI: clip.url, CurrentURIMetaData: meta });
+    await this.soap(s.host, AVT, 'SetPlayMode', { InstanceID: 0, NewPlayMode: 'NORMAL' }).catch(() => {});
+    await this.soap(s.host, AVT, 'Play', { InstanceID: 0, Speed: 1 });
+    s.media = clip.title;
+    s.queue = null;
+    s.paused = false;
+    return { on: true, media: clip.title, paused: false, track: null, shuffle: false };
+  }
+
+  /**
+   * Back on what snapshotPlayback saw: the same URI (its own queue at the same track and time; a radio station starts
+   * live again; a speaker that followed a Sonos group rejoins it), its play mode, and playing or not as it was.
+   */
+  async restorePlayback(device: Device, snap0: unknown | null): Promise<{ words: string; state?: DeviceState }> {
+    const s = this.speakers.get(device.id);
+    if (!s) throw new Error(`Unknown Sonos speaker ${device.id}`);
+    const snap = snap0 as null | { uri: string; meta: string; state: string; track: number; rel: string; playMode: string; queue: Speaker['queue']; media: string | null };
+    if (!snap) {
+      await this.soap(s.host, AVT, 'Stop', { InstanceID: 0 }).catch(() => {});
+      s.media = null; s.queue = null; s.paused = false;
+      return { words: 'idle again', state: { on: false, media: null, paused: false, track: null, shuffle: false } };
+    }
+    await this.soap(s.host, AVT, 'SetAVTransportURI', { InstanceID: 0, CurrentURI: snap.uri, CurrentURIMetaData: snap.meta });
+    const queue = snap.uri.startsWith('x-rincon-queue:'), group = snap.uri.startsWith('x-rincon:');
+    const live = /^(x-rincon-mp3radio|x-sonosapi-stream|x-sonosapi-radio|x-sonosapi-hls|x-rincon-stream|aac|hls-radio):/.test(snap.uri);
+    if (queue && snap.track > 0) await this.soap(s.host, AVT, 'Seek', { InstanceID: 0, Unit: 'TRACK_NR', Target: snap.track }).catch(() => {});
+    const at = secsOf(snap.rel);
+    if (!group && !live && at > 0) await this.soap(s.host, AVT, 'Seek', { InstanceID: 0, Unit: 'REL_TIME', Target: snap.rel }).catch(() => {});
+    if (!group) await this.soap(s.host, AVT, 'SetPlayMode', { InstanceID: 0, NewPlayMode: snap.playMode || 'NORMAL' }).catch(() => {});
+    const playing = /PLAYING|TRANSITIONING/.test(snap.state), paused = /PAUSED/.test(snap.state);
+    if (playing && !group) await this.soap(s.host, AVT, 'Play', { InstanceID: 0, Speed: 1 });
+    s.queue = snap.queue;
+    s.media = playing || paused ? snap.media : null;
+    s.paused = paused;
+    const name = snap.media ?? 'what it was playing';
+    const words = group ? 'back in its Sonos group'
+      : !playing && !paused ? 'idle again (on what it had before)'
+      : live ? `back to ${name} (live)`
+      : `resumed ${name}${queue && snap.track ? ` at track ${snap.track}` : ''}${at >= 1 ? `, ${mmss(at)}` : ''}${paused ? ', paused' : ''}`;
+    const qu = s.queue;
+    return { words, state: { on: playing || paused || group, media: group ? 'Sonos' : s.media, paused, track: qu ? shown(qu.q.tracks[qu.index]!) : null, shuffle: qu ? qu.q.shuffle : false } };
   }
 
   status(): AdapterStatus {

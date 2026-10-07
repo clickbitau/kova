@@ -1,5 +1,6 @@
 // The home at a glance, as cards: outside, inside, the air. And how loud each alert is.
 import type { Glance, Insight } from '../api/types';
+import type { Waqt } from './prayer.ts';
 
 /** A card: a short value (a number or a word, so it fits a third of a phone), a line naming it, and the detail. */
 export interface GlanceCard { key: string; icon: string; color: string; label: string; value: string; caption: string; sub: string; device?: string }
@@ -31,6 +32,13 @@ export function glanceCards(g: Glance | undefined): GlanceCard[] {
     });
   }
   return out;
+}
+
+/** The waqt as a glance card: the prayer now, the next with its countdown, and its time. Opens Prayer times. */
+export function waqtCard(w: Waqt | null): GlanceCard | null {
+  if (!w) return null;
+  // The caption stays short enough for a third of a small phone; the countdown is the line that may wrap.
+  return { key: 'waqt', icon: 'mosque', color: w.soon ? '#f2b14c' : '#7fd4a0', label: 'Prayer', value: w.current, caption: `${w.next} ${w.at}`, sub: w.left.charAt(0).toUpperCase() + w.left.slice(1) };
 }
 
 /** An alert's colour, by how urgent it is. */

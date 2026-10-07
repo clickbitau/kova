@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, R, SP, alpha } from '../theme';
@@ -7,7 +7,8 @@ import { useSheet } from '../state/sheet';
 import { useNav } from '../navigation';
 import { devs, favourites, isLight, plural, toggleCommand, type Dev } from '../logic/devices';
 import { dayBands } from '../logic/day';
-import { alertActions, glanceCards, glanceColumns, insightColor, shownAlerts, type AlertAction } from '../logic/glance';
+import { alertActions, glanceCards, glanceColumns, insightColor, shownAlerts, waqtCard, type AlertAction } from '../logic/glance';
+import { waqtOf } from '../logic/prayer';
 import type { Insight } from '../api/types';
 import { Icon } from '../ui/Icon';
 import { Avatar, Button, Card, Empty, HScroll, IconWell, Mark, Notice, NoticeAction, Press, Section, Skeleton } from '../ui/kit';
@@ -35,7 +36,17 @@ export function NowScreen() {
   const tap = (d: Dev) => { const c = toggleCommand(d, s.sources); if (c) void send(d.id, c); else sheet.open(d.id); };
   const end = () => api('POST', '/api/overlays/end').then(() => { say(`Back to ${M?.name}`); return true; }).catch(e => { say((e as Error).message, { error: true }); return false; });
   const bands = dayBands(s);
-  const cards = glanceCards(s.glance);
+  // The waqt counts down live: the card follows the clock every half minute while prayer times are on.
+  const [clock, setClock] = useState(() => Date.now());
+  const prayerOn = !!s.prayer?.on;
+  useEffect(() => {
+    if (!prayerOn) return;
+    setClock(Date.now());
+    const t = setInterval(() => setClock(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, [prayerOn]);
+  const waqt = waqtCard(waqtOf(s.prayer, clock, s.home.timezone));
+  const cards = [...(waqt ? [waqt] : []), ...glanceCards(s.glance)];
   const alerts = s.insights ?? [];
   const [allAlerts, setAllAlerts] = useState(false);
   const { shown, more } = shownAlerts(alerts, allAlerts);
@@ -106,7 +117,7 @@ export function NowScreen() {
       {cards.length ? (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SP[2] }}>
           {cards.map(c => (
-            <Press key={c.key} give="soft" onPress={c.device ? () => sheet.open(c.device!) : undefined} label={`${c.label}: ${c.value}, ${c.caption}. ${c.sub}`} style={{ flexGrow: 1, flexBasis: cardW, minWidth: 0 }}>
+            <Press key={c.key} give="soft" onPress={c.key === 'waqt' ? () => nav.navigate('PrayerTimes') : c.device ? () => sheet.open(c.device!) : undefined} label={`${c.label}: ${c.value}, ${c.caption}. ${c.sub}`} style={{ flexGrow: 1, flexBasis: cardW, minWidth: 0 }}>
               <Card pad={SP[3]} style={{ flex: 1, gap: 2 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 2 }}>
                   <Icon name={c.icon} size={16} color={c.color} fill />

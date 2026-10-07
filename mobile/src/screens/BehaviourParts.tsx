@@ -4,9 +4,10 @@ import { C, F, R, SP, alpha } from '../theme';
 import { useSnap } from '../state/hub';
 import type { Command, Device, TargetRow } from '../api/types';
 import {
-  RHYTHMS, canSet, clockOf, commandChoices, commandFromKey, commandKey, deviceLabel, deviceSections, firstCommand, parseClock, rhythmFromKey, rhythmKey, rhythmWords, withOffset,
-  type Rhythm, type Targets,
+  canSet, clockOf, commandChoices, commandFromKey, commandKey, deviceLabel, deviceSections, firstCommand, parseClock, rhythmFromKey, rhythmKey, rhythmWords, withOffset,
+  rhythmChoices, type Rhythm, type Targets,
 } from '../logic/automations';
+import { prayerOn } from '../logic/prayer';
 import { OFFSETS, offsetWords } from '../logic/modes';
 import { isZoneTarget, zoneCommandWords, ZONE_PRESETS, zoneTargetLabel, zoneTargetOptions, zoneTargetRoom, type ZoneCommand } from '../logic/zones';
 import { Icon } from '../ui/Icon';
@@ -80,11 +81,12 @@ function TimeSheet({ open, value, title, onPick, onClose }: { open: boolean; val
 
 /** A time of day that can move: a clock time, sunrise or sunset, or a prayer time, with an offset. */
 export function RhythmEditor({ value, onChange, title }: { value: Rhythm; onChange: (r: Rhythm) => void; title: string }) {
+  const s = useSnap();
   const [clock, setClock] = useState(false);
   const k = rhythmKey(value);
   return (
     <View style={{ gap: SP[2] }}>
-      <HScroll>{RHYTHMS.map(o => <Pill key={o.v} label={o.label} on={k === o.v} onPress={() => onChange(rhythmFromKey(o.v, value))} />)}</HScroll>
+      <HScroll>{rhythmChoices(prayerOn(s), value).map(o => <Pill key={o.v} label={o.label} on={k === o.v} onPress={() => onChange(rhythmFromKey(o.v, value))} />)}</HScroll>
       {value.kind === 'time' ? (
         <Press onPress={() => setClock(true)} label={`${title}: ${value.at}. Change`} style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3], minHeight: 52, paddingHorizontal: SP[4], borderRadius: R.md, backgroundColor: C.card, borderWidth: 1, borderColor: C.line }}>
           <Icon name="schedule" size={20} color={C.amber} />

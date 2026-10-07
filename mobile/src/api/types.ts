@@ -96,6 +96,10 @@ export interface Device {
   /** Devices with no meter: the owner's figure for what it draws while on (null: not set) and Kova's typical one. */
   watts?: number | null;
   typicalWatts?: number | null;
+  /** Speakers an announcement can play on (type media, can play and set a volume, not a group). */
+  canAnnounce?: true;
+  /** Speakers: how loud announcements play here, in % of the level asked for (20–200, 100 = as asked). */
+  announceTrim?: number;
 }
 
 export interface Room { id: string; name: string; icon: string }
@@ -186,6 +190,35 @@ export interface SecurityState {
 /** A stream speakers can play by name. `loop`: a recording plays again from the start when it ends. */
 export interface MediaSource { name: string; icon: string; url?: string; loop?: boolean }
 
+export type PrayerName = 'fajr' | 'sunrise' | 'dhuhr' | 'asr' | 'maghrib' | 'isha';
+
+/** A clip uploaded to the hub for announcements (`url` is the hub path, /api/clip/<id>.<ext>). */
+export interface Clip { id: string; name: string; contentType: string; ext: string; bytes: number; durationMs?: number; added: number; url: string }
+
+/** A built-in public recording of the call to prayer (only while prayer times are on). CC BY-SA: always credit it. */
+export interface Adhan {
+  id: string; title: string; author: string; licence: string; licenceUrl: string; page: string; durationMs: number; format: string;
+  /** False: the hub downloads it on first use. */
+  ready: boolean;
+}
+
+/** Prayer times, an opt-in part of Kova (Integrations → Prayer times). */
+export interface PrayerView {
+  on: boolean;
+  method: string;
+  methods: { id: string; label: string }[];
+  /** Asr: standard (Shafi'i, Maliki, Hanbali) or Hanafi (later). */
+  madhab: 'shafi' | 'hanafi';
+  /** Minutes added to each time (-30 to 30). */
+  adjust: Partial<Record<PrayerName, number>>;
+  /** The call announcements play by default, and Fajr's own. */
+  adhan: { media?: string; fajr?: string };
+  /** Only while on: today's times (Unix ms), the latest one passed, and the next one. */
+  times?: Record<PrayerName, number>;
+  current?: { prayer: PrayerName; at: number };
+  next?: { prayer: PrayerName; at: number };
+}
+
 export interface SpeakerGroup { id: string; name: string; members: string[]; deviceId: string; sync: 'perfect' | 'together'; castGroup: string | null; room?: string; missing?: string[] }
 
 /** Today's energy (hub services/energy.ts). Watts and kWh; `use` null when nothing meters the home. */
@@ -222,6 +255,12 @@ export interface Snapshot {
   overlays: { id: string; name: string; icon: string; endsLabel: string; ends?: OverlayEnd; allOff?: boolean; targets?: TargetRow[] }[];
   moments?: MomentView[];
   sources: MediaSource[];
+  /** Clips uploaded for announcements. */
+  clips?: Clip[];
+  /** Built-in recordings of the call to prayer (empty while prayer times are off). */
+  adhans?: Adhan[];
+  /** Prayer times (missing on older hubs, where prayer options always show). */
+  prayer?: PrayerView;
   /** Helix music any speaker with `queue` can play: Shuffle all, Loved, playlists. Empty until Helix is paired. */
   music?: { name: string; kind: 'all' | 'loved' | 'playlist'; icon: string; tracks?: number }[];
   findings: Finding[];

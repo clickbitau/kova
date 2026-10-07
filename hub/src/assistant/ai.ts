@@ -8,7 +8,9 @@ import { ROOM_ICONS, UNASSIGNED_ROOM, WHOLE_HOME, type Automation, type Cause, t
 import { FIELD_CAP, isPlayer, pseudoLabel, targetLabel } from '../util/describe.ts';
 import { cleanZoneCommand, ZONE_FIELDS, zonesServing, type ZoneCommand } from '../util/zones.ts';
 import { hardwareSummary, hasHardware } from '../util/hardware.ts';
-import { CheckError, checkAutomation } from '../engine/automation-check.ts';
+import { announceWithoutMedia, CheckError, checkAutomation } from '../engine/automation-check.ts';
+import { canAnnounce, isSpeakerGroup, trimOf } from '../engine/announce.ts';
+import { BUILTIN_ADHANS, adhanCredit } from '../services/adhans.ts';
 import { actionWords, condWords, nextOnce, triggerWords } from '../engine/automations.ts';
 import { slug } from '../tools/import-ha.ts';
 import { atLocal, clock, localDate, localStamp, stampWords } from '../util/time.ts';
@@ -239,7 +241,7 @@ export const TOOLS = [
     description: `Create a home automation: "when" (triggers) starts it, every "if" (condition) must hold, then "then" (actions) run in order. It is saved and runs on its own from then on — only use it when the user asks for something ongoing or scheduled, not for a one-off change (use set_devices). Shapes:
 when: {kind:'time', at:'HH:MM' or {kind:'time', at:'HH:MM'} or {kind:'sun', event:'sunrise|sunset|dawn|dusk', offsetMin?:n (minutes, negative = before, e.g. -15)} or {kind:'prayer', prayer:'fajr|sunrise|dhuhr|asr|maghrib|isha', offsetMin?:n}, days?:[0-6, 0=Sunday, empty=every day]} — e.g. 15 minutes before sunset is {kind:'time', at:{kind:'sun', event:'sunset', offsetMin:-15}} | {kind:'device', device:id, to?:{on?, online?, mode?, hvac?, input?, playing?, muted?, motion?, open?}, from?:{...}, forSec?:n} | {kind:'numeric', device:id, field:'temp|target|power|energy|battery|bri|vol|grid|load|humidity|lux|pm25', above?:n, below?:n} (sensors included) | {kind:'event', device:id, event:string} | {kind:'room', room:roomId, event:'person|motion|ring|vehicle|animal|package|sound|opened|closed'} (anything a camera or sensor in that room notices; 'motion' includes a person seen) | {kind:'every', minutes:n} | {kind:'presence', event:'arrives|leaves|first-arrives|last-leaves', person?:id} | {kind:'mode', mode:id} | {kind:'overlay', overlay:id, event:'starts|ends'} | {kind:'hub', event:'start'} | {kind:'once', at:'YYYY-MM-DDTHH:MM' in the home's time} or {kind:'once', inMinutes:n} — ONE time only
 if: {kind:'device', device:id, is:{on?...}} | {kind:'numeric', device:id, field, above?, below?} | {kind:'time', after?/before?:'HH:MM' or a sun/prayer object as above, days?} | {kind:'presence', who:'anyone|no-one|person id', home:boolean} | {kind:'mode', modes:[id]} | {kind:'overlay', overlay?:id, active:boolean} | {kind:'room', room:roomId, active:boolean, withinMin?:n} (a person, motion or a door in that room in the last withinMin minutes, default 10) | {kind:'all|any|not', conditions:[...]}
-then: {kind:'set', targets:{deviceId:{on:false, bri:50, ...same fields as set_devices + set}, or 'type:light'|'type:media'|'type:<device type>'|'room:<room id>' to reach EVERY matching device — including devices added later (use "type:light" for "all lights")}} | {kind:'delay', seconds:n} | {kind:'wait', until:condition, timeoutSec?:n, stopOnTimeout?:bool} | {kind:'notify', message:string, title?:string, people?:[ids]} | {kind:'overlay', overlay:id, op:'start|end'} | {kind:'if', conditions:[...], then:[...], else?:[...]} | {kind:'repeat', times:n, actions:[...]} | {kind:'ramp', targets:{same target map as set}, field:'bri'|'vol'|'target', to:number, from?:number, overSec:number, stepSec?:number} — gradual changes like brightness climbing over an hour | {kind:'run', automation:id} | {kind:'stop'}
+then: {kind:'announce', media:'<source name | clip:<id> | adhan:<key> | https URL | Song: <Helix title>>', vol:15, targets:{<speaker id>:{}, …}, pause?:[<player ids to pause, e.g. a Helix box>], restore:true, mediaFor?:{fajr:'<media>'}} — play something over speakers (an announcement, a call to prayer, a chime) and then put each speaker back as it was (volume, and what it was playing, resumed where possible); vol is the level the owner says, each speaker plays it × its own announcement loudness; list EVERY speaker it should play on in targets (or a speaker group); TVs and Helix boxes go in pause, never in targets; leave media out when the user hasn't said which audio and none fits, and ask them | {kind:'set', targets:{deviceId:{on:false, bri:50, ...same fields as set_devices + set}, or 'type:light'|'type:media'|'type:<device type>'|'room:<room id>' to reach EVERY matching device — including devices added later (use "type:light" for "all lights")}} | {kind:'delay', seconds:n} | {kind:'wait', until:condition, timeoutSec?:n, stopOnTimeout?:bool} | {kind:'notify', message:string, title?:string, people?:[ids]} | {kind:'overlay', overlay:id, op:'start|end'} | {kind:'if', conditions:[...], then:[...], else?:[...]} | {kind:'repeat', times:n, actions:[...]} | {kind:'ramp', targets:{same target map as set}, field:'bri'|'vol'|'target', to:number, from?:number, overSec:number, stepSec?:number} — gradual changes like brightness climbing over an hour | {kind:'run', automation:id} | {kind:'stop'}
 runMode: what a second start does while it's still running — single (ignore), restart (start over), queued (run after), parallel (alongside). Default single.
 One-time schedules: anything asked for once at a later time ("turn the AC off at 3pm", "in 20 minutes", "tomorrow at 7 open the blinds", "remind me tonight") is create_automation with only a once trigger — it runs once, then switches itself off. Name it after what it does and when ("AC off at 15:00"). Never use a daily time trigger for a one-off.
 Prefer ONE automation per intent: several triggers plus if/else branches beat overlapping automations. Check the Automations list first — update_automation an existing one rather than adding another.
@@ -295,7 +297,7 @@ Only use device, person, mode and overlay ids from the home context; never inven
   },
   {
     name: 'update_device',
-    description: `Change how a device is organised — for "the X is in the master bedroom", "rename it", "hide it", "put it on my favourites". name renames it, room moves it (a room id from the Rooms list — create_room first if the room the user named doesn't exist; "unassigned" puts it in no room), favourite puts it on the Now page, hidden takes it out of view (hidden:false shows it again). zoneNames names a ducted air conditioner's zones by number, e.g. {"1": "Living", "3": "Theatre"} (an empty name clears one). The result says the room's real name — use that name in the reply.`,
+    description: `Change how a device is organised — for "the X is in the master bedroom", "rename it", "hide it", "put it on my favourites". name renames it, room moves it (a room id from the Rooms list — create_room first if the room the user named doesn't exist; "unassigned" puts it in no room), favourite puts it on the Now page, hidden takes it out of view (hidden:false shows it again). zoneNames names a ducted air conditioner's zones by number, e.g. {"1": "Living", "3": "Theatre"} (an empty name clears one). loudness is a speaker's announcement loudness, in % of the level an announcement asks for (20–200, 100 = as asked): a speaker that sounds louder than the rest gets less (e.g. 80, 70, 60). The result says the room's real name — use that name in the reply.`,
     parameters: {
       type: 'object',
       properties: {
@@ -305,6 +307,7 @@ Only use device, person, mode and overlay ids from the home context; never inven
         favourite: { type: 'boolean' },
         hidden: { type: 'boolean' },
         zoneNames: { type: 'object', description: 'Zone number → name, for an air conditioner with zones.' },
+        loudness: { type: 'integer', minimum: 20, maximum: 200, description: 'Speakers: announcement loudness in % (100 = as asked).' },
       },
       required: ['id'],
     },
@@ -367,6 +370,18 @@ Only use device, person, mode and overlay ids from the home context; never inven
 ] as const;
 
 type ToolName = typeof TOOLS[number]['name'];
+export type ToolDef = { name: string; description: string; parameters: unknown };
+
+/** Prayer-time words, which only go to the model while prayer times are on (Integrations → Prayer times). */
+const PRAYER_WHEN = " or {kind:'prayer', prayer:'fajr|sunrise|dhuhr|asr|maghrib|isha', offsetMin?:n}";
+
+/** The tools as the model gets them: without prayer times while they're off. */
+export function toolDefs(o: { prayer: boolean }): ToolDef[] {
+  return TOOLS.map(t => {
+    if (o.prayer || (t.name !== 'create_automation' && t.name !== 'update_automation')) return t as ToolDef;
+    return { ...t, description: t.description.split(PRAYER_WHEN).join('').replace(/ or a sun\/prayer object as above/g, ' or a sun object as above').replace(/, mediaFor\?:\{fajr:'<media>'\}/, '').replace(/, a call to prayer/, '') } as ToolDef;
+  });
+}
 
 const AI_CAUSE: Cause = { kind: 'assistant', label: 'Ask Kova (AI)' };
 /** Model round trips per ask. A house-organising request ("combine these, move that, make a room…") takes several. */
@@ -584,7 +599,22 @@ export class Toolbox {
   private separated = new Map<string, string[]>();
   /** False once any tool reports ok:false, or the ask made a one-time schedule — such sessions aren’t learned. */
   okAll = true;
-  constructor(private ai: AiAssistant, private ctx: AiContext, private onSteps?: (steps: AskStep[]) => void) {}
+  /** The tools as the model sees them (prayer times only while they're on). */
+  readonly defs: ToolDef[];
+  constructor(private ai: AiAssistant, private ctx: AiContext, private onSteps?: (steps: AskStep[]) => void) {
+    this.defs = toolDefs({ prayer: !!ai.config.get().prayer?.on });
+  }
+
+  /** The checker's context for an automation the model sends: real devices, the home, and what announcements can play. */
+  private checkCtx() {
+    return { device: (id: string) => this.ai.reg.get(id), cfg: this.ai.config.get(), now: this.ai.engine.now(), media: (m: string) => this.ai.mediaProblem?.(m) ?? null };
+  }
+
+  /** Prayer times are off: an automation the model sends mustn't start on one (existing ones keep running). */
+  private prayerOff(a: unknown): string | null {
+    if (this.ai.config.get().prayer?.on) return null;
+    return JSON.stringify(a ?? null).includes('"prayer"') ? 'Prayer times are off in this home: the owner turns them on in Integrations → Prayer times. Don’t use prayer times; tell the user that.' : null;
+  }
 
   /** A device the model means: its id (or alias) from the context, or — names shared — any device made since. */
   private device(alias: unknown): Device | undefined {
@@ -656,6 +686,7 @@ export class Toolbox {
         if (a.hidden === false) { ing.push(`showing ${ing.length ? 'it' : n} again`); inf.push(`show ${inf.length ? 'it' : n} again`); }
         if (typeof a.favourite === 'boolean') { ing.push(`${a.favourite ? 'favouriting' : 'unfavouriting'} ${ing.length ? 'it' : n}`); inf.push(`${a.favourite ? 'favourite' : 'unfavourite'} ${inf.length ? 'it' : n}`); }
         if (a.zoneNames && typeof a.zoneNames === 'object') { ing.push(`naming ${ing.length ? 'its' : `${n}’s`} zones`); inf.push(`name ${inf.length ? 'its' : `${n}’s`} zones`); }
+        if (typeof a.loudness === 'number') { ing.push(`setting ${ing.length ? 'its' : `${n}’s`} announcement loudness to ${Math.round(a.loudness)}%`); inf.push(`set ${inf.length ? 'its' : `${n}’s`} announcement loudness to ${Math.round(a.loudness)}%`); }
         if (!ing.length) return both(`Changing ${n}`, `change ${n}`);
         const s = list(ing);
         return both(s[0]!.toUpperCase() + s.slice(1), list(inf));
@@ -941,9 +972,11 @@ export class Toolbox {
         case 'create_automation': {
           try {
             const cfg = this.ai.config.get();
+            const off = this.prayerOff([args.when, args.if, args.then]);
+            if (off) return JSON.stringify({ ok: false, error: off });
             const a = checkAutomation(
               { name: args.name, description: args.description, triggers: listArg(args.when), conditions: listArg(args.if), actions: listArg(args.then), mode: args.runMode, enabled: args.enabled },
-              { device: id => this.ai.reg.get(id), cfg, now: this.ai.engine.now() });
+              this.checkCtx());
             const id = autoSlug(a.name);
             const undo = this.ai.config.update(c => { (c.automations ??= []).push({ id, ...a }); });
             this.undos.push(this.ai.engine.registerUndo(undo));
@@ -954,12 +987,15 @@ export class Toolbox {
               kind: 'system', device: null, feed: 'system', what: `Ask Kova made the automation “${a.name}”`,
               data: { automation: id }, cause: AI_CAUSE,
             });
-            const w = { reg: this.ai.reg, cfg, now: this.ai.engine.now() };
+            const w = { reg: this.ai.reg, cfg, now: this.ai.engine.now(), clipName: (cid: string) => this.ai.clipName?.(cid) };
             const tgt = (tid: string, cmd: object) => { const d = this.ai.reg.get(tid); return d ? targetLabel(d, cmd as Command) : (pseudoLabel(tid, this.ai.config.get().rooms, cmd) ?? tid); };
             const words = { when: a.triggers.map(t => triggerWords(t, w)), if: a.conditions.map(c => condWords(c, w)), then: a.actions.map(x => actionWords(x, w, tgt)) };
-            this.done(`Made the automation “${a.name}”: when ${words.when.join(' or ')}${words.if.length ? `, if ${words.if.join(' and ')}` : ''}, ${words.then.join('; ')}`, [`auto:${norm(a.name)}`, `auto:${id}`],
+            // Waiting for its audio: kept, switched off, and the model asks which audio to use.
+            const waiting = announceWithoutMedia(a.actions);
+            if (waiting) this.okAll = false;
+            this.done(`Made the automation “${a.name}”${waiting ? ' (switched off until its audio is chosen)' : ''}: when ${words.when.join(' or ')}${words.if.length ? `, if ${words.if.join(' and ')}` : ''}, ${words.then.join('; ')}`, [`auto:${norm(a.name)}`, `auto:${id}`],
               { verify: () => (this.ai.config.get().automations ?? []).some(x => x.id === id) ? null : `The automation “${a.name}” isn’t there any more.` });
-            return JSON.stringify({ ok: true, id, name: a.name, ...words });
+            return JSON.stringify({ ok: true, id, name: a.name, ...words, ...(waiting ? { enabled: false, next: 'It is saved switched off because no audio was chosen. Ask the user which audio to play (offer the recordings, clips and sources from the context by name); then update_automation with media and it switches on. Never guess a URL.' } : {}) });
           } catch (e) { return JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e), ...(e instanceof CheckError && e.fix ? { sendInstead: e.fix } : {}) }); }
         }
         case 'update_automation': {
@@ -968,13 +1004,17 @@ export class Toolbox {
             const id = String(args.id ?? '');
             const cur = (cfg.automations ?? []).find(a => a.id === id);
             if (!cur) return JSON.stringify({ ok: false, error: `No automation ${id} — use an id from the Automations list` });
+            const off = this.prayerOff([args.when, args.if, args.then]);
+            if (off && !JSON.stringify([cur.triggers, cur.conditions, cur.actions]).includes('"prayer"')) return JSON.stringify({ ok: false, error: off });
             const a = checkAutomation(
               {
                 name: args.name ?? cur.name, description: args.description ?? cur.description,
                 triggers: listArg(args.when) ?? cur.triggers, conditions: listArg(args.if) ?? cur.conditions,
-                actions: listArg(args.then) ?? cur.actions, mode: args.runMode ?? cur.mode, enabled: args.enabled ?? cur.enabled,
+                actions: listArg(args.then) ?? cur.actions, mode: args.runMode ?? cur.mode,
+                // An announcement given its audio now switches on (it was kept off waiting for it), unless asked otherwise.
+                enabled: args.enabled ?? (cur.enabled || (announceWithoutMedia(cur.actions) && args.then !== undefined)),
               },
-              { device: did => this.ai.reg.get(did), cfg, now: this.ai.engine.now() });
+              this.checkCtx());
             const undo = this.ai.config.update(c => {
               const i = (c.automations ?? []).findIndex(x => x.id === id);
               if (i >= 0) c.automations![i] = { ...c.automations![i]!, ...a };
@@ -984,7 +1024,7 @@ export class Toolbox {
               kind: 'system', device: null, feed: 'system', what: `Ask Kova changed the automation “${a.name}”`,
               data: { automation: id }, cause: AI_CAUSE,
             });
-            const w = { reg: this.ai.reg, cfg, now: this.ai.engine.now() };
+            const w = { reg: this.ai.reg, cfg, now: this.ai.engine.now(), clipName: (cid: string) => this.ai.clipName?.(cid) };
             const tgt = (tid: string, cmd: object) => { const d = this.ai.reg.get(tid); return d ? targetLabel(d, cmd as Command) : (pseudoLabel(tid, this.ai.config.get().rooms, cmd) ?? tid); };
             const words = { when: a.triggers.map(t => triggerWords(t, w)), if: a.conditions.map(c => condWords(c, w)), then: a.actions.map(x => actionWords(x, w, tgt)) };
             this.done(`Changed the automation “${a.name}”${a.enabled ? '' : ' (it’s off)'}: when ${words.when.join(' or ')}${words.if.length ? `, if ${words.if.join(' and ')}` : ''}, ${words.then.join('; ')}`, [`auto:${id}`, `auto:${norm(a.name)}`]);
@@ -1050,7 +1090,15 @@ export class Toolbox {
             if (bad.length) return JSON.stringify({ ok: false, error: `${d.name} has no zone ${bad.join(', ')} — its zones are ${[...have].join(', ')}` });
             zoneNames = Object.fromEntries(Object.entries(zn as Record<string, unknown>).map(([n, v]) => [n, typeof v === 'string' ? v.trim().replace(/\s+/g, ' ').slice(0, 30) : '']));
           }
-          if (name === undefined && room === undefined && favourite === undefined && hidden === undefined && !zoneNames) return JSON.stringify({ ok: false, error: 'Nothing to change' });
+          // A speaker's announcement loudness: % of the level an announcement asks for.
+          let loudness: number | undefined;
+          if (args.loudness !== undefined && args.loudness !== null) {
+            const v = Number(args.loudness);
+            if (!canAnnounce(d)) return JSON.stringify({ ok: false, error: `${d.name} isn’t a speaker announcements play on` });
+            if (!Number.isFinite(v) || v < 20 || v > 200) return JSON.stringify({ ok: false, error: 'loudness is 20–200 (% of the level asked for; 100 = as asked)' });
+            loudness = Math.round(v);
+          }
+          if (name === undefined && room === undefined && favourite === undefined && hidden === undefined && !zoneNames && loudness === undefined) return JSON.stringify({ ok: false, error: 'Nothing to change' });
           // Same override model as PATCH /api/devices/:id/settings: store only what differs from the adapter's own.
           const orig = d.original ?? { name: d.name, room: d.room };
           const was = d.name;
@@ -1064,6 +1112,7 @@ export class Toolbox {
               for (const [n, v] of Object.entries(zoneNames)) { if (v) z[n] = v; else delete z[n]; }
               if (Object.keys(z).length) s.zoneNames = z; else delete s.zoneNames;
             }
+            if (loudness !== undefined) { if (loudness === 100) delete s.announceTrim; else s.announceTrim = loudness; }
             c.devices = { ...(c.devices ?? {}) };
             if (Object.keys(s).length) c.devices[d.id] = s; else delete c.devices[d.id];
             if (favourite !== undefined) { const f = (c.favourites ?? []).filter(x => x !== d.id); c.favourites = favourite ? [...f, d.id] : f; }
@@ -1081,6 +1130,7 @@ export class Toolbox {
           if (favourite === true) bits.push(`put ${bits.length ? 'it' : was} on favourites`); else if (favourite === false) bits.push(`took ${bits.length ? 'it' : was} off favourites`);
           if (hidden === true) bits.push(`hid ${bits.length ? 'it' : was}`); else if (hidden === false) bits.push(`showed ${bits.length ? 'it' : was} again`);
           if (zoneNames) bits.push(`named ${bits.length ? 'its' : `${was}’s`} zones (${Object.entries(zoneNames).map(([n, v]) => v ? `${n}: ${v}` : `${n}: no name`).join(', ')})`);
+          if (loudness !== undefined) bits.push(`set ${bits.length ? 'its' : `${was}’s`} announcement loudness to ${loudness}%`);
           const said = cap(bits.join(' and '));
           this.ai.store.append({ kind: 'system', device: d.id, feed: 'system', what: `Ask Kova ${bits.join(' and ') || 'updated'} — ${was}`, data: { device: d.id }, cause: AI_CAUSE });
           const id = d.id;
@@ -1094,10 +1144,11 @@ export class Toolbox {
               if (want !== undefined && now.room !== want) return `${now.name} is still in ${this.roomName(now.room)}, not ${roomName}.`;
               if (name !== undefined && now.name !== name) return `${now.name} wasn’t renamed to ${name}.`;
               if (hidden !== undefined && !!now.hidden !== hidden) return `${now.name} ${hidden ? 'still shows' : 'is still hidden'}.`;
+              if (loudness !== undefined && trimOf(this.ai.config.get(), id) !== loudness) return `${now.name}’s announcement loudness isn’t ${loudness}%.`;
               return null;
             },
           });
-          return JSON.stringify({ ok: true, id: this.alias(d.id), name: name ?? d.name, room: room !== undefined ? (room || orig.room) : d.room, ...(roomName ? { roomName } : {}), ...(zoneNames ? { zoneNames } : {}) });
+          return JSON.stringify({ ok: true, id: this.alias(d.id), name: name ?? d.name, room: room !== undefined ? (room || orig.room) : d.room, ...(roomName ? { roomName } : {}), ...(zoneNames ? { zoneNames } : {}), ...(loudness !== undefined ? { loudness } : {}) });
         }
         case 'rename_room': {
           const rid = this.roomId(args.room);
@@ -1325,7 +1376,7 @@ export class LocalAiEngine implements AiEngine {
           body: JSON.stringify({
             model: this.opts.model,
             messages,
-            tools: TOOLS.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } })),
+            tools: tools.defs.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } })),
             tool_choice: 'auto',
             stream: false,
           }),
@@ -1374,7 +1425,7 @@ export class CloudAiEngine implements AiEngine {
   async run(system: string, chat: ChatTurn[], tools: Toolbox): Promise<EngineResult> {
     const model = this.opts.model;
     const messages: Anthropic.Beta.Messages.BetaMessageParam[] = chat.map(t => ({ role: t.role, content: t.content }));
-    const toolDefs: Anthropic.Beta.Messages.BetaTool[] = TOOLS.map(t => ({ name: t.name, description: t.description, input_schema: t.parameters as unknown as Anthropic.Beta.Messages.BetaTool.InputSchema }));
+    const toolDefsA: Anthropic.Beta.Messages.BetaTool[] = tools.defs.map(t => ({ name: t.name, description: t.description, input_schema: t.parameters as unknown as Anthropic.Beta.Messages.BetaTool.InputSchema }));
     const fallback = FALLBACK_MODELS.has(model);
     for (let round = 0; round < MAX_ROUNDS; round++) {
       let msg: Anthropic.Beta.Messages.BetaMessage;
@@ -1384,7 +1435,7 @@ export class CloudAiEngine implements AiEngine {
           max_tokens: 16000,
           system,
           messages,
-          tools: toolDefs,
+          tools: toolDefsA,
           ...(EFFORT_MODEL.test(model) ? { output_config: { effort: 'low' as const } } : {}),
           ...(fallback ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const } : {}),
         });
@@ -1429,7 +1480,11 @@ Rooms: use a room only if it is in the Rooms list under that name (or plainly th
 When a tool call fails because of how it was written (an unknown kind, a bad time, a wrong id), correct it and call again — the error says what to send instead. Never ask the user about formats, ids, schemas or tool shapes; they don't know them and shouldn't see them. Ask the user only about real choices (which automations, which room).
 A request about a group ("the light automations that start at sunset", "all the bedroom lights") means every match: find them all in the home context, change each one (one call each), then name each in the reply.
 Tool results are the truth: each has ok, and when it worked a "result" saying what changed, with real names. Report only what results confirmed. If any call returned ok:false, say plainly what didn't happen and why — never say "all done", "done" or "everything's set" unless every part worked. Don't claim a change you didn't make with a tool.
+Announcements ("play X on all speakers at 15%", a chime, a call to prayer): one automation with an announce step. vol is the level the owner says; each speaker plays it times its own announcement loudness. List every speaker in targets (devices with "speaker": true, or a speaker group); players such as a Helix box or a TV that should stop for it go in pause (they carry on after); restore true puts every speaker back as it was. If the owner didn't say which audio and none in the context plainly fits, leave media out (the automation is saved switched off) and ask which to use, naming the choices; never guess or invent a URL. When the owner says some speakers are louder or quieter than others, suggest an announcement loudness for each (e.g. 80, 70, 60 for louder, louder still, loudest) in the reply and ask them to confirm; set them with update_device loudness only once they agree, then say what each is now.
 If the request can't be done with these tools or the shared context, say so plainly instead of guessing. Reply like a text message — plain text only, no markdown (never ** or # or \` characters — they show raw in the chat). Keep it short: a sentence or two usually; when listing several things, one item per line starting with "- ". Refer to automations and devices by their names, not their ids.`;
+
+/** Only while prayer times are on. */
+const PRAYER_SYSTEM = `Prayer times: "every prayer", "each call to prayer" means the five daily prayers: five time triggers {kind:'time', at:{kind:'prayer', prayer:'fajr'}} for fajr, dhuhr, asr, maghrib and isha in ONE automation (or one trigger {kind:'time', at:{kind:'prayer', prayer:'all'}}, which the hub turns into the five). A call to prayer (adhan) is an announce step; Fajr's may differ (mediaFor.fajr). Use the owner's chosen call to prayer when there is one; otherwise ask which recording to use (they're listed with their credits).`;
 
 /** Words of the hub's own failure lines, not names of things. */
 const FAILURE_WORDS = new Set(['couldn’t', 'couldnt', 'couldn', 'change', 'everything', 'combine', 'ask', 'kova', 'move', 'unknown', 'make', 'set', 'add', 'the', 'and', 'use', 'that', 'device', 'devices', 'rename', 'create', 'delete', 'update', 'turn', 'room']);
@@ -1496,6 +1551,11 @@ export class AiAssistant {
 
   /** Helix music names for the home context (hub.music). */
   music: (() => { name: string; kind: string }[]) | null = null;
+  /** Clips kept on the hub ({id, name}), for the home context and words (hub.clips). */
+  clips: (() => { id: string; name: string; durationMs?: number }[]) | null = null;
+  clipName: ((id: string) => string | undefined) | null = null;
+  /** What's wrong with announcement media (hub.mediaProblem). */
+  mediaProblem: ((m: string) => string | null) | null = null;
 
   constructor(readonly engine: Engine, readonly reg: Registry, readonly config: ConfigStore, readonly store: Store, private opts: AiOptions = {}) {}
 
@@ -1555,6 +1615,9 @@ export class AiAssistant {
       }
       parts.room = d.room === WHOLE_HOME ? WHOLE_HOME : roomAlias.get(d.room) ?? `room${cfg.rooms.length + 1}`;
       parts.can = d.capabilities.filter(c => c !== 'events' && c !== 'power');
+      // Speakers announcements play on, with their announcement loudness (%), and speaker groups with their speakers.
+      if (canAnnounce(d)) { parts.speaker = true; parts.loudness = trimOf(cfg, d.id); }
+      if (isSpeakerGroup(d)) parts.speakerGroup = ((cfg.speakerGroups ?? []).find(g => `group_${g.id}` === d.id)?.members ?? []).map(m => share.names ? m : [...deviceIds].find(([, v]) => v === m)?.[0] ?? m);
       if (share.rooms) {
         const s = d.state;
         const zoneNames = cfg.devices?.[d.id]?.zoneNames, zoneRooms = cfg.devices?.[d.id]?.zoneRooms;
@@ -1602,6 +1665,14 @@ export class AiAssistant {
     // Named sources (ambient loops, radio streams): "play thunderstorm" means the source, not a music station.
     const sources = cfg.sources ?? [];
     if (share.names && sources.length) lines.push(`Playable sources — set media to the source name exactly (never "Station:" or Helix music for these): ${sources.map(s => `"${s.name}"${s.loop ? ' (loops)' : ''}`).join(', ')}.`);
+    // Audio announcements can play: clips on the hub, and (prayer times on) the call-to-prayer recordings.
+    const clips = this.clips?.() ?? [];
+    if (clips.length) lines.push(`Clips on the hub for announcements (media "clip:<id>"): ${clips.map(c => `clip:${c.id}${share.names ? ` "${c.name}"` : ''}${c.durationMs ? ` (${Math.round(c.durationMs / 1000)} s)` : ''}`).join(', ')}.`);
+    if (cfg.prayer?.on) {
+      lines.push(`Prayer times are on (method ${cfg.prayerMethod ?? 'MuslimWorldLeague'}${cfg.prayer.madhab === 'hanafi' ? ', Hanafi Asr' : ''}). Call-to-prayer recordings Kova offers for announcements: ${BUILTIN_ADHANS.map(a => `${a.id} (${adhanCredit(a)}, ${Math.round(a.durationMs / 1000)} s)`).join('; ')}.`);
+      const ad = cfg.prayer.adhan;
+      lines.push(ad?.media ? `The owner's chosen call to prayer: ${ad.media}${ad.fajr ? `; for Fajr: ${ad.fajr}` : ''}.` : 'The owner hasn’t chosen a call to prayer yet.');
+    } else lines.push('Prayer times are off in this home (Integrations → Prayer times): don’t use prayer times.');
     if (share.names) shared.push('device and room names');
     if (share.rooms) shared.push('device states');
 
@@ -1743,7 +1814,8 @@ export class AiAssistant {
       const ctx = this.buildContext(share);
       if (history.length) ctx.shared.push('recent chat');
       const notes = s.instructions.trim() ? `\n\nStanding instructions from the user:\n${s.instructions.trim()}` : '';
-      const system = `${SYSTEM}${notes}\n\nHome context (shared by the user):\n${ctx.text}`;
+      const prayer = this.config.get().prayer?.on ? `\n${PRAYER_SYSTEM}` : '';
+      const system = `${SYSTEM}${prayer}${notes}\n\nHome context (shared by the user):\n${ctx.text}`;
       this.store.append({
         kind: 'system', device: null, feed: 'system', what: `Ask Kova sent a request to ${e.label}`,
         data: { engine: e.kind, chars: system.length + q.length, preview: q.length > 40 ? `${q.slice(0, 40)}…` : q, shared: ctx.shared },

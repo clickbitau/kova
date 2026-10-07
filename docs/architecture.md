@@ -188,6 +188,27 @@ of its conditions), **then** (steps in order). Kept in the home's config (`autom
 - **Older shapes:** automations saved by hub 0.7.6 (one when / ifs / targets) are rewritten in this shape on
   start.
 
+### Announcements (`announce.ts`, `services/clips.ts`, `services/adhans.ts`, `services/prayer.ts`)
+
+- **The step:** `{kind:'announce', media, mediaFor?, vol, targets: {speakerId: {vol?, off?, skipWhile?}}, pause?, restore, maxSec?}`.
+  `media` is a source's name, an http(s) URL, `clip:<id>` (uploaded to the hub), `adhan:<key>` (a Wikimedia Commons
+  recording, downloaded on first use) or `Song: <title>` (Helix). `mediaFor.fajr` plays when Fajr's time started the run.
+- **A run:** expand speaker groups to their members; leave out speakers switched off in the step or skipped while an
+  overlay is on; snapshot each (`Registry.snapshotPlayback`: Kova's state plus the integration's exact account); pause
+  the `pause` players; set each speaker to `vol × announceTrim%` and start them all at once (`Registry.playClip`); wait
+  for the clip's length, the speakers going idle, or `maxSec`; then `Registry.restorePlayback` each (in a `finally`, so a
+  cancelled run restores too) and resume the paused players. Each speaker that fails is named in the run's history.
+- **What comes back exactly:** Cast resumes Kova's queue at the song and second (asked of the speaker), a stream starts
+  again, and a cast from another app (Spotify, YouTube) can't be taken back (said so). Sonos puts back its own transport
+  (queue at the track and time, play mode; a radio station live; a grouped speaker rejoins its group). Others are
+  restarted by name (sources, Helix music) or put back to idle. A combined soundbar is put back through its playing part.
+- **Loudness:** `devices[id].announceTrim` (20–200 %, default 100), set in each speaker's panel or Speaker loudness.
+- **Audio for speakers:** `/api/clip/<file>` needs no token (speakers can't send one): a clip's 24-hex id is its key.
+  The URL uses the hub's address on the speaker's own subnet.
+- **Prayer times** are an opt-in integration (`HomeConfig.prayer`): off for new homes; on for homes that already used
+  a prayer rhythm or a non-default method. While off, prayer options, the waqt card and the recordings don't show and
+  Ask Kova can't use prayer times; existing prayer schedules keep running.
+
 ### Teach, test, trust (`findings.ts`)
 
 * **Static check**: walks the day's modes and flags a bright light that one mode

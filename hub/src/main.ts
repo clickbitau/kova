@@ -76,6 +76,7 @@ const hub = new Hub({
   weather: env.KOVA_WEATHER === '0' ? undefined : new Weather(Date.now),
   // The picture of each camera event, kept with it for the timelines.
   security: { framesDir: resolve(dataDir, 'frames') },
+  dataDir,
 });
 
 await hub.start();
