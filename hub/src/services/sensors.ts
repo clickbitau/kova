@@ -4,6 +4,7 @@ import type { Device, HomeConfig } from '../model/types.ts';
 import type { RoomActivity } from '../engine/rooms.ts';
 import { isOutdoor, isSensor, NUMERIC_READINGS, readingsOf, roomOutdoor, SENSOR_ICON, sensorKind, type Reading, type ReadingField, type SensorKind } from '../util/sensors.ts';
 import { clock } from '../util/time.ts';
+import { roomReading, roomZones, type RoomZone } from '../util/zones.ts';
 
 // Sensors as the owner sees them: each one's live readings with units, which way they're heading, when they last
 // changed and reported, its battery, and whether it's answering. And each room's climate and activity, from its
@@ -54,6 +55,8 @@ export interface RoomClimate {
   /** Doors and windows open there now. */
   open: string[];
   sensors: number;
+  /** The air conditioner zones that serve the room (util/zones.ts), with their unit's power, mode and set temperature. */
+  zones: RoomZone[];
 }
 
 type Series = Record<string, Record<string, [number, number][]>>;
@@ -160,23 +163,20 @@ export function sensorViews(devices: Device[], cfg: Pick<HomeConfig, 'rooms' | '
     .sort((a, b) => (order.get(a.room) ?? 999) - (order.get(b.room) ?? 999) || a.name.localeCompare(b.name));
 }
 
-const avg = (xs: number[]) => xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length * 10) / 10 : null;
-
 /**
  * Each room's climate and activity. Temperature and humidity come from the room's sensors (the average when there
  * are several); without one, from a device there that senses the room (an air conditioner). Hidden and offline
  * devices don't count.
  */
-export function roomClimate(devices: Device[], cfg: Pick<HomeConfig, 'rooms' | 'timezone'>, rooms: RoomActivity): Record<string, RoomClimate> {
+export function roomClimate(devices: Device[], cfg: Pick<HomeConfig, 'rooms' | 'timezone' | 'devices'>, rooms: RoomActivity): Record<string, RoomClimate> {
   const out: Record<string, RoomClimate> = {};
   const live = devices.filter(d => !d.hidden && d.state.online !== false);
+  const settings = cfg.devices ?? {};
+  // A whole-home air conditioner counts for a room only through its zones (roomReading, roomZones).
+  const zones = roomZones(cfg.rooms, devices, settings);
   for (const r of cfg.rooms) {
-    const here = live.filter(d => d.room === r.id);
-    const sensors = here.filter(isSensor);
-    const pick = (f: 'temp' | 'humidity' | 'lux') => {
-      const from = (sensors.some(d => typeof d.state[f] === 'number') ? sensors : here).filter(d => typeof d.state[f] === 'number');
-      return { v: avg(from.map(d => d.state[f] as number)), from: from.map(d => d.id) };
-    };
+    const sensors = live.filter(d => d.room === r.id && isSensor(d));
+    const pick = (f: 'temp' | 'humidity' | 'lux') => { const x = roomReading(r.id, f, devices, settings); return { v: x.value, from: x.from }; };
     const temp = pick('temp'), hum = pick('humidity'), lux = pick('lux');
     const st = rooms.status(r.id);
     out[r.id] = {
@@ -185,6 +185,7 @@ export function roomClimate(devices: Device[], cfg: Pick<HomeConfig, 'rooms' | '
       last: st.last ? { kind: st.last.kind, at: st.last.at, atLabel: st.last.atLabel, device: st.last.device, what: st.last.what } : null,
       open: sensors.filter(d => d.state.open === true).map(d => d.name),
       sensors: devices.filter(d => d.room === r.id && isSensor(d) && !d.hidden).length,
+      zones: zones[r.id] ?? [],
     };
   }
   return out;

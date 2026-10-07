@@ -264,7 +264,7 @@ export function MomentEditor() {
         <RhythmEditor value={d.at} title="At" onChange={at => setD(x => ({ ...x, at }))} />
       </Section>
       <Section title="What it does" caption gap={SP[2]}>
-        <TargetsEditor rows={rowsOf(d.targets, s.devices, s.sources)} onSet={setT} empty="Add at least one device." />
+        <TargetsEditor rows={rowsOf(d.targets, s.devices, s.sources, s.rooms)} onSet={setT} empty="Add at least one device." />
       </Section>
       {err && d.label.trim() ? <T v="footnote" color={C.stone}>{err}</T> : null}
       <Button full kind={err || !changed ? 'secondary' : 'primary'} icon="check" label={M ? 'Save' : 'Add moment'} onPress={err || !changed ? undefined : save} />

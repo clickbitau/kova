@@ -1,6 +1,6 @@
 import type { Adapter, AdapterContext, AdapterStatus, DeviceInfo, Snapshot } from './sdk.ts';
 import SunCalc from 'suncalc';
-import type { Command, Device } from '../model/types.ts';
+import type { Command, Device, DeviceState } from '../model/types.ts';
 import { atLocal, localDate } from '../util/time.ts';
 
 /** A simulated solar inverter: power follows the sun's height, as a real array roughly would. */
@@ -104,8 +104,17 @@ ${door
 
   async stop(): Promise<void> { if (this.timer) clearInterval(this.timer); if (this.life) clearInterval(this.life); }
 
-  async command(_d: Device, _cmd: Command): Promise<void> {
-    // A real device would acknowledge here; virtual ones always accept.
+  async command(d: Device, cmd: Command): Promise<void | DeviceState> {
+    // A real device would acknowledge here; virtual ones always accept. A ducted unit reports its zones back after a
+    // change to some of them, as a real one does.
+    if (cmd.zoneSet && Array.isArray(d.state.zones)) {
+      return { zones: d.state.zones.map(z => {
+        const c = cmd.zoneSet![String(z.n)];
+        if (!c) return z;
+        const on = c.on ?? z.on;
+        return { ...z, on, open: c.open != null ? c.open : on && !z.on && !z.open ? 100 : !on ? 0 : z.open };
+      }) };
+    }
   }
 
   /** Simulate a change made at the device itself (a wall switch, another app). */

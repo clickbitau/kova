@@ -152,6 +152,8 @@ export interface DeviceSettings {
   watts?: number;
   /** Ducted air conditioners: what the owner calls each zone, by zone number ("1": "Living"). */
   zoneNames?: Record<string, string>;
+  /** Ducted air conditioners: the rooms each zone serves, by zone number ("5": ["office", "guest"]). The owner confirms them. */
+  zoneRooms?: Record<string, string[]>;
 }
 
 /**
@@ -164,8 +166,8 @@ export type Command = Partial<DeviceState> & {
   zoneSet?: Record<string, { on?: boolean; open?: number }>;
 };
 
-/** One zone of a ducted air conditioner, numbered as the unit numbers them. */
-export interface Zone { n: number; on: boolean; open: number | null }
+/** One zone of a ducted air conditioner, numbered as the unit numbers them. `temp`: the zone's own reading, on systems with a sensor per zone. */
+export interface Zone { n: number; on: boolean; open: number | null; temp?: number | null }
 
 /** Why something happened. Attached to every state change and log entry. */
 export interface Cause {
@@ -188,6 +190,11 @@ export interface Room {
 
 /** The room id of devices that are in none of the home's rooms (a deleted room's devices go here). */
 export const UNASSIGNED_ROOM = 'unassigned';
+/**
+ * The place of devices that serve the whole home rather than one room (a ducted air conditioner). They show under
+ * "Whole home", aren't in any room's lists, summaries or "room off", and reach rooms only through their zones.
+ */
+export const WHOLE_HOME = 'whole_home';
 
 /** Material Symbols icons a room can have — offered wherever a room is made or renamed. */
 export const ROOM_ICONS = ['weekend', 'kitchen', 'desk', 'bed', 'single_bed', 'crib', 'music_note', 'local_laundry_service', 'garage_home', 'door_front', 'yard', 'bathtub', 'stairs', 'meeting_room', 'chair', 'tv', 'deck', 'balcony', 'fitness_center', 'checkroom'];

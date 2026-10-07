@@ -32,8 +32,11 @@ export function summarize(targets: Targets, devices: Map<string, Device>): strin
   const play = new Map<string, { n: number; vol?: number | null }>();
   let stop = 0;
   const fans = new Set<string>();
+  let zonesOpen = 0, zonesClosed = 0;
   for (const [id, t] of Object.entries(targets)) {
     const d = devices.get(id);
+    // A room's air conditioner zone ("zone:lounge"): open or closed.
+    if (!d && id.startsWith('zone:')) { const z = t as { on?: boolean; open?: number }; if (z.on === false || z.open === 0) zonesClosed++; else if (z.on || z.open) zonesOpen++; continue; }
     if (!d) continue;
     if (isLight(d)) {
       if (t.on === false) lightsOff++;
@@ -55,6 +58,8 @@ export function summarize(targets: Targets, devices: Map<string, Device>): strin
   for (const [media, p] of play) parts.push(`${media} on ${p.n === 1 ? 'a speaker' : `${p.n} speakers`}${p.vol != null ? ` at ${p.vol}%` : ''}`);
   if (stop) parts.push(`${n(stop, 'speaker stops', 'speakers stop')}`);
   if (fans.size) parts.push(`purifiers to ${[...fans].join(' / ')}`);
+  if (zonesOpen) parts.push(`${n(zonesOpen, 'zone', 'zones')} open`);
+  if (zonesClosed) parts.push(`${n(zonesClosed, 'zone', 'zones')} closed`);
   const s = parts.join(', ');
   return s ? s[0].toUpperCase() + s.slice(1) : 'No device changes';
 }

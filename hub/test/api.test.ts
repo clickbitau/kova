@@ -13,7 +13,7 @@ test('API: state, commands, undo, overlays, preview', async () => {
 
   const s = (await app.inject({ url: '/api/state' })).json();
   assert.equal(s.current.modeId, 'evening');
-  assert.equal(s.devices.length, 35, '28 home devices, 6 sensors and the simulated inverter');
+  assert.equal(s.devices.length, 36, '28 home devices, 6 sensors, the simulated inverter and the ducted AC');
   assert.equal(s.devices.filter((d: { kind: string }) => d.kind === 'sensor').length, 7, 'the sensors and the inverter are sensors');
   assert.equal(s.energy.available, true);
   assert.equal(s.modes.length, 5);

@@ -2,7 +2,8 @@ import type { Engine } from '../engine/engine.ts';
 import type { HelixMusic } from '../services/helix-music.ts';
 import type { Registry } from '../devices/registry.ts';
 import type { ConfigStore } from '../engine/config.ts';
-import type { Cause, Device, Overlay, RoomEventKind, Targets } from '../model/types.ts';
+import type { Cause, Command, Device, Overlay, RoomEventKind, Targets } from '../model/types.ts';
+import { allClosedAfter, hasZones, roomReading, sensibleMode, zonesServing, type ZoneCommand } from '../util/zones.ts';
 import { isLight, isPlayer } from '../util/describe.ts';
 import { clock, localDate, atLocal } from '../util/time.ts';
 import { hardwareSummary, hasHardware } from '../util/hardware.ts';
@@ -50,7 +51,12 @@ export type Intent =
   /** "is the garage door open?" */
   | { kind: 'contact'; devices: string[]; label: string }
   /** "is the router OK?", "how much power is the router using?": a device whose hardware Kova reads (the router, from Warden). */
-  | { kind: 'hardware'; device: string; label: string };
+  | { kind: 'hardware'; device: string; label: string }
+  /**
+   * "cool the lounge", "turn off the AC in the office", "open the lounge zone to 50%": the air conditioner zone serving
+   * a room (and the unit's power and mode when that's asked). `targets` is empty when no zone serves the place.
+   */
+  | { kind: 'zone'; label: string; what: string; targets: Targets; offer: { targets: Targets; label: string } | null };
 
 /** A follow-up the user can tap, executed by POST /api/ask/act. */
 export type AskAction =
@@ -177,6 +183,85 @@ export class Assistant {
     return r ?? null;
   }
 
+  /**
+   * The air conditioner zones a place means: the zones serving a room ("the lounge"), or a zone by its own name ("the
+   * living zone") — on whichever unit has them.
+   */
+  private zonePlace(phrase: string): { label: string; zones: { d: Device; n: number }[]; room: string | null } | null {
+    const p = norm(phrase).replace(/^(the|my|our)\s+/, '').replace(/\s+(zones?|area)$/, '').trim();
+    if (!p) return null;
+    const settings = this.config.get().devices ?? {};
+    const zoned = this.reg.list().filter(d => hasZones(d) && !d.archived);
+    const squash = (x: string) => x.replace(/\s+/g, '');
+    // A zone by its own name ("Living", "Office & Guest").
+    for (const d of zoned) {
+      for (const [n, name] of Object.entries(settings[d.id]?.zoneNames ?? {})) {
+        if (squash(norm(name)) !== squash(p)) continue;
+        return { label: name, zones: [{ d, n: Number(n) }], room: settings[d.id]?.zoneRooms?.[n]?.[0] ?? null };
+      }
+    }
+    const room = this.roomFrom(p);
+    if (!room) return null;
+    return { label: room.name, zones: zonesServing(room.id, zoned, settings), room: room.id };
+  }
+
+  /** "cool the lounge", "turn on the AC in the office", "close the kitchen zone", "lounge zone to 40%". */
+  private zoneIntent(t: string): Intent | null {
+    const AC = '(?:ac|a c|aircon|air con|air conditioning|air conditioner|airconditioner|climate)';
+    const power = (dir: string): ZoneCommand => dir === 'on' ? { on: true, ac: true } : { on: false };
+    const pct = (v?: string) => v ? Math.min(100, Number(v)) : undefined;
+    // [pattern, (match) → place, command, what it does in words, and whether the words alone say it's the AC]
+    const forms: [RegExp, (m: RegExpMatchArray) => [string, ZoneCommand, string, boolean]][] = [
+      [/^(cool|heat|warm)(?: (?:down|up))? (?:the |my )?(.+?)(?: (?:to|at) (\d{2})(?: ?degrees| ?c)?)?$/, m => {
+        const hvac = m[1] === 'cool' ? 'cool' : 'heat';
+        return [m[2]!, { on: true, hvac, ...(m[3] ? { target: Number(m[3]) } : {}) }, `${hvac === 'cool' ? 'Cool' : 'Heat'}${m[3] ? ` to ${m[3]}°` : ''}`, false];
+      }],
+      [new RegExp(`^(?:turn|switch|put) (on|off) (?:the )?${AC} (?:in|for|of) (?:the )?(.+)$`), m => [m[2]!, power(m[1]!), m[1] === 'on' ? 'Turn on' : 'Turn off', true]],
+      [new RegExp(`^(?:turn|switch) (?:the )?${AC} (?:in|for|of) (?:the )?(.+?) (on|off)$`), m => [m[1]!, power(m[2]!), m[2] === 'on' ? 'Turn on' : 'Turn off', true]],
+      [new RegExp(`^(?:turn|switch|put) (on|off) (?:the )?(.+?) (?:${AC}|zone)$`), m => [m[2]!, power(m[1]!), m[1] === 'on' ? 'Turn on' : 'Turn off', true]],
+      [new RegExp(`^(?:turn|switch) (?:the )?(.+?) (?:${AC}|zone) (on|off)$`), m => [m[1]!, power(m[2]!), m[2] === 'on' ? 'Turn on' : 'Turn off', true]],
+      // Only with the word "zone": "open the garage door" is a door.
+      [/^(open|close|shut)(?: up)? (?:the )?(?:zones? (?:in|for) (?:the )?(.+?)|(.+?) zones?)(?: (?:to|at) (\d{1,3}) ?%?)?$/, m => {
+        const n = pct(m[4]), place = (m[2] ?? m[3])!;
+        return m[1] === 'open' && n !== 0 ? [place, { on: true, ...(n != null ? { open: n } : {}) }, `Open${n != null ? ` ${n}%` : ''}`, true] : [place, { on: false }, 'Close', true];
+      }],
+      [/^(?:set )?(?:the )?(.+?) zones? (?:to |at )?(\d{1,3}) ?%?$/, m => { const n = pct(m[2])!; return [m[1]!, n === 0 ? { on: false } : { on: true, open: n }, n === 0 ? 'Close' : `Open ${n}%`, true]; }],
+    ];
+    let hit: [string, ZoneCommand, string, boolean] | null = null;
+    for (const [re, f] of forms) { const m = t.match(re); if (m) { hit = f(m); break; } }
+    if (!hit) return null;
+    let [place, cmd, what] = hit;
+    const sure = hit[3];
+    const zp = this.zonePlace(place);
+    // "cool the lounge" or "open the kitchen" only mean the AC when a zone is there; "turn on the lounge AC" always does.
+    if (!zp || (!sure && !zp.zones.length)) return null;
+    const settings = this.config.get().devices ?? {};
+    const units = [...new Set(zp.zones.map(z => z.d))];
+    const off = units.filter(d => !d.state.on);
+    const temp = zp.room ? roomReading(zp.room, 'temp', this.reg.list(), settings).value : null;
+    // "Turn on the AC in the office" with the unit off: on in a sensible mode for that room.
+    if (cmd.ac && off.length) { const s = sensibleMode(off[0].state, temp); cmd = { ...cmd, hvac: s.hvac, target: s.target }; }
+    const targets: Targets = {};
+    const confirmed = !!zp.room && zp.zones.every(z => settings[z.d.id]?.zoneRooms?.[String(z.n)]?.includes(zp.room!));
+    if (zp.zones.length && confirmed) targets[`zone:${zp.room}`] = cmd as unknown as Command;
+    else for (const z of zp.zones) {
+      // A zone named in the words but not yet tied to a room: the unit itself.
+      const c = (targets[z.d.id] ??= {}) as Command;
+      c.zoneSet = { ...(c.zoneSet ?? {}), [String(z.n)]: { ...(cmd.on !== undefined ? { on: cmd.on } : {}), ...(cmd.open != null ? { open: cmd.open } : {}) } };
+      if (cmd.ac || cmd.hvac) c.on = true;
+      if (cmd.hvac) c.hvac = cmd.hvac;
+      if (cmd.target != null) c.target = cmd.target;
+      if (cmd.on === false && z.d.state.on && allClosedAfter(z.d, c.zoneSet)) c.on = false;
+    }
+    // Opening a zone while the unit is off: offer to turn it on, never do it unasked.
+    let offer: { targets: Targets; label: string } | null = null;
+    if (cmd.on && !cmd.ac && !cmd.hvac && off.length) {
+      const s = sensibleMode(off[0].state, temp);
+      offer = { label: `Turn the AC on · ${cap(s.hvac)} ${s.target}°`, targets: Object.fromEntries(off.map(d => [d.id, { on: true, hvac: s.hvac, target: s.target }])) };
+    }
+    return { kind: 'zone', label: zp.label, what, targets, offer };
+  }
+
   /** Understand a request without doing anything. */
   parse(q: string): Intent | null {
     const t = norm(q);
@@ -228,6 +313,8 @@ export class Assistant {
     if (hw && /\b(ok|okay|alright|fine|healthy|good|working|power|watts?|using|draw(ing|s)?|use|supply|supplies|psus?|redundan\w*|temp\w*|hot|warm|fans?|status|how is|hows)\b/.test(t) && !/^(turn|switch|restart|reboot)\b/.test(t)) {
       return { kind: 'hardware', device: hw.id, label: hw.name };
     }
+    const zi = this.zoneIntent(t);
+    if (zi) return zi;
     if (/^why\b/.test(t)) {
       const m = t.match(/^why (?:is|are|did) (?:the )?(.+?)(?: (?:on|off|playing|turn on|come on))?$/);
       const r = m ? this.resolve(m[1]) : null;
@@ -236,7 +323,9 @@ export class Assistant {
         return { kind: 'why', device: d.id, label: `${this.roomName(d.room)} ${d.name.toLowerCase()}` };
       }
     }
-    if (/\b(tonight|coming up|whats happening|what happens|schedule|whats next)\b/.test(t)) return { kind: 'tonight' };
+    // "What's happening tonight?", but not "turn the porch light on tonight" or a long request that only mentions it.
+    if (/\b(tonight|coming up|whats happening|what happens|schedule|whats next)\b/.test(t)
+      && (/^(what|whats|when|is|are|anything|show|tell me|list)\b/.test(t) || /\?\s*$/.test(q) || t.split(' ').length <= 3)) return { kind: 'tonight' };
 
     // "lamp to 30%", "dim the lounge to 20", "set office strip 50%"
     const lvl = t.match(/^(?:set |dim |brighten |turn )?(?:the )?(.+?) (?:to |at )?(\d{1,3}) ?%?$/);
@@ -338,6 +427,7 @@ export class Assistant {
       case 'contact': return ['Open or closed', i.label];
       case 'greeting': return ['Greeting'];
       case 'hardware': return ['Hardware', i.label];
+      case 'zone': return [i.what, `${i.label} zone`];
     }
   }
 
@@ -457,6 +547,11 @@ export class Assistant {
         const ds = this.devs().filter(d => d.room === i.room && !d.hidden && d.state.online !== false && reading(d, i.field));
         const sensors = ds.filter(isSensor);
         const from = sensors.length ? sensors : ds;
+        // No sensor or device there: the air conditioner zone serving it, where the zone has its own sensor.
+        if (!from.length && i.field === 'temp') {
+          const z = roomReading(i.room, 'temp', this.reg.list(), this.config.get().devices ?? {});
+          if (z.value != null) return reply(`It’s ${z.value}° in the ${i.label} (from its air conditioner zone).`, 'Built-in · nothing left your home');
+        }
         if (!from.length) return reply(`Nothing in the ${i.label} measures ${i.field === 'humidity' ? 'humidity' : i.field === 'lux' ? 'the light' : 'the temperature'}.`, 'Built-in · nothing left your home');
         const vals = from.map(d => reading(d, i.field)!.value as number);
         const v = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length * 10) / 10;
@@ -472,6 +567,17 @@ export class Assistant {
           return reply(d.state.online === false ? `${d.name} isn’t answering, so I can’t tell.` : `${d.name} is ${d.state.open ? 'open' : 'closed'}.`, 'Built-in · nothing left your home');
         }
         return reply(open.length ? `${list(open.map(d => d.name))} ${open.length === 1 ? 'is' : 'are'} open.` : `All closed${off.length ? ` (${list(off.map(d => d.name))} isn’t answering)` : ''}.`, 'Built-in · nothing left your home');
+      }
+      case 'zone': {
+        if (!Object.keys(i.targets).length) return reply(`No air conditioner zone serves the ${i.label} yet. Choose the rooms each zone serves in the AC’s settings.`, 'Device control');
+        const r = await this.engine.applyMany(i.targets, { ...CAUSE, label: `${i.label} zone: ${i.what.toLowerCase()}` });
+        const unit = Object.keys(this.reg.expandTargets(i.targets)).map(id => this.reg.get(id)).find((d): d is Device => !!d && hasZones(d));
+        const ac = unit?.state;
+        const HV: Record<string, string> = { cool: 'cooling', heat: 'heating', dry: 'drying', fan: 'on fan only', auto: 'on auto' };
+        const acText = !ac ? '' : ac.on ? ` The AC is ${HV[ac.hvac ?? ''] ?? 'on'}${ac.target != null ? ` to ${ac.target}°` : ''}.` : ' The AC is off.';
+        const done = r.changed.length ? `Done. ${i.label} zone: ${i.what.toLowerCase()}.` : `The ${i.label} zone was already like that.`;
+        const acts = i.offer && !ac?.on ? [{ label: i.offer.label, action: { type: 'apply' as const, targets: i.offer.targets, label: 'AC on', done: 'The AC is on.' } }] : [];
+        return reply(`${done}${acText}`, 'Device control', { undo: r.changed.length ? r.undo : undefined, actions: acts });
       }
       case 'hardware': {
         const d = this.reg.get(i.device);

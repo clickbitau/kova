@@ -266,7 +266,7 @@ test('Zones: the AC’s zones are named, then one zone is switched; the reply us
   const h = await askHome();
   await h.useModel(model.url);
   const r = await h.ask('zone 1 is living, 2 theatre, 3 master. turn on just the theatre zone. 9 is the garage');
-  assert.deepEqual(h.hub.config.get().devices!.ducted_ac!.zoneNames, { 1: 'Living', 2: 'Theatre', 3: 'Master' });
+  assert.deepEqual(h.hub.config.get().devices!.ducted_ac!.zoneNames, { 1: 'Living', 2: 'Theatre', 3: 'Master', 4: 'Baby', 5: 'Office & Guest', 6: 'Music' }, 'named zones are kept; only those given change');
   const zoneRes = lastResults(model.received[2]!.body)[0];
   assert.equal(zoneRes.ok, true);
   assert.match(zoneRes.result, /AC/);
@@ -280,7 +280,7 @@ test('honestReply: clean replies pass; "Done" with nothing done is corrected', (
   assert.equal(honestReply('Done.', { done: [], couldnt: [] }, { changed: false }).text, 'I didn’t change anything.');
   assert.equal(honestReply('Done — I’ll remember that.', { done: [], couldnt: [] }, { changed: false }).text, 'I didn’t change anything. I’ll remember that.');
   const r = honestReply('Everything is done. The lamp is in Theatre.', { done: [], couldnt: ['Move Lamp to Theatre: Unknown room theatre.'] }, { changed: false });
-  assert.equal(r.text, 'That didn’t work.\n\nThe lamp is in Theatre.\n\nCouldn’t:\n- Move Lamp to Theatre: Unknown room theatre.');
+  assert.equal(r.text, 'That didn’t work.\n\nCouldn’t:\n- Move Lamp to Theatre: Unknown room theatre.', 'its claim that the lamp moved is dropped');
 });
 
 test('Built-in answers: a combined device stands for its parts, hidden ones stay out of lists', async () => {

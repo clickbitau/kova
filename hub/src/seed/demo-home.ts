@@ -1,4 +1,4 @@
-import type { Capability, HomeConfig, Targets } from '../model/types.ts';
+import { WHOLE_HOME, type Capability, type HomeConfig, type Targets } from '../model/types.ts';
 import type { DeviceInfo } from '../adapters/sdk.ts';
 
 // A demo home modelled on a real one (the owner's former Home Assistant setup):
@@ -50,6 +50,18 @@ const SENSORS: DeviceInfo[] = [
   { id: 'garage_contact', name: 'Garage door', room: 'garage', state: { open: false, battery: 55, online: true } },
 ].map(d => ({ ...d, type: 'sensor' as const, integration: 'Zigbee (simulated)', address: `demo.${d.id}`, capabilities: d.state.battery != null ? ['events' as const, 'battery' as const] : ['events' as const] }));
 
+/**
+ * A ducted air conditioner serving the whole home, with six zones (named in demoConfig's device settings). Which room
+ * each zone serves is left for the owner to confirm, from Kova's suggestions.
+ */
+export const DEMO_DUCTED: DeviceInfo = {
+  id: 'ducted_ac', name: 'Ducted AC', room: WHOLE_HOME, type: 'climate', integration: 'Ducted (simulated)', address: 'demo.ducted_ac',
+  capabilities: ['onoff', 'climate', 'zones'],
+  state: { on: false, hvac: 'cool', target: 23, temp: 23.5, fanSpeed: 'auto', online: true,
+    zones: [1, 2, 3, 4, 5, 6].map(n => ({ n, on: n <= 2, open: n <= 2 ? 100 : 0 })) },
+};
+export const DEMO_ZONE_NAMES: Record<string, string> = { 1: 'Lounge', 2: 'Kitchen', 3: 'Master', 4: 'Baby', 5: 'Office & Guest', 6: 'Music' };
+
 /** The demo home's simulated solar array (about 3 kW, like the real one). */
 export const DEMO_SOLAR = { id: 'solar_inverter', lat: -31.95, lon: 115.86, peakW: 2900, tz: 'Australia/Perth' };
 
@@ -63,7 +75,7 @@ export function demoDevices(): DeviceInfo[] {
       : type === 'plug' ? { on: true, power: 14 }
       : type === 'camera' || type === 'sensor' ? { online: true }
       : { on: false },
-  })), ...SENSORS.map(d => ({ ...d, state: { ...d.state } }))];
+  })), ...SENSORS.map(d => ({ ...d, state: { ...d.state } })), structuredClone(DEMO_DUCTED)];
 }
 
 const LIGHTS = ROWS.filter(r => r[3] === 'light' || r[3] === 'dimmer').map(r => r[0]);
@@ -154,5 +166,6 @@ export function demoConfig(): HomeConfig {
     ],
     groups: {},
     dismissedFindings: [],
+    devices: { ducted_ac: { zoneNames: { ...DEMO_ZONE_NAMES } } },
   };
 }

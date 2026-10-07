@@ -156,8 +156,9 @@ export class Engine extends EventEmitter<{ changed: [] }> {
   private async applyUnderOverlay(targets: Targets, cause: Cause): Promise<string[]> {
     if (!this.overlay) return (await this.reg.applyTargets(targets, cause)).changed;
     const now: Targets = {};
-    for (const [id, c] of Object.entries(targets)) {
-      if (id in this.overlay.snapshot) this.overlay.snapshot[id] = { ...this.overlay.snapshot[id], ...c };
+    // Pseudo-targets ("room:", "zone:") resolve first, so a device the overlay holds gets its change queued.
+    for (const [id, c] of Object.entries(this.reg.expandTargets(targets))) {
+      if (id in this.overlay.snapshot) this.overlay.snapshot[id] = queueOnto(this.overlay.snapshot[id], c);
       else now[id] = c;
     }
     this.store.set('overlay', this.overlay);
@@ -189,10 +190,12 @@ export class Engine extends EventEmitter<{ changed: [] }> {
     if (this.overlay) await this.endOverlay('replaced');
     const targets = this.overlayTargets(o);
     const snapshot: Targets = {};
-    for (const [devId, c] of Object.entries(targets)) {
+    // What it changes, to put back when it ends: pseudo-targets ("room:", "zone:") as the devices they reach, and a
+    // change to some zones as all of the unit's zones.
+    for (const [devId, c] of Object.entries(this.reg.expandTargets(targets))) {
       const d = this.reg.get(devId);
       if (!d) continue;
-      snapshot[devId] = pick(d.state, Object.keys(c));
+      snapshot[devId] = pick(d.state, [...new Set(Object.keys(c).map(k => k === 'zoneSet' ? 'zones' : k))]);
     }
     const now = this.now();
     const endsAt = o.ends.kind === 'time' ? this.nextRhythm(o.ends.at, now) : null;
@@ -430,6 +433,17 @@ export class Engine extends EventEmitter<{ changed: [] }> {
 }
 
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
+
+/** A change queued onto what an overlay will put back: zone changes go into the zones it keeps. */
+function queueOnto(kept: Command, c: Command): Command {
+  const { zoneSet, ...rest } = c;
+  const out: Command = { ...kept, ...rest };
+  if (zoneSet) {
+    if (Array.isArray(kept.zones)) out.zones = kept.zones.map(z => zoneSet[String(z.n)] ? { ...z, ...Object.fromEntries(Object.entries(zoneSet[String(z.n)]!).filter(([, v]) => v !== undefined)) } : z);
+    else out.zoneSet = { ...(kept.zoneSet ?? {}), ...zoneSet };
+  }
+  return out;
+}
 
 function pick(s: DeviceState, keys: string[]): Command {
   const out: Command = {};

@@ -73,7 +73,7 @@ test('sensors are not devices: their own kind in the snapshot, out of device cou
     assert.ok(!s.sensors.some((x: { id: string }) => x.id === 'lamp'), 'devices aren’t sensors');
     // Integration counts: devices and sensors apart.
     const v = s.integrations.find((i: { id: string }) => i.id === 'virtual');
-    assert.deepEqual([v.devices, v.sensors], [28, 7]);
+    assert.deepEqual([v.devices, v.sensors], [29, 7], 'the ducted AC is a device');
     // Room climate comes from the room's sensors.
     assert.deepEqual([s.roomStatus.lounge.temp, s.roomStatus.lounge.humidity, s.roomStatus.lounge.sensors], [22.4, 48, 1]);
     assert.equal(s.roomStatus.front.outdoor, true);

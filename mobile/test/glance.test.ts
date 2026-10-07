@@ -10,7 +10,7 @@ test('glance cards: outside with today, inside as a range, the air worst first',
   });
   assert.deepEqual(cards.map(c => [c.label, c.value, c.caption, c.sub]), [
     ['Outside', '21°', 'Sunny', '22° / 13° today · UV 9 at midday'],
-    ['Inside', '20.8–23°', '2 rooms', 'Lounge 20.8° · Bedroom 23°'],
+    ['Inside', '21–23°', '2 rooms', 'Lounge 20.8° · Bedroom 23°'],
     ['Air', 'Poor', 'Lounge purifier', 'Bedroom purifier: good'],
   ]);
   const one = glanceCards({ outside: null, inside: [{ name: 'Lounge', temp: 21, device: 'a' }], air: [{ name: 'Purifier', level: 1, label: 'Good', device: 'p' }] });

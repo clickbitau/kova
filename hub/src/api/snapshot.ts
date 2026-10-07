@@ -13,6 +13,7 @@ import { alertsFor, isCamera, isOutdoor, kindOf, isSensor } from '../util/sensor
 import { roomClimate, sensorViews } from '../services/sensors.ts';
 import { roomOutdoor } from '../util/sensors.ts';
 import { engineInfo, loadSettings } from '../assistant/ai.ts';
+import { hasZones, suggestZoneRooms, zoneCommandWords, type ZoneCommand } from '../util/zones.ts';
 
 const FEED_ICON: Record<string, string> = { mode: 'routine', run: 'bolt', presence: 'person_pin_circle', state: 'lightbulb', system: 'info', skip: 'event_busy' };
 
@@ -57,6 +58,9 @@ function chipsByRoom(targets: Targets, devices: Map<string, Device>, roomName: (
   const byRoom = new Map<string, { chips: string[]; offLights: number }>();
   for (const [id, t] of Object.entries(targets)) {
     const d = devices.get(id);
+    // A room's air conditioner zone shows with the room: "Zone open 50%, AC cool 23°".
+    const zm = !d && /^zone:(.+)$/.exec(id);
+    if (zm) { const g = byRoom.get(zm[1]) ?? { chips: [], offLights: 0 }; g.chips.push(`Zone ${zoneCommandWords(t as unknown as ZoneCommand)}`); byRoom.set(zm[1], g); continue; }
     if (!d) continue;
     const g = byRoom.get(d.room) ?? { chips: [], offLights: 0 };
     if (isLight(d) && t.on === false) g.offLights++;
@@ -86,12 +90,14 @@ export function snapshot(hub: Hub) {
   /** Editable target rows: which device, what it's set to, and the chip text. */
   const targetList = (t: Targets) => Object.entries(t).map(([id, cmd]) => {
     const d = devices.get(id);
+    // A room's air conditioner zone ("zone:lounge").
+    if (!d && id.startsWith('zone:')) { const rn = cfg.rooms.find(r => r.id === id.slice(5))?.name; return { deviceId: id, name: `${rn ?? id.slice(5)} zone`, label: pseudoLabel(id, cfg.rooms, cmd) ?? id, target: cmd, missing: !rn }; }
     return { deviceId: id, name: d ? (inRoom(d.room) ? `${roomName(d.room)} ${d.name.toLowerCase()}` : d.name) : `${id} (missing)`, label: d ? targetLabel(d, cmd) : 'Device not found', target: cmd, missing: !d };
   });
   const findings = checker.findings();
   // Each part of an automation in words, for lists and the editor's summary.
   const words = { reg, cfg, now };
-  const tgt = (id: string, cmd: object) => { const d = reg.get(id); return d ? targetLabel(d, cmd) : pseudoLabel(id, cfg.rooms) ?? id; };
+  const tgt = (id: string, cmd: object) => { const d = reg.get(id); return d ? targetLabel(d, cmd) : pseudoLabel(id, cfg.rooms, cmd) ?? id; };
   const autoWords = (a: Pick<import('../model/types.ts').Automation, 'triggers' | 'conditions' | 'actions'>) => ({
     triggerLabels: a.triggers.map(t => triggerWords(t, words)),
     conditionLabels: a.conditions.map(c => condWords(c, words)),
@@ -189,10 +195,11 @@ export function snapshot(hub: Hub) {
       const st = engine.people[p.id];
       return { ...p, via: hub.presenceVia(p.id), home: st?.home ?? true, since: st?.since ?? null, sinceLabel: st ? clock(st.since, tz) : '', confidence: st?.confidence ?? null, confidenceLabel: st?.confidence == null ? '' : `${Math.round(st.confidence * 100)}%`, evidence: st?.evidence ?? [] };
     }),
-    // zoneNames: what the owner calls a ducted air conditioner's zones. `watts` / `typicalWatts`: what a device with no
-    // meter draws while on, the owner's figure and Kova's (Energy page).
+    // zoneNames: what the owner calls a ducted air conditioner's zones; zoneRooms: the rooms each zone serves, as the
+    // owner confirmed them; zoneSuggest: rooms Kova suggests for the named zones not yet confirmed, from their names.
+    // `watts` / `typicalWatts`: what a device with no meter draws while on, the owner's figure and Kova's (Energy page).
     // `kind`: device (something to control), sensor (only reports) or camera. Sensors stay here so ids keep working.
-    devices: reg.list().map(d => ({ ...d, kind: kindOf(d), why: engine.why(d.id), usedIn: engine.usedIn(d.id), ...wattsSetting(d, cfg.devices?.[d.id]?.watts), ...(cfg.devices?.[d.id]?.zoneNames ? { zoneNames: cfg.devices[d.id].zoneNames } : {}) })),
+    devices: reg.list().map(d => ({ ...d, kind: kindOf(d), why: engine.why(d.id), usedIn: engine.usedIn(d.id), ...wattsSetting(d, cfg.devices?.[d.id]?.watts), ...zoneSettings(d, cfg) })),
     modes,
     current: {
       modeId: mn.mode.id, since: mn.since, until: mn.until, untilLabel: clock(mn.until, tz), nextId: mn.next.id,
@@ -241,3 +248,12 @@ export function snapshot(hub: Hub) {
 }
 
 export type Snapshot = ReturnType<typeof snapshot>;
+
+/** A ducted unit's zone names, the rooms the owner gave its zones, and Kova's suggestions for the rest. */
+function zoneSettings(d: Device, cfg: import('../model/types.ts').HomeConfig) {
+  const s = cfg.devices?.[d.id];
+  if (!hasZones(d)) return s?.zoneNames ? { zoneNames: s.zoneNames } : {};
+  const confirmed = s?.zoneRooms ?? {};
+  const names = Object.fromEntries(Object.entries(s?.zoneNames ?? {}).filter(([n]) => !confirmed[n]));
+  return { zoneNames: s?.zoneNames ?? {}, zoneRooms: confirmed, zoneSuggest: suggestZoneRooms(names, cfg.rooms) };
+}

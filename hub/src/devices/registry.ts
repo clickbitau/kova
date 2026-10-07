@@ -4,6 +4,7 @@ import type { Cause, Command, Device, DeviceSettings, DeviceState, Targets } fro
 import type { Store } from '../store/db.ts';
 import { CAPS, changeSentence, fitCommand, PSEUDO_TARGET, typeMatch } from '../util/describe.ts';
 import { isSensor } from '../util/sensors.ts';
+import { allClosedAfter, mergeCommand, zoneCommands, type ZoneCommand } from '../util/zones.ts';
 
 /**
  * Readings that update silently: they're not "changes" anyone made. A vacuum's
@@ -245,13 +246,25 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
     return this.apply(d, kept, cause, opts.quiet);
   }
 
-  /** Apply many targets at once. Failures on one device don't stop the rest. The caller logs one summary entry. */
-  /** "type:light" / "room:lounge" targets resolve here, at run time — devices added later join in. */
+  /**
+   * "type:light" / "room:lounge" / "zone:lounge" targets resolve here, at run time — devices added later join in.
+   * A room's zone becomes its air conditioner's zone change (and the unit's mode when asked); zone changes for the
+   * same unit merge. Closing zones so that none is left open turns the unit off, unless the target said otherwise.
+   */
   expandTargets(targets: Targets): Record<string, Command> {
     const expanded: Record<string, Command> = {};
+    const closing = new Set<string>();
     for (const [id, cmd] of Object.entries(targets)) {
       const m = PSEUDO_TARGET.exec(id);
-      if (!m) { expanded[id] = cmd; continue; }
+      if (!m) { mergeCommand(expanded, id, cmd); continue; }
+      if (m[1] === 'zone') {
+        const zc = cmd as unknown as ZoneCommand;
+        for (const [did, c] of Object.entries(zoneCommands(m[2]!, zc, this.devices.values(), this.settings()))) {
+          mergeCommand(expanded, did, c);
+          if ((zc.on === false || zc.open === 0) && zc.ac === undefined) closing.add(did);
+        }
+        continue;
+      }
       for (const d of this.devices.values()) {
         if (m[1] === 'type' ? typeMatch(d, m[2]!) : d.room === m[2]) {
           const c = fitCommand(d, cmd);
@@ -259,8 +272,14 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
         }
       }
     }
+    for (const id of closing) {
+      const d = this.devices.get(id), c = expanded[id];
+      if (d && c?.zoneSet && c.on === undefined && d.state.on && allClosedAfter(d, c.zoneSet)) c.on = false;
+    }
     return expanded;
   }
+
+  /** Apply many targets at once. Failures on one device don't stop the rest. The caller logs one summary entry. */
 
   async applyTargets(targets: Targets, cause: Cause): Promise<{ changed: string[]; prev: Targets; failed: { id: string; error: string }[] }> {
     // Archived devices are left alone: a mode or overlay that still names one skips it.

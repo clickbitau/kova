@@ -3,8 +3,9 @@
 // (hub/src/assistant/ai.ts: set_devices, create_automation) can be built here by hand, and what the hub accepts
 // (hub/src/engine/automation-check.ts) is what the editor offers: every field a device can be set to, state
 // matches, readings, events, every kind of trigger, condition and step, and one-time schedules.
-import type { Command, Device, Room } from '../api/types';
+import type { Command, Device, Room, RoomStatus } from '../api/types';
 import { isCamera, isSensor } from './sensors.ts';
+import { WHOLE_HOME, WHOLE_HOME_NAME, ZONE_FIELDS, ZONE_PRESETS, zoneCommandWords, zoneTargetOptions, type ZoneCommand } from './zones.ts';
 
 // ------------------------------------------------------------------ shapes --
 
@@ -215,7 +216,7 @@ export const labelOf = <V extends string>(list: Opt<V>[], v: V | undefined, fall
 
 // ------------------------------------------------------------- devices ----
 
-type Dev = Pick<Device, 'id' | 'type' | 'capabilities'> & { kind?: Device['kind']; name?: string; integration?: string; room?: string; state?: Partial<Device['state']>; zoneNames?: Record<string, string> };
+type Dev = Pick<Device, 'id' | 'type' | 'capabilities'> & { kind?: Device['kind']; name?: string; integration?: string; room?: string; state?: Partial<Device['state']>; zoneNames?: Record<string, string>; zoneRooms?: Record<string, string[]>; archived?: boolean };
 const has = (d: { capabilities?: string[] }, c: string) => (d.capabilities ?? []).includes(c);
 const isPlayerType = (t: string | undefined) => t === 'media' || t === 'tv';
 
@@ -225,8 +226,12 @@ const isPlayerType = (t: string | undefined) => t === 'media' || t === 'tv';
  */
 export const canSet = (d: Pick<Device, 'type'> & { kind?: Device['kind'] }) => !isCamera(d) && d.kind !== 'camera' && !isSensor(d);
 
-/** "type:light" / "room:lounge": every matching device, now and later. */
-export const PSEUDO = /^(type|room):(.+)$/;
+/**
+ * "type:light" / "room:lounge": every matching device, now and later. "zone:lounge": the air conditioner zone that
+ * serves the room (logic/zones.ts), on whichever unit serves it when it runs. (A zone's own fields inside an air
+ * conditioner's command are keyed by number in `zoneSet`, so they never meet these ids.)
+ */
+export const PSEUDO = /^(type|room|zone):(.+)$/;
 export const isPseudo = (id: string) => PSEUDO.test(id);
 const TYPE_WORDS: Record<string, string> = { light: 'All lights', dimmer: 'All dimmers', fan: 'All fans and purifiers', media: 'All media players', tv: 'All TVs', plug: 'All plugs', camera: 'All cameras', sensor: 'All sensors', vacuum: 'All vacuums', internet: 'Every device’s internet', climate: 'All air conditioners' };
 /** A pseudo-target in words: "All lights", "Everything in the Lounge"; null for a device id. */
@@ -234,6 +239,7 @@ export function pseudoLabel(id: string, rooms: Pick<Room, 'id' | 'name'>[]): str
   const m = PSEUDO.exec(id);
   if (!m) return null;
   if (m[1] === 'room') return `Everything in ${rooms.find(r => r.id === m[2])?.name ?? m[2]}`;
+  if (m[1] === 'zone') return `${rooms.find(r => r.id === m[2])?.name ?? m[2]} zone`;
   return TYPE_WORDS[m[2]!] ?? `All ${m[2]}s`;
 }
 /** Does this device match a "type:" word? "light" includes dimmers, "media" includes TVs (as the hub has it). */
@@ -249,6 +255,8 @@ export function pseudoTargets(devices: (Pick<Device, 'type' | 'room'> & { kind?:
   const r = rooms.filter(rm => settable.some(d => d.room === rm.id)).map(rm => ({ v: `room:${rm.id}`, label: `Everything in ${rm.name}` }));
   return [...t, ...r];
 }
+/** The "<Room> zone" targets: each room an air conditioner zone serves (confirmed in the unit's panel). */
+export const zoneTargets = zoneTargetOptions;
 
 /** What a type can usually do, for a group with no such device yet. */
 const TYPE_CAPS: Record<string, string[]> = {
@@ -260,6 +268,11 @@ const TYPE_CAPS: Record<string, string[]> = {
 export interface TargetInfo { id: string; label: string; caps: Set<string>; devices: Dev[]; type?: string; pseudo: boolean; missing: boolean }
 export function targetInfo(id: string, devices: Dev[], rooms: Pick<Room, 'id' | 'name'>[]): TargetInfo {
   const m = PSEUDO.exec(id);
+  // A room's zone: the zoned units serving it now are its devices; what it takes is the zone's fields (ZONE_FIELDS).
+  if (m && m[1] === 'zone') {
+    const units = devices.filter(d => !d.archived && (d.capabilities ?? []).includes('zones') && Object.values(d.zoneRooms ?? {}).some(rs => rs.includes(m[2]!)));
+    return { id, label: pseudoLabel(id, rooms)!, caps: new Set(['zone']), devices: units, type: 'zone', pseudo: true, missing: !rooms.some(r => r.id === m[2]) };
+  }
   if (m) {
     const list = devices.filter(d => canSet(d) && (m[1] === 'room' ? d.room === m[2] : typeMatch(d, m[2]!)));
     const caps = new Set<string>(list.flatMap(d => d.capabilities ?? []));
@@ -324,6 +337,11 @@ const levelMax = (devs: Dev[]) => { const m = Math.max(0, ...devs.map(d => Numbe
 /** How each field is edited, for this target. */
 export function fieldSpec(key: string, t: TargetInfo, cur?: unknown): CmdField {
   const choice = (label: string, icon: string, options: Opt[]): CmdField => ({ key, label, icon, kind: 'choice', options: typeof cur === 'string' ? withCurrent(options, cur) : options });
+  if (t.type === 'zone') {
+    if (key === 'on') return { key, label: 'Zone', icon: 'ac_unit', kind: 'bool', yes: 'Open', no: 'Closed' };
+    if (key === 'open') return { key, label: 'How far open', icon: 'tune', kind: 'number', min: 0, max: 100, step: 5, unit: '%' };
+    if (key === 'ac') return { key, label: 'Air conditioner', icon: 'power_settings_new', kind: 'bool', yes: 'On', no: 'Off' };
+  }
   switch (key) {
     case 'on': return { key, label: t.type === 'internet' ? 'Internet' : t.type === 'vacuum' ? 'Cleaning' : 'Power', icon: 'power_settings_new', kind: 'bool', yes: t.type === 'internet' ? 'Allowed' : t.type === 'vacuum' ? 'Clean' : 'On', no: t.type === 'internet' ? 'Paused' : t.type === 'vacuum' ? 'Dock' : 'Off' };
     case 'bri': return { key, label: 'Brightness', icon: 'brightness_6', kind: 'number', min: 1, max: 100, step: 5, unit: '%' };
@@ -359,6 +377,7 @@ export function fieldSpec(key: string, t: TargetInfo, cur?: unknown): CmdField {
 /** The fields this target can be set to, in order, with any the command already has (so nothing it holds is hidden). */
 export function fieldsFor(t: TargetInfo, cmd: Command = {}): CmdField[] {
   const c = cmd as Record<string, unknown>;
+  if (t.type === 'zone') return [...ZONE_FIELDS, ...Object.keys(c).filter(k => !(ZONE_FIELDS as readonly string[]).includes(k))].map(k => fieldSpec(k, t, c[k]));
   const keys: string[] = CMD_ORDER.filter(k => k in c || canDo(t.caps, k));
   for (const k of Object.keys(c)) if (!keys.includes(k)) keys.push(k);
   // Zones need zones to set; extras need named extras (from the device or the command).
@@ -417,6 +436,8 @@ export function mediaFromKey(k: string, prev: string | null | undefined): string
 export function fieldDefault(key: string, t: TargetInfo, sources: { name: string }[] = [], music: MusicItem[] = []): unknown {
   const now = (k: string) => t.devices.map(d => (d.state as Record<string, unknown> | undefined)?.[k]).find(v => v != null);
   const num = (k: string, d: number) => { const v = Number(now(k)); return Number.isFinite(v) && now(k) != null ? v : d; };
+  if (t.type === 'zone' && key === 'open') return 100;
+  if (t.type === 'zone' && key === 'ac') return true;
   switch (key) {
     case 'on': return true;
     case 'bri': return Math.max(1, Math.min(100, num('bri', 50)));
@@ -465,6 +486,7 @@ export function firstCommand(t: TargetInfo | Dev | undefined, sources: { name: s
 /** A few common settings as one tap ("Off", "On at 50%", "Play Rain"), for this target. Each replaces the command. */
 export function presets(t: TargetInfo, sources: { name: string }[], music: MusicItem[] = []): [Command, string][] {
   const c = t.caps, out: [Command, string][] = [];
+  if (t.type === 'zone') return ZONE_PRESETS.map(([z, label]) => [z as Command, label]);
   if (t.type === 'internet') return [[{ on: false }, 'Pause internet'], [{ on: true }, 'Allow internet']];
   if (t.type === 'vacuum') return [[{ on: true }, 'Clean'], [{ on: false }, 'Dock']];
   if (c.has('climate')) out.push([{ on: true, hvac: 'cool', target: 24 }, 'Cool to 24°'], [{ on: true, hvac: 'heat', target: 21 }, 'Heat to 21°']);
@@ -550,7 +572,8 @@ export function retarget(t: Targets, from: string, to: string, cmd: Command): Ta
 /** Keep what a command can carry over to a new target: the fields the new one can do. */
 export function carryCommand(cmd: Command, to: TargetInfo, sources: { name: string }[] = [], music: MusicItem[] = []): Command {
   const kept: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(cmd)) if (canDo(to.caps, k)) kept[k] = v;
+  for (const [k, v] of Object.entries(cmd)) if (to.type === 'zone' ? (ZONE_FIELDS as readonly string[]).includes(k) && k !== 'on' : canDo(to.caps, k)) kept[k] = v;
+  if (to.type === 'zone' && Object.keys(kept).length) return { on: true, ...kept } as Command;
   return Object.keys(kept).length ? kept as Command : firstCommand(to, sources, music);
 }
 
@@ -664,6 +687,22 @@ export function readingsFor(d: Dev | undefined, cur?: NumericField): Opt<Numeric
   const l = FIELDS.filter(f => ok(f.v));
   return l.length ? l : withCurrent(FIELDS, cur);
 }
+/** The readings a room has (logic for "room:<id>" sources): its temperature, humidity and light level, where it has them. */
+export const ROOM_FIELDS: NumericField[] = ['temp', 'humidity', 'lux'];
+export function roomReadingsFor(st: Pick<RoomStatus, 'temp' | 'humidity' | 'lux'> | undefined, cur?: NumericField): Opt<NumericField>[] {
+  const l = FIELDS.filter(f => ROOM_FIELDS.includes(f.v) && (f.v === cur || f.v === 'temp' || (st && st[f.v as 'temp' | 'humidity' | 'lux'] != null)));
+  return cur && !l.some(o => o.v === cur) ? [...l, { v: cur, label: labelOf(FIELDS, cur) }] : l;
+}
+/** Rooms a numeric trigger or condition can read: each one with a temperature now, as "<Room> temperature". */
+export function readingRooms(rooms: Pick<Room, 'id' | 'name'>[], status: Record<string, Pick<RoomStatus, 'temp'>> | undefined, cur?: string): Opt[] {
+  return rooms.filter(r => status?.[r.id]?.temp != null || cur === `room:${r.id}`).map(r => ({ v: `room:${r.id}`, label: `${r.name} temperature` }));
+}
+/** What a numeric trigger or condition reads, for its picker: a room ("Lounge"), else the device as usual. */
+export function readingSourceLabel(id: string, devices: Pick<Device, 'id' | 'name' | 'room'>[], rooms: Pick<Room, 'id' | 'name'>[]): string {
+  if (id.startsWith('room:')) return rooms.find(r => r.id === id.slice(5))?.name ?? id.slice(5);
+  return deviceLabel(id, devices, rooms);
+}
+
 /** A reading's unit, for the number boxes. */
 export const FIELD_UNIT: Record<NumericField, string> = { temp: '°C', target: '°C', power: 'W', energy: 'kWh', battery: '%', bri: '%', vol: '%', grid: 'W', load: 'W', humidity: '%', lux: 'lux', pm25: 'µg/m³' };
 
@@ -1110,6 +1149,8 @@ export interface Names {
 }
 const nm = (l: { id: string; name: string }[], id: string | undefined) => (id ? l.find(x => x.id === id)?.name ?? id : '');
 const dn = (n: Names, id: string) => pseudoLabel(id, n.rooms) ?? (id ? n.devices.find(d => d.id === id)?.name ?? id : 'a device');
+/** What a reading comes from, by name: a device, or a room ("room:lounge" → "Lounge"). */
+const sn = (n: Names, id: string) => id.startsWith('room:') ? nm(n.rooms, id.slice(5)) : dn(n, id);
 const range = (above?: number, below?: number) => above != null && below != null ? `between ${above} and ${below}` : above != null ? `above ${above}` : below != null ? `below ${below}` : '…';
 const forW = (s?: number) => (s ? ` for ${durWords(s)}` : '');
 const daysW = (days?: number[]) => { const w = daysWords(days); return w === 'every day' ? '' : w === 'weekdays' ? 'on weekdays' : w === 'weekends' ? 'at weekends' : `on ${w}`; };
@@ -1117,7 +1158,7 @@ const daysW = (days?: number[]) => { const w = daysWords(days); return w === 'ev
 export function triggerText(t: Trigger, n: Names): string {
   switch (t.kind) {
     case 'device': return `${dn(n, t.device)} ${t.to ? `turns ${matchWords(t.to)}` : `stops being ${matchWords(t.from)}`}${t.to && t.from ? ` from ${matchWords(t.from)}` : ''}${forW(t.forSec)}`;
-    case 'numeric': return `${dn(n, t.device)} ${FIELD_WORD[t.field] ?? t.field} goes ${range(t.above, t.below)}${forW(t.forSec)}`;
+    case 'numeric': return `${sn(n, t.device)} ${FIELD_WORD[t.field] ?? t.field} goes ${range(t.above, t.below)}${forW(t.forSec)}`;
     case 'event': return `${dn(n, t.device)} ${eventWords(t.event)}`;
     case 'time': return `at ${[rhythmWords(t.at), daysW(t.days)].filter(Boolean).join(' ')}`;
     case 'once': { const w = n.now ? onceWords(t.at, n.now) : t.at; return `once, ${w}${t.missed ? ' (missed)' : t.firedAt ? ' (done)' : ''}`; }
@@ -1136,7 +1177,7 @@ export function triggerText(t: Trigger, n: Names): string {
 export function conditionText(c: Condition, n: Names): string {
   switch (c.kind) {
     case 'device': return `${dn(n, c.device)} is ${matchWords(c.is)}`;
-    case 'numeric': return `${dn(n, c.device)} ${FIELD_WORD[c.field] ?? c.field} is ${range(c.above, c.below)}`;
+    case 'numeric': return `${sn(n, c.device)} ${FIELD_WORD[c.field] ?? c.field} is ${range(c.above, c.below)}`;
     case 'time': return [c.after && c.before ? `between ${rhythmWords(c.after)} and ${rhythmWords(c.before)}` : c.after ? `after ${rhythmWords(c.after)}` : c.before ? `before ${rhythmWords(c.before)}` : '', daysW(c.days)].filter(Boolean).join(' ') || 'any time';
     case 'presence': return c.who === 'anyone' ? (c.home ? 'someone’s home' : 'nobody’s home') : c.who === 'no-one' ? (c.home ? 'nobody’s home' : 'someone’s home') : `${nm(n.people, c.who)} is ${c.home ? 'home' : 'out'}`;
     case 'mode': return c.modes.length ? `in ${c.modes.map(m => nm(n.modes, m)).join(' or ')}` : 'in a mode (pick one)';
@@ -1149,6 +1190,7 @@ export function conditionText(c: Condition, n: Names): string {
 }
 
 export function targetText(id: string, cmd: Command, n: Names): string {
+  if (id.startsWith('zone:')) return `${dn(n, id)}: ${zoneCommandWords(cmd as ZoneCommand)}`;
   const z = n.devices.find(d => d.id === id)?.zoneNames;
   return `${dn(n, id)}: ${commandWords(cmd, z)}`;
 }
@@ -1201,7 +1243,7 @@ export interface DeviceSection { room: string; items: Opt[] }
 /** Devices to pick from, by room (rooms in the home's order), filtered by a search over name and room. */
 export function deviceSections(devices: Pick<Device, 'id' | 'name' | 'room' | 'type' | 'hidden'>[], rooms: Room[], q: string, only?: (d: Pick<Device, 'type' | 'capabilities'>) => boolean): DeviceSection[] {
   const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const name = (id: string) => rooms.find(r => r.id === id)?.name ?? (id || 'No room');
+  const name = (id: string) => rooms.find(r => r.id === id)?.name ?? (id === WHOLE_HOME ? WHOLE_HOME_NAME : id || 'No room');
   const order = (id: string) => { const i = rooms.findIndex(r => r.id === id); return i < 0 ? rooms.length : i; };
   const by = new Map<string, Opt[]>();
   for (const d of devices.filter(x => !only || only(x as Pick<Device, 'type' | 'capabilities'>)).sort((a, b) => order(a.room) - order(b.room) || a.name.localeCompare(b.name))) {

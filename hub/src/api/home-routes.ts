@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { Hub } from '../hub.ts';
-import { LOCATION_SOURCES, ROOM_ICONS, UNASSIGNED_ROOM, type HomeConfig, type HomeLocation, type LocationSource } from '../model/types.ts';
+import { LOCATION_SOURCES, ROOM_ICONS, UNASSIGNED_ROOM, WHOLE_HOME, type HomeConfig, type HomeLocation, type LocationSource } from '../model/types.ts';
 import { distanceKm, MapsError, PLACE_ID, sameClock, validZone } from '../services/maps.ts';
 import { groupDeviceId } from '../adapters/groups.ts';
 import { combinedDeviceId } from '../adapters/combined.ts';
@@ -149,13 +149,16 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
   });
 
   // ---------------------------------------------------------------- devices --
-  // room: a room id, "unassigned" for none of the home's rooms, or null for the room its integration gave it.
+  // room: a room id, "unassigned" for none of the home's rooms, "whole_home" for a device that serves the whole home
+  // (a ducted air conditioner), or null for the room its integration gave it.
+  // zoneRooms: ducted units, the rooms each zone serves ({ "1": ["lounge"], "5": ["office", "guest"] }; a room id alone
+  // is one room; [] or null clears that zone). Merged by zone, like zoneNames.
   // archived: out of every list, the assistant and alerts, and modes leave it alone, until it's restored.
-  app.patch<{ Params: { id: string }; Body: { name?: string | null; room?: string | null; hidden?: boolean; archived?: boolean; favourite?: boolean; watts?: number | null; zoneNames?: Record<string, string | null>; outdoor?: boolean | null; alerts?: AlertPrefs | null } }>('/api/devices/:id/settings', async (req, reply) => {
+  app.patch<{ Params: { id: string }; Body: { name?: string | null; room?: string | null; hidden?: boolean; archived?: boolean; favourite?: boolean; watts?: number | null; zoneNames?: Record<string, string | null>; zoneRooms?: Record<string, string | string[] | null> | null; outdoor?: boolean | null; alerts?: AlertPrefs | null } }>('/api/devices/:id/settings', async (req, reply) => {
     const d = hub.reg.get(req.params.id);
     if (!d) return bad(reply, 'Unknown device', 404);
     const b = req.body ?? {};
-    if (b.room != null && b.room !== UNASSIGNED_ROOM && !hub.config.get().rooms.some(r => r.id === b.room)) return bad(reply, 'Unknown room');
+    if (b.room != null && b.room !== UNASSIGNED_ROOM && b.room !== WHOLE_HOME && !hub.config.get().rooms.some(r => r.id === b.room)) return bad(reply, 'Unknown room');
     if (b.hidden !== undefined && typeof b.hidden !== 'boolean') return bad(reply, 'hidden must be true or false');
     if (b.archived !== undefined && typeof b.archived !== 'boolean') return bad(reply, 'archived must be true or false');
     if (b.name !== undefined && b.name !== null && !text(b.name)) return bad(reply, 'Give it a name');
@@ -169,6 +172,24 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
     if (b.zoneNames !== undefined) {
       if (!d.capabilities.includes('zones')) return bad(reply, `${d.name} has no zones`);
       if (!b.zoneNames || typeof b.zoneNames !== 'object' || Object.keys(b.zoneNames).some(n => !/^[1-9]\d?$/.test(n))) return bad(reply, 'zoneNames is { "1": "Living", … }');
+    }
+    let zoneRooms: Record<string, string[]> | null | undefined;
+    if (b.zoneRooms !== undefined) {
+      if (!d.capabilities.includes('zones')) return bad(reply, `${d.name} has no zones`);
+      if (b.zoneRooms === null) zoneRooms = null;
+      else {
+        if (typeof b.zoneRooms !== 'object' || Array.isArray(b.zoneRooms) || Object.keys(b.zoneRooms).some(n => !/^[1-9]\d?$/.test(n))) return bad(reply, 'zoneRooms is { "1": ["lounge"], … }');
+        const rooms = hub.config.get().rooms;
+        zoneRooms = {};
+        for (const [n, v] of Object.entries(b.zoneRooms)) {
+          const ids = v == null ? [] : Array.isArray(v) ? v : [v];
+          if (ids.some(x => typeof x !== 'string')) return bad(reply, `Zone ${n}: rooms are room ids`);
+          const bad1 = ids.find(x => !rooms.some(r => r.id === x));
+          if (bad1) return bad(reply, `Zone ${n}: unknown room ${bad1}`);
+          if (ids.length > 8) return bad(reply, `Zone ${n}: at most 8 rooms`);
+          zoneRooms[n] = [...new Set(ids as string[])];
+        }
+      }
     }
     return edit(c => {
       const s = { ...(c.devices?.[d.id] ?? {}) };
@@ -190,8 +211,15 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
       // Zone names merge: a name sets it, null or "" clears it.
       if (b.zoneNames) {
         const z = { ...(s.zoneNames ?? {}) };
-        for (const [n, v] of Object.entries(b.zoneNames)) { const t = v ? text(v, 30) : ''; if (t) z[n] = t; else delete z[n]; }
+        for (const [n, v] of Object.entries(b.zoneNames)) { const t = v ? text(v, 40) : ''; if (t) z[n] = t; else delete z[n]; }
         if (Object.keys(z).length) s.zoneNames = z; else delete s.zoneNames;
+      }
+      // Zone rooms merge by zone too: a list sets it, [] or null clears it; null for the whole map clears them all.
+      if (zoneRooms === null) delete s.zoneRooms;
+      else if (zoneRooms) {
+        const z = { ...(s.zoneRooms ?? {}) };
+        for (const [n, ids] of Object.entries(zoneRooms)) { if (ids.length) z[n] = ids; else delete z[n]; }
+        if (Object.keys(z).length) s.zoneRooms = z; else delete s.zoneRooms;
       }
       c.devices = { ...(c.devices ?? {}) };
       if (Object.keys(s).length) c.devices[d.id] = s; else delete c.devices[d.id];
@@ -218,7 +246,7 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
     if (!name) return bad(reply, 'Give the room a name');
     const rooms = hub.config.get().rooms;
     let id = slug(name) || 'room', n = 2;
-    while (rooms.some(r => r.id === id) || id === UNASSIGNED_ROOM || id === 'order') id = `${slug(name) || 'room'}_${n++}`;
+    while (rooms.some(r => r.id === id) || id === UNASSIGNED_ROOM || id === WHOLE_HOME || id === 'order') id = `${slug(name) || 'room'}_${n++}`;
     const icon = ROOM_ICONS.includes(String(req.body?.icon)) ? String(req.body!.icon) : 'meeting_room';
     return { id, ...edit(c => { c.rooms.push({ id, name, icon }); }) };
   });
@@ -264,6 +292,14 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
         const s = { ...(c.devices[d.id] ?? {}) };
         if (moveTo === orig) delete s.room; else s.room = moveTo;
         if (Object.keys(s).length) c.devices[d.id] = s; else delete c.devices[d.id];
+      }
+      // Zones that served it don't any more.
+      for (const [did, st] of Object.entries(c.devices)) {
+        if (!st.zoneRooms) continue;
+        const z = Object.fromEntries(Object.entries(st.zoneRooms).map(([n, rs]) => [n, rs.filter(r => r !== id)]).filter(([, rs]) => rs.length));
+        const next = { ...st };
+        if (Object.keys(z).length) next.zoneRooms = z; else delete next.zoneRooms;
+        if (Object.keys(next).length) c.devices[did] = next; else delete c.devices[did];
       }
       for (const [g, rooms] of Object.entries(c.groups)) c.groups[g] = rooms.filter(r => r !== id);
       // Speaker groups and combined devices that were in it are in no room now.

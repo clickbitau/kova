@@ -41,7 +41,7 @@ export interface DeviceState {
   display?: boolean;
   childLock?: boolean;
   /** Ducted air conditioners (`zones`): each zone's damper, on or off and how far open (0–100). */
-  zones?: { n: number; on: boolean; open: number | null }[] | null;
+  zones?: { n: number; on: boolean; open: number | null; /** The zone's own reading, on systems with a sensor per zone. */ temp?: number | null }[] | null;
   /** Grid power in W from a meter (positive importing, negative exporting) and whole-home use in W. */
   grid?: number | null;
   load?: number | null;
@@ -83,6 +83,10 @@ export interface Device {
   state: DeviceState;
   /** What the owner calls a ducted air conditioner's zones, by number. */
   zoneNames?: Record<string, string>;
+  /** Ducted air conditioners: the rooms each zone serves, as the owner confirmed them ({ "5": ["office", "guest"] }). */
+  zoneRooms?: Record<string, string[]>;
+  /** Ducted air conditioners: rooms Kova suggests for named zones not confirmed yet, from their names. */
+  zoneSuggest?: Record<string, string[]>;
   hidden?: boolean;
   /** Archived by the owner: out of every list, Ask Kova and alerts; modes leave it alone. Customise home → Archived restores it. */
   archived?: boolean;
@@ -153,6 +157,21 @@ export interface SensorView {
 export interface RoomStatus {
   temp: number | null; humidity: number | null; lux: number | null; tempFrom: string[]; outdoor: boolean; active: boolean; occupied: boolean;
   last: { kind: string; at: number; atLabel: string; device: string; what: string } | null; open: string[]; sensors: number;
+  /** The air conditioner zones that serve the room (missing on older hubs). */
+  zones?: RoomZone[];
+}
+export type HvacMode = 'cool' | 'heat' | 'dry' | 'fan' | 'auto';
+export type FanSpeed = 'auto' | 'quiet' | 'low' | 'medium' | 'high' | 'turbo';
+/** One air conditioner zone as a room shows it: the zone, the unit it's on, and a sensible way to turn that unit on for the room (hub util/zones.ts). */
+export interface RoomZone {
+  device: string; deviceName: string; n: number;
+  /** What the owner calls it, else "Zone n". */
+  name: string;
+  on: boolean; open: number | null; temp: number | null;
+  /** Every room the zone serves (this one among them). */
+  rooms: string[];
+  ac: { on: boolean; hvac: HvacMode | null; target: number | null; temp: number | null; fanSpeed: FanSpeed | null; online: boolean };
+  suggest: { hvac: HvacMode; target: number };
 }
 export type AlertWhen = 'always' | 'away' | 'never';
 /** One camera or sensor event, newest first, with its kept picture. */

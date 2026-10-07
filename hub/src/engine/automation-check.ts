@@ -1,6 +1,7 @@
 import type { Action, Automation, Command, Condition, Device, HomeConfig, NumericField, RoomEventKind, RunMode, StateMatch, Trigger } from '../model/types.ts';
 import { cleanTarget, isRhythmShape, rhythm } from './validate.ts';
 import { FIELD_CAP, PSEUDO_TARGET } from '../util/describe.ts';
+import { cleanZoneCommand } from '../util/zones.ts';
 import { LOCAL_STAMP, localStamp, stampAt } from '../util/time.ts';
 
 // Checks an automation someone made or edited, against the home it's for, and cleans it: only known fields,
@@ -77,6 +78,22 @@ function range(t: Record<string, unknown>, what: string) {
   return { above, below };
 }
 const field = (v: unknown): NumericField => (FIELDS.includes(v as NumericField) ? v as NumericField : fail(`${v} isn’t a reading Kova can compare`));
+/** Readings a room has (from its sensors, a device there, or for temperature the zone serving it). */
+export const ROOM_FIELDS: NumericField[] = ['temp', 'humidity', 'lux'];
+
+/** What a numeric trigger or condition reads: a device, or "room:<id>" for the room's own reading. */
+function numericSource(x: CheckCtx, t: Record<string, unknown>, role: string): { device: string; field: NumericField } {
+  const f = field(t.field);
+  // { room: "lounge" } is said as the device "room:lounge".
+  const id = typeof t.room === 'string' && t.room && !t.device ? `room:${t.room}` : t.device;
+  const rm = typeof id === 'string' ? /^room:(.+)$/.exec(id) : null;
+  if (rm) {
+    if (!x.cfg.rooms.some(r => r.id === rm[1])) fail(`Unknown room ${rm[1]} (${role})`);
+    if (!ROOM_FIELDS.includes(f)) fail(`A room has a temperature, humidity and light level, not ${f}`);
+    return { device: id as string, field: f };
+  }
+  return { device: device(x, id, role), field: f };
+}
 
 /**
  * Near misses read as what they plainly mean: a bare rhythm ("sunset", "21:00", {kind:'sun', …}, {kind:'prayer', …})
@@ -130,7 +147,7 @@ export function checkTrigger(v0: unknown, x: CheckCtx): Trigger {
       if (!to && !from) fail('A device trigger needs a state to turn to (or from)');
       return { kind: 'device', device: device(x, t.device, 'the trigger'), ...(to ? { to } : {}), ...(from ? { from } : {}), ...(forSec ? { forSec } : {}) };
     }
-    case 'numeric': return { kind: 'numeric', device: device(x, t.device, 'the trigger'), field: field(t.field), ...range(t, 'The trigger'), ...(forSec ? { forSec } : {}) };
+    case 'numeric': return { kind: 'numeric', ...numericSource(x, t, 'the trigger'), ...range(t, 'The trigger'), ...(forSec ? { forSec } : {}) };
     case 'event': {
       if (typeof t.event !== 'string' || !t.event.trim()) fail('Choose the event');
       return { kind: 'event', device: device(x, t.device, 'the trigger'), event: (t.event as string).trim() };
@@ -189,7 +206,7 @@ export function checkCondition(v0: unknown, x: CheckCtx, depth = 0): Condition {
   const c = obj(v, 'A condition');
   switch (c.kind) {
     case 'device': return { kind: 'device', device: device(x, c.device, 'a condition'), is: stateMatch(c.is, 'A condition') };
-    case 'numeric': return { kind: 'numeric', device: device(x, c.device, 'a condition'), field: field(c.field), ...range(c, 'A condition') };
+    case 'numeric': return { kind: 'numeric', ...numericSource(x, c, 'a condition'), ...range(c, 'A condition') };
     case 'time': {
       const after = c.after === undefined ? undefined : (rhythm(c.after) ?? fail('The “after” time isn’t valid — use "HH:MM", a sun event like "sunset", or a prayer like "isha"', `You sent after:${show(c.after)}. Send {kind:'time', after:'22:00'} or {kind:'time', after:{kind:'sun', event:'sunset', offsetMin:-15}}.`));
       const before = c.before === undefined ? undefined : (rhythm(c.before) ?? fail('The “before” time isn’t valid — use "HH:MM", a sun event like "sunset", or a prayer like "isha"', `You sent before:${show(c.before)}. Send {kind:'time', before:'06:00'} or {kind:'time', before:{kind:'sun', event:'sunrise'}}.`));
@@ -235,6 +252,12 @@ function checkTargets(t: Record<string, unknown>, x: CheckCtx, extra?: Record<st
     if (extra) c = { ...c, ...extra };
     // "type:light" / "room:lounge" — every matching device, now and later; each device keeps only what it can do at run time.
     const pm = PSEUDO_TARGET.exec(id);
+    // "zone:lounge" — the air conditioner zone serving that room, on whichever unit serves it when it runs.
+    if (pm && pm[1] === 'zone') {
+      if (!x.cfg.rooms.some(r => r.id === pm[2])) fail(`Unknown room in ${id}`);
+      out[id] = cleanZoneCommand(c) as unknown as Command;
+      continue;
+    }
     if (pm) {
       if (pm[1] === 'room' ? !x.cfg.rooms.some(r => r.id === pm[2]) : !DEVICE_TYPES.includes(pm[2]!)) fail(`Unknown ${pm[1]} target ${id}`, pm[1] === 'room' ? `Use 'room:<room id from the Rooms list>', e.g. 'room:${x.cfg.rooms[0]?.id ?? 'lounge'}'` : `Use 'type:' with one of ${DEVICE_TYPES.join(', ')}, e.g. 'type:light'`);
       const cleaned: Record<string, unknown> = {};

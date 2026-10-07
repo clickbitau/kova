@@ -66,7 +66,7 @@ const SCENARIOS: Record<string, Scenario> = {
       say('Named the four zones. The AC is cooling to 22° with only Theatre and Master open.'),
     ],
     check: (h, r, sent) => {
-      assert.deepEqual(h.hub.config.get().devices!.ducted_ac!.zoneNames, { 1: 'Living', 2: 'Theatre', 3: 'Master', 4: 'Office' });
+      assert.deepEqual(h.hub.config.get().devices!.ducted_ac!.zoneNames, { 1: 'Living', 2: 'Theatre', 3: 'Master', 4: 'Office', 5: 'Office & Guest', 6: 'Music' });
       const ac = h.hub.reg.get('ducted_ac')!;
       assert.equal(ac.state.hvac, 'cool');
       assert.equal(ac.state.target, 22);
