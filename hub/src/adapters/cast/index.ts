@@ -1,14 +1,16 @@
 import mdns from 'multicast-dns';
 import { findCastGroups } from '../../services/lan-find.ts';
-import type { Adapter, AdapterContext, AdapterStatus, Clip, Queue, QueueTrack } from '../sdk.ts';
+import type { Adapter, AdapterContext, AdapterStatus, Clip, NativeGroup, PlaybackPosition, Queue, QueueTrack } from '../sdk.ts';
+import { partition } from '../../engine/group-sync.ts';
 import { mmss } from '../../devices/registry.ts';
 import type { Command, Device, DeviceState, Track } from '../../model/types.ts';
 import { CastChannel, NS, type CastMessage } from './channel.ts';
 
 // Google Cast speakers, displays and TVs (Nest Audio, Nest Hub, Chromecast…).
 // Perfect multi-room sync comes from Cast groups: when several speakers are
-// told to play the same thing at once, Kova plays it on the Cast group whose
-// members are exactly those speakers, and the speakers keep themselves in sync.
+// told to play the same thing at once, Kova plays it on the Cast groups whose
+// members are exactly some of those speakers (the fewest streams), and the
+// speakers in each keep themselves in sync. The rest play on their own.
 
 const DEFAULT_RECEIVER = 'CC1AD845';
 
@@ -249,6 +251,47 @@ class Receiver {
     } catch { /* the poll reports what the receiver says */ }
   }
 
+  /** Where the queue is now, as the receiver says (its place to the ms, and when that was true). */
+  async position(): Promise<PlaybackPosition | null> {
+    if (!this.transport) {
+      const { app } = await this.status();
+      if (!app || app.isIdleScreen) return null;
+      this.ch.connectTo(app.transportId);
+      this.transport = app.transportId;
+    }
+    const t0 = Date.now();
+    const m = await this.ch.request(NS.media, this.transport, { type: 'GET_STATUS' });
+    const t1 = Date.now();
+    const st = (m.data.status as MediaStatus[] | undefined)?.[0];
+    if (!st) return null;
+    this.onStatus(st);
+    const qu = this.queue;
+    return {
+      index: qu?.index ?? 0, positionMs: Math.round((st.currentTime ?? 0) * 1000), at: Math.round((t0 + t1) / 2), playing: st.playerState === 'PLAYING',
+      ...(qu?.q.tracks[qu.index]?.durationMs ? { durationMs: qu.q.tracks[qu.index]!.durationMs } : {}), seekStepMs: 1,
+    };
+  }
+
+  /** To a song in the queue (its place in Kova's queue), `sec` into it: a seek in the same song, a jump within what the receiver holds, else a reload from there. */
+  async seekTo(index: number, sec: number): Promise<void> {
+    const qu = this.queue;
+    if (!qu) throw new Error(`${this.ep.name} isn’t playing a queue`);
+    if (index < 0 || index >= qu.q.tracks.length) throw new Error(`${qu.q.label} has no song ${index + 1}`);
+    if (qu.session != null && this.transport && index === qu.index) {
+      await this.ch.request(NS.media, this.transport, { type: 'SEEK', mediaSessionId: qu.session, currentTime: sec, resumeState: 'PLAYBACK_START' });
+      qu.position = sec;
+      return;
+    }
+    if (qu.session != null && this.transport && index > qu.index && index < qu.to) {
+      await this.ch.request(NS.media, this.transport, { type: 'QUEUE_UPDATE', mediaSessionId: qu.session, jump: index - qu.index, currentTime: sec });
+      qu.index = index;
+      qu.position = sec;
+      this.onTrack?.();
+      return;
+    }
+    await this.playQueue(qu.q, index, sec);
+  }
+
   async stop(): Promise<void> {
     const { app } = await this.status();
     if (app && !app.isIdleScreen) await this.ch.request(NS.receiver, 'receiver-0', { type: 'STOP', sessionId: app.sessionId });
@@ -477,17 +520,22 @@ export class CastAdapter implements Adapter {
         await r.playQueue(q);
       };
       queue?.catch(() => {});
+      // The Cast groups among these speakers that leave the fewest streams; the rest play on their own.
       const ids = ps.map(p => this.speakerId(p.device));
-      const gid = ps.length > 1 ? this.groupFor(ids) : undefined;
-      if (gid) {
-        jobs.push(run(ps, async () => {
-          await Promise.all(ps.filter(p => p.cmd.vol != null).map(p => this.receivers.get(this.speakerId(p.device))!.volume(p.cmd.vol! / 100)));
-          await start(this.receivers.get(gid)!);
-          for (const id of ids) { this.viaGroup.set(id, gid); this.receivers.get(id)!.media = media; }
-          return playedQueue(this.receivers.get(gid)!);
-        }));
-      } else {
-        for (const p of ps) jobs.push(run([p], async () => {
+      const parts = ps.length > 1 ? partition(ids, this.castGroups()) : [{ ids }];
+      for (const part of parts) {
+        const gid = part.native?.id;
+        if (gid) {
+          const gps = ps.filter(p => part.ids.includes(this.speakerId(p.device)));
+          jobs.push(run(gps, async () => {
+            await Promise.all(gps.filter(p => p.cmd.vol != null).map(p => this.receivers.get(this.speakerId(p.device))!.volume(p.cmd.vol! / 100)));
+            await start(this.receivers.get(gid)!);
+            for (const id of part.ids) { this.viaGroup.set(id, gid); this.receivers.get(id)!.media = media; }
+            return playedQueue(this.receivers.get(gid)!);
+          }));
+          continue;
+        }
+        for (const p of ps.filter(x => part.ids.includes(this.speakerId(x.device)))) jobs.push(run([p], async () => {
           const r = this.receivers.get(this.speakerId(p.device))!;
           if (p.cmd.vol != null) await r.volume(p.cmd.vol / 100);
           await start(r);
@@ -670,6 +718,33 @@ export class CastAdapter implements Adapter {
       ? `resumed ${snap.queue.q.label}${snap.queue.q.tracks[snap.queue.index] ? ` (${snap.queue.q.tracks[snap.queue.index]!.title}${pos >= 1 ? ` at ${mmss(pos)}` : ''})` : ''}${snap.paused ? ', paused' : ''}`
       : `back to ${snap.stream!.title}${snap.paused ? ', paused' : ''}`;
     return { words, state: { on: true, media: target.media, paused: !!snap.paused, track: target.track, shuffle: target.queue ? target.queue.q.shuffle : false } };
+  }
+
+  /** The Cast groups whose members are known, by Cast ids (for partition()). */
+  private castGroups(): NativeGroup[] {
+    return [...this.groups].filter(([, m]) => m.size >= 2).map(([id, m]) => ({ via: 'cast', id, name: this.receivers.get(id)?.ep.name ?? id, members: [...m] }));
+  }
+
+  /** Cast groups made in Google Home, as native groups for Kova's speaker groups (member Kova device ids). */
+  nativeGroups(): NativeGroup[] {
+    return this.castGroups().map(g => ({ ...g, members: g.members.map(s => this.kovaId(s)) }));
+  }
+
+  /** The receiver that plays this speaker now: the Cast group it plays through, or itself. */
+  private playerFor(device: Device): Receiver | undefined {
+    const id = this.speakerId(device);
+    return this.receivers.get(this.viaGroup.get(id) ?? id);
+  }
+
+  async playbackPosition(device: Device): Promise<PlaybackPosition | null> {
+    const r = this.playerFor(device);
+    return r ? r.position() : null;
+  }
+
+  async syncTo(device: Device, to: { index: number; positionMs: number }): Promise<void> {
+    const r = this.playerFor(device);
+    if (!r) throw new Error(`${device.name} isn’t reachable`);
+    await r.seekTo(to.index, Math.max(0, to.positionMs) / 1000);
   }
 
   /** Cast groups Kova can use for synced playback, with their member device ids. */

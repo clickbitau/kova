@@ -11,6 +11,7 @@ import { clock, localDate, atLocal } from '../util/time.ts';
 import { hardwareSummary, hasHardware } from '../util/hardware.ts';
 import { isCamera, isDoorbell, isSensor, reading, type ReadingField } from '../util/sensors.ts';
 import { allows, canDevice, currentActor, demand, needs, type Perm } from '../services/actor.ts';
+import { mergeOffsets, OFFSET_LIMIT_MS, type GroupSync } from '../engine/group-sync.ts';
 
 /** A time still to come: "at 9pm", "at 21:30", "in 20 minutes", "in an hour", "tomorrow", "tonight at", "later". */
 export const LATER = /\b(at \d{1,2}(:\d{2})? ?(am|pm)|at \d{1,2}:\d{2}|at (noon|midnight)|in (\d+|an?|half an?) (min|mins|minutes?|hours?|hrs?)|tomorrow|tonight at|later (today|on|tonight)|on (mon|tues|wednes|thurs|fri|satur|sun)day)\b/;
@@ -66,7 +67,13 @@ export type Intent =
    * "why do you suggest moving Thunderstorm?", "apply the bedroom LED suggestion", "what have you learned?": what Kova
    * learned from what people do (engine/learn.ts). `id` is the suggestion meant, null when none or several match.
    */
-  | { kind: 'suggestion'; op: 'why' | 'apply' | 'list'; id: string | null };
+  | { kind: 'suggestion'; op: 'why' | 'apply' | 'list'; id: string | null }
+  /**
+   * "Ray is late", "the office speaker is about half a second behind", "sync the speakers": a speaker group's timing
+   * (engine/group-sync.ts). `device` is the speaker named (null: the speakers in general), `group` the group it's in,
+   * `deltaMs` how much earlier (+) it should play, when an amount was said.
+   */
+  | { kind: 'groupSync'; group: string | null; device: string | null; label: string; late: boolean | null; deltaMs: number | null };
 
 /** A follow-up the user can tap, executed by POST /api/ask/act. */
 export type AskAction =
@@ -77,7 +84,11 @@ export type AskAction =
   /** A room's AC on or off, by the room-AC policy (engine/room-climate.ts). */
   | { type: 'roomAc'; room: string; on: boolean; done: string }
   /** Apply something Kova learned from what people do (a learned suggestion's id). */
-  | { type: 'suggestion'; id: string };
+  | { type: 'suggestion'; id: string }
+  /** A speaker group part's timing to `ms` (+ earlier): "Ray is half a second behind", confirmed. */
+  | { type: 'groupOffset'; group: string; part: string; ms: number; done: string }
+  /** Open a speaker group's timing (its sync test and sliders): the apps do it; the hub only says where. */
+  | { type: 'tune'; group: string; device: string };
 
 export interface AskReply {
   text: string; source: Source; actions: { label: string; action: AskAction }[]; undo?: string; understood: boolean;
@@ -145,6 +156,45 @@ export class Assistant {
 
   /** What Kova learned from what people do (set by the hub): "why do you suggest that?", "apply it". */
   learner: Learner | null = null;
+
+  /** Speaker groups' timing (set by the hub): "Ray is late", "sync the speakers". */
+  groupSync: GroupSync | null = null;
+
+  /**
+   * "Ray is late", "the office is about 200 ms behind", "Ray's a bit early", "sync the speakers", "the speakers echo".
+   * Only when a speaker group plays something alongside a part (or the speakers' sync in general is asked about).
+   */
+  private groupSyncIntent(raw: string, t: string): Intent | null {
+    const groups = this.config.get().speakerGroups ?? [];
+    if (!groups.length || !this.groupSync) return null;
+    const late = /\b(late|behind|lagging|lags|delayed|after the others|trailing)\b/.test(t);
+    const early = /\b(early|ahead|too soon|before the others|rushing)\b/.test(t);
+    const general = /\b(sync|synch?ronis(e|ed|ing)|synch?roniz(e|ed|ing)|in time|line up|echo(es|ing|y)?)\b/.test(t) && /\b(speakers?|music|sound|audio|whole home|group|groups)\b/.test(t);
+    if (!late && !early && !general) return null;
+    // The speaker named: a member of a group (its name, or its room's name with "speaker"), the longest match.
+    const members = new Map<string, string[]>();
+    for (const g of groups) for (const m of g.members) members.set(m, [...(members.get(m) ?? []), g.id]);
+    let best: { id: string; len: number } | null = null;
+    for (const id of members.keys()) {
+      const d = this.reg.get(id);
+      if (!d) continue;
+      for (const n of [norm(d.name), `${norm(this.roomName(d.room))} speaker`]) {
+        if (n.length >= 3 && new RegExp(`\\b${n.replace(/[^a-z0-9 ]/g, '')}\\b`).test(t) && (!best || n.length > best.len)) best = { id, len: n.length };
+      }
+    }
+    if (!best && !general) return null;
+    const named = groups.find(g => new RegExp(`\\b${norm(g.name)}\\b`).test(t));
+    const inGroups = best ? members.get(best.id)! : [];
+    const group = named && (!best || inGroups.includes(named.id)) ? named.id : inGroups.length === 1 ? inGroups[0]! : inGroups.length ? (inGroups.find(gid => this.groupSync!.plan(groups.find(x => x.id === gid)!).some(p => !p.reference && p.members.includes(best!.id))) ?? null) : groups.length === 1 ? groups[0]!.id : null;
+    // How much: "200 ms", "0.3 s", "half a second", "a quarter of a second", "a second", "a bit".
+    const n = raw.match(/(\d+(?:[.,]\d+)?)\s*(ms|msec|milliseconds?|millis?)\b/) ?? null;
+    const s2 = raw.match(/(\d+(?:[.,]\d+)?)\s*(s|secs?|seconds?)\b/) ?? null;
+    let deltaMs: number | null = n ? Number(n[1]!.replace(',', '.')) : s2 ? Number(s2[1]!.replace(',', '.')) * 1000
+      : /\bhalf (a |of a )?sec(ond)?\b/.test(t) ? 500 : /\bquarter (of )?(a )?sec(ond)?\b/.test(t) ? 250 : /\btenth (of )?(a )?sec(ond)?\b/.test(t) ? 100
+      : /\b(a|one) sec(ond)?\b/.test(t) ? 1000 : /\b(a (little )?bit|slightly|a little|a touch|just)\b/.test(t) ? 50 : null;
+    if (deltaMs != null) deltaMs = Math.round(deltaMs / 10) * 10;
+    return { kind: 'groupSync', group, device: best?.id ?? null, label: best ? this.reg.get(best.id)!.name : 'The speakers', late: late ? true : early ? false : null, deltaMs };
+  }
 
   constructor(private engine: Engine, private reg: Registry, private config: ConfigStore) {}
 
@@ -377,6 +427,10 @@ export class Assistant {
     if (LATER.test(raw) && !/^(what|whats|what's|when|is|are|anything)\b/.test(raw)) return null;
     // A message that is only a greeting — "hey turn the lights on" still parses as a command.
     if (/^(hi+|hello+|hey+|yo|hiya|howdy|morning|good (morning|afternoon|evening))( there)?( kova)?$/.test(t)) return { kind: 'greeting' };
+    // A speaker group's timing ("Ray is about half a second behind the others"): before the length check, which
+    // "behind the others" or "after the kitchen" would otherwise trip.
+    const gsync = norm(q).split(' ').length <= 16 ? this.groupSyncIntent(raw, t) : null;
+    if (gsync) return gsync;
     // Only short, direct commands and questions from here: anything longer, conditional or explained is the AI's.
     if (notDirect(q)) return null;
     // "is the garage door open?", "is the front door closed"
@@ -537,6 +591,7 @@ export class Assistant {
       case 'zone': return [i.what, `${i.label} zone`];
       case 'acWhere': return [i.on ? 'Turn on' : 'Turn off', 'The AC', 'Which room?'];
       case 'suggestion': return [i.op === 'apply' ? 'Apply' : i.op === 'list' ? 'What Kova learned' : 'Why', i.op === 'list' ? 'From what you do' : 'A suggestion'];
+      case 'groupSync': return ['Speaker timing', i.label, ...(i.deltaMs != null && i.late !== null ? [`${i.late ? '+' : '−'}${i.deltaMs} ms`] : [])];
     }
   }
 
@@ -571,6 +626,7 @@ export class Assistant {
         }
         return reply(this.learner!.explain(s.id) ?? s.finding.body, src, { actions: [{ label: s.finding.fix, action: { type: 'suggestion', id: s.id } }] });
       }
+      case 'groupSync': return this.groupSyncReply(i, reply);
       case 'learn':
         return reply(`Got it. “${i.name}” will mean ${list(i.roomNames)}.`, 'Built-in · nothing left your home', { actions: [{ label: 'Remember that', action: { type: 'learnGroup', name: i.name, rooms: i.rooms } }] });
       case 'unknownLabel':
@@ -758,6 +814,47 @@ export class Assistant {
     return reply(`${what} ${where} today.${before ? ` The last was ${WORDS[before.kind]?.[0] ?? before.kind} ${localDate(before.at, tz) === localDate(t - 86400_000, tz) ? 'yesterday' : `on ${new Date(before.at).toLocaleDateString('en-AU', { weekday: 'long', timeZone: tz })}`} at ${clock(before.at, tz)}.` : ''}`);
   }
 
+  /** "Ray is late": where Ray plays in its group, and the change to its timing, to confirm; or how to tune. */
+  private groupSyncReply(i: Extract<Intent, { kind: 'groupSync' }>, reply: (text: string, source: Source, extra?: Partial<AskReply>) => AskReply): AskReply {
+    const src: Source = 'Built-in · nothing left your home';
+    const groups = this.config.get().speakerGroups ?? [];
+    const canTune = allows(currentActor(), 'home');
+    const fmt = (ms: number) => `${ms > 0 ? '+' : ms < 0 ? '−' : ''}${Math.abs(ms)} ms`;
+    const tuneOf = (gid: string) => ({ label: 'Open the timing', action: { type: 'tune' as const, group: gid, device: `group_${gid}` } });
+    const g = i.group ? groups.find(x => x.id === i.group) : undefined;
+    if (!g) {
+      const mixed = groups.filter(x => this.groupSync!.plan(x).length > 1);
+      if (!mixed.length) return reply('Every speaker group plays as one native group (a Cast group, or Sonos speakers together), so they’re already in perfect sync. Timing is only needed for speakers played alongside one.', src);
+      return reply(`Which group? ${list(mixed.map(x => x.name))} ${mixed.length === 1 ? 'has' : 'have'} speakers played alongside. Open one, then Timing, to run the sync test.`, src, { actions: canTune ? mixed.slice(0, 3).map(x => ({ ...tuneOf(x.id), label: `Tune ${x.name}` })) : [] });
+    }
+    const parts = this.groupSync!.plan(g), view = this.groupSync!.view(g.id)!;
+    const ref = parts[0]!, alongside = parts.filter(p => !p.reference);
+    const how = `${g.name} plays ${ref.kind === 'native' ? `${ref.name} as one ${ref.via === 'cast' ? 'Cast group' : 'group'}, in perfect sync` : `${ref.name} as the main speaker`}${alongside.length ? `, and ${list(alongside.map(p => p.name))} alongside` : ''}.`;
+    if (!alongside.length) return reply(`${how} There’s nothing to tune: one stream, kept in sync by the speakers themselves.`, src);
+    let part = i.device ? parts.find(p => p.members.includes(i.device!)) : undefined;
+    let late = i.late;
+    // A speaker of the main part: the others follow it, so move the one played alongside the other way.
+    if (part?.reference && alongside.length === 1 && late !== null) { part = alongside[0]; late = !late; }
+    if (!part || part.reference || !canTune || late === null) {
+      const p0 = part && !part.reference ? part : alongside[0]!, near = view.parts.find(x => x.key === p0.key)?.listenWith;
+      const tip = `Run the sync test: Kova plays a tick every second on every speaker, quietly. Stand between ${near ?? 'one of the main speakers'} and ${p0.name}, and move ${p0.name}’s slider until the ticks land together. Or tell me roughly, like “${p0.name} is about 200 ms behind”.`;
+      const lead = part?.reference ? `${i.label} is in ${ref.name}, which the others follow. ` : '';
+      return reply(`${lead}${how} ${canTune ? tip : 'An adult in the home can tune it (Timing, on the group).'}`, src, { actions: canTune ? [tuneOf(g.id)] : [] });
+    }
+    const was = view.parts.find(x => x.key === part!.key)?.offset ?? 0;
+    const delta = i.deltaMs ?? 50;
+    const want = was + (late ? delta : -delta);
+    const ms = Math.max(-OFFSET_LIMIT_MS, Math.min(OFFSET_LIMIT_MS, want));
+    const words = `${part.name} ${late ? 'earlier' : 'later'} by ${Math.abs(ms - was)} ms`;
+    const capped = ms !== want ? ` That’s as far as it goes (${OFFSET_LIMIT_MS} ms either way).` : '';
+    return reply(`${how} To play ${words}, its timing goes from ${fmt(was)} to ${fmt(ms)}.${capped}${i.deltaMs == null ? ' (A small step: say how far off it is for a bigger one.)' : ''} Shall I?`, src, {
+      actions: [
+        { label: `Set ${part.name} to ${fmt(ms)}`, action: { type: 'groupOffset', group: g.id, part: part.key, ms, done: `${part.name} now plays at ${fmt(ms)} in ${g.name}. Run the sync test to check it.` } },
+        tuneOf(g.id),
+      ],
+    });
+  }
+
   async act(a: AskAction): Promise<{ text: string; undo?: string }> {
     if (a.type === 'apply') { const r = await this.engine.applyMany(a.targets, { ...CAUSE, label: a.label }); return { text: a.done, undo: r.undo }; }
     if (a.type === 'overlay') return { text: a.done, undo: await this.engine.startOverlay(a.id, CAUSE) };
@@ -773,6 +870,19 @@ export class Assistant {
       const s = this.learner?.find(a.id);
       if (!s) return { text: 'That suggestion no longer applies.' };
       return { text: `${s.finding.done ?? 'Done'}.`, undo: this.engine.registerUndo(this.learner!.apply(a.id)) };
+    }
+    if (a.type === 'groupOffset') {
+      demand('home');
+      const g = (this.config.get().speakerGroups ?? []).find(x => x.id === a.group);
+      if (!g || !this.groupSync) return { text: 'That speaker group no longer exists.' };
+      const next = mergeOffsets(this.config.get().groupOffsets?.[g.id], { [a.part]: a.ms }, this.groupSync.plan(g));
+      const undo = this.config.update(c => { if (Object.keys(next).length) (c.groupOffsets ??= {})[g.id] = next; else if (c.groupOffsets) delete c.groupOffsets[g.id]; });
+      void this.groupSync.retune(g.id, [a.part]).catch(() => {});
+      return { text: a.done, undo: this.engine.registerUndo(undo) };
+    }
+    if (a.type === 'tune') {
+      const g = (this.config.get().speakerGroups ?? []).find(x => x.id === a.group);
+      return { text: g ? `Open ${g.name}, then Timing: the sync test and a slider for each speaker played alongside.` : 'That speaker group no longer exists.' };
     }
     if (a.type === 'learnGroup') {
       demand('home');

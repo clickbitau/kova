@@ -123,6 +123,39 @@ export function chimeWav(): Buffer {
 export const CHIME_MS = 1300;
 export const CHIME_FILE = 'chime.wav';
 
+export const SYNC_TEST_FILE = 'sync-test.wav';
+/** How long the speaker groups' sync test plays (its click track's length). */
+export const SYNC_TEST_MS = 180_000;
+
+/**
+ * The speaker groups' sync test click track (engine/group-sync.ts), made here like the chime (22 kHz mono WAV): a
+ * short sharp tick every second, and a lower, longer tone on each minute (0:00, 1:00, 2:00) so ticks a whole second
+ * apart can't be mistaken for each other.
+ */
+export function syncTestWav(secs = SYNC_TEST_MS / 1000, rate = 22050): Buffer {
+  const n = Math.round(secs * rate);
+  const pcm = Buffer.alloc(n * 2);
+  const add = (i: number, v: number) => { if (i < 0 || i >= n) return; const x = pcm.readInt16LE(i * 2) + Math.round(v * 32767); pcm.writeInt16LE(Math.max(-32767, Math.min(32767, x)), i * 2); };
+  for (let s = 0; s < secs; s++) {
+    const at = s * rate;
+    // The tick: a 3 kHz burst that dies away in a few ms (sharp, easy to place by ear).
+    for (let i = 0; i < Math.round(rate * 0.012); i++) add(at + i, 0.85 * Math.exp(-i / (rate * 0.0018)) * Math.sin(2 * Math.PI * 3000 * i / rate));
+    if (s % 60 !== 0) continue;
+    // The minute: 660 Hz for 250 ms, from the same instant as its tick.
+    const len = Math.round(rate * 0.25);
+    for (let i = 0; i < len; i++) {
+      const env = Math.min(1, i / (rate * 0.003), (len - i) / (rate * 0.02));
+      add(at + i, 0.5 * env * Math.sin(2 * Math.PI * 660 * i / rate));
+    }
+  }
+  const h = Buffer.alloc(44);
+  h.write('RIFF', 0); h.writeUInt32LE(36 + pcm.length, 4); h.write('WAVE', 8); h.write('fmt ', 12);
+  h.writeUInt32LE(16, 16); h.writeUInt16LE(1, 20); h.writeUInt16LE(1, 22); h.writeUInt32LE(rate, 24); h.writeUInt32LE(rate * 2, 28); h.writeUInt16LE(2, 32); h.writeUInt16LE(16, 34);
+  h.write('data', 36); h.writeUInt32LE(pcm.length, 40);
+  return Buffer.concat([h, pcm]);
+}
+
+
 /** A clip's name as the owner typed it, tidied. */
 const cleanName = (s: unknown) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, 60);
 
@@ -131,6 +164,7 @@ export class ClipError extends Error { constructor(message: string, readonly sta
 export class Clips {
   private list: Clip[] = [];
   private chime: Buffer | null = null;
+  private ticks: Buffer | null = null;
 
   constructor(private dir: string | null) {
     if (!dir) return;
@@ -192,6 +226,7 @@ export class Clips {
   /** The file behind `/api/clip/<file>`: a clip by its id and extension, or the chime. */
   file(name: string): { contentType: string; body: Buffer } | null {
     if (name === CHIME_FILE) return { contentType: 'audio/wav', body: this.chime ??= chimeWav() };
+    if (name === SYNC_TEST_FILE) return { contentType: 'audio/wav', body: this.ticks ??= syncTestWav() };
     const m = /^([0-9a-f]{24})\.([a-z0-9]{2,4})$/.exec(name);
     const c = m ? this.get(m[1]!) : undefined;
     if (!c || c.ext !== m![2] || !this.dir) return null;

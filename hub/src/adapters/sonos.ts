@@ -1,9 +1,11 @@
 import dgram from 'node:dgram';
-import type { Adapter, AdapterContext, AdapterStatus, AudioFormat, Clip, Queue, QueueTrack } from './sdk.ts';
+import type { Adapter, AdapterContext, AdapterStatus, AudioFormat, Clip, NativeGroup, PlaybackPosition, Queue, QueueTrack } from './sdk.ts';
 import { mmss } from '../devices/registry.ts';
 import type { Command, Device, DeviceState, Track } from '../model/types.ts';
 
 // Sonos speakers over their local UPnP/SOAP API on port 1400. No cloud, no account.
+// Speakers told to play the same thing at once are grouped on the fly (Sonos can group any of its speakers): the
+// first plays, the others join it (x-rincon:), and Sonos keeps them sample-locked.
 
 const AVT = 'urn:schemas-upnp-org:service:AVTransport:1';
 const RC = 'urn:schemas-upnp-org:service:RenderingControl:1';
@@ -55,7 +57,12 @@ export interface SonosOptions {
   discover?: boolean;
   /** Maps a Sonos room name to a Kova room id. Defaults to a lower-cased, underscored name. */
   roomFor?: (sonosRoom: string) => string;
+  /** Window in which plays are collected so speakers asked together are grouped (ms; 0: never grouped). */
+  batchMs?: number;
 }
+
+interface PendingPlay { s: Speaker; cmd: Command; resolve: (v: void | DeviceState) => void; reject: (e: unknown) => void }
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 export class SonosAdapter implements Adapter {
   id = 'sonos';
@@ -67,11 +74,23 @@ export class SonosAdapter implements Adapter {
   private poller: NodeJS.Timeout | null = null;
   private lastError: string | null = null;
   private opts: Required<Omit<SonosOptions, 'roomFor'>> & Pick<SonosOptions, 'roomFor'>;
+  /** Speakers following another (grouped by Kova to play with it) → the one they follow. */
+  private follows = new Map<string, string>();
+  private batch: PendingPlay[] = [];
+  private batchTimer: NodeJS.Timeout | null = null;
 
   constructor(opts: SonosOptions = {}) {
     const envHosts = process.env.KOVA_SONOS_HOSTS?.split(',').map(s => s.trim()).filter(Boolean) ?? [];
-    this.opts = { hosts: opts.hosts ?? envHosts, port: opts.port ?? 1400, pollMs: opts.pollMs ?? 5000, discover: opts.discover ?? true, roomFor: opts.roomFor };
+    this.opts = { hosts: opts.hosts ?? envHosts, port: opts.port ?? 1400, pollMs: opts.pollMs ?? 5000, discover: opts.discover ?? true, roomFor: opts.roomFor, batchMs: opts.batchMs ?? 40 };
   }
+
+  /** Any two or more Sonos speakers can play as one group. */
+  nativeGroups(): NativeGroup[] {
+    return this.speakers.size >= 2 ? [{ via: 'sonos', id: 'group', name: 'Sonos', members: [...this.speakers.keys()], dynamic: true }] : [];
+  }
+
+  /** The speaker whose transport plays for this one: the one it follows, or itself. */
+  private lead(s: Speaker): Speaker { const c = this.follows.get(s.id); return (c && this.speakers.get(c)) || s; }
 
   async start(ctx: AdapterContext): Promise<void> {
     this.ctx = ctx;
@@ -82,7 +101,7 @@ export class SonosAdapter implements Adapter {
     await this.poll();
   }
 
-  async stop(): Promise<void> { if (this.poller) clearInterval(this.poller); }
+  async stop(): Promise<void> { if (this.poller) clearInterval(this.poller); if (this.batchTimer) clearTimeout(this.batchTimer); }
 
   private base(host: string) { return host.includes(':') ? `http://${host}` : `http://${host}:${this.opts.port}`; }
 
@@ -145,8 +164,43 @@ export class SonosAdapter implements Adapter {
   async command(d: Device, cmd: Command): Promise<void | DeviceState> {
     const s = this.speakers.get(d.id);
     if (!s) throw new Error(`Unknown Sonos speaker ${d.id}`);
+    if (typeof cmd.media === 'string' && cmd.media && this.opts.batchMs > 0) {
+      return new Promise((resolve, reject) => {
+        this.batch.push({ s, cmd, resolve, reject });
+        this.batchTimer ??= setTimeout(() => void this.flush(), this.opts.batchMs);
+      });
+    }
+    return this.run(s, cmd);
+  }
+
+  /** Plays asked for together: one speaker plays, the others with the same thing join it as a Sonos group. */
+  private async flush(): Promise<void> {
+    this.batchTimer = null;
+    const plays = new Map<string, PendingPlay[]>();
+    for (const p of this.batch.splice(0)) { const k = `${p.cmd.media}\0${p.cmd.shuffle ? 1 : 0}`; plays.set(k, [...(plays.get(k) ?? []), p]); }
+    await Promise.all([...plays.values()].map(async ([first, ...rest]) => {
+      try { first!.resolve(await this.run(first!.s, first!.cmd)); } catch (e) { first!.reject(e); for (const p of rest) p.reject(e); return; }
+      await Promise.all(rest.map(async p => { try { p.resolve(await this.join(p.s, first!.s, p.cmd)); } catch (e) { p.reject(e); } }));
+    }));
+  }
+
+  /** A speaker joins another's group, playing what it plays in sync. */
+  private async join(s: Speaker, lead: Speaker, cmd: Command): Promise<DeviceState> {
+    if (cmd.vol != null) await this.soap(s.host, RC, 'SetVolume', { InstanceID: 0, Channel: 'Master', DesiredVolume: Math.round(cmd.vol) });
+    await this.soap(s.host, AVT, 'SetAVTransportURI', { InstanceID: 0, CurrentURI: `x-rincon:${lead.udn}`, CurrentURIMetaData: '' });
+    this.follows.set(s.id, lead.id);
+    s.media = lead.media; s.queue = null; s.paused = false;
+    const qu = lead.queue;
+    return qu ? { shuffle: qu.q.shuffle, track: shown(qu.q.tracks[qu.index]!), paused: false } : { paused: false };
+  }
+
+  private async run(s0: Speaker, cmd: Command): Promise<void | DeviceState> {
+    const s = s0;
+    // Playing, skipping, pausing: on the transport of the speaker it follows, if it's in a group Kova made.
+    const t = cmd.media ? s : this.lead(s);
     if (cmd.vol != null) await this.soap(s.host, RC, 'SetVolume', { InstanceID: 0, Channel: 'Master', DesiredVolume: Math.round(cmd.vol) });
     if (cmd.media) {
+      this.follows.delete(s.id);
       const url = this.ctx!.sourceUrl(cmd.media);
       if (url) {
         // A grouped speaker can't take its own source; make it stand alone first.
@@ -163,33 +217,88 @@ export class SonosAdapter implements Adapter {
         if (!q) throw new Error(`No stream URL set for “${cmd.media}”`);
         await this.playQueue(s, q);
       }
-    } else if (cmd.shuffle !== undefined && s.queue && cmd.shuffle !== s.queue.q.shuffle) {
+    } else if (cmd.shuffle !== undefined && t.queue && cmd.shuffle !== t.queue.q.shuffle) {
       // The same music in a new order (or back in order), carrying on with this song where it is.
-      const q = await this.ctx!.queueFor(s.queue.q.label, { shuffle: cmd.shuffle, format: sonosFormat(s) });
+      const q = await this.ctx!.queueFor(t.queue.q.label, { shuffle: cmd.shuffle, format: sonosFormat(t) });
       if (q) {
-        const cur = s.queue.q.tracks[s.queue.index];
-        const pos = secsOf(tag(await this.soap(s.host, AVT, 'GetPositionInfo', { InstanceID: 0 }), 'RelTime'));
-        const tracks = q.shuffle ? [cur, ...q.tracks.filter(t => t.id !== cur.id)] : q.tracks;
-        await this.playQueue(s, { ...q, tracks }, q.shuffle ? 0 : Math.max(0, q.tracks.findIndex(t => t.id === cur.id)), pos);
+        const cur = t.queue.q.tracks[t.queue.index];
+        const pos = secsOf(tag(await this.soap(t.host, AVT, 'GetPositionInfo', { InstanceID: 0 }), 'RelTime'));
+        const tracks = q.shuffle ? [cur, ...q.tracks.filter(x => x.id !== cur.id)] : q.tracks;
+        await this.playQueue(t, { ...q, tracks }, q.shuffle ? 0 : Math.max(0, q.tracks.findIndex(x => x.id === cur.id)), pos);
       }
     } else if (cmd.on === true) {
-      await this.soap(s.host, AVT, 'Play', { InstanceID: 0, Speed: 1 });
+      await this.soap(t.host, AVT, 'Play', { InstanceID: 0, Speed: 1 });
     }
-    if (cmd.skip) await this.skip(s, cmd.skip > 0 ? 1 : -1);
+    if (cmd.skip) await this.skip(t, cmd.skip > 0 ? 1 : -1);
     // Pause keeps the place (and the queue); resume carries on from it.
     if (cmd.paused !== undefined && cmd.on !== false && cmd.media !== null) {
-      await this.soap(s.host, AVT, cmd.paused ? 'Pause' : 'Play', { InstanceID: 0, ...(cmd.paused ? {} : { Speed: 1 }) });
+      await this.soap(t.host, AVT, cmd.paused ? 'Pause' : 'Play', { InstanceID: 0, ...(cmd.paused ? {} : { Speed: 1 }) });
+      t.paused = cmd.paused;
       s.paused = cmd.paused;
     }
     if (cmd.on === false || cmd.media === null) {
-      await this.soap(s.host, AVT, 'Pause', { InstanceID: 0 }).catch(() => this.soap(s.host, AVT, 'Stop', { InstanceID: 0 }));
+      // A speaker following another leaves its group (the rest play on); one on its own pauses.
+      if (t !== s) await this.soap(s.host, AVT, 'BecomeCoordinatorOfStandaloneGroup', { InstanceID: 0 }).catch(() => {});
+      else await this.soap(s.host, AVT, 'Pause', { InstanceID: 0 }).catch(() => this.soap(s.host, AVT, 'Stop', { InstanceID: 0 }));
+      this.follows.delete(s.id);
       s.media = null;
       s.queue = null;
       s.paused = false;
+      return;
     }
     // What the speaker now plays: whether it's shuffled, and the song.
-    if (s.queue) return { shuffle: s.queue.q.shuffle, track: shown(s.queue.q.tracks[s.queue.index]), paused: !!s.paused };
+    if (t.queue) return { shuffle: t.queue.q.shuffle, track: shown(t.queue.q.tracks[t.queue.index]), paused: !!t.paused };
     if (cmd.paused !== undefined) return { paused: !!s.paused };
+  }
+
+  /** One read of where the speaker's transport is: the track (1-based), seconds into it, its length, and when. */
+  private async readPos(s: Speaker): Promise<{ track: number; rel: number; dur: number; at: number }> {
+    const t0 = Date.now();
+    const x = await this.soap(s.host, AVT, 'GetPositionInfo', { InstanceID: 0 });
+    return { track: Number(tag(x, 'Track') ?? 0), rel: secsOf(tag(x, 'RelTime')), dur: secsOf(tag(x, 'TrackDuration')), at: Math.round((t0 + Date.now()) / 2) };
+  }
+
+  /**
+   * Where the queue is. Sonos says whole seconds only, so while it plays Kova reads again every 60 ms or so until
+   * the second ticks over: at that moment the place is exactly that second (to within half the gap between reads).
+   */
+  async playbackPosition(device: Device): Promise<PlaybackPosition | null> {
+    const s0 = this.speakers.get(device.id);
+    if (!s0) return null;
+    const s = this.lead(s0), qu = s.queue;
+    if (!qu) return null;
+    const state = tag(await this.soap(s.host, AVT, 'GetTransportInfo', { InstanceID: 0 }), 'CurrentTransportState') ?? '';
+    const playing = /PLAYING/.test(state);
+    const out = (r: { track: number; dur: number }, positionMs: number, at: number): PlaybackPosition => {
+      const index = r.track >= 1 ? qu.from + r.track - 1 : qu.index;
+      const durationMs = r.dur ? r.dur * 1000 : qu.q.tracks[index]?.durationMs;
+      return { index, positionMs, at, playing, ...(durationMs ? { durationMs } : {}), seekStepMs: 1000 };
+    };
+    let a = await this.readPos(s);
+    if (!playing) return out(a, a.rel * 1000, a.at);
+    const until = Date.now() + 1300;
+    while (Date.now() < until) {
+      await sleep(60);
+      const b = await this.readPos(s);
+      if (b.track === a.track && b.rel === a.rel + 1) return out(b, b.rel * 1000, Math.round((a.at + b.at) / 2));
+      if (b.track !== a.track || b.rel !== a.rel) return out(b, b.rel * 1000 + 500, b.at);
+      a = b;
+    }
+    return out(a, a.rel * 1000 + 500, a.at);
+  }
+
+  /** To a song in the queue, whole seconds into it (Sonos seeks no finer): within what the speaker holds, else a reload. */
+  async syncTo(device: Device, to: { index: number; positionMs: number }): Promise<void> {
+    const s0 = this.speakers.get(device.id);
+    if (!s0) throw new Error(`Unknown Sonos speaker ${device.id}`);
+    const s = this.lead(s0), qu = s.queue;
+    if (!qu) throw new Error(`${s.name} isn’t playing a queue`);
+    const secs = Math.max(0, Math.round(to.positionMs / 1000));
+    if (to.index < qu.from || to.index >= qu.to) { await this.playQueue(s, qu.q, to.index, secs); return; }
+    if (to.index !== qu.index) await this.soap(s.host, AVT, 'Seek', { InstanceID: 0, Unit: 'TRACK_NR', Target: to.index - qu.from + 1 });
+    if (secs > 0 || to.index === qu.index) await this.soap(s.host, AVT, 'Seek', { InstanceID: 0, Unit: 'REL_TIME', Target: hms(secs) });
+    await this.soap(s.host, AVT, 'Play', { InstanceID: 0, Speed: 1 });
+    qu.index = to.index;
   }
 
   private async skip(s: Speaker, delta: number): Promise<void> {
@@ -232,7 +341,9 @@ export class SonosAdapter implements Adapter {
         // The queue ran out, or someone played something else from the Sonos app.
         if (!playing && /STOPPED/.test(state)) s.queue = null;
         if (s.queue) await this.followQueue(s).catch(() => {});
-        const qu = s.queue;
+        // A speaker following another (a group Kova made) plays its song.
+        const lead = this.lead(s), qu = s.queue ?? (lead !== s ? lead.queue : null);
+        if (lead !== s && playing) s.media = lead.media;
         this.ctx!.report(s.id, {
           online: true, on: playing, paused: s.paused, media: playing ? s.media ?? 'Sonos' : null, vol: Number(tag(vo, 'CurrentVolume') ?? 0),
           track: playing && qu ? shown(qu.q.tracks[qu.index]) : null, shuffle: playing && qu ? qu.q.shuffle : false,
@@ -275,6 +386,7 @@ export class SonosAdapter implements Adapter {
     const s = this.speakers.get(device.id);
     if (!s) throw new Error(`Unknown Sonos speaker ${device.id}`);
     await this.soap(s.host, AVT, 'BecomeCoordinatorOfStandaloneGroup', { InstanceID: 0 }).catch(() => {});
+    this.follows.delete(s.id);
     const meta = '<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">'
       + `<item id="-1" parentID="-1" restricted="true"><res protocolInfo="http-get:*:${esc(clip.contentType)}:*">${esc(clip.url)}</res><dc:title>${esc(clip.title)}</dc:title><upnp:class>object.item.audioItem.musicTrack</upnp:class></item></DIDL-Lite>`;
     await this.soap(s.host, AVT, 'SetAVTransportURI', { InstanceID: 0, CurrentURI: clip.url, CurrentURIMetaData: meta });
@@ -301,6 +413,8 @@ export class SonosAdapter implements Adapter {
     }
     await this.soap(s.host, AVT, 'SetAVTransportURI', { InstanceID: 0, CurrentURI: snap.uri, CurrentURIMetaData: snap.meta });
     const queue = snap.uri.startsWith('x-rincon-queue:'), group = snap.uri.startsWith('x-rincon:');
+    const lead = group ? [...this.speakers.values()].find(x => x.udn === snap.uri.slice('x-rincon:'.length) && x !== s) : undefined;
+    if (lead) this.follows.set(s.id, lead.id); else this.follows.delete(s.id);
     const live = /^(x-rincon-mp3radio|x-sonosapi-stream|x-sonosapi-radio|x-sonosapi-hls|x-rincon-stream|aac|hls-radio):/.test(snap.uri);
     if (queue && snap.track > 0) await this.soap(s.host, AVT, 'Seek', { InstanceID: 0, Unit: 'TRACK_NR', Target: snap.track }).catch(() => {});
     const at = secsOf(snap.rel);

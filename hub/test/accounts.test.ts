@@ -210,6 +210,9 @@ const MATRIX: [string, string, unknown, ...(number | 'ok')[]][] = [
   ['PUT', '/api/home', { name: 'Home' }, 'ok', 403, 403, 403],
   ['POST', '/api/import/ha/apply', {}, 503, 403, 403, 403],
   ['POST', '/api/devices/doorbell/event', { type: 'ring' }, 'ok', 403, 403, 403],
+  // A speaker group's timing: adults tune it, children and guests don't.
+  ['PUT', '/api/speaker-groups/none/offsets', { offsets: {} }, 404, 404, 403, 403],
+  ['POST', '/api/speaker-groups/none/sync-test', {}, 404, 404, 403, 403],
 ];
 
 test('the role matrix: each role on the routes that matter', async () => {

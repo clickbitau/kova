@@ -6,6 +6,7 @@ import type { AskReply } from '../api/types';
 import { askKova, Cancelled, engineLine, followJob, mergeHistory, progressLines, sourceIcon, type AskHistory, type AskJob, type ChatMsg } from '../logic/ask';
 import { C, F, R, SP } from '../theme';
 import { useHub, useSnap } from '../state/hub';
+import { useNav } from '../navigation';
 import { isLight, plural } from '../logic/devices';
 import { Icon } from '../ui/Icon';
 import { Button, HScroll, Press } from '../ui/kit';
@@ -159,7 +160,11 @@ export function AskScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sent?.ask, sent?.at]);
 
+  const nav = useNav();
   const run = async (m: Msg, a: AskReply['actions'][number]) => {
+    // “Open the timing”: the group's timing screen, here in the app.
+    const ac = a.action as { type: string; group?: string };
+    if (ac.type === 'tune' && ac.group) { nav.navigate('GroupSync', { id: ac.group }); return true; }
     try {
       const r = await api<{ text: string; undo?: string }>('POST', '/api/ask/act', { action: a.action });
       setChat(c => [...c.map(x => x.id === m.id ? { ...x, actions: [] } : x), { id: `a${Date.now()}`, from: 'kova', text: r.text || 'Done.', src: 'Device control', undo: r.undo, ts: Date.now() }]);

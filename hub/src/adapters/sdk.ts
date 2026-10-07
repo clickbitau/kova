@@ -75,7 +75,26 @@ export interface Adapter {
    * in words what it did ("resumed Loved at 1:23"), with the state when it knows it.
    */
   restorePlayback?(device: Device, snap: unknown | null): Promise<{ words: string; state?: DeviceState }>;
+  /**
+   * Optional, for speaker groups (engine/group-sync.ts): sets of this adapter's speakers it can play as one stream in
+   * perfect sync. A fixed group (a Cast group made in Google Home) is only used for exactly its members; a dynamic one
+   * (Sonos, which can group any of its speakers on the fly) for any two or more of them. Members are Kova device ids.
+   */
+  nativeGroups?(): NativeGroup[];
+  /** Optional: where whatever plays this speaker (it, or the native group it plays through) is in its queue, now. */
+  playbackPosition?(device: Device): Promise<PlaybackPosition | null>;
+  /** Optional: move whatever plays this speaker to a place in its queue (a song, ms into it), to line it up with others. */
+  syncTo?(device: Device, to: { index: number; positionMs: number }): Promise<void>;
 }
+
+/** Speakers an adapter can play as one stream (see Adapter.nativeGroups). */
+export interface NativeGroup { via: string; id: string; name: string; members: string[]; dynamic?: boolean }
+
+/**
+ * Where a speaker is: the song (its place in Kova's queue), how far into it (ms), when that was true (Date.now() ms),
+ * whether it's playing, the song's length when known, and how finely it can seek (Sonos: whole seconds).
+ */
+export interface PlaybackPosition { index: number; positionMs: number; at: number; playing: boolean; durationMs?: number; seekStepMs?: number }
 
 /** A short piece of audio for a speaker to play once (an announcement). The URL needs no headers. */
 export interface Clip { url: string; title: string; contentType: string; durationMs?: number }

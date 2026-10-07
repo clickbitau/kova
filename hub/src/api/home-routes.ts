@@ -4,6 +4,7 @@ import type { Hub } from '../hub.ts';
 import { LOCATION_SOURCES, ROOM_ICONS, UNASSIGNED_ROOM, WHOLE_HOME, type HomeConfig, type HomeLocation, type LocationSource } from '../model/types.ts';
 import { distanceKm, MapsError, PLACE_ID, sameClock, validZone } from '../services/maps.ts';
 import { groupDeviceId } from '../adapters/groups.ts';
+import { mergeOffsets, pruneOffsets, SYNC_TEST_LEVEL } from '../engine/group-sync.ts';
 import { combinedDeviceId } from '../adapters/combined.ts';
 import { isPlayer } from '../util/describe.ts';
 import { slug } from '../tools/import-ha.ts';
@@ -391,13 +392,51 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
     return edit(c => {
       const g = (c.speakerGroups ?? []).find(x => x.id === req.params.id)!;
       if (name) g.name = name;
-      if (req.body?.members) g.members = [...new Set(req.body.members.map(String))];
+      if (req.body?.members) {
+        g.members = [...new Set(req.body.members.map(String))];
+        // Timing for speakers that left the group goes with them.
+        const kept = pruneOffsets(c.groupOffsets?.[g.id], g.members);
+        if (Object.keys(kept).length) (c.groupOffsets ??= {})[g.id] = kept; else if (c.groupOffsets) delete c.groupOffsets[g.id];
+      }
       if (req.body?.room !== undefined) { if (req.body.room) g.room = req.body.room; else delete g.room; }
     });
   });
   app.delete<{ Params: { id: string } }>('/api/speaker-groups/:id', async (req, reply) => {
     if (!(hub.config.get().speakerGroups ?? []).some(g => g.id === req.params.id)) return bad(reply, 'Unknown group', 404);
-    return edit(c => { c.speakerGroups = (c.speakerGroups ?? []).filter(g => g.id !== req.params.id); });
+    void hub.groupSync.stopTest(req.params.id);
+    hub.groupSync.end(req.params.id);
+    return edit(c => { c.speakerGroups = (c.speakerGroups ?? []).filter(g => g.id !== req.params.id); if (c.groupOffsets) delete c.groupOffsets[req.params.id]; });
+  });
+
+  // A group's timing (engine/group-sync.ts): how it plays (native groups, speakers alongside), each part's offset and
+  // learned start delay, and what Kova did lately to keep it in time.
+  const groupOf = (id: string) => (hub.config.get().speakerGroups ?? []).find(g => g.id === id);
+  app.get<{ Params: { id: string } }>('/api/speaker-groups/:id/sync', async (req, reply) => {
+    const v = hub.groupSync.view(req.params.id);
+    return v ?? bad(reply, 'Unknown group', 404);
+  });
+  // Offsets: { offsets: { "<part key>": ms } }, −1000…+1000 in 10 ms steps (+ plays earlier); 0 clears one.
+  app.put<{ Params: { id: string }; Body: { offsets?: unknown } }>('/api/speaker-groups/:id/offsets', async (req, reply) => {
+    const g = groupOf(req.params.id);
+    if (!g) return bad(reply, 'Unknown group', 404);
+    let next: Record<string, number>;
+    try { next = mergeOffsets(hub.config.get().groupOffsets?.[g.id], req.body?.offsets, hub.groupSync.plan(g)); } catch (e) { return bad(reply, (e as Error).message); }
+    const r = edit(c => { if (Object.keys(next).length) (c.groupOffsets ??= {})[g.id] = next; else if (c.groupOffsets) delete c.groupOffsets[g.id]; });
+    // Heard at once while music or the sync test plays.
+    void hub.groupSync.retune(g.id, Object.keys(req.body?.offsets as object)).catch(() => {});
+    return { ...r, offsets: next };
+  });
+  // The sync test: Kova's click track on every speaker of the group, low, then each put back as it was.
+  app.post<{ Params: { id: string }; Body: { level?: number } }>('/api/speaker-groups/:id/sync-test', async (req, reply) => {
+    const g = groupOf(req.params.id);
+    if (!g) return bad(reply, 'Unknown group', 404);
+    const level = req.body?.level ?? SYNC_TEST_LEVEL;
+    if (typeof level !== 'number' || !(level >= 1 && level <= 40)) return bad(reply, 'The test level is 1–40');
+    try { return { ok: true, ...(await hub.groupSync.startTest(g.id, { kind: 'user', label: 'You', detail: `Sync test on ${g.name}` }, Math.round(level))) }; } catch (e) { return bad(reply, (e as Error).message); }
+  });
+  app.delete<{ Params: { id: string } }>('/api/speaker-groups/:id/sync-test', async (req, reply) => {
+    if (!groupOf(req.params.id)) return bad(reply, 'Unknown group', 404);
+    return { ok: true, restored: await hub.groupSync.stopTest(req.params.id) };
   });
 
   // --------------------------------------------------------------- combined --

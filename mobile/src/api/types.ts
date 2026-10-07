@@ -234,7 +234,29 @@ export interface PrayerView {
   next?: { prayer: PrayerName; at: number };
 }
 
-export interface SpeakerGroup { id: string; name: string; members: string[]; deviceId: string; sync: 'perfect' | 'together'; castGroup: string | null; room?: string; missing?: string[] }
+/**
+ * A part of a speaker group (hubs from 0.7.63): a native group played as one stream ("cast:<id>", "sonos:group"), or a
+ * speaker on its own (its device id). The reference is what the others follow; the others have an offset (+ ms
+ * earlier, − later) and a learned start delay.
+ */
+export interface GroupPart {
+  key: string; kind: 'native' | 'single'; via: string; name: string; members: string[]; reference: boolean;
+  offset: number; latencyMs: number | null; latencyN: number; driftMs: number | null;
+  /** A speaker of the reference to listen to this part against. */
+  listenWith: string | null;
+}
+
+/** What speakers can play as one stream (a Cast group made in Google Home; dynamic: any two or more Sonos speakers). */
+export interface NativeGroup { via: string; id: string; name: string; members: string[]; dynamic?: boolean }
+
+export interface SpeakerGroup {
+  id: string; name: string; members: string[]; deviceId: string;
+  /** perfect: one native group; hybrid: a native group and speakers alongside (hubs from 0.7.63); together: each on its own. */
+  sync: 'perfect' | 'hybrid' | 'together'; castGroup: string | null; room?: string; missing?: string[];
+  parts?: GroupPart[];
+  /** A sync test plays until then (ms). */
+  testUntil?: number | null;
+}
 
 /** Today's energy (hub services/energy.ts). Watts and kWh; `use` null when nothing meters the home. */
 export interface EnergyToday {
@@ -257,6 +279,8 @@ export interface Snapshot {
   groups?: Record<string, string[]>;
   favourites: string[] | null;
   speakerGroups: SpeakerGroup[];
+  /** What the speakers can play as one stream, for the group editor's note (hubs from 0.7.63). */
+  nativeGroups?: NativeGroup[];
   people: Person[];
   devices: Device[];
   /** Sensors with their readings (hubs from 0.7.46). */

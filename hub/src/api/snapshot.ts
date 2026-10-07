@@ -213,13 +213,18 @@ export function snapshot(hub: Hub) {
     },
     // The owner's favourites (null until they pick some: the apps then suggest a few).
     favourites: cfg.favourites ?? null,
-    // Speaker groups, and whether they play in perfect sync (their speakers are exactly a Cast group made in Google Home).
+    // Speaker groups and how they play (engine/group-sync.ts): `parts` are native groups (a Cast group made in Google
+    // Home, Sonos speakers grouped on the fly), sample-locked, and speakers played alongside, each with its offset and
+    // learned start delay. sync: perfect (one native group), hybrid (a native group and others alongside) or together.
     speakerGroups: (cfg.speakerGroups ?? []).map(g => {
-      const ms = g.members.map(id => reg.get(id)).filter((d): d is Device => !!d);
-      const cast = reg.adapters.get('cast') as { castGroupFor?: (d: Device[]) => string | undefined } | undefined;
-      const castGroup = ms.length === g.members.length && ms.every(d => d.adapter === 'cast') ? cast?.castGroupFor?.(ms) : undefined;
-      return { ...g, deviceId: `group_${g.id}`, missing: g.members.filter(id => !reg.get(id)), sync: castGroup ? 'perfect' : 'together', castGroup: castGroup ?? null };
+      const v = hub.groupSync.view(g.id);
+      const parts = (v?.parts ?? []).map(({ players: _p, ...p }) => p);
+      const natives = parts.filter(p => p.kind === 'native');
+      const sync = parts.length === 1 && natives.length === 1 && !g.members.some(id => !reg.get(id)) ? 'perfect' : natives.length ? 'hybrid' : 'together';
+      return { ...g, deviceId: `group_${g.id}`, missing: g.members.filter(id => !reg.get(id)), sync, castGroup: natives.find(p => p.via === 'cast')?.name ?? null, parts, testUntil: v?.test?.until ?? null };
     }),
+    // What speakers can play as one stream, for the group editors' note (fixed: exactly these; dynamic: any two or more).
+    nativeGroups: [...reg.adapters.values()].flatMap(a => { try { return a.nativeGroups?.() ?? []; } catch { return []; } }),
     groups: cfg.groups,
     // Which engine Ask Kova hands what the built-in parser can't do to (no keys, no settings beyond its name).
     assistant: engineInfo(loadSettings(store)),

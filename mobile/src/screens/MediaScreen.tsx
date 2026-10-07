@@ -9,6 +9,7 @@ import type { Command, MediaSource } from '../api/types';
 import { devs, has, ICON, stateOf, type Dev } from '../logic/devices';
 import { groupMembers, loopDone, memberToggle, musicCommand, nowPlaying, pickPlayer, playersOf, playingCount, playPause, sourceCommand, sourceSub, stationCommand, STOP, streamUrlError } from '../logic/media';
 import { plural } from '../logic/customise';
+import { groupHow } from '../logic/group-sync';
 import { Icon } from '../ui/Icon';
 import { Button, Card, Empty, HScroll, IconButton, IconWell, Pill, Press, Row, Section, Segmented, Sheet, Slider } from '../ui/kit';
 import { Screen } from '../ui/Screen';
@@ -167,7 +168,10 @@ export function MediaScreen() {
             ))}
             {!members.length ? <View style={{ padding: SP[4] }}><T v="callout" color={C.stone}>None of its speakers are here right now.</T></View> : null}
           </Card>
-          <T v="footnote" color={C.stone2} style={{ paddingHorizontal: 4 }}>{G.sync === 'perfect' ? `In perfect sync through “${G.castGroup}”.` : 'They start together; each keeps its own volume.'}</T>
+          <Card style={{ overflow: 'hidden' }}>
+            <Row first icon="graphic_eq" iconFg={C.blue} title="Timing and sync test" sub={groupHow(G)} onPress={() => nav.navigate('GroupSync', { id: G.id })} />
+          </Card>
+          <T v="footnote" color={C.stone2} style={{ paddingHorizontal: 4 }}>{G.sync === 'perfect' ? `In perfect sync through “${G.castGroup ?? G.parts?.[0]?.name ?? 'its native group'}”. Each speaker keeps its own volume.` : 'Each speaker keeps its own volume.'}</T>
         </Section>
       ) : null}
 
@@ -205,7 +209,7 @@ export function MediaScreen() {
           <Card style={{ overflow: 'hidden' }}>
             {s.speakerGroups.map((g, i) => {
               const d = all[g.deviceId];
-              return d ? <PlayerRow key={g.id} d={d} room={`${plural(g.members.length, 'speaker')}${g.sync === 'perfect' ? ' · perfect sync' : ''}`} first={!i} selected={P?.id === d.id} onPick={() => setSel(d.id)} onToggle={() => toggle(d)} />
+              return d ? <PlayerRow key={g.id} d={d} room={`${plural(g.members.length, 'speaker')}${g.sync === 'perfect' ? ' · perfect sync' : g.sync === 'hybrid' ? ' · native sync + alongside' : ''}`} first={!i} selected={P?.id === d.id} onPick={() => setSel(d.id)} onToggle={() => toggle(d)} />
                 : <Row key={g.id} first={!i} icon="speaker_group" title={g.name} sub="Its speakers aren’t here right now" onPress={() => setEditGroup(g.id)} />;
             })}
           </Card>
