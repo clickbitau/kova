@@ -5,7 +5,7 @@ import type { Store } from '../store/db.ts';
 import type { ConfigStore } from './config.ts';
 import type { Notification } from '../services/notify.ts';
 import { resolveRhythm } from '../rhythms/rhythms.ts';
-import { localDate, localHour } from '../util/time.ts';
+import { localDate, localHour, stampAt, stampWords } from '../util/time.ts';
 import { pseudoLabel } from '../util/describe.ts';
 
 // Automations: when (any trigger), if (all conditions), then (actions in order), with a run mode for when one
@@ -147,6 +147,26 @@ interface Timer { at: number; fn: () => void }
 interface Waiter { cond: Condition; resolve: (ok: boolean) => void; until: number | null; live: Live }
 
 const RUNS_KEPT = 30;
+/** A one-time schedule Kova was off for still runs when Kova is back within this long; after it, it's missed. */
+export const ONCE_CATCH_UP_MS = 30 * 60_000;
+
+/** One-time schedule: every trigger is a "once". */
+export const isOneTime = (a: Pick<Automation, 'triggers'>) => a.triggers.length > 0 && a.triggers.every(t => t.kind === 'once');
+
+/** When a "once" trigger is due (null when its time isn't valid). */
+export const onceDue = (t: Extract<Trigger, { kind: 'once' }>, tz: string) => stampAt(t.at, tz);
+
+/** The next time a one-time trigger of this automation goes off, if one is still to come. */
+export function nextOnce(a: Pick<Automation, 'triggers' | 'enabled'>, tz: string, now: number): number | null {
+  if (!a.enabled) return null;
+  let best: number | null = null;
+  for (const t of a.triggers) {
+    if (t.kind !== 'once' || t.firedAt) continue;
+    const at = onceDue(t, tz);
+    if (at != null && at > now - ONCE_CATCH_UP_MS && (best == null || at < best)) best = at;
+  }
+  return best;
+}
 /** More starts than this in a minute is a loop: the automation is paused and says so. */
 const LOOP_LIMIT = 30;
 
@@ -187,8 +207,36 @@ export class Automations {
 
   // --------------------------------------------------------------- triggers --
 
-  /** The hub started: "hub start" triggers. */
-  hubStarted(): void { for (const a of this.enabled()) if (a.triggers.some(t => t.kind === 'hub')) void this.start(a, 'Kova started'); }
+  /** The hub started: "hub start" triggers, and one-time schedules that came due while Kova was off. */
+  hubStarted(): void {
+    const tz = this.config.get().timezone, now = this.now();
+    for (const a of this.enabled()) {
+      if (a.triggers.some(t => t.kind === 'hub')) void this.start(a, 'Kova started');
+      a.triggers.forEach((t, i) => {
+        if (t.kind !== 'once' || t.firedAt) return;
+        const at = onceDue(t, tz);
+        if (at == null || at > now) return;
+        const when = stampWords(t.at, now, tz);
+        if (now - at <= ONCE_CATCH_UP_MS) { this.fireOnce(a, i); void this.start(a, `Scheduled for ${when} (Kova was off then)`); return; }
+        this.fireOnce(a, i, true);
+        this.record({ id: randomUUID(), automation: a.id, at: now, why: `Scheduled for ${when}`, result: 'skipped', detail: `missed: Kova was off then`, steps: [], endedAt: now });
+        this.store.append({ kind: 'run', device: null, feed: 'auto', what: `${a.name} didn’t run: Kova was off ${when}`, data: { automation: a.id }, cause: { kind: 'automation', id: a.id, label: a.name, detail: 'missed' } });
+      });
+    }
+  }
+
+  /** A "once" trigger went off (or was missed): stamp it, and switch a one-time schedule off after its last one. */
+  private fireOnce(a: Automation, index: number, missed = false): void {
+    const at = this.now();
+    this.config.update(c => {
+      const x = c.automations?.find(y => y.id === a.id);
+      const t = x?.triggers?.[index];
+      if (!x || !t || t.kind !== 'once') return;
+      t.firedAt = at;
+      if (missed) t.missed = true; else delete t.missed;
+      if (isOneTime(x) && x.triggers.every(k => k.kind === 'once' && k.firedAt)) x.enabled = false;
+    });
+  }
 
   /** The clock moved on: due timers, time and "every" triggers. */
   async tick(t = this.now()): Promise<void> {
@@ -208,6 +256,9 @@ export class Automations {
             const at = resolveRhythm(tr.at, date, cfg);
             if (at != null && at > from && at <= t && (!tr.days?.length || tr.days.includes(dayOf(date)))) void this.start(a, `It’s ${timeWords(tr)}`);
           }
+        } else if (tr.kind === 'once' && !tr.firedAt) {
+          const at = onceDue(tr, cfg.timezone);
+          if (at != null && at > from && at <= t) { this.fireOnce(a, a.triggers.indexOf(tr)); void this.start(a, `Scheduled for ${stampWords(tr.at, at, cfg.timezone)}`); }
         } else if (tr.kind === 'every' && tr.minutes > 0) {
           const slot = (ms: number) => `${localDate(ms, cfg.timezone)}:${Math.floor((localHour(ms, cfg.timezone) * 60 + 1e-6) / tr.minutes)}`;
           if (slot(from) !== slot(t)) void this.start(a, `Every ${tr.minutes} min`);
@@ -502,7 +553,7 @@ const rhythmWords = (r: import('../model/types.ts').Rhythm): string => {
 export const timeWords = (t: Extract<Trigger, { kind: 'time' }>) => [rhythmWords(t.at), daysWords(t.days)].filter(Boolean).join(' ');
 
 /** A trigger in words: "Lounge box turns offline for 2 min". */
-export function triggerWords(t: Trigger, x: Pick<CondCtx, 'reg' | 'cfg'>): string {
+export function triggerWords(t: Trigger, x: Pick<CondCtx, 'reg' | 'cfg'> & { now?: number }): string {
   const n = (id: string) => x.reg.get(id)?.name ?? id;
   const forW = (s?: number) => s ? ` for ${durWords(s)}` : '';
   switch (t.kind) {
@@ -518,6 +569,11 @@ export function triggerWords(t: Trigger, x: Pick<CondCtx, 'reg' | 'cfg'>): strin
     case 'mode': return `${x.cfg.modes.find(m => m.id === t.mode)?.name ?? t.mode} starts`;
     case 'overlay': return `${x.cfg.overlays.find(o => o.id === t.overlay)?.name ?? t.overlay} ${t.event === 'starts' ? 'starts' : 'ends'}`;
     case 'hub': return 'Kova starts';
+    case 'once': {
+      const tz = x.cfg.timezone ?? 'UTC', now = x.now ?? Date.now();
+      const w = stampWords(t.at, now, tz);
+      return t.missed ? `Once, ${w} (missed)` : t.firedAt ? `Once, ${w} (done)` : `Once, ${w}`;
+    }
   }
 }
 

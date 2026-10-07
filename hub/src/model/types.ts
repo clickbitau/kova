@@ -288,7 +288,11 @@ export type Trigger =
   /** An overlay starting or ending. */
   | { kind: 'overlay'; overlay: string; event: 'starts' | 'ends' }
   /** The hub starting (after an update or a power cut). */
-  | { kind: 'hub'; event: 'start' };
+  | { kind: 'hub'; event: 'start' }
+  /** Once, at a local date and time in the home's timezone ("2026-10-08T15:30"). Kova stamps `firedAt` when it
+   *  goes off, or `missed` when Kova was off for longer than the catch-up window. An automation whose triggers
+   *  are all once-only is a one-time schedule: it switches itself off after its last one. */
+  | { kind: 'once'; at: string; firedAt?: number; missed?: boolean };
 
 /** Whether to go ahead. Every condition in a list has to hold, unless grouped with any / not. */
 export type Condition =

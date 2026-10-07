@@ -332,6 +332,29 @@ test('AI creates a real, validated automation that shows in the engine and can b
   await app.close(); await hub.stop(); await fake.close();
 });
 
+test('A change for later becomes a one-time schedule: the AI is told the date, the parser leaves it alone, it isn’t learned', async () => {
+  const fake = await fakeServer([
+    openAiToolCall('create_automation', { name: 'Porch off in 20', when: [{ kind: 'once', inMinutes: 20 }], then: [{ kind: 'set', targets: { front_1: { on: false } } }] }),
+    openAiText('The porch light goes off in 20 minutes.'),
+  ]);
+  const { hub, app, put, ask } = await setup();
+  await put({ engine: 'local', local: { url: fake.url, model: 'm' } });
+
+  // "turn off … in 20 minutes" would otherwise parse as "turn off now".
+  assert.equal(hub.assistant.parse('turn off the porch light in 20 minutes'), null);
+  assert.equal(hub.assistant.parse('dim the lamp at 9pm'), null);
+  assert.ok(hub.assistant.parse('turn off the porch light'), 'a change now still parses');
+  const r = await ask('turn off the porch light in 20 minutes');
+  assert.match(r.text, /20 minutes/);
+  const sys = JSON.stringify(fake.received[0].body.messages);
+  assert.match(sys, /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/, 'the context gives the home’s date and time');
+  const made = hub.engine.automations.list().find(a => a.name === 'Porch off in 20')!;
+  assert.equal(made.triggers[0]!.kind, 'once');
+  assert.equal(made.enabled, true);
+  assert.deepEqual((await app.inject({ url: '/api/assistant/learned' })).json(), [], 'a dated schedule is never replayed');
+  await app.close(); await hub.stop(); await fake.close();
+});
+
 test('AI updates and deletes an existing automation, both undoable', async () => {
   const fake = await fakeServer([
     openAiToolCall('update_automation', { id: 'a1', when: [{ kind: 'time', at: { kind: 'time', at: '07:00' } }] }),

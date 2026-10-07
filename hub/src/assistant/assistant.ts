@@ -6,6 +6,9 @@ import type { Cause, Device, Overlay, Targets } from '../model/types.ts';
 import { isLight, isPlayer } from '../util/describe.ts';
 import { clock } from '../util/time.ts';
 
+/** A time still to come: "at 9pm", "at 21:30", "in 20 minutes", "in an hour", "tomorrow", "tonight at", "later". */
+export const LATER = /\b(at \d{1,2}(:\d{2})? ?(am|pm)|at \d{1,2}:\d{2}|at (noon|midnight)|in (\d+|an?|half an?) (min|mins|minutes?|hours?|hrs?)|tomorrow|tonight at|later (today|on|tonight)|on (mon|tues|wednes|thurs|fri|satur|sun)day)\b/;
+
 // Ask Kova, built in: a deterministic intent parser that runs on the hub.
 // No AI, nothing leaves the home. Requests are parsed into an Intent first,
 // which the UI can show as "Understood" chips before anything runs.
@@ -139,6 +142,9 @@ export class Assistant {
         .map(s => this.rooms().find(r => norm(r.name) === s || norm(r.name).startsWith(s))).filter((r): r is NonNullable<typeof r> => !!r);
       if (rooms.length) return { kind: 'learn', name: learn[1], rooms: rooms.map(r => r.id), roomNames: rooms.map(r => r.name) };
     }
+    // A change for later ("lights off at 9pm", "in 20 minutes", "tomorrow morning") is a one-time schedule, not
+    // something to do now: left to the AI, which makes one. Questions about the plan ("what's on tonight") stay here.
+    if (LATER.test(raw) && !/^(what|whats|what's|when|is|are|anything)\b/.test(raw)) return null;
     // A message that is only a greeting — "hey turn the lights on" still parses as a command.
     if (/^(hi+|hello+|hey+|yo|hiya|howdy|morning|good (morning|afternoon|evening))( there)?( kova)?$/.test(t)) return { kind: 'greeting' };
     if (/^who(s| is)?\b.*\b(home|in|here|out)\b/.test(t)) return { kind: 'whoHome' };
@@ -254,6 +260,7 @@ export class Assistant {
   async ask(q: string): Promise<AskReply> {
     const i = this.parse(q);
     const reply = (text: string, source: Source, extra: Partial<AskReply> = {}): AskReply => ({ text, source, actions: [], understood: true, ...extra });
+    if (!i && LATER.test(q.toLowerCase())) return reply('That’s for later, so it needs a one-time schedule: make one in Automations → Schedule once, or turn on an AI engine in Ask Kova settings and ask again.', 'Built-in · nothing left your home', { understood: false });
     if (!i) return reply('I didn’t catch that. I can switch rooms and devices, set brightness (“lamp to 30%”), start Movie or Away, tell you why something is on, what’s happening tonight, and who’s home.', 'Built-in · nothing left your home', { understood: false });
     const tz = this.config.get().timezone;
     switch (i.kind) {
