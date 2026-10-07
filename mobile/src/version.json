@@ -2,8 +2,12 @@
   "//": "The Kova app's version (docs/VERSIONING.md). store: the X.Y.0 a store binary on this train carries (app.json version). version: what runs, store or over the air (X.Y.Z, PATCH only). train: the native runtime (app.json runtimeVersion). history: newest first; an over-the-air release adds an entry.",
   "train": "kova-mobile-0.2",
   "store": "0.2.0",
-  "version": "0.2.29",
+  "version": "0.2.30",
   "history": [
+    {
+      "version": "0.2.30",
+      "title": "Design pass across the app, Ask Kova that finishes big requests and says what didn't work, and AC zones by room"
+    },
     {
       "version": "0.2.29",
       "title": "Whole-home air conditioning: a ducted AC serves the whole home, each zone gets its rooms (suggested from the zone names), rooms show and control their zone, and automations and modes can set a room’s zone"

@@ -1,7 +1,7 @@
 {
   "name": "Kova",
   "slug": "kova",
-  "version": "0.2.26",
+  "version": "0.2.30",
   "runtimeVersion": "kova-mobile-0.2",
   "updates": {
     "enabled": true,
@@ -164,24 +164,24 @@
     },
     "kovaHistory": [
       {
+        "version": "0.2.30",
+        "title": "Design pass across the app, Ask Kova that finishes big requests and says what didn't work, and AC zones by room"
+      },
+      {
+        "version": "0.2.29",
+        "title": "Whole-home air conditioning: a ducted AC serves the whole home, each zone gets its rooms (suggested from the zone names), rooms show and control their zone, and automations and modes can set a room’s zone"
+      },
+      {
+        "version": "0.2.28",
+        "title": "Ask Kova works through big requests: it shows each step as it happens, never gives up while the hub is still working, finds the answer after the app was closed, says honestly what didn’t work, and names the AI that answered"
+      },
+      {
+        "version": "0.2.27",
+        "title": "A design pass: alerts on Now as clear cards with Open, Not now and That’s expected as buttons; a calmer Security page with the home’s status first; nothing cut off or spilling out on small phones or with larger text"
+      },
+      {
         "version": "0.2.26",
         "title": "Alerts: “That’s expected” hides one for as long as it stays like that"
-      },
-      {
-        "version": "0.2.25",
-        "title": "Where the home is: paste a Google Maps link or coordinates, check it on a map, drag the pin and size the arriving-and-leaving circle; phones follow the new circle"
-      },
-      {
-        "version": "0.2.23",
-        "title": "The router’s power: watts, each power supply with what’s wrong, redundancy, temperatures and fans, on the Router and Internet panels; power supply events in automations"
-      },
-      {
-        "version": "0.2.22",
-        "title": "Settings has Software update for the hub and the app; rooms go to No room when deleted, groups of rooms, archive and combine devices, and edit modes, overlays and moments in the app"
-      },
-      {
-        "version": "0.2.21",
-        "title": "Sensors get their own screen (readings, trends, batteries) and leave Devices; cameras show their room and what they saw, with the picture from each moment; alert choices per camera and room, quiet hours"
       }
     ]
   },
