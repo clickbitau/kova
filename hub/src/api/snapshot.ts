@@ -131,7 +131,9 @@ export function snapshot(hub: Hub) {
       dateLabel: new Date(now).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'short', timeZone: tz }).replace(/\bSept\b/, 'Sep'),
       clock: clock(now, tz),
       // Where the home is, for the phone app's arriving and leaving (it watches a circle around this).
-      location: cfg.location ? { latitude: cfg.location.latitude, longitude: cfg.location.longitude, ...(cfg.location.radiusM !== undefined ? { radiusM: cfg.location.radiusM } : {}), ...(cfg.location.source ? { source: cfg.location.source } : {}), ...(cfg.location.updatedAt !== undefined ? { updatedAt: cfg.location.updatedAt } : {}) } : { latitude: cfg.latitude, longitude: cfg.longitude },
+      location: cfg.location ? { latitude: cfg.location.latitude, longitude: cfg.location.longitude, ...(cfg.location.radiusM !== undefined ? { radiusM: cfg.location.radiusM } : {}), ...(cfg.location.source ? { source: cfg.location.source } : {}), ...(cfg.location.updatedAt !== undefined ? { updatedAt: cfg.location.updatedAt } : {}), ...(cfg.location.provider ? { provider: cfg.location.provider } : {}) } : { latitude: cfg.latitude, longitude: cfg.longitude },
+      // Whether address search goes through Google (suggestions as text; Google's points on Google's map only).
+      maps: { google: hub.maps.google },
       // For Settings: how prayer times are worked out, and whether the doorbell pauses what's playing.
       prayerMethod: cfg.prayerMethod ?? 'MuslimWorldLeague', pauseForDoorbell: cfg.pauseForDoorbell !== false, address: cfg.address ?? null,
       // Today's sunrise and sunset as local hours, for day strips.

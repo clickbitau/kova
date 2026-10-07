@@ -377,14 +377,30 @@ export interface MediaSource {
   loop?: boolean;
 }
 
+/**
+ * How the home's point was chosen: typed in, an address search's match, a phone's or browser's location, an
+ * import (Home Assistant), or placed on the map (a pasted Google Maps link or a dragged pin).
+ */
+export const LOCATION_SOURCES = ['manual', 'geocode', 'phone', 'import', 'map'] as const;
+export type LocationSource = typeof LOCATION_SOURCES[number];
+
 /** The real point Kova treats as "home", and how it was chosen. */
 export interface HomeLocation {
   latitude: number;
   longitude: number;
   /** Geofence radius; defaults to the phone app's 150 m when unset. */
   radiusM?: number;
-  source?: 'manual' | 'geocode' | 'phone' | 'import';
+  source?: LocationSource;
   updatedAt?: number;
+  /**
+   * Whose point it is when it came from an address search: "google" (Places or Geocoding) or "osm". Google's
+   * coordinates may be kept 30 days, so the hub keeps its place id and refreshes them (services/maps.ts).
+   * Points the owner set themselves (the map's pin, a pasted link, typed, a phone) have neither.
+   */
+  provider?: 'google' | 'osm';
+  placeId?: string;
+  /** When the provider's coordinates were last fetched. */
+  fetchedAt?: number;
 }
 
 export interface HomeConfig {

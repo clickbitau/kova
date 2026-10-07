@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { Hub } from '../hub.ts';
-import { ROOM_ICONS, UNASSIGNED_ROOM, type HomeConfig } from '../model/types.ts';
+import { LOCATION_SOURCES, ROOM_ICONS, UNASSIGNED_ROOM, type HomeConfig, type HomeLocation, type LocationSource } from '../model/types.ts';
+import { distanceKm, MapsError, PLACE_ID, sameClock, validZone } from '../services/maps.ts';
 import { groupDeviceId } from '../adapters/groups.ts';
 import { combinedDeviceId } from '../adapters/combined.ts';
 import { isPlayer } from '../util/describe.ts';
@@ -12,6 +13,8 @@ import { slug } from '../tools/import-ha.ts';
 
 type Reply = { code: (n: number) => { send: (b: { error: string }) => unknown } };
 /** How prayer times can be worked out (adhan's calculation methods). */
+/** A new location this far from the old one (km) is another place: its timezone is worked out again. */
+const TZ_MOVE_KM = 30;
 export const PRAYER_METHODS = ['MuslimWorldLeague', 'Egyptian', 'Karachi', 'UmmAlQura', 'Dubai', 'MoonsightingCommittee', 'NorthAmerica', 'Kuwait', 'Qatar', 'Singapore', 'Tehran', 'Turkey'];
 
 export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
@@ -22,8 +25,9 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
   app.get('/api/home/room-icons', async () => ({ icons: ROOM_ICONS }));
 
   // The home's details: only what's sent changes. Location and timezone move sun and prayer times; the prayer
-  // method decides how prayer times are worked out.
-  app.put<{ Body: { name?: string; address?: string | null; timezone?: string; latitude?: number; longitude?: number; location?: { latitude?: number; longitude?: number; radiusM?: number; source?: string }; prayerMethod?: string; pauseForDoorbell?: boolean } }>('/api/home', async (req, reply) => {
+  // method decides how prayer times are worked out. A new location far from the old one (another town) gets the
+  // timezone there too, unless one is sent: the answer says so (`timezone`), and Undo puts both back.
+  app.put<{ Body: { name?: string; address?: string | null; timezone?: string; timezoneHint?: string; latitude?: number; longitude?: number; location?: { latitude?: number; longitude?: number; radiusM?: number; source?: string; provider?: string; placeId?: string }; prayerMethod?: string; pauseForDoorbell?: boolean } }>('/api/home', async (req, reply) => {
     const b = req.body ?? {};
     const name = b.name === undefined ? undefined : text(b.name);
     if (name === '') return bad(reply, 'Give the home a name');
@@ -35,67 +39,95 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
     if ((latitude === undefined) !== (longitude === undefined)) return bad(reply, 'Send latitude and longitude together');
     if (latitude !== undefined && !(typeof latitude === 'number' && Math.abs(latitude) <= 90 && typeof longitude === 'number' && Math.abs(longitude) <= 180)) return bad(reply, 'Latitude is −90 to 90, longitude −180 to 180');
     if (b.location?.radiusM !== undefined && !(typeof b.location.radiusM === 'number' && b.location.radiusM >= 50 && b.location.radiusM <= 1000)) return bad(reply, 'location.radiusM is 50–1000');
-    if (b.location?.source !== undefined && !['manual', 'geocode', 'phone', 'import'].includes(b.location.source)) return bad(reply, 'location.source is manual, geocode, phone or import');
+    if (b.location?.source !== undefined && !(LOCATION_SOURCES as readonly string[]).includes(b.location.source)) return bad(reply, `location.source is ${LOCATION_SOURCES.slice(0, -1).join(', ')} or ${LOCATION_SOURCES.at(-1)}`);
+    if (b.location?.provider !== undefined && b.location.provider !== 'google' && b.location.provider !== 'osm') return bad(reply, 'location.provider is google or osm');
+    if (b.location?.placeId !== undefined && !(typeof b.location.placeId === 'string' && PLACE_ID.test(b.location.placeId))) return bad(reply, 'location.placeId isn’t a place id');
+    if (b.location?.provider === 'google' && !b.location.placeId) return bad(reply, 'A point from Google needs its placeId');
     if (b.prayerMethod !== undefined && !PRAYER_METHODS.includes(b.prayerMethod)) return bad(reply, `Prayer method is one of ${PRAYER_METHODS.join(', ')}`);
     if (b.pauseForDoorbell !== undefined && typeof b.pauseForDoorbell !== 'boolean') return bad(reply, 'pauseForDoorbell must be true or false');
-    return edit(c => {
+    const source = b.location?.source as LocationSource | undefined;
+    // The timezone of a new place: only when it moved a long way (fine-tuning the pin never changes the clock), and
+    // only when that zone keeps a different clock. The phone's own zone is the best guess when it's the phone's location.
+    let timezone = b.timezone;
+    const before = hub.config.get();
+    if (timezone === undefined && latitude !== undefined && longitude !== undefined) {
+      const was = before.latitude || before.longitude ? { latitude: before.latitude, longitude: before.longitude } : null;
+      if (!was || distanceKm(was, { latitude, longitude }) > TZ_MOVE_KM) {
+        const hint = source === 'phone' && b.timezoneHint && validZone(b.timezoneHint) ? b.timezoneHint : null;
+        const z = hint ?? await hub.maps.timezoneAt({ latitude, longitude }).catch(() => null);
+        if (z && !sameClock(z, before.timezone)) timezone = z;
+      }
+    }
+    // Whose point it is: an address search's match keeps its provider (and Google's place id, so its coordinates can
+    // be refreshed within Google's 30 days); a point the owner set (map, typed, phone, import) is their own.
+    const from = (): Pick<HomeLocation, 'provider' | 'placeId' | 'fetchedAt'> => source === 'geocode' && b.location?.provider
+      ? { provider: b.location.provider as 'google' | 'osm', ...(b.location.placeId ? { placeId: b.location.placeId } : {}), fetchedAt: hub.engine.now() } : {};
+    const r = edit(c => {
       if (name) c.name = name;
       if (b.address !== undefined) { const a = b.address ? text(b.address, 200) : ''; if (a) c.address = a; else delete c.address; }
-      if (b.timezone) c.timezone = b.timezone;
+      if (timezone) c.timezone = timezone;
       if (latitude !== undefined) {
         const lat = Math.round(latitude * 1e5) / 1e5, lon = Math.round(longitude! * 1e5) / 1e5;
         c.latitude = lat; c.longitude = lon;
-        c.location = { latitude: lat, longitude: lon, ...(b.location?.radiusM !== undefined ? { radiusM: Math.round(b.location.radiusM) } : c.location?.radiusM ? { radiusM: c.location.radiusM } : {}), source: (b.location?.source ?? 'manual') as 'manual' | 'geocode' | 'phone' | 'import', updatedAt: hub.engine.now() };
+        c.location = { latitude: lat, longitude: lon, ...(b.location?.radiusM !== undefined ? { radiusM: Math.round(b.location.radiusM) } : c.location?.radiusM ? { radiusM: c.location.radiusM } : {}), source: source ?? 'manual', updatedAt: hub.engine.now(), ...from() };
       } else if (b.location) {
-        c.location = { latitude: c.location?.latitude ?? c.latitude, longitude: c.location?.longitude ?? c.longitude, ...(b.location.radiusM !== undefined ? { radiusM: Math.round(b.location.radiusM) } : c.location?.radiusM ? { radiusM: c.location.radiusM } : {}), source: (b.location.source ?? c.location?.source ?? 'manual') as 'manual' | 'geocode' | 'phone' | 'import', updatedAt: hub.engine.now() };
+        // Only the circle (or the source) changed: the point and whose it is stay.
+        const keep = c.location ? { provider: c.location.provider, placeId: c.location.placeId, fetchedAt: c.location.fetchedAt } : {};
+        c.location = JSON.parse(JSON.stringify({ ...keep, latitude: c.location?.latitude ?? c.latitude, longitude: c.location?.longitude ?? c.longitude, ...(b.location.radiusM !== undefined ? { radiusM: Math.round(b.location.radiusM) } : c.location?.radiusM ? { radiusM: c.location.radiusM } : {}), source: source ?? c.location?.source ?? 'manual', updatedAt: hub.engine.now() })) as HomeLocation;
       }
       if (b.prayerMethod) c.prayerMethod = b.prayerMethod;
       if (b.pauseForDoorbell !== undefined) c.pauseForDoorbell = b.pauseForDoorbell;
     });
+    return { ...r, ...(timezone && timezone !== before.timezone && b.timezone === undefined ? { timezone } : {}) };
   });
 
-  // Finding the home's address (Settings): Google Maps when a server-side key is configured, otherwise OpenStreetMap's
-  // Nominatim. Both go through the hub so no API key is ever in a phone/browser app. Answers are cached for a day.
-  const geoCache = new Map<string, { at: number; results: unknown[] }>();
-  let geoLast = 0;
+  // Finding the home (Settings). All of it goes through the hub, so the Google Maps key never reaches a phone or
+  // browser (services/maps.ts). With a key: Google Places suggestions, each looked up with /api/geocode/place when
+  // it's picked; without one, OpenStreetMap's Nominatim.
+  const lang = (req: { headers: Record<string, string | string[] | undefined> }) => String(req.headers['accept-language'] ?? 'en').split(',')[0].trim().slice(0, 20) || 'en';
+  const mapsFail = (reply: Reply, e: unknown) => e instanceof MapsError ? bad(reply, e.message, e.code) : bad(reply, (e as Error).message, 502);
   app.get<{ Querystring: { q?: string } }>('/api/geocode', async (req, reply) => {
     const q = text(req.query.q, 200);
     if (q.length < 4) return bad(reply, 'Type more of the address');
-    const googleKey = process.env.GOOGLE_MAPS_API_KEY ?? process.env.KOVA_GOOGLE_MAPS_API_KEY;
-    const cf = hub.config.get(), key = `${googleKey ? 'google' : 'osm'}:${q.toLowerCase()}@${Math.round(cf.latitude)},${Math.round(cf.longitude)}`;
-    const hit = geoCache.get(key);
-    if (hit && Date.now() - hit.at < 86_400_000) return { results: hit.results };
-    const wait = geoLast + 1100 - Date.now();
-    if (wait > 0) await new Promise(r => setTimeout(r, wait));
-    geoLast = Date.now();
+    try { return await hub.maps.search(q, lang(req)); } catch (e) { return mapsFail(reply, e); }
+  });
+  app.get<{ Querystring: { id?: string; session?: string } }>('/api/geocode/place', async (req, reply) => {
+    if (!req.query.id) return bad(reply, 'id is required');
+    try { return await hub.maps.place(req.query.id, req.query.session, lang(req)); } catch (e) { return mapsFail(reply, e); }
+  });
+  // Pasted from Google Maps: a share link (short ones are followed here), a maps address, coordinates or a Plus
+  // Code → { latitude, longitude, label?, address? }. Nothing is saved: the apps show it on the map to confirm.
+  app.post<{ Body: { text?: string } }>('/api/location/parse', async (req, reply) => {
+    if (typeof req.body?.text !== 'string' || !req.body.text.trim()) return bad(reply, 'Paste a Google Maps link or coordinates');
+    try { return await hub.maps.locate(req.body.text, lang(req)); } catch (e) { return mapsFail(reply, e); }
+  });
+  // The address at a point (the map's pin), best effort.
+  app.get<{ Querystring: { lat?: string; lon?: string } }>('/api/geocode/reverse', async (req, reply) => {
+    const latitude = Number(req.query.lat), longitude = Number(req.query.lon);
+    if (!(Number.isFinite(latitude) && Number.isFinite(longitude) && Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180)) return bad(reply, 'lat and lon are required');
+    return { address: await hub.maps.reverse({ latitude, longitude }, lang(req)) };
+  });
+  // Google's map of a point and the circle (Maps Static API through the hub, so the key stays here): how a point
+  // from a Google search is shown, since Google's answers may only be drawn on Google's maps.
+  app.get<{ Querystring: { lat?: string; lon?: string; r?: string; w?: string; h?: string } }>('/api/maps/static', async (req, reply) => {
+    const latitude = Number(req.query.lat), longitude = Number(req.query.lon);
+    if (!(Number.isFinite(latitude) && Number.isFinite(longitude) && Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180)) return bad(reply, 'lat and lon are required');
+    const clamp = (v: unknown, lo: number, hi: number, d: number) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d; };
     try {
-      // Matches near where the home already is come first (a box ±3° around it, not a limit), so a street name that
-      // exists in many countries finds the local one.
-      if (googleKey) {
-        try {
-          const c = hub.config.get();
-          const params: Record<string, string> = { address: q, key: googleKey, language: req.headers['accept-language'] ?? 'en' };
-          if (c.latitude || c.longitude) params.bounds = `${c.latitude - 3},${c.longitude - 3}|${c.latitude + 3},${c.longitude + 3}`;
-          const u = `https://maps.googleapis.com/maps/api/geocode/json?${new URLSearchParams(params)}`;
-          const res = await fetch(u, { signal: AbortSignal.timeout(10_000) });
-          if (res.ok) {
-            const j = await res.json() as { status: string; results?: { formatted_address?: string; geometry?: { location?: { lat?: number; lng?: number } } }[] };
-            if (j.status === 'OK' || j.status === 'ZERO_RESULTS') {
-              const results = (j.results ?? []).map(r => ({ label: r.formatted_address ?? '', latitude: Number(r.geometry?.location?.lat), longitude: Number(r.geometry?.location?.lng) })).filter(r => r.label && Number.isFinite(r.latitude) && Number.isFinite(r.longitude));
-              geoCache.set(key, { at: Date.now(), results });
-              return { results };
-            }
-          }
-        } catch { /* fall back to OpenStreetMap below */ }
-      }
-      const c = hub.config.get(), near: Record<string, string> = c.latitude || c.longitude ? { viewbox: [c.longitude - 3, c.latitude + 3, c.longitude + 3, c.latitude - 3].map(n => n.toFixed(3)).join(','), bounded: '0' } : {};
-      const u = `https://nominatim.openstreetmap.org/search?${new URLSearchParams({ q, format: 'jsonv2', limit: '5', addressdetails: '0', ...near })}`;
-      const res = await fetch(u, { headers: { 'User-Agent': 'Kova (https://github.com/clickbitau/kova)', 'Accept-Language': req.headers['accept-language'] ?? 'en' }, signal: AbortSignal.timeout(10_000) });
-      if (!res.ok) return bad(reply, `The address search answered HTTP ${res.status}`, 502);
-      const results = ((await res.json()) as { display_name: string; lat: string; lon: string }[]).map(r => ({ label: r.display_name, latitude: Number(r.lat), longitude: Number(r.lon) }));
-      geoCache.set(key, { at: Date.now(), results });
-      return { results };
-    } catch { return bad(reply, 'Couldn’t reach the address search: is the hub online?', 502); }
+      const img = await hub.maps.staticMap({ latitude, longitude, radiusM: clamp(req.query.r, 50, 1000, 150), width: clamp(req.query.w, 100, 640, 600), height: clamp(req.query.h, 100, 640, 300) });
+      return reply.type(img.type).header('cache-control', 'private, max-age=3600').send(img.body);
+    } catch (e) { return mapsFail(reply, e); }
+  });
+  // The Google Maps key, entered in Settings → Home: stored on the hub and never sent back (only whether there is
+  // one, and its last 4). It needs the Places API (New) and the Geocoding API enabled, and should be restricted to
+  // them (and to the hub's address, if it has a fixed one). "" or null removes it.
+  app.get('/api/maps/settings', async () => hub.maps.status());
+  app.put<{ Body: { googleKey?: string | null } }>('/api/maps/settings', async (req, reply) => {
+    if (!req.body || !('googleKey' in req.body)) return bad(reply, 'Send googleKey (or null to remove it)');
+    if (req.body.googleKey != null && typeof req.body.googleKey !== 'string') return bad(reply, 'googleKey is text');
+    try { hub.maps.setKey(req.body.googleKey); } catch (e) { return mapsFail(reply, e); }
+    hub.emit('changed');
+    return hub.maps.status();
   });
 
   // Not now: an alert or warning on the Now page goes quiet for so many hours (24 by default).
