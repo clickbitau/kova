@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { Animated, KeyboardAvoidingView, Platform, ScrollView, TextInput, View } from 'react-native';
+import { Animated, AppState, KeyboardAvoidingView, Platform, ScrollView, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useScrollToTop } from '@react-navigation/native';
 import type { AskReply } from '../api/types';
-import { ASK_TIMEOUT_MS } from '../api/client';
+import { askKova, Cancelled, engineLine, followJob, mergeHistory, progressLines, sourceIcon, type AskHistory, type AskJob, type ChatMsg } from '../logic/ask';
 import { C, F, R, SP } from '../theme';
 import { useHub, useSnap } from '../state/hub';
 import { isLight, plural } from '../logic/devices';
@@ -13,10 +13,28 @@ import { ConnBanner } from '../ui/Screen';
 import { T } from '../ui/Text';
 import { Appear, haptic, useLoop, useStateValue } from '../ui/motion';
 
-interface Msg { id: number; from: 'you' | 'kova'; text: string; src?: string; actions?: AskReply['actions']; undo?: string; failed?: boolean }
-
-const SRC_ICON: Record<string, string> = { 'Device control': 'toggle_on', 'From the activity log': 'history', 'From your modes': 'routine', 'Built-in · nothing left your home': 'lock' };
+type Msg = ChatMsg;
 const TRY = ['What’s happening tonight?', 'Who’s home?', 'Turn off the kitchen', 'Lamp to 30%', 'Why is the porch light on?', 'I’m leaving'];
+
+/** While a long request is worked on: what the hub is doing, step by step (logic/ask.ts progressLines). */
+function Working({ job, trouble }: { job: AskJob | null; trouble: string | null }) {
+  const p = progressLines(job);
+  return (
+    <Appear style={{ alignSelf: 'flex-start', maxWidth: '86%', gap: 8 }}>
+      <Typing />
+      <View style={{ gap: 4, paddingHorizontal: 6 }} accessibilityLiveRegion="polite">
+        <T v="micro" weight={600} color={C.stone2}>{p.title}</T>
+        {p.steps.map((st, i) => (
+          <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 6 }}>
+            <Icon name={st.status === 'ok' ? 'check_circle' : st.status === 'failed' ? 'error' : 'pending'} size={14} color={st.status === 'ok' ? C.green : st.status === 'failed' ? C.redText : C.stone2} />
+            <T v="micro" color={st.status === 'failed' ? C.redText : C.bone2} style={{ flexShrink: 1 }}>{st.note && st.status === 'failed' ? `${st.label}: ${st.note}` : st.label}</T>
+          </View>
+        ))}
+        {trouble ? <T v="micro" color={C.stone2} style={{ flexShrink: 1 }}>{trouble}</T> : null}
+      </View>
+    </Appear>
+  );
+}
 
 /** Three dots rising in turn: Kova is working on an answer. */
 function Typing() {
@@ -39,10 +57,16 @@ export function AskScreen() {
   const insets = useSafeAreaInsets();
   const mode = s.modes.find(m => m.id === s.current.modeId);
   const lights = s.devices.filter(d => isLight(d) && d.state.on).length;
-  const [chat, setChat] = useState<Msg[]>(() => [{ id: 0, from: 'kova', text: `Hi. It’s ${mode?.name ?? 'Day'} mode, with ${plural(lights, 'light')} on. Ask me anything about your home, or tell me what to do.`, src: 'Built-in · nothing left your home' }]);
+  const [chat, setChat] = useState<Msg[]>(() => [{ id: 'hello', from: 'kova', text: `Hi. It’s ${mode?.name ?? 'Day'} mode, with ${plural(lights, 'light')} on. Ask me anything about your home, or tell me what to do.`, src: 'Built-in · nothing left your home' }]);
   const [text, setText] = useState('');
   const [chips, setChips] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  // The request being worked on (its steps), and a word when the hub can't be heard for a moment.
+  const [job, setJob] = useState<AskJob | null>(null);
+  const [trouble, setTrouble] = useState<string | null>(null);
+  const gone = useRef(false);
+  useEffect(() => () => { gone.current = true; }, []);
+  const line = engineLine(s.assistant);
   const [focus, setFocus] = useState(false);
   const scroll = useRef<ScrollView>(null);
   useScrollToTop(scroll);
@@ -56,29 +80,63 @@ export function AskScreen() {
     return () => clearTimeout(t);
   }, [text, api]);
 
-  // A sent message leaves the box and lands in the chat straight away; a slow or hung request before it never
-  // eats the next one — each waits its turn while the reply for it is on the way.
+  // A sent message leaves the box and lands in the chat straight away; a slow request before it never eats the next
+  // one — each waits its turn. A long one is a job on the hub, followed here until it lands (logic/ask.ts): it is never
+  // timed out while the hub works on it, and if the app goes away the answer is in the hub's conversation.
   const queue = useRef<string[]>([]);
   const asking = useRef(false);
+  const following = useRef(new Set<string>());
+  const land = (r: AskReply, jobId?: string) => {
+    setChat(c => (jobId && c.some(m => m.job === jobId && m.from === 'kova')) ? c
+      : [...c, { id: `k${Date.now()}`, from: 'kova', text: r.text, src: r.source || undefined, engine: r.engine, actions: r.actions, undo: r.undo, failed: r.failed, ts: Date.now(), ...(jobId ? { job: jobId } : {}) }]);
+    if (r.failed) haptic.error(); else if (r.undo) haptic.success();
+  };
+  const opts = (id?: { current: string | undefined }) => ({
+    api, sleep: (ms: number) => new Promise<void>(ok => setTimeout(ok, ms)), cancelled: () => gone.current,
+    onJob: (j: AskJob) => { if (id) id.current = j.id; following.current.add(j.id); setJob(j.status === 'done' ? null : j); },
+    onTrouble: setTrouble,
+  });
   const drain = async () => {
     if (asking.current) return;
     asking.current = true; setBusy(true);
     try {
       while (queue.current.length) {
         const t = queue.current.shift()!;
+        const id = { current: undefined as string | undefined };
         try {
-          const r = await api<AskReply>('POST', '/api/ask', { text: t }, ASK_TIMEOUT_MS);
-          setChat(c => [...c, { id: Date.now() + 1, from: 'kova', text: r.text, src: r.source, actions: r.actions, undo: r.undo }]);
-          if (r.undo) haptic.success();
+          land(await askKova(t, opts(id)), id.current);
         } catch (e) {
-          haptic.error();
-          setChat(c => [...c, { id: Date.now() + 1, from: 'kova', text: (e as Error).message, failed: true }]);
-        }
+          if (e instanceof Cancelled) return;
+          land({ text: (e as Error).message, source: '', actions: [], understood: false, failed: true }, id.current);
+        } finally { setJob(null); setTrouble(null); }
       }
     } finally {
       asking.current = false; setBusy(false);
     }
   };
+
+  // What the hub has: answers that landed while the app was closed or away, and requests still being worked on
+  // (followed from here on). Read on opening, and each time the app comes back to the front.
+  const catchUp = async () => {
+    let h: AskHistory;
+    try { h = await api<AskHistory>('GET', '/api/ask/history'); } catch { return; }
+    if (gone.current) return;
+    setChat(c => mergeHistory(c, h.turns ?? []));
+    for (const j of h.jobs ?? []) {
+      if (following.current.has(j.id)) continue;
+      following.current.add(j.id);
+      setChat(c => mergeHistory(c, [{ role: 'user', text: j.text, ts: j.started, job: j.id }]));
+      setBusy(true);
+      void followJob(j, opts()).then(r => land(r, j.id), e => { if (!(e instanceof Cancelled)) land({ text: (e as Error).message, source: '', actions: [], understood: false, failed: true }, j.id); })
+        .finally(() => { if (!asking.current) { setBusy(false); setJob(null); setTrouble(null); } });
+    }
+  };
+  useEffect(() => {
+    void catchUp();
+    const sub = AppState.addEventListener('change', st => { if (st === 'active') void catchUp(); });
+    return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const ask = (q: string) => {
     const t = q.trim();
@@ -86,14 +144,14 @@ export function AskScreen() {
     haptic.select();
     setText(''); setChips([]);
     queue.current.push(t);
-    setChat(c => [...c, { id: Date.now(), from: 'you', text: t }]);
+    setChat(c => [...c, { id: `y${Date.now()}`, from: 'you', text: t, ts: Date.now() }]);
     void drain();
   };
 
   const run = async (m: Msg, a: AskReply['actions'][number]) => {
     try {
       const r = await api<{ text: string; undo?: string }>('POST', '/api/ask/act', { action: a.action });
-      setChat(c => [...c.map(x => x.id === m.id ? { ...x, actions: [] } : x), { id: Date.now(), from: 'kova', text: r.text || 'Done.', src: 'Device control', undo: r.undo }]);
+      setChat(c => [...c.map(x => x.id === m.id ? { ...x, actions: [] } : x), { id: `a${Date.now()}`, from: 'kova', text: r.text || 'Done.', src: 'Device control', undo: r.undo, ts: Date.now() }]);
       return true;
     } catch (e) { say((e as Error).message, { error: true }); return false; }
   };
@@ -109,8 +167,8 @@ export function AskScreen() {
           <View style={{ flex: 1, gap: 1 }}>
             <T v="heading" size={19}>Ask Kova</T>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              <Icon name="lock" size={13} color={C.green} />
-              <T v="footnote" size={12} weight={600} color={C.green}>Built in · works without the internet</T>
+              <Icon name={line.icon} size={13} color={line.tone === 'green' ? C.green : line.tone === 'warn' ? C.redText : C.stone2} />
+              <T v="footnote" size={12} weight={600} color={line.tone === 'green' ? C.green : line.tone === 'warn' ? C.redText : C.stone2} style={{ flexShrink: 1 }} numberOfLines={2}>{line.text}</T>
             </View>
           </View>
         </View>
@@ -133,15 +191,15 @@ export function AskScreen() {
                 </View>
               ) : null}
               {m.src ? (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 6 }}>
-                  <Icon name={SRC_ICON[m.src] ?? (m.src.startsWith('Cloud') ? 'cloud' : m.src.startsWith('Local') ? 'dns' : 'lock')} size={13} color={C.stone2} />
-                  <T v="micro" weight={500} color={C.stone2}>{m.src}</T>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 6, maxWidth: '86%' }}>
+                  <Icon name={sourceIcon(m.src, m.engine)} size={13} color={C.stone2} />
+                  <T v="micro" weight={500} color={C.stone2} style={{ flexShrink: 1 }}>{m.src}</T>
                 </View>
               ) : null}
             </Appear>
           );
         })}
-        {busy ? <Typing /> : null}
+        {busy ? <Working job={job} trouble={trouble} /> : null}
       </ScrollView>
 
       <View style={{ paddingTop: SP[2], paddingBottom: SP[2] + 2, gap: SP[2], borderTopWidth: 1, borderTopColor: C.hairline, backgroundColor: C.page }}>

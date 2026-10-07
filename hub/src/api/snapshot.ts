@@ -12,6 +12,7 @@ import SunCalc from 'suncalc';
 import { alertsFor, isCamera, isOutdoor, kindOf, isSensor } from '../util/sensors.ts';
 import { roomClimate, sensorViews } from '../services/sensors.ts';
 import { roomOutdoor } from '../util/sensors.ts';
+import { engineInfo, loadSettings } from '../assistant/ai.ts';
 
 const FEED_ICON: Record<string, string> = { mode: 'routine', run: 'bolt', presence: 'person_pin_circle', state: 'lightbulb', system: 'info', skip: 'event_busy' };
 
@@ -181,6 +182,8 @@ export function snapshot(hub: Hub) {
       return { ...g, deviceId: `group_${g.id}`, missing: g.members.filter(id => !reg.get(id)), sync: castGroup ? 'perfect' : 'together', castGroup: castGroup ?? null };
     }),
     groups: cfg.groups,
+    // Which engine Ask Kova hands what the built-in parser can't do to (no keys, no settings beyond its name).
+    assistant: engineInfo(loadSettings(store)),
     // `via`: what already knows whether they're home without their phone's location (the app then doesn't need it).
     people: cfg.people.map(p => {
       const st = engine.people[p.id];

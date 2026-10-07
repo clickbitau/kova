@@ -90,7 +90,7 @@ export class CombinedAdapter implements Adapter {
       this.ctx.announce(fresh.map(c => {
         const ms = this.members(c);
         return {
-          id: combinedDeviceId(c), name: c.name, room: c.room ?? ms.find(m => m.room !== 'unassigned')?.room ?? 'unassigned', type: ms[0].type,
+          id: combinedDeviceId(c), name: c.name, room: this.roomOf(c, ms), type: ms[0].type,
           capabilities: [...new Set(ms.flatMap(m => m.capabilities))], integration: ms.map(m => m.integration).join(' + '),
           address: c.members.join(', '), state: mergeState(ms),
         };
@@ -99,11 +99,21 @@ export class CombinedAdapter implements Adapter {
     this.refresh();
   }
 
-  /** A member came or went since it was announced: announce again with the new capabilities. */
+  /** The room it's announced in: its own, else its first part's that has one. */
+  private roomOf(c: CombinedDevice, ms: Device[]): string { return c.room ?? ms.find(m => m.room !== 'unassigned')?.room ?? 'unassigned'; }
+
+  /**
+   * A member came or went since it was announced, or it was renamed or moved in its entry (Ask Kova, the combine
+   * sheet): announce again with the new capabilities, name and room.
+   */
   private changedShape(c: CombinedDevice): boolean {
     const d = this.reg.get(combinedDeviceId(c));
-    const caps = [...new Set(this.members(c).flatMap(m => m.capabilities))];
-    return !d || caps.length !== d.capabilities.length;
+    if (!d) return true;
+    const ms = this.members(c);
+    const caps = [...new Set(ms.flatMap(m => m.capabilities))];
+    const announced = d.original ?? { name: d.name, room: d.room };
+    return caps.length !== d.capabilities.length || announced.name !== c.name || (!!c.room && announced.room !== c.room)
+      || (d.address ?? '') !== c.members.join(', ');
   }
 
   private refresh(): void {

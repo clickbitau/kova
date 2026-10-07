@@ -1,5 +1,5 @@
 import type { Action, Automation, Command, Condition, Device, HomeConfig, NumericField, RoomEventKind, RunMode, StateMatch, Trigger } from '../model/types.ts';
-import { cleanTarget, rhythm } from './validate.ts';
+import { cleanTarget, isRhythmShape, rhythm } from './validate.ts';
 import { FIELD_CAP, PSEUDO_TARGET } from '../util/describe.ts';
 import { LOCAL_STAMP, localStamp, stampAt } from '../util/time.ts';
 
@@ -26,7 +26,20 @@ const HVAC = ['cool', 'heat', 'dry', 'fan', 'auto'];
 const ACTIVITY = ['cleaning', 'returning', 'docked', 'paused', 'idle', 'error'];
 const MAX_DEPTH = 6;
 
-const fail = (m: string): never => { throw new Error(m); };
+/**
+ * A check that failed. `message` is for a person (the editor shows it); `fix` is what to send instead, as a concrete
+ * example built from what was sent — Ask Kova's tools hand it to the model so it can correct the call itself.
+ */
+export class CheckError extends Error {
+  constructor(message: string, readonly fix?: string) { super(message); }
+}
+const fail = (m: string, fix?: string): never => { throw new CheckError(m, fix); };
+/** A compact JS-ish rendering of a value for a "send this instead" example. */
+const show = (v: unknown): string => JSON.stringify(v)?.replace(/"([a-zA-Z_]\w*)":/g, '$1:').replace(/"/g, "'") ?? String(v);
+const TRIGGER_KINDS = 'time, device, numeric, event, room, every, presence, mode, overlay, hub, once';
+const CONDITION_KINDS = 'device, numeric, time, presence, mode, overlay, room, all, any, not';
+const STEP_KINDS = 'set, ramp, delay, wait, notify, overlay, if, repeat, run, stop';
+const TIME_FIX = "{kind:'time', at:'07:30'}, or a sun or prayer time inside it: {kind:'time', at:{kind:'sun', event:'sunset', offsetMin:-15}}";
 const obj = (v: unknown, what: string): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : fail(`${what} isn’t valid`));
 const list = (v: unknown, what: string): unknown[] => (v === undefined ? [] : Array.isArray(v) ? v : fail(`${what} must be a list`));
 const numOrUndef = (v: unknown, what: string, min = -1e9, max = 1e9): number | undefined => {
@@ -41,8 +54,8 @@ const days = (v: unknown): number[] | undefined => {
 };
 
 function device(x: CheckCtx, id: unknown, role: string): string {
-  if (typeof id !== 'string' || !id) fail(`Choose a device for ${role}`);
-  if (!x.device(id as string)) fail(`Unknown device ${id} (${role})`);
+  if (typeof id !== 'string' || !id) fail(`Choose a device for ${role}`, `Give device: one of the device ids from the Devices list, e.g. device:'lamp'`);
+  if (!x.device(id as string)) fail(`Unknown device ${id} (${role})`, `Use a device id exactly as the Devices list shows it (not a name); ${String(id)} isn't one`);
   return id as string;
 }
 
@@ -65,7 +78,50 @@ function range(t: Record<string, unknown>, what: string) {
 }
 const field = (v: unknown): NumericField => (FIELDS.includes(v as NumericField) ? v as NumericField : fail(`${v} isn’t a reading Kova can compare`));
 
-export function checkTrigger(v: unknown, x: CheckCtx): Trigger {
+/**
+ * Near misses read as what they plainly mean: a bare rhythm ("sunset", "21:00", {kind:'sun', …}, {kind:'prayer', …})
+ * is a time trigger at it; a time trigger with its offset beside the rhythm has it moved in.
+ */
+function looseTrigger(v: unknown): unknown {
+  if (typeof v === 'string' && rhythm(v)) return { kind: 'time', at: rhythm(v) };
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return v;
+  const t = v as Record<string, unknown>;
+  if (t.kind !== 'time' && isRhythmShape(t)) {
+    const { days, ...rest } = t;
+    const at = rhythm(rest) ?? fail('That time isn’t valid — use "HH:MM", a sun event like "sunset", or a prayer like "isha"', `You sent ${show(v)}. Send ${TIME_FIX}. Offsets are minutes from -240 to 240.`);
+    return { kind: 'time', at, ...(days !== undefined ? { days } : {}) };
+  }
+  if (t.kind === 'time' && !rhythm(t.at)) {
+    // {kind:'time', at:'sunset', offset:-15} — the offset sits on the trigger, not the rhythm.
+    const { days, kind: _k, ...rest } = t;
+    const at = rhythm({ kind: 'time', ...rest }) ?? rhythm(rest);
+    if (at) return { kind: 'time', at, ...(days !== undefined ? { days } : {}) };
+  }
+  const offKey = ['offsetMin', 'offset', 'offsetMinutes'].find(k => t[k] !== undefined);
+  if (t.kind === 'time' && offKey) {
+    // {kind:'time', at:'sunset', offsetMin:-15}: the offset belongs to the sun time.
+    const at = rhythm({ kind: 'time', at: t.at, offsetMin: t[offKey] });
+    if (at) { const { offsetMin: _o, offset: _p, offsetMinutes: _q, ...rest } = t; return { ...rest, at }; }
+  }
+  return v;
+}
+
+/** A sun or prayer time given as a condition: after or before it, when it says which. */
+function looseCondition(v: unknown): unknown {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return v;
+  const c = v as Record<string, unknown>;
+  if (c.kind !== 'time' && isRhythmShape(c)) {
+    const side = c.when === 'before' || c.before === true ? 'before' : c.when === 'after' || c.after === true ? 'after' : undefined;
+    const { before: _b, after: _a, when: _w, days, ...rest } = c;
+    const at = rhythm(rest);
+    if (at && side) return { kind: 'time', [side]: at, ...(days !== undefined ? { days } : {}) };
+    if (at) fail('A sun or prayer time as a condition needs “after” or “before”', `{kind:'time', after:${show(at)}} (or before:)`);
+  }
+  return v;
+}
+
+export function checkTrigger(v0: unknown, x: CheckCtx): Trigger {
+  const v = looseTrigger(v0);
   const t = obj(v, 'A trigger');
   const forSec = numOrUndef(t.forSec, 'How long', 0, 7 * 86400);
   switch (t.kind) {
@@ -85,7 +141,7 @@ export function checkTrigger(v: unknown, x: CheckCtx): Trigger {
       return { kind: 'room', room: String(t.room), event: t.event as RoomEventKind };
     }
     case 'time': {
-      const at = rhythm(t.at) ?? fail('That time isn’t valid — use "HH:MM", a sun event like "sunset", or a prayer like "isha"');
+      const at = rhythm(t.at) ?? fail('That time isn’t valid — use "HH:MM", a sun event like "sunset", or a prayer like "isha"', `You sent at:${show(t.at)}. Send ${TIME_FIX}. Offsets are minutes from -240 to 240.`);
       const d = days(t.days);
       return { kind: 'time', at, ...(d ? { days: d } : {}) };
     }
@@ -118,24 +174,25 @@ export function checkTrigger(v: unknown, x: CheckCtx): Trigger {
       else if (typeof t.at === 'string' && LOCAL_STAMP.test(t.at.trim())) at = t.at.trim();
       // A full ISO time with a zone ("…Z", "…+08:00"): the home's own clock time for that instant.
       else if (typeof t.at === 'string' && /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(t.at) && Number.isFinite(Date.parse(t.at))) at = localStamp(Date.parse(t.at), tz);
-      else return fail('Give a date and time for “once”, like "2026-10-08T15:30" (the home’s time), or inMinutes');
+      else return fail('Give a date and time for “once”, like "2026-10-08T15:30" (the home’s time), or inMinutes', `You sent at:${show(t.at)}. Send {kind:'once', at:'${localStamp(now + 3600_000, tz)}'} or {kind:'once', inMinutes:60}.`);
       if (stampAt(at, tz) == null) fail(`${at} isn’t a real date and time`);
       const firedAt = typeof t.firedAt === 'number' && Number.isFinite(t.firedAt) ? t.firedAt : undefined;
       return { kind: 'once', at, ...(firedAt ? { firedAt } : {}), ...(firedAt && t.missed === true ? { missed: true } : {}) };
     }
-    default: return fail(`Unknown kind of trigger ${String(t.kind)}`);
+    default: return fail(`Unknown kind of trigger ${String(t.kind)}`, `Trigger kinds are ${TRIGGER_KINDS}. For a time of day send ${TIME_FIX}.`);
   }
 }
 
-export function checkCondition(v: unknown, x: CheckCtx, depth = 0): Condition {
+export function checkCondition(v0: unknown, x: CheckCtx, depth = 0): Condition {
   if (depth > MAX_DEPTH) fail('Conditions are nested too deep');
+  const v = looseCondition(v0);
   const c = obj(v, 'A condition');
   switch (c.kind) {
     case 'device': return { kind: 'device', device: device(x, c.device, 'a condition'), is: stateMatch(c.is, 'A condition') };
     case 'numeric': return { kind: 'numeric', device: device(x, c.device, 'a condition'), field: field(c.field), ...range(c, 'A condition') };
     case 'time': {
-      const after = c.after === undefined ? undefined : (rhythm(c.after) ?? fail('The “after” time isn’t valid — use "HH:MM", a sun event like "sunset", or a prayer like "isha"'));
-      const before = c.before === undefined ? undefined : (rhythm(c.before) ?? fail('The “before” time isn’t valid — use "HH:MM", a sun event like "sunset", or a prayer like "isha"'));
+      const after = c.after === undefined ? undefined : (rhythm(c.after) ?? fail('The “after” time isn’t valid — use "HH:MM", a sun event like "sunset", or a prayer like "isha"', `You sent after:${show(c.after)}. Send {kind:'time', after:'22:00'} or {kind:'time', after:{kind:'sun', event:'sunset', offsetMin:-15}}.`));
+      const before = c.before === undefined ? undefined : (rhythm(c.before) ?? fail('The “before” time isn’t valid — use "HH:MM", a sun event like "sunset", or a prayer like "isha"', `You sent before:${show(c.before)}. Send {kind:'time', before:'06:00'} or {kind:'time', before:{kind:'sun', event:'sunrise'}}.`));
       const d = days(c.days);
       if (!after && !before && !d) fail('A time condition needs times or days');
       return { kind: 'time', ...(after ? { after } : {}), ...(before ? { before } : {}), ...(d ? { days: d } : {}) };
@@ -165,7 +222,7 @@ export function checkCondition(v: unknown, x: CheckCtx, depth = 0): Condition {
       if (!cs.length) fail(`An “${c.kind}” group needs at least one condition`);
       return { kind: c.kind, conditions: cs };
     }
-    default: return fail(`Unknown kind of condition ${String(c.kind)}`);
+    default: return fail(`Unknown kind of condition ${String(c.kind)}`, `Condition kinds are ${CONDITION_KINDS}, e.g. {kind:'time', after:{kind:'sun', event:'sunset'}} or {kind:'device', device:'lamp', is:{on:true}}.`);
   }
 }
 
@@ -179,7 +236,7 @@ function checkTargets(t: Record<string, unknown>, x: CheckCtx, extra?: Record<st
     // "type:light" / "room:lounge" — every matching device, now and later; each device keeps only what it can do at run time.
     const pm = PSEUDO_TARGET.exec(id);
     if (pm) {
-      if (pm[1] === 'room' ? !x.cfg.rooms.some(r => r.id === pm[2]) : !DEVICE_TYPES.includes(pm[2]!)) fail(`Unknown ${pm[1]} target ${id}`);
+      if (pm[1] === 'room' ? !x.cfg.rooms.some(r => r.id === pm[2]) : !DEVICE_TYPES.includes(pm[2]!)) fail(`Unknown ${pm[1]} target ${id}`, pm[1] === 'room' ? `Use 'room:<room id from the Rooms list>', e.g. 'room:${x.cfg.rooms[0]?.id ?? 'lounge'}'` : `Use 'type:' with one of ${DEVICE_TYPES.join(', ')}, e.g. 'type:light'`);
       const cleaned: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(c)) {
         if (!FIELD_CAP[k]) fail(`${k} isn’t something devices can do`);
@@ -188,7 +245,7 @@ function checkTargets(t: Record<string, unknown>, x: CheckCtx, extra?: Record<st
       out[id] = cleaned as Command;
       continue;
     }
-    const d = x.device(id) ?? fail(`Unknown device ${id}`);
+    const d = x.device(id) ?? fail(`Unknown device ${id}`, `targets are keyed by device ids from the Devices list (or 'type:light', 'room:<id>'); ${id} isn't one`);
     out[id] = cleanTarget(d, c as Command);
   }
   if (!Object.keys(out).length) fail('Choose at least one device to set');
@@ -253,7 +310,7 @@ export function checkAction(v: unknown, x: CheckCtx, depth = 0): Action {
       return { kind: 'run', automation: String(a.automation) };
     }
     case 'stop': return { kind: 'stop' };
-    default: return fail(`Unknown kind of step ${String(a.kind)}`);
+    default: return fail(`Unknown kind of step ${String(a.kind)}`, `Step kinds are ${STEP_KINDS}, e.g. {kind:'set', targets:{lamp:{on:true, bri:40}}} or {kind:'notify', message:'…'}.`);
   }
 }
 
@@ -264,7 +321,7 @@ export function checkAutomation(v: unknown, x: CheckCtx): Omit<Automation, 'id'>
   if (!name) fail('An automation needs a name');
   if (name.length > 80) fail('Keep the name under 80 characters');
   const triggers = list(b.triggers, 'Triggers').map(t => checkTrigger(t, x));
-  if (!triggers.length) fail('Add at least one trigger: what starts it');
+  if (!triggers.length) fail('Add at least one trigger: what starts it', `Give when:[…], e.g. when:[${TIME_FIX.split(', or')[0]}]`);
   if (triggers.length > 20) fail('Up to 20 triggers');
   // A one-time schedule switched on has to have a time still to come; a time moved later goes off again.
   const tz = x.cfg.timezone ?? 'UTC', now = x.now ?? Date.now();
@@ -275,7 +332,7 @@ export function checkAutomation(v: unknown, x: CheckCtx): Omit<Automation, 'id'>
   }
   const conditions = list(b.conditions, 'Conditions').map(c => checkCondition(c, x));
   const actions = list(b.actions, 'Steps').map(a => checkAction(a, x));
-  if (!actions.length) fail('Add at least one step: what it does');
+  if (!actions.length) fail('Add at least one step: what it does', `Give then:[…], e.g. then:[{kind:'set', targets:{'type:light':{on:false}}}]`);
   const mode = b.mode === undefined ? 'single' : MODES.includes(b.mode as RunMode) ? b.mode as RunMode : fail(`${b.mode} isn’t a run mode`);
   const description = typeof b.description === 'string' && b.description.trim() ? b.description.trim().slice(0, 300) : undefined;
   const origin = b.origin && typeof b.origin === 'object' ? b.origin as Automation['origin'] : undefined;

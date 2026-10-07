@@ -553,7 +553,9 @@ a row on the Integrations screen ("Router: 2 phones seen").
 | POST | `/api/push/test` | Send a test notification to every channel |
 | POST | `/api/lights/off` | Every light off → `{undo}` |
 | POST | `/api/undo/:id` | |
-| POST | `/api/ask`, `/api/ask/act` | Ask Kova |
+| POST | `/api/ask`, `/api/ask/act` | Ask Kova. With `job: true`, what goes on to an AI engine answers at once with a job instead of waiting |
+| GET | `/api/ask/jobs/:id?rev=&wait=` | Follow an Ask job: a long poll that returns as soon as a step starts or ends or the answer lands (404: the hub restarted) |
+| GET | `/api/ask/history` | The conversation (8 hours, with each reply's source and undo), jobs still running, and the engine in use |
 | GET | `/api/integrations/homekit` | `{enabled, pincode, setupURI, paired}` for the Apple Home bridge |
 | GET | `/api/integrations/homekit-devices/discover` | HomeKit accessories on the network: `{accessories: [{id, name, category, host, port, paired}]}` (browses mDNS for 3 s) |
 | POST | `/api/integrations/homekit-devices/pair` | `{id, code: "123-45-678", room?, name?}` pairs Kova with an accessory and returns its new devices; 400 with a message on a wrong code, an accessory that's already paired elsewhere, or when `homekit` isn't in integrations.json |

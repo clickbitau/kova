@@ -262,18 +262,19 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
     return expanded;
   }
 
-  async applyTargets(targets: Targets, cause: Cause): Promise<{ changed: string[]; prev: Targets }> {
+  async applyTargets(targets: Targets, cause: Cause): Promise<{ changed: string[]; prev: Targets; failed: { id: string; error: string }[] }> {
     // Archived devices are left alone: a mode or overlay that still names one skips it.
     const expanded = Object.fromEntries(Object.entries(this.expandTargets(targets)).filter(([id]) => !this.devices.get(id)?.archived));
     const changed: string[] = [];
     const prev: Targets = {};
+    const failed: { id: string; error: string }[] = [];
     await Promise.all(Object.entries(expanded).map(async ([id, cmd]) => {
       try {
         const p = await this.command(id, cmd, cause, { quiet: true });
         if (Object.keys(p).length) { changed.push(id); prev[id] = p; }
-      } catch { /* logged in command() */ }
+      } catch (e) { failed.push({ id, error: e instanceof Error ? e.message : String(e) }); /* logged in command() */ }
     }));
-    return { changed, prev };
+    return { changed, prev, failed };
   }
 
   private apply(d: Device, patch: Command, cause: Cause, quiet = false): Command {

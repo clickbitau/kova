@@ -59,7 +59,11 @@ export type AskAction =
   | { type: 'learnGroup'; name: string; rooms: string[] }
   | { type: 'screen'; screen: string };
 
-export interface AskReply { text: string; source: Source; actions: { label: string; action: AskAction }[]; undo?: string; understood: boolean }
+export interface AskReply {
+  text: string; source: Source; actions: { label: string; action: AskAction }[]; undo?: string; understood: boolean;
+  /** Which engine answered: the built-in parser (or a learned phrase), a local AI, or a cloud AI. */
+  engine?: 'builtin' | 'local' | 'cloud';
+}
 
 const CAUSE: Cause = { kind: 'assistant', label: 'Ask Kova' };
 export const norm = (s: string) => s.toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9% ]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -85,6 +89,13 @@ export class Assistant {
   constructor(private engine: Engine, private reg: Registry, private config: ConfigStore) {}
 
   private rooms() { return this.config.get().rooms; }
+
+  /**
+   * The devices answers are about: not archived, not hidden — and so never the parts of a combined device, which
+   * stands for them (its parts are hidden while combined). A hidden device is still reached by its exact name.
+   */
+  private devs(): Device[] { return this.reg.list().filter(d => !d.archived && !d.hidden); }
+  private hiddenNamed(p: string): Device[] { return this.reg.list().filter(d => !d.archived && d.hidden && norm(d.name) === p); }
   private roomName(id: string) { return this.rooms().find(r => r.id === id)?.name ?? id; }
 
   /** Devices a phrase refers to: a learned label, a room (optionally + device), a device, or everything. */
@@ -95,30 +106,32 @@ export class Assistant {
     const kind = (ds: Device[]) => ds.filter(d => wantsSpeakers ? isPlayer(d) : isLight(d));
     const noun = wantsSpeakers ? 'speakers' : 'lights';
     const c = this.config.get();
-    if (!p || ['everything', 'house', 'home', 'lights', 'light', 'all'].includes(p)) return { devices: kind(this.reg.list()), label: `All ${noun}` };
+    if (!p || ['everything', 'house', 'home', 'lights', 'light', 'all'].includes(p)) return { devices: kind(this.devs()), label: `All ${noun}` };
     const group = Object.entries(c.groups).find(([g]) => norm(g) === p);
-    if (group) return { devices: kind(this.reg.list().filter(d => group[1].includes(d.room))), label: cap(group[0]) };
+    if (group) return { devices: kind(this.devs().filter(d => group[1].includes(d.room))), label: cap(group[0]) };
     const room = [...this.rooms()].sort((a, b) => b.name.length - a.name.length)
       .find(r => norm(r.name) === p || norm(r.id) === p || p.startsWith(`${norm(r.name)} `) || (p.length > 2 && norm(r.name).startsWith(p)));
     if (room) {
       const rest = p.startsWith(`${norm(room.name)} `) ? p.slice(norm(room.name).length).trim() : '';
-      const inRoom = this.reg.list().filter(d => d.room === room.id);
+      const inRoom = this.devs().filter(d => d.room === room.id);
       const named = rest ? inRoom.filter(d => norm(d.name).includes(rest)) : [];
       if (named.length) return { devices: named, label: `${room.name} ${named.length === 1 ? named[0].name.toLowerCase() : rest}` };
       return { devices: kind(inRoom), label: `${room.name} ${noun}` };
     }
-    const dev = this.reg.list().filter(d => {
+    const dev = this.devs().filter(d => {
       const full = norm(`${this.roomName(d.room)} ${d.name}`);
       return norm(d.name) === p || full === p || full.includes(p) || (p.length > 3 && norm(d.name).includes(p));
     });
     if (dev.length) return { devices: dev, label: dev.length === 1 ? dev[0].name : cap(phrase.trim()) };
+    const hid = this.hiddenNamed(p);
+    if (hid.length) return { devices: hid, label: hid.length === 1 ? hid[0].name : cap(phrase.trim()) };
     if (/^[a-z]+$/.test(p) && p.length > 2) return { unknown: p };
     return null;
   }
 
   /** Speakers that can play a queue (Helix music). A Kova speaker group stands for its speakers, so they aren't asked twice. */
   private speakers(): Device[] {
-    const all = this.reg.list().filter(d => d.capabilities.includes('queue') && !d.hidden);
+    const all = this.devs().filter(d => d.capabilities.includes('queue') && !d.hidden);
     const real = all.filter(d => d.adapter !== 'groups');
     return real.length ? real : all;
   }
@@ -136,7 +149,7 @@ export class Assistant {
     if (room) return { label: room.name, has: d => d.room === room.id };
     const group = Object.entries(this.config.get().groups).find(([g]) => norm(g) === p);
     if (group) return { label: cap(group[0]), has: d => group[1].includes(d.room) };
-    const ids = new Set(this.reg.list().filter(d => norm(d.name) === p || norm(`${this.roomName(d.room)} ${d.name}`).includes(p)).map(d => d.id));
+    const ids = new Set(this.devs().filter(d => norm(d.name) === p || norm(`${this.roomName(d.room)} ${d.name}`).includes(p)).map(d => d.id));
     return ids.size ? { label: cap(phrase.trim()), has: d => ids.has(d.id) } : null;
   }
 
@@ -154,12 +167,12 @@ export class Assistant {
     if (hit) return hit;
     // "the door": wherever the doorbell is.
     if (/\bdoor\b/.test(p)) {
-      const bell = this.reg.list().find(d => isCamera(d) && isDoorbell(d));
+      const bell = this.devs().find(d => isCamera(d) && isDoorbell(d));
       const r = bell && this.rooms().find(x => x.id === bell.room);
       if (r) return r;
     }
     // A camera's name ("the driveway camera").
-    const cam = this.reg.list().find(d => (isCamera(d) || isSensor(d)) && norm(d.name).includes(p));
+    const cam = this.devs().find(d => (isCamera(d) || isSensor(d)) && norm(d.name).includes(p));
     const r = cam && this.rooms().find(x => x.id === cam.room);
     return r ?? null;
   }
@@ -185,7 +198,7 @@ export class Assistant {
     const ct = t.match(/^(?:is|are) (?:the |my )?(.+?) (open|closed|shut)$/);
     if (ct) {
       const p = norm(ct[1]);
-      const ds = this.reg.list().filter(d => isSensor(d) && typeof d.state.open === 'boolean' && (norm(d.name).includes(p) || p.includes(norm(d.name)) || norm(`${this.roomName(d.room)} ${d.name}`).includes(p) || norm(this.roomName(d.room)) === p));
+      const ds = this.devs().filter(d => isSensor(d) && typeof d.state.open === 'boolean' && (norm(d.name).includes(p) || p.includes(norm(d.name)) || norm(`${this.roomName(d.room)} ${d.name}`).includes(p) || norm(this.roomName(d.room)) === p));
       if (ds.length) return { kind: 'contact', devices: ds.map(d => d.id), label: ds.length === 1 ? ds[0].name : cap(ct[1]) };
     }
     // "what's the temperature in the bedroom", "how warm is the baby room", "how humid is it in the lounge"
@@ -211,7 +224,7 @@ export class Assistant {
     }
     if (/^who(s| is)?\b.*\b(home|in|here|out)\b/.test(t)) return { kind: 'whoHome' };
     // "is the router ok", "how much power is the router using", "router power supplies", "how hot is the router"
-    const hw = this.reg.list().filter(hasHardware).find(d => new RegExp(`\\b(${[norm(d.name), d.adapter === 'warden' ? 'router|warden' : ''].filter(Boolean).join('|')})\\b`).test(t));
+    const hw = this.devs().filter(hasHardware).find(d => new RegExp(`\\b(${[norm(d.name), d.adapter === 'warden' ? 'router|warden' : ''].filter(Boolean).join('|')})\\b`).test(t));
     if (hw && /\b(ok|okay|alright|fine|healthy|good|working|power|watts?|using|draw(ing|s)?|use|supply|supplies|psus?|redundan\w*|temp\w*|hot|warm|fans?|status|how is|hows)\b/.test(t) && !/^(turn|switch|restart|reboot)\b/.test(t)) {
       return { kind: 'hardware', device: hw.id, label: hw.name };
     }
@@ -246,7 +259,7 @@ export class Assistant {
     if (pz) {
       const resume = pz[1] !== 'pause';
       const at = pz[2] ? this.place(pz[2]) : null;
-      const players = this.reg.list().filter(d => d.capabilities.includes('pause') && (!at || at.has(d)));
+      const players = this.devs().filter(d => d.capabilities.includes('pause') && (!at || at.has(d)));
       if (players.length && (!pz[2] || at)) return { kind: 'pause', resume, label: at?.label ?? 'What’s playing', devices: players.filter(d => d.state.on && !!d.state.paused === resume).map(d => d.id) };
     }
     // "what's playing", "what song is this"
@@ -270,7 +283,7 @@ export class Assistant {
       const split = words.match(/^(.+) (?:on|in) (?:the )?(.+)$/);
       const at = split ? this.place(split[2]) : null;
       let title = (at ? split![1] : words).trim();
-      const tvs = this.reg.list().filter(d => d.capabilities.includes('library'));
+      const tvs = this.devs().filter(d => d.capabilities.includes('library'));
       const picked = at ? tvs.filter(d => at.has(d)) : tvs.length === 1 ? tvs : tvs.filter(d => d.state.on);
       const musical = shuffle || pl[1] === 'shuffle' || /\b(songs?|music|playlist|station|radio|album|loved|favou?rites?|tracks?)\b/.test(norm(title)) || / by /.test(title);
       if (pl[1] !== 'shuffle' && !musical && picked.length === 1 && title && !/^(a |the )?(movie|film|something)$/.test(norm(title))) {
@@ -336,7 +349,7 @@ export class Assistant {
     const tz = this.config.get().timezone;
     switch (i.kind) {
       case 'greeting': {
-        const on = this.reg.list().filter(d => isLight(d) && d.state.on).length;
+        const on = this.devs().filter(d => isLight(d) && d.state.on).length;
         return reply(`Hi. ${plural(on, 'light')} ${on === 1 ? 'is' : 'are'} on and the home is in ${this.engine.mode().name}. What do you need?`, 'Built-in · nothing left your home');
       }
       case 'learn':
@@ -385,7 +398,7 @@ export class Assistant {
         return reply(text, 'From the activity log');
       }
       case 'whatsOn': {
-        const on = this.reg.list().filter(d => isLight(d) && d.state.on);
+        const on = this.devs().filter(d => isLight(d) && d.state.on);
         const names = on.map(d => `${this.roomName(d.room)} ${d.name.toLowerCase()}`);
         return reply(on.length ? `${plural(on.length, 'light')} ${on.length === 1 ? 'is' : 'are'} on: ${list(names)}.` : 'All the lights are off.', 'Built-in · nothing left your home',
           on.length ? { actions: [{ label: 'Turn them all off', action: { type: 'apply', targets: Object.fromEntries(on.map(d => [d.id, { on: false }])), label: 'All lights off', done: 'All lights are off.' } }] } : {});
@@ -441,7 +454,7 @@ export class Assistant {
       }
       case 'roomEvents': return this.roomEventsReply(i);
       case 'reading': {
-        const ds = this.reg.list().filter(d => d.room === i.room && !d.hidden && d.state.online !== false && reading(d, i.field));
+        const ds = this.devs().filter(d => d.room === i.room && !d.hidden && d.state.online !== false && reading(d, i.field));
         const sensors = ds.filter(isSensor);
         const from = sensors.length ? sensors : ds;
         if (!from.length) return reply(`Nothing in the ${i.label} measures ${i.field === 'humidity' ? 'humidity' : i.field === 'lux' ? 'the light' : 'the temperature'}.`, 'Built-in · nothing left your home');
@@ -475,7 +488,7 @@ export class Assistant {
   private roomEventsReply(i: Extract<Intent, { kind: 'roomEvents' }>): AskReply {
     const cfg = this.config.get(), tz = cfg.timezone, t = this.engine.now();
     const rooms = this.engine.rooms;
-    const watchers = this.reg.list().filter(d => d.room === i.room && (isCamera(d) || (isSensor(d) && (typeof d.state.motion === 'boolean' || typeof d.state.open === 'boolean'))));
+    const watchers = this.devs().filter(d => d.room === i.room && (isCamera(d) || (isSensor(d) && (typeof d.state.motion === 'boolean' || typeof d.state.open === 'boolean'))));
     const src: Source = 'From the activity log';
     const acts = [{ label: 'Open Security', action: { type: 'screen' as const, screen: 'security' } }];
     const reply = (text: string): AskReply => ({ text, source: src, actions: acts, understood: true });

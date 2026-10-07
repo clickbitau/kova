@@ -23,7 +23,7 @@ document.write('<script src="/api/boot.js'+(t?"?token="+encodeURIComponent(t):""
 </head>
 <body>
 <x-dc>
-<helmet><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..24,400,0..1,0&display=swap" rel="stylesheet"><style>body{margin:0;background:#0e0f10;-webkit-font-smoothing:antialiased}a{color:#f2b14c}a:hover{color:#f7cb82}*{box-sizing:border-box}input[type=range]{accent-color:#f2b14c}</style></helmet>
+<helmet><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..24,400,0..1,0&display=swap" rel="stylesheet"><style>body{margin:0;background:#0e0f10;-webkit-font-smoothing:antialiased}a{color:#f2b14c}a:hover{color:#f7cb82}*{box-sizing:border-box}input[type=range]{accent-color:#f2b14c}@keyframes askspin{to{transform:rotate(360deg)}}@media (prefers-reduced-motion:reduce){[data-ask-working] span{animation:none!important}}</style></helmet>
 <div data-kova-shell style="display:flex;min-height:100vh;background:#0e0f10;color:#f1efea;font-family:Manrope,system-ui,sans-serif">
 
 <aside data-kova-nav style="width:236px;flex:none;border-right:1px solid rgba(255,255,255,0.07);padding:22px 14px;display:flex;flex-direction:column;gap:4px;position:sticky;top:0;height:100vh;background:#111214">
@@ -733,10 +733,10 @@ document.write('<script src="/api/boot.js'+(t?"?token="+encodeURIComponent(t):""
 </sc-if>
 
 <sc-if value="{{ isAssistant }}" hint-placeholder-val="{{ false }}">
-<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;color:#a3a09a">{{ askSub }}</span><h1 style="margin:0;font-size:30px;font-weight:700;letter-spacing:-0.02em">Ask Kova</h1></div>
+<div style="display:flex;flex-direction:column;gap:6px;min-width:0"><span style="font-size:13px;color:#a3a09a;overflow-wrap:anywhere">{{ askSub }}</span><h1 style="margin:0;font-size:30px;font-weight:700;letter-spacing:-0.02em">Ask Kova</h1><span data-ask-engine style="display:flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;color:{{ askEngineFg }};min-width:0"><span style="font-family:'Material Symbols Rounded';font-size:15px;flex:none">{{ askEngineIcon }}</span><span style="overflow-wrap:anywhere;min-width:0">{{ askEngine }}</span></span></div>
 <div style="max-width:760px;width:100%;display:flex;flex-direction:column;gap:14px">
 <sc-for list="{{ chat }}" as="m" hint-placeholder-count="2">
-<div style="display:flex;justify-content:{{ m.justify }}"><div style="max-width:80%;padding:12px 16px;border-radius:16px;font-size:14px;line-height:1.5;background:{{ m.bg }};color:{{ m.fg }}">{{ m.text }}<sc-if value="{{ m.hasAct }}" hint-placeholder-val="{{ false }}"><div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><sc-for list="{{ m.acts }}" as="ma" hint-placeholder-count="1"><div onClick="{{ ma.run }}" style="padding:7px 12px;border-radius:9px;background:#f2b14c;color:#1a1408;font-size:12px;font-weight:700;cursor:pointer">{{ ma.label }}</div></sc-for></div></sc-if></div></div>
+<div data-ask-msg style="display:flex;flex-direction:column;align-items:{{ m.justify }};gap:6px;min-width:0"><sc-if value="{{ m.hasText }}" hint-placeholder-val="{{ true }}"><div style="max-width:min(80%,640px);min-width:0;padding:12px 16px;border-radius:16px;font-size:14px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;background:{{ m.bg }};color:{{ m.fg }};border:1px solid {{ m.border }}">{{ m.text }}<sc-if value="{{ m.hasAct }}" hint-placeholder-val="{{ false }}"><div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><sc-for list="{{ m.acts }}" as="ma" hint-placeholder-count="1"><div onClick="{{ ma.run }}" style="padding:7px 12px;border-radius:9px;background:#f2b14c;color:#1a1408;font-size:12px;font-weight:700;cursor:pointer">{{ ma.label }}</div></sc-for></div></sc-if></div></sc-if><sc-if value="{{ m.working }}" hint-placeholder-val="{{ false }}"><div data-ask-working aria-live="polite" style="max-width:min(80%,640px);min-width:0;display:flex;flex-direction:column;gap:6px;padding:12px 16px;border-radius:16px;background:#16171a;border:1px solid rgba(255,255,255,0.08)"><div style="display:flex;align-items:center;gap:8px;min-width:0"><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#f2b14c;flex:none;animation:askspin 1.4s linear infinite">progress_activity</span><span style="font-size:13px;font-weight:700;color:#d8d5cf;overflow-wrap:anywhere;min-width:0">{{ m.title }}</span></div><sc-for list="{{ m.steps }}" as="st" hint-placeholder-count="2"><div style="display:flex;align-items:flex-start;gap:8px;min-width:0"><span style="font-family:'Material Symbols Rounded';font-size:16px;line-height:20px;flex:none;color:{{ st.fg }}">{{ st.icon }}</span><span style="font-size:13px;line-height:20px;color:{{ st.tx }};overflow-wrap:anywhere;min-width:0">{{ st.label }}</span></div></sc-for><sc-if value="{{ m.hasTrouble }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:#a3a09a;line-height:1.45;overflow-wrap:anywhere">{{ m.trouble }}</span></sc-if></div></sc-if><sc-if value="{{ m.hasFoot }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px;max-width:min(80%,640px);min-width:0;padding:0 6px"><span style="display:flex;align-items:center;gap:4px;min-width:0"><span style="font-family:'Material Symbols Rounded';font-size:14px;color:#8a8781;flex:none">{{ m.srcIcon }}</span><span style="font-size:11.5px;color:#8a8781;overflow-wrap:anywhere;min-width:0">{{ m.src }}</span></span><sc-if value="{{ m.hasUndo }}" hint-placeholder-val="{{ false }}"><span onClick="{{ m.undo }}" role="button" style="font-size:12px;font-weight:700;color:#f2b14c;cursor:pointer">Undo</span></sc-if></div></sc-if></div>
 </sc-for>
 <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px"><sc-for list="{{ asks }}" as="q" hint-placeholder-count="4"><div onClick="{{ q.ask }}" style="padding:8px 13px;border-radius:999px;background:#16171a;border:1px solid rgba(255,255,255,0.08);font-size:13px;font-weight:600;cursor:pointer" style-hover="border-color:rgba(242,177,76,0.5)">{{ q.text }}</div></sc-for></div>
 <div style="display:flex;gap:8px;align-items:center;padding:6px 6px 6px 16px;border-radius:16px;background:#16171a;border:1px solid rgba(255,255,255,0.1)">
@@ -1022,6 +1022,23 @@ async function api(method,path,body){
   if(!r.ok)throw new Error(j.error||r.statusText);
   return j;
 }
+// Ask Kova: the engine line under the title, a reply's footer icon, and what a job is doing (mobile/src/logic/ask.ts).
+function askEngineLine(e){
+  if(!e||e.kind==='builtin')return{icon:'lock',text:'Built in · works without the internet',fg:'#7fd4a0'};
+  if(e.ready===false)return{icon:'error',text:`${e.label} isn’t set up · built in only`,fg:'#ff8a7e'};
+  if(e.kind==='local')return{icon:'dns',text:'Built in, then Local AI on your server',fg:'#a3a09a'};
+  return{icon:'cloud',text:`Built in, then ${e.label} (online)`,fg:'#a3a09a'};
+}
+function askIcon(src,engine){
+  const K={'Device control':'toggle_on','From the activity log':'history','From your modes':'routine','Built-in · nothing left your home':'lock','Learned · no AI needed':'history'};
+  if(K[src])return K[src];if(engine==='cloud'||/ · sent /.test(src))return'cloud';if(engine==='local'||/^Local/.test(src))return'dns';return'lock';
+}
+function askProgress(j){
+  if(!j)return{title:'Thinking…',steps:[]};
+  const who=j.engine&&j.engine.kind!=='builtin'?j.engine.label:'Kova';
+  return{title:!(j.steps||[]).length?`Asking ${who}…`:`${who} is working on it…`,
+    steps:(j.steps||[]).map(x=>({label:x.status==='working'?`${x.label}…`:x.status==='failed'&&x.note?`${x.label}: ${x.note}`:x.label,icon:x.status==='ok'?'check_circle':x.status==='failed'?'cancel':'pending',fg:x.status==='ok'?'#7fd4a0':x.status==='failed'?'#ff8a7e':'#a3a09a',tx:x.status==='failed'?'#ff8a7e':'#d8d5cf'}))};
+}
 // Leaflet for the map in Settings, from unpkg the first time it's needed (pinned, with its integrity hash).
 let leafletP=null;
 function loadLeaflet(){if(window.L&&window.L.map)return Promise.resolve(window.L);if(leafletP)return leafletP;
@@ -1242,7 +1259,7 @@ const PUSH_UI={insecure:['Notifications need HTTPS','Open Kova over https:// to 
 
 class Component extends DCLogic {
   state={hub:BOOT,conn:!!window.KOVA_BOOT,screen:this.props.startScreen??'home',room:null,drawer:null,tab:'simple',nameDraft:null,advanced:(this.props.depth??'Simple')==='Advanced',sel:'sunset',toast:null,undo:null,merging:false,merged:false,done:{},linked:{},q:'',camSel:null,push:pushBase(),mediaSel:null,actF:'all',inboxDone:{},iq:'',intF:'All',draft:'',chat:[{from:'kova',text:`Hi. ${BOOT.devices.filter(d=>isLight(d)&&d.state.on).length} lights are on and the home is in ${(BOOT.modes.find(m=>m.id===BOOT.current.modeId)||BOOT.modes[0]).name}. What do you need?`}],preview:null,pv:null,modeSel:null,igCat:null,igCfg:null,igPick:false,ig:null,igLoadErr:null,imp:null,impAutos:[],impFile:null,impKey:'',impPath:'',impBusy:null,impPct:0,impErr:null,impNeedKey:false,impNew:false,showCode:false};
-  componentDidMount(){this.connect();this._igLoad=this.loadInteg();this.loadImport();this.pushCheck();this.deepLink();this.autoKeys()}
+  componentDidMount(){this.loadAsk();this.connect();this._igLoad=this.loadInteg();this.loadImport();this.pushCheck();this.deepLink();this.autoKeys()}
   // The automation editor: Esc goes back (asking first when there are changes), Ctrl/⌘+S saves; leaving the page with changes asks too.
   autoKeys(){
     document.addEventListener('keydown',e=>{const k=this._aeKeys;if(!k||!this.state.ae||this.state.screen!=='autos')return;
@@ -1358,13 +1375,52 @@ class Component extends DCLogic {
   async startOverlay(o){try{const r=await api('POST',`/api/overlays/${o.id}/start`);this.setState({preview:null,pv:null});this.toast(`${o.name} is on`,this.undoFn(r.undo))}catch(e){this.err(e)}}
   async loadPreview(h){try{const r=await api('GET','/api/preview?hour='+h.toFixed(3));if(this.state.preview===h)this.setState({pv:r})}catch(e){}}
   setPreview(h){this.setState({preview:h,pv:null});if(h!=null)this.loadPreview(h)}
+  // Ask Kova. The built-in parser answers at once; what goes on to an AI engine comes back as a job, followed here with
+  // short long-polls until it lands (GET /api/ask/jobs/:id), showing each step as it happens. Nothing is timed out
+  // while the hub works on it; a follow that fails is tried again; the answer is also kept in the hub's conversation.
   async reply(q){
-    this.setState(p=>({draft:'',chat:[...p.chat,{from:'you',text:q}]}));
-    try{const r=await api('POST','/api/ask',{text:q});
-      this.setState(p=>({chat:[...p.chat,{from:'kova',text:r.text,acts:(r.actions||[]).map(a=>({label:a.label,run:async()=>{
-        if(a.action.type==='screen'){this.setState({screen:a.action.screen});return}
-        const x=await api('POST','/api/ask/act',{action:a.action});this.setState(pp=>({chat:[...pp.chat,{from:'kova',text:x.text}]}));if(x.undo)this.toast(x.text,this.undoFn(x.undo))}}))}]}))}
-    catch(e){this.setState(p=>({chat:[...p.chat,{from:'kova',text:'I couldn’t reach the hub. '+e.message}]}))}
+    const asked=Date.now();
+    this.setState(p=>({draft:'',chat:[...p.chat,{from:'you',text:q,ts:asked}]}));
+    let r;
+    try{r=await api('POST','/api/ask',{text:q,job:true})}
+    catch(e){this.setState(p=>({chat:[...p.chat,{from:'kova',failed:true,ts:Date.now(),text:e instanceof TypeError?'Can’t reach the hub. Check this computer’s connection to it.':(e.message||String(e))}]}));return}
+    if(r.job){this.followAsk(r.job);return}
+    this.landAsk(r);
+  }
+  landAsk(r,jobId){
+    const acts=(r.actions||[]).map(a=>({label:a.label,run:async()=>{
+      if(a.action.type==='screen'){this.setState({screen:a.action.screen});return}
+      const x=await api('POST','/api/ask/act',{action:a.action});this.setState(pp=>({chat:[...pp.chat,{from:'kova',text:x.text,src:'Device control',ts:Date.now()}]}));if(x.undo)this.toast(x.text,this.undoFn(x.undo))}}));
+    const msg={from:'kova',text:r.text,src:r.source||'',engine:r.engine,undoId:r.undo||null,failed:!!r.failed,acts,ts:Date.now(),...(jobId?{jobId}:{})};
+    this.setState(p=>{const i=jobId?p.chat.findIndex(m=>m.jobId===jobId&&m.from==='kova'):-1;
+      if(i>=0&&!p.chat[i].working)return null;
+      const chat=[...p.chat];if(i>=0)chat[i]=msg;else chat.push(msg);return{chat}});
+  }
+  async followAsk(job){
+    this._following=this._following||new Set();
+    if(this._following.has(job.id))return;this._following.add(job.id);
+    const show=(j,trouble)=>this.setState(p=>{const i=p.chat.findIndex(m=>m.jobId===j.id&&m.from==='kova');const w={from:'kova',working:true,job:j,jobId:j.id,trouble:trouble||null,ts:p.chat[i]?.ts||Date.now()};const chat=[...p.chat];if(i>=0)chat[i]=w;else chat.push(w);return{chat}});
+    let j=job,misses=0;show(j);
+    while(j.status!=='done'&&!this._closed){
+      try{const n=await api('GET',`/api/ask/jobs/${encodeURIComponent(j.id)}?rev=${j.rev}&wait=20`);if(misses)show(n);misses=0;if(n.rev!==j.rev||n.status!==j.status){j=n;if(j.status!=='done')show(j)}}
+      catch(e){
+        if(/restarted/.test(e.message||'')){this.landAsk({text:e.message,source:'',failed:true},j.id);return}
+        misses++;if(misses>=2)show(j,'Lost touch with the hub for a moment. It’s still working on this; the answer will show here.');
+        await new Promise(ok=>setTimeout(ok,[1000,2000,3000,5000,8000,10000][Math.min(misses-1,5)]))}
+    }
+    if(j.reply)this.landAsk(j.reply,j.id);
+  }
+  // What the hub has: the conversation (answers that landed while this page was closed) and requests still running.
+  async loadAsk(){
+    if(this._askLoaded)return;this._askLoaded=true;
+    let h;try{h=await api('GET','/api/ask/history')}catch(e){this._askLoaded=false;return}
+    this.setState(p=>{const chat=[...p.chat];
+      for(const t of h.turns||[]){const from=t.role==='user'?'you':'kova';
+        if(chat.some(m=>m.from===from&&((t.job&&m.jobId===t.job)||(m.text===t.text&&Math.abs((m.ts||0)-t.ts)<300000))))continue;
+        chat.push({from,text:t.text,ts:t.ts,src:t.source||'',engine:t.engine,undoId:t.undo||null,failed:!!t.failed,...(t.job?{jobId:t.job}:{})})}
+      for(const j of h.jobs||[])if(!chat.some(m=>m.jobId===j.id&&m.from==='you'))chat.push({from:'you',text:j.text,ts:j.started,jobId:j.id});
+      chat.sort((a,b)=>(a.ts||0)-(b.ts||0));return{chat}});
+    for(const j of h.jobs||[])this.followAsk(j);
   }
   // ---- import from Home Assistant ----
   async loadImport(){try{const [x,a]=await Promise.all([api('GET','/api/import/ha'),api('GET','/api/import/ha/automations')]);this.setState({imp:x&&x.scanned?x:null,impAutos:a.automations||[]})}catch(e){}}
@@ -1713,7 +1769,9 @@ class Component extends DCLogic {
     const INBOX=[...H.findings.map(f=>({id:'f:'+f.id,icon:f.icon,fg:f.tone==='alert'?'#ff6b5e':'#f2b14c',title:f.title,kind:f.kind||'Check',body:f.body,btn:'Review',go:'modes'})),
       ...H.integrations.filter(i=>!i.ok).map(i=>({id:'i:'+i.id,icon:'build',fg:'#f2b14c',title:`${i.name} needs attention`,kind:'Repair',body:i.note||'Not responding.',btn:'Open',go:'integrations'}))];
     const inbox=INBOX.filter(i=>!s.inboxDone[i.id]).map(i=>({...i,act:()=>this.setState({screen:i.go}),dismiss:()=>this.setState(p=>({inboxDone:{...p.inboxDone,[i.id]:true}}))}));
-    const chat=s.chat.map(m=>({text:m.text,justify:m.from==='you'?'flex-end':'flex-start',bg:m.from==='you'?'#f1efea':'#16171a',fg:m.from==='you'?'#141517':'#f1efea',hasAct:!!(m.acts&&m.acts.length),acts:m.acts||[]}));
+    const chat=s.chat.map(m=>{const P=m.working?askProgress(m.job):null;return{text:m.text||'',hasText:!!m.text,justify:m.from==='you'?'flex-end':'flex-start',bg:m.from==='you'?'#f1efea':m.failed?'rgba(255,107,94,0.1)':'#16171a',fg:m.from==='you'?'#141517':m.failed?'#ff8a7e':'#f1efea',border:m.from==='you'?'transparent':m.failed?'rgba(255,107,94,0.3)':'rgba(255,255,255,0.05)',hasAct:!!(m.acts&&m.acts.length),acts:m.acts||[],
+      working:!!m.working,title:P?P.title:'',steps:P?P.steps:[],hasTrouble:!!m.trouble,trouble:m.trouble||'',hasFoot:!!m.src&&!m.working,src:m.src||'',srcIcon:askIcon(m.src||'',m.engine),hasUndo:!!m.undoId,undo:()=>{api('POST','/api/undo/'+m.undoId).then(()=>this.toast('Undone')).catch(e=>this.err(e));this.setState(p=>({chat:p.chat.map(x=>x===m?{...x,undoId:null}:x)}))}}});
+    const eng=askEngineLine(H.assistant);
     const iq=s.iq.toLowerCase();
     const IF=['All','Needs attention','Local','Cloud'];
     // Running integrations, plus ones saved in settings that aren't running (yet).
@@ -1726,7 +1784,8 @@ class Component extends DCLogic {
       upd:updUi(H,this),energyBars,energyStats,energyDevices,...env,camMain,camThumbs,tlRows,tlTabs,tlEmpty:!tlRows.length,tlEmptyText:cm?'Nothing seen yet. People, rings and motion show up here, with the picture from that moment.':'No cameras or sensors have noticed anything yet.',secRooms,secRoomsNone:!secRooms.length,sa,people,secEvents,mp,...musicUi,sources,players,mediaCount:`${pls.filter(d=>d.on).length} playing · ${pls.length} players`,
       noSecEvents:!secEvents.length,secSummary:`${cams.length} camera${cams.length===1?'':'s'} · ${H.people.length} ${H.people.length===1?'person':'people'}`,
       actFilters,activity,inbox,inboxEmpty:!inbox.length,inboxTitle:inbox.length?`Needs you · ${inbox.length}`:'Needs you',
-      askSub:`Runs locally · knows your ${list.filter(d=>!isSens(d)).length} devices, ${(H.sensors||[]).length} sensors, ${H.rooms.length} rooms and ${H.modes.length} modes`,
+      askEngine:eng.text,askEngineIcon:eng.icon,askEngineFg:eng.fg,
+      askSub:`Knows your ${list.filter(d=>!isSens(d)).length} devices, ${(H.sensors||[]).length} sensors, ${H.rooms.length} rooms and ${H.modes.length} modes`,
       chat,asks:ASKS.map(text=>({text,ask:()=>this.reply(text)})),draft:s.draft,setDraft:e=>this.setState({draft:e.target.value}),draftKey:e=>{if(e.key==='Enter'&&s.draft.trim())this.reply(s.draft.trim())},sendDraft:()=>{if(s.draft.trim())this.reply(s.draft.trim())},
       iq:s.iq,setIq:e=>this.setState({iq:e.target.value}),integFilters:IF.map(f=>({label:f,pick:()=>this.setState({intF:f}),bg:s.intF===f?'#f1efea':'#16171a',fg:s.intF===f?'#141517':'#d8d5cf'})),integrations,integCount:`${INTEG.length} connected`,goIntegrations:go('integrations'),...this.igVals(s,H)};
   }

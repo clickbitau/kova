@@ -7,7 +7,7 @@ import type { Store } from '../store/db.ts';
 import { ROOM_ICONS, UNASSIGNED_ROOM, type Automation, type Cause, type Command, type Device, type Targets } from '../model/types.ts';
 import { FIELD_CAP, isPlayer, pseudoLabel, targetLabel } from '../util/describe.ts';
 import { hardwareSummary, hasHardware } from '../util/hardware.ts';
-import { checkAutomation } from '../engine/automation-check.ts';
+import { CheckError, checkAutomation } from '../engine/automation-check.ts';
 import { actionWords, condWords, nextOnce, triggerWords } from '../engine/automations.ts';
 import { slug } from '../tools/import-ha.ts';
 import { atLocal, clock, localDate, localStamp, stampWords } from '../util/time.ts';
@@ -234,7 +234,7 @@ export const TOOLS = [
   {
     name: 'create_automation',
     description: `Create a home automation: "when" (triggers) starts it, every "if" (condition) must hold, then "then" (actions) run in order. It is saved and runs on its own from then on — only use it when the user asks for something ongoing or scheduled, not for a one-off change (use set_devices). Shapes:
-when: {kind:'time', at:'HH:MM' or {kind:'time', at:'HH:MM'} or {kind:'sun', event:'sunrise|sunset|dawn|dusk', offsetMin?:n} or {kind:'prayer', prayer:'fajr|sunrise|dhuhr|asr|maghrib|isha'}, days?:[0-6, 0=Sunday, empty=every day]} | {kind:'device', device:id, to?:{on?, online?, mode?, hvac?, input?, playing?, muted?, motion?, open?}, from?:{...}, forSec?:n} | {kind:'numeric', device:id, field:'temp|target|power|energy|battery|bri|vol|grid|load|humidity|lux|pm25', above?:n, below?:n} (sensors included) | {kind:'event', device:id, event:string} | {kind:'room', room:roomId, event:'person|motion|ring|vehicle|animal|package|sound|opened|closed'} (anything a camera or sensor in that room notices; 'motion' includes a person seen) | {kind:'every', minutes:n} | {kind:'presence', event:'arrives|leaves|first-arrives|last-leaves', person?:id} | {kind:'mode', mode:id} | {kind:'overlay', overlay:id, event:'starts|ends'} | {kind:'hub', event:'start'} | {kind:'once', at:'YYYY-MM-DDTHH:MM' in the home's time} or {kind:'once', inMinutes:n} — ONE time only
+when: {kind:'time', at:'HH:MM' or {kind:'time', at:'HH:MM'} or {kind:'sun', event:'sunrise|sunset|dawn|dusk', offsetMin?:n (minutes, negative = before, e.g. -15)} or {kind:'prayer', prayer:'fajr|sunrise|dhuhr|asr|maghrib|isha', offsetMin?:n}, days?:[0-6, 0=Sunday, empty=every day]} — e.g. 15 minutes before sunset is {kind:'time', at:{kind:'sun', event:'sunset', offsetMin:-15}} | {kind:'device', device:id, to?:{on?, online?, mode?, hvac?, input?, playing?, muted?, motion?, open?}, from?:{...}, forSec?:n} | {kind:'numeric', device:id, field:'temp|target|power|energy|battery|bri|vol|grid|load|humidity|lux|pm25', above?:n, below?:n} (sensors included) | {kind:'event', device:id, event:string} | {kind:'room', room:roomId, event:'person|motion|ring|vehicle|animal|package|sound|opened|closed'} (anything a camera or sensor in that room notices; 'motion' includes a person seen) | {kind:'every', minutes:n} | {kind:'presence', event:'arrives|leaves|first-arrives|last-leaves', person?:id} | {kind:'mode', mode:id} | {kind:'overlay', overlay:id, event:'starts|ends'} | {kind:'hub', event:'start'} | {kind:'once', at:'YYYY-MM-DDTHH:MM' in the home's time} or {kind:'once', inMinutes:n} — ONE time only
 if: {kind:'device', device:id, is:{on?...}} | {kind:'numeric', device:id, field, above?, below?} | {kind:'time', after?/before?:'HH:MM' or a sun/prayer object as above, days?} | {kind:'presence', who:'anyone|no-one|person id', home:boolean} | {kind:'mode', modes:[id]} | {kind:'overlay', overlay?:id, active:boolean} | {kind:'room', room:roomId, active:boolean, withinMin?:n} (a person, motion or a door in that room in the last withinMin minutes, default 10) | {kind:'all|any|not', conditions:[...]}
 then: {kind:'set', targets:{deviceId:{on:false, bri:50, ...same fields as set_devices + set}, or 'type:light'|'type:media'|'type:<device type>'|'room:<room id>' to reach EVERY matching device — including devices added later (use "type:light" for "all lights")}} | {kind:'delay', seconds:n} | {kind:'wait', until:condition, timeoutSec?:n, stopOnTimeout?:bool} | {kind:'notify', message:string, title?:string, people?:[ids]} | {kind:'overlay', overlay:id, op:'start|end'} | {kind:'if', conditions:[...], then:[...], else?:[...]} | {kind:'repeat', times:n, actions:[...]} | {kind:'ramp', targets:{same target map as set}, field:'bri'|'vol'|'target', to:number, from?:number, overSec:number, stepSec?:number} — gradual changes like brightness climbing over an hour | {kind:'run', automation:id} | {kind:'stop'}
 runMode: what a second start does while it's still running — single (ignore), restart (start over), queued (run after), parallel (alongside). Default single.
@@ -292,7 +292,7 @@ Only use device, person, mode and overlay ids from the home context; never inven
   },
   {
     name: 'update_device',
-    description: `Change how a device is organised — for "the X is in the master bedroom", "rename it", "hide it", "put it on my favourites". name renames it, room moves it (a room id from the Rooms list — create_room first if it doesn't exist yet), favourite puts it on the Now page, hidden takes it out of view.`,
+    description: `Change how a device is organised — for "the X is in the master bedroom", "rename it", "hide it", "put it on my favourites". name renames it, room moves it (a room id from the Rooms list — create_room first if the room the user named doesn't exist; "unassigned" puts it in no room), favourite puts it on the Now page, hidden takes it out of view (hidden:false shows it again). zoneNames names a ducted air conditioner's zones by number, e.g. {"1": "Living", "3": "Theatre"} (an empty name clears one). The result says the room's real name — use that name in the reply.`,
     parameters: {
       type: 'object',
       properties: {
@@ -301,6 +301,7 @@ Only use device, person, mode and overlay ids from the home context; never inven
         room: { type: 'string' },
         favourite: { type: 'boolean' },
         hidden: { type: 'boolean' },
+        zoneNames: { type: 'object', description: 'Zone number → name, for an air conditioner with zones.' },
       },
       required: ['id'],
     },
@@ -332,7 +333,7 @@ Only use device, person, mode and overlay ids from the home context; never inven
   },
   {
     name: 'combine_devices',
-    description: `Two or more device ids that are really one physical device seen through different integrations (e.g. the same TV discovered twice). They show as one device; the members are hidden while combined. Use when the user says two entries are the same thing. name defaults to the first member's name; room is a room id, optional.`,
+    description: `Show device entries that are really one physical device seen through different integrations (e.g. the same TV found twice) as one device; the parts are hidden while combined. Use when the user says entries are the same thing — put ALL of them in one call. To add entries to a device that is already combined, include its combined id (or any of its parts) with the new ones: they join it, no need to separate first. name defaults to the existing combined device's or first member's name; room is a room id, optional. The result gives the combined device's id — use it for any later change (room, name).`,
     parameters: {
       type: 'object',
       properties: {
@@ -345,7 +346,7 @@ Only use device, person, mode and overlay ids from the home context; never inven
   },
   {
     name: 'separate_devices',
-    description: 'Split a combined device back into its separate devices. id is the combined device id (combined_…, from the Devices list or the result of combine_devices).',
+    description: 'Split a combined device back into its separate devices — only when the user wants them apart again (to add a part, use combine_devices instead). id is the combined device id (or one of its parts). The result lists the parts\' ids.',
     parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
   },
   {
@@ -365,7 +366,14 @@ Only use device, person, mode and overlay ids from the home context; never inven
 type ToolName = typeof TOOLS[number]['name'];
 
 const AI_CAUSE: Cause = { kind: 'assistant', label: 'Ask Kova (AI)' };
-const MAX_ROUNDS = 6;
+/** Model round trips per ask. A house-organising request ("combine these, move that, make a room…") takes several. */
+const MAX_ROUNDS = 14;
+
+/** One thing the AI is doing, as the person sees it while it works ("Combining Bedroom TV and TV…"). */
+export interface AskStep { tool: string; label: string; status: 'working' | 'ok' | 'failed'; note?: string }
+
+/** What the tools confirmed, after a re-read of what they touched: the honest summary of an ask. */
+export interface AskOutcome { done: string[]; couldnt: string[] }
 
 /** Fields that are readings, not commands — never settable through `set`. */
 const READONLY = new Set(['power', 'energy', 'grid', 'load', 'temp', 'humidity', 'lux', 'pm25', 'airQuality', 'filterLife', 'battery', 'online', 'track', 'fanLevelMax', 'zones']);
@@ -416,6 +424,20 @@ const cleanReply = (s: string) => stripThink(s)
   .replace(/\n{3,}/g, '\n\n')
   .trim();
 
+const cap = (s: string) => s ? s[0]!.toUpperCase() + s.slice(1) : s;
+/** "a, b and c". */
+const andList = (xs: string[]) => xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`;
+
+/** A tool's error as the person reads it: no instructions meant for the model, no ids-list advice. */
+export function tidyError(e: string | undefined): string {
+  const t = (e ?? '').trim();
+  if (!t) return 'it didn’t work.';
+  if (/^This (exact call already failed|has failed)/.test(t)) return 'it kept failing.';
+  if (/^Unknown device ids?:? /i.test(t)) return 'Ask Kova can’t use that device (cameras and unknown ids are off limits).';
+  const out = t.replace(/\s+—\s+(use an id|ask where|create_room|use a room id)[^]*$/i, '').replace(/\s*\(?use an id from[^)]*\)?\.?$/i, '').trim();
+  return /[.!?]$/.test(out) ? out : `${out}.`;
+}
+
 /** A mutating step the AI took, with resolved device ids — replayable without the AI. */
 export type LearnedStep =
   | { tool: 'set_devices'; targets: Targets }
@@ -445,8 +467,16 @@ const CONVO_CAP = 20;
 /** Older turns are dropped — a stale thread confuses the model more than no thread does. */
 const CONVO_AGE_MS = 8 * 3600_000;
 
-/** One turn of the Ask Kova conversation — user said, Kova replied. */
-export interface ConvoTurn { role: 'user' | 'assistant'; text: string; ts: number }
+/**
+ * One turn of the Ask Kova conversation — user said, Kova replied. A reply also keeps where it came from and its
+ * undo, so a phone that was closed while it was being worked on shows it as it would have (GET /api/ask/history).
+ */
+export interface ConvoTurn {
+  role: 'user' | 'assistant'; text: string; ts: number;
+  /** The ask job it belongs to (POST /api/ask with job: true). */
+  job?: string;
+  source?: string; engine?: 'builtin' | 'local' | 'cloud'; undo?: string; failed?: boolean;
+}
 
 /** The last few exchanges, oldest first, so "yes", "the second one" and "do it" still land. */
 export function convoRecent(store: Store): ConvoTurn[] {
@@ -454,10 +484,11 @@ export function convoRecent(store: Store): ConvoTurn[] {
 }
 
 /** Remember one turn of the conversation. Called for every ask, whichever side handled it. */
-export function convoAdd(store: Store, role: ConvoTurn['role'], text: string): void {
-  const t = text.trim().slice(0, 800);
+export function convoAdd(store: Store, role: ConvoTurn['role'], text: string, extra: Partial<Omit<ConvoTurn, 'role' | 'text'>> = {}): void {
+  const t = text.trim().slice(0, 2000);
   if (!t) return;
-  store.set(CONVO_KEY, [...convoRecent(store), { role, text: t, ts: Date.now() }]);
+  const turn: ConvoTurn = { role, text: t, ts: Date.now(), ...Object.fromEntries(Object.entries(extra).filter(([, v]) => v !== undefined)) };
+  store.set(CONVO_KEY, [...convoRecent(store), turn].sort((a, b) => a.ts - b.ts).slice(-CONVO_CAP));
 }
 
 /** Facts the user asked the AI to keep ("note it down"): {ts, text} list, newest last. */
@@ -499,7 +530,38 @@ export interface AiContext {
   deviceIds: Map<string, string>;
   /** The room id the model gives → the real one (neutral `roomN` aliases when names are private). */
   roomIds: Map<string, string>;
+  /** Names are shared, so real device ids are what the model sees (and may use for devices made during the ask). */
+  realIds?: boolean;
 }
+
+/** The id the model knows a device by: its own id, or a neutral alias when names are private (made on first use). */
+export function aliasOf(ctx: AiContext, realId: string): string {
+  for (const [a, id] of ctx.deviceIds) if (id === realId) return a;
+  if (ctx.realIds) { ctx.deviceIds.set(realId, realId); return realId; }
+  let n = ctx.deviceIds.size + 1;
+  while (ctx.deviceIds.has(`device${n}`)) n++;
+  ctx.deviceIds.set(`device${n}`, realId);
+  return `device${n}`;
+}
+
+/** One tool call, kept for the honest summary at the end. */
+interface CallRecord {
+  tool: string; args: unknown; ok: boolean; error?: string;
+  /** The step as the person sees it: "Combining Bedroom TV and TV", and "combine Bedroom TV and TV" for "Couldn't …". */
+  doing: string; what: string;
+  /** What it did, in words, with real names ("Moved Lamp to Front door"). */
+  said?: string;
+  /** Things this call is about: a later call of the same tool about one of them supersedes it (a retry that worked). */
+  keys: string[];
+  /** Re-read after the run: null when it holds, else what's wrong. */
+  verify?: () => string | null;
+  /** Part of it didn't happen even though the call worked (a device that didn't answer). */
+  partial?: string;
+  /** Room ids the call put things in: the reply must name these rooms, not the words the person said. */
+  rooms?: string[];
+}
+
+const MUTATING = new Set<string>(['set_devices', 'start_overlay', 'end_overlay', 'remember', 'forget', 'create_automation', 'update_automation', 'delete_automation', 'create_room', 'update_device', 'rename_room', 'delete_room', 'combine_devices', 'separate_devices']);
 
 /** Runs tool calls against the engine, collecting undo ids. One per ask. */
 export class Toolbox {
@@ -510,14 +572,27 @@ export class Toolbox {
   readonly calls: { tool: string; args: unknown; ok: boolean; error?: string }[] = [];
   /** Mutating steps that succeeded — the learnable part of this ask. */
   readonly learned: LearnedStep[] = [];
+  /** What the person sees while it works. */
+  readonly steps: AskStep[] = [];
+  private records: CallRecord[] = [];
+  /** Filled in by a tool case that worked: what it did, for the record. */
+  private note: Pick<CallRecord, 'said' | 'keys' | 'verify' | 'partial' | 'rooms'> | null = null;
+  /** Combined devices separated during this ask → their members, so "combine <the old id> with X" still means them. */
+  private separated = new Map<string, string[]>();
   /** False once any tool reports ok:false, or the ask made a one-time schedule — such sessions aren’t learned. */
   okAll = true;
-  constructor(private ai: AiAssistant, private ctx: AiContext) {}
+  constructor(private ai: AiAssistant, private ctx: AiContext, private onSteps?: (steps: AskStep[]) => void) {}
 
+  /** A device the model means: its id (or alias) from the context, or — names shared — any device made since. */
   private device(alias: unknown): Device | undefined {
-    const id = typeof alias === 'string' ? this.ctx.deviceIds.get(alias) : undefined;
-    return id ? this.ai.reg.get(id) : undefined;
+    if (typeof alias !== 'string') return undefined;
+    const id = this.ctx.deviceIds.get(alias) ?? (this.ctx.realIds ? alias : undefined);
+    const d = id ? this.ai.reg.get(id) : undefined;
+    return d && !isCamera(d) ? d : undefined;
   }
+
+  /** The id the model should use for a device from now on. */
+  private alias(realId: string): string { return aliasOf(this.ctx, realId); }
 
   /** The real room id for what the model sent (a `roomN` alias when names are private), or undefined. */
   private roomId(alias: unknown): string | undefined {
@@ -525,26 +600,185 @@ export class Toolbox {
     const rooms = this.ai.config.get().rooms;
     if (rooms.some(r => r.id === alias)) return alias;
     const id = this.ctx.roomIds.get(alias);
-    return id && rooms.some(r => r.id === id) ? id : undefined;
+    if (id && rooms.some(r => r.id === id)) return id;
+    // A room made during this ask: the model may use its id even when names are private (create_room returned it).
+    return undefined;
+  }
+
+  private roomName(id: string | undefined): string {
+    if (!id || id === UNASSIGNED_ROOM) return 'no room';
+    return this.ai.config.get().rooms.find(r => r.id === id)?.name ?? id;
+  }
+
+  private nameOf(alias: unknown): string {
+    const d = this.device(alias);
+    if (d) return d.name;
+    const sep = typeof alias === 'string' ? this.separated.get(this.ctx.deviceIds.get(alias) ?? alias) : undefined;
+    return sep ? 'the separated device' : typeof alias === 'string' && this.ctx.realIds ? `“${alias}”` : 'a device';
+  }
+
+  /** What a call is about to do, in words, before it runs. */
+  private describe(name: string, a: Record<string, unknown>): { doing: string; what: string } {
+    const both = (ing: string, inf: string) => ({ doing: ing, what: inf });
+    const list = (xs: string[]) => xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`;
+    const autoName = (id: unknown) => (this.ai.config.get().automations ?? []).find(x => x.id === id)?.name;
+    const roomOf = (id: unknown) => { const r = this.roomId(id); return r ? this.roomName(r) : String(id ?? ''); };
+    switch (name) {
+      case 'set_devices': {
+        const ds = Array.isArray(a.devices) ? a.devices as Record<string, unknown>[] : [];
+        if (ds.length === 1) {
+          const n = this.nameOf(ds[0]?.id), on = ds[0]?.on;
+          return on === false ? both(`Turning off ${n}`, `turn off ${n}`) : on === true && Object.keys(ds[0] ?? {}).length === 2 ? both(`Turning on ${n}`, `turn on ${n}`) : both(`Changing ${n}`, `change ${n}`);
+        }
+        return both(`Changing ${ds.length} devices`, `change ${ds.length} devices`);
+      }
+      case 'start_overlay': { const o = this.ai.config.get().overlays.find(x => x.id === a.id); return both(`Starting ${o?.name ?? 'the overlay'}`, `start ${o?.name ?? String(a.id)}`); }
+      case 'end_overlay': return both('Ending the overlay', 'end the overlay');
+      case 'explain_device': return both(`Looking into ${this.nameOf(a.id)}`, `look into ${this.nameOf(a.id)}`);
+      case 'list_schedule': return both('Reading what’s planned', 'read what’s planned');
+      case 'remember': return both('Remembering that', 'remember that');
+      case 'forget': return both('Forgetting that', 'forget that');
+      case 'create_automation': return both(`Making the automation “${String(a.name ?? '')}”`, `make the automation “${String(a.name ?? '')}”`);
+      case 'update_automation': { const n = String(a.name ?? autoName(a.id) ?? a.id ?? ''); return both(`Changing the automation “${n}”`, `change the automation “${n}”`); }
+      case 'delete_automation': { const n = autoName(a.id) ?? String(a.id ?? ''); return both(`Removing the automation “${n}”`, `remove the automation “${n}”`); }
+      case 'create_room': return both(`Making the room ${String(a.name ?? '')}`, `make the room ${String(a.name ?? '')}`);
+      case 'rename_room': return a.name ? both(`Renaming ${roomOf(a.room)} to ${String(a.name)}`, `rename ${roomOf(a.room)} to ${String(a.name)}`) : both(`Changing ${roomOf(a.room)}`, `change ${roomOf(a.room)}`);
+      case 'delete_room': return both(`Removing the room ${roomOf(a.room)}`, `remove the room ${roomOf(a.room)}`);
+      case 'update_device': {
+        const n = this.nameOf(a.id);
+        const ing: string[] = [], inf: string[] = [];
+        if (typeof a.name === 'string' && a.name.trim()) { ing.push(`renaming ${n} to ${a.name.trim()}`); inf.push(`rename ${n} to ${a.name.trim()}`); }
+        if (a.room != null && String(a.room).trim()) { const r = roomOf(a.room); ing.push(`moving ${ing.length ? 'it' : n} to ${r}`); inf.push(`move ${inf.length ? 'it' : n} to ${r}`); }
+        if (a.hidden === true) { ing.push(`hiding ${ing.length ? 'it' : n}`); inf.push(`hide ${inf.length ? 'it' : n}`); }
+        if (a.hidden === false) { ing.push(`showing ${ing.length ? 'it' : n} again`); inf.push(`show ${inf.length ? 'it' : n} again`); }
+        if (typeof a.favourite === 'boolean') { ing.push(`${a.favourite ? 'favouriting' : 'unfavouriting'} ${ing.length ? 'it' : n}`); inf.push(`${a.favourite ? 'favourite' : 'unfavourite'} ${inf.length ? 'it' : n}`); }
+        if (a.zoneNames && typeof a.zoneNames === 'object') { ing.push(`naming ${ing.length ? 'its' : `${n}’s`} zones`); inf.push(`name ${inf.length ? 'its' : `${n}’s`} zones`); }
+        if (!ing.length) return both(`Changing ${n}`, `change ${n}`);
+        const s = list(ing);
+        return both(s[0]!.toUpperCase() + s.slice(1), list(inf));
+      }
+      case 'combine_devices': {
+        const ms = Array.isArray(listArg(a.members)) ? (listArg(a.members) as unknown[]).map(m => this.nameOf(m)) : [];
+        const names = [...new Set(ms)];
+        return both(`Combining ${list(names) || 'devices'}`, `combine ${list(names) || 'those devices'}`);
+      }
+      case 'separate_devices': return both(`Separating ${this.nameOf(a.id)}`, `separate ${this.nameOf(a.id)}`);
+      case 'review_action': return both('Checking that’s safe', 'check that’s safe');
+      default: return both(`Running ${name}`, `run ${name}`);
+    }
+  }
+
+  private emitSteps(): void { try { this.onSteps?.(this.steps.map(x => ({ ...x }))); } catch { /* a progress listener never breaks the ask */ } }
+
+  /** A tool case that worked says what it did (for the summary) and how to check it held. */
+  private done(said: string, keys: string[], extra: Pick<CallRecord, 'verify' | 'partial' | 'rooms'> = {}): void {
+    this.note = { said, keys, ...extra };
   }
 
   async run(name: string, input: unknown): Promise<string> {
     this.called.push(name);
-    // The same call failing again means the model is guessing — tell it to stop and explain.
-    const fails = this.calls.filter(c => c.tool === name && !c.ok).length;
-    if (fails >= 2) {
-      this.calls.push({ tool: name, args: input, ok: false, error: 'already failed twice' });
-      this.okAll = false;
-      return JSON.stringify({ ok: false, error: `This has failed ${fails} times. Don't try the same call again — tell the user what you can't do or what's missing instead.` });
+    const args = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
+    const { doing, what } = this.describe(name, args);
+    const step: AskStep = { tool: name, label: doing, status: 'working' };
+    this.steps.push(step);
+    this.emitSteps();
+    // The same call failing again means the model is guessing — tell it to stop and explain. A corrected call
+    // (different arguments) gets its chance; only a tool failing over and over is stopped.
+    // The same call again is only worth it when something changed in between (create_room, then the move again).
+    const sig = JSON.stringify(input ?? null);
+    const failed = this.calls.filter(c => c.tool === name && !c.ok);
+    const lastSame = this.records.map(r => !r.ok && r.tool === name && JSON.stringify(r.args ?? null) === sig).lastIndexOf(true);
+    const same = lastSame >= 0 && !this.records.slice(lastSame + 1).some(r => r.ok && MUTATING.has(r.tool)) ? 1 : 0;
+    let out: string;
+    if (same >= 1 || failed.length >= 3) {
+      out = JSON.stringify({ ok: false, error: same ? 'This exact call already failed. Don’t repeat it — fix what the error said, or tell the user what you can’t do.' : `This has failed ${failed.length} times. Don't try again — tell the user what you can't do or what's missing instead.` });
+    } else {
+      this.note = null;
+      out = await this.dispatch(name, input);
     }
-    const out = await this.dispatch(name, input);
     let ok = true, error: string | undefined;
+    let parsed: Record<string, unknown> | null = null;
     try {
-      const r = JSON.parse(out) as { ok?: boolean; error?: string };
-      if (r.ok === false) { ok = false; error = r.error; this.okAll = false; }
+      parsed = JSON.parse(out) as Record<string, unknown>;
+      if (parsed.ok === false) { ok = false; error = typeof parsed.error === 'string' ? parsed.error : 'it failed'; this.okAll = false; }
     } catch { /* not json */ }
+    const note = ok ? this.note : null;
+    this.note = null;
     this.calls.push({ tool: name, args: input, ok, ...(error ? { error: error.slice(0, 300) } : {}) });
+    const rec: CallRecord = { tool: name, args: input, ok, ...(error ? { error } : {}), doing, what, keys: note?.keys ?? this.keysOf(name, args), ...(note?.said ? { said: note.said } : {}), ...(note?.verify ? { verify: note.verify } : {}), ...(note?.partial ? { partial: note.partial } : {}), ...(note?.rooms ? { rooms: note.rooms } : {}) };
+    this.records.push(rec);
+    if (note?.partial) this.okAll = false;
+    step.status = ok ? 'ok' : 'failed';
+    if (!ok && error) step.note = error.slice(0, 200);
+    else if (note?.partial) step.note = note.partial;
+    this.emitSteps();
+    // The model gets the result in words too, and is told to report only what results confirm.
+    if (parsed) {
+      if (ok && note?.said) parsed.result = note.said + (note.partial ? ` But: ${note.partial}` : '');
+      if (!ok) {
+        parsed.result = `Not done: couldn’t ${what}.`;
+        // A shape or id problem is the model's to fix, never the person's to answer.
+        parsed.next = parsed.sendInstead
+          ? 'Correct the call as sendInstead shows and call the tool again now. Never ask the user about formats, ids or tool shapes.'
+          : 'If the error is about an id, a shape or a missing field, fix the call and try again yourself — never ask the user about formats, ids or tool shapes. Ask the user only about a real choice (which room, which device).';
+      }
+      return JSON.stringify(parsed);
+    }
     return out;
+  }
+
+  /** What a call is about, for matching a retry to the failure it fixes (when the call didn't say). */
+  private keysOf(name: string, a: Record<string, unknown>): string[] {
+    const real = (x: unknown) => (typeof x === 'string' ? this.ctx.deviceIds.get(x) ?? x : String(x));
+    switch (name) {
+      case 'combine_devices': return (Array.isArray(listArg(a.members)) ? listArg(a.members) as unknown[] : []).flatMap(m => { const r = real(m); return [r, ...(this.separated.get(r) ?? [])]; });
+      case 'set_devices': return (Array.isArray(a.devices) ? a.devices as Record<string, unknown>[] : []).map(x => real(x?.id));
+      case 'update_device': case 'separate_devices': case 'explain_device': return [real(a.id)];
+      case 'create_room': return [`room:${norm(String(a.name ?? ''))}`];
+      case 'rename_room': case 'delete_room': return [`room:${this.roomId(a.room) ?? String(a.room)}`];
+      case 'create_automation': return [`auto:${norm(String(a.name ?? ''))}`];
+      case 'update_automation': case 'delete_automation': return [`auto:${String(a.id)}`];
+      default: return [name];
+    }
+  }
+
+  /** Did anything change the home? */
+  get changedAnything(): boolean { return this.records.some(r => r.ok && MUTATING.has(r.tool)); }
+
+  /**
+   * The honest account of the ask: each change the tools confirmed (and that still holds when re-read now), and
+   * each thing that didn't happen — a failed call no later call fixed, or a change that didn't stick.
+   */
+  outcome(): AskOutcome {
+    const done: string[] = [], couldnt: string[] = [];
+    const later = (i: number, pred: (r: CallRecord) => boolean) => this.records.slice(i + 1).some(pred);
+    const overlap = (a: string[], b: string[]) => a.some(k => b.includes(k));
+    this.records.forEach((r, i) => {
+      if (!MUTATING.has(r.tool) && r.ok) return;
+      if (!r.ok) {
+        // A failure a later call of the same tool fixed (a corrected retry) isn't something that didn't happen.
+        if (later(i, x => x.ok && x.tool === r.tool && overlap(x.keys, r.keys))) return;
+        if (!MUTATING.has(r.tool) && r.tool !== 'review_action') return;
+        if (r.tool === 'review_action') return;
+        couldnt.push(`${cap(r.what)}: ${tidyError(r.error)}`);
+        return;
+      }
+      if (r.partial) couldnt.push(r.partial);
+      // A later change of the same thing has the last word (renamed twice: the second name is what's true now).
+      if (later(i, x => x.ok && x.tool === r.tool && overlap(x.keys, r.keys))) return;
+      // Undone by its opposite later in the same ask (separated, then combined again): the later one says it.
+      if (r.tool === 'separate_devices' && later(i, x => x.ok && x.tool === 'combine_devices' && overlap(x.keys, r.keys))) { if (r.said) done.push(r.said); return; }
+      const problem = r.verify?.() ?? null;
+      if (problem) couldnt.push(problem);
+      else if (r.said) done.push(r.said);
+    });
+    return { done: [...new Set(done)], couldnt: [...new Set(couldnt)] };
+  }
+
+  /** The rooms this ask put things in (or made), by their names now. */
+  roomsUsed(): string[] {
+    const rooms = this.ai.config.get().rooms;
+    return [...new Set(this.records.filter(r => r.ok).flatMap(r => r.rooms ?? []).map(id => rooms.find(x => x.id === id)?.name).filter((x): x is string => !!x))];
   }
 
   private async dispatch(name: string, input: unknown): Promise<string> {
@@ -555,15 +789,19 @@ export class Toolbox {
           const list = Array.isArray(args.devices) ? args.devices as Record<string, unknown>[] : [];
           const targets: Targets = {};
           const unknown: string[] = [];
+          const skipped: string[] = [];
           for (const x of list) {
             const d = this.device(x?.id);
             if (!d) { unknown.push(String(x?.id)); continue; }
             const c: Command = {};
+            const has = (cap: string) => d.capabilities.includes(cap as never);
+            // A field the device can't do is left out — and said, so the reply doesn't claim it ("Downlights can't dim").
+            const cant = (what: string) => skipped.push(`${d.name} can’t ${what}`);
             if (typeof x.on === 'boolean') c.on = x.on;
-            if (typeof x.bri === 'number' && Number.isFinite(x.bri)) c.bri = Math.round(Math.max(1, Math.min(100, x.bri)));
-            if (typeof x.k === 'number' && Number.isFinite(x.k)) c.k = Math.round(Math.max(1500, Math.min(9000, x.k)));
-            if (typeof x.color === 'string' && /^#[0-9a-f]{6}$/i.test(x.color)) c.color = x.color.toLowerCase();
-            if (typeof x.vol === 'number' && Number.isFinite(x.vol)) c.vol = Math.round(Math.max(0, Math.min(100, x.vol)));
+            if (typeof x.bri === 'number' && Number.isFinite(x.bri)) { if (has('brightness')) c.bri = Math.round(Math.max(1, Math.min(100, x.bri))); else cant('dim'); }
+            if (typeof x.k === 'number' && Number.isFinite(x.k)) { if (has('colorTemp')) c.k = Math.round(Math.max(1500, Math.min(9000, x.k))); else cant('change colour temperature'); }
+            if (typeof x.color === 'string' && /^#[0-9a-f]{6}$/i.test(x.color)) { if (has('color')) c.color = x.color.toLowerCase(); else cant('change colour'); }
+            if (typeof x.vol === 'number' && Number.isFinite(x.vol)) { if (has('volume')) c.vol = Math.round(Math.max(0, Math.min(100, x.vol))); else cant('change volume'); }
             if (typeof x.paused === 'boolean' && d.capabilities.includes('pause')) c.paused = x.paused;
             // A title only means something to a TV that finds titles itself; elsewhere media is a named source.
             if (typeof x.media === 'string' && x.media.trim() && (d.capabilities.includes('library') || this.ai.config.get().sources.some(s => s.name === x.media)
@@ -601,23 +839,34 @@ export class Toolbox {
             if (c.on === false && isPlayer(d)) c.media = null;
             if (Object.keys(c).length) targets[d.id] = c;
           }
-          if (!Object.keys(targets).length) return JSON.stringify({ ok: false, error: unknown.length ? `Unknown device ids: ${unknown.join(', ')}` : 'Nothing to change' });
+          if (!Object.keys(targets).length) return JSON.stringify({ ok: false, error: unknown.length ? `Unknown device ids: ${unknown.join(', ')}` : skipped.length ? `${skipped.join('; ')}` : 'Nothing to change — only fields the device lists in its state can be set' });
           const r = await this.ai.engine.applyMany(targets, AI_CAUSE);
           if (r.changed.length) this.undos.push(r.undo);
+          const failed = (r.failed ?? []).filter(f => f.id in targets);
+          const name = (id: string) => this.ai.reg.get(id)?.name ?? id;
+          if (failed.length === Object.keys(targets).length) {
+            return JSON.stringify({ ok: false, error: failed.map(f => `${name(f.id)}: ${f.error}`).join('; ') });
+          }
           this.learned.push({ tool: 'set_devices', targets });
-          return JSON.stringify({ ok: true, changed: r.changed.length, unchanged: Object.keys(targets).length - r.changed.length, ...(unknown.length ? { unknownIds: unknown } : {}) });
+          const okIds = Object.keys(targets).filter(id => !failed.some(f => f.id === id));
+          const what = okIds.map(id => targetLabel(this.ai.reg.get(id)!, targets[id]!));
+          const problems = [...failed.map(f => `${name(f.id)} didn’t answer (${f.error})`), ...skipped, ...(unknown.length ? [`no device ${unknown.join(', ')}`] : [])];
+          this.done(what.length <= 3 ? what.join(', ') : `Changed ${what.length} devices`, Object.keys(targets), problems.length ? { partial: `Couldn’t change everything: ${problems.join('; ')}` } : {});
+          return JSON.stringify({ ok: true, changed: r.changed.length, unchanged: okIds.length - r.changed.length, ...(skipped.length ? { notPossible: skipped } : {}), ...(failed.length ? { failed: failed.map(f => ({ id: this.alias(f.id), error: f.error })) } : {}), ...(unknown.length ? { unknownIds: unknown } : {}) });
         }
         case 'start_overlay': {
           const o = this.ai.config.get().overlays.find(x => x.id === args.id);
           if (!o) return JSON.stringify({ ok: false, error: `Unknown overlay ${String(args.id)}` });
           this.undos.push(await this.ai.engine.startOverlay(o.id, AI_CAUSE));
           this.learned.push({ tool: 'start_overlay', id: o.id });
+          this.done(`Started ${o.name} (${o.endsLabel.toLowerCase()})`, [o.id]);
           return JSON.stringify({ ok: true, started: o.name, ends: o.endsLabel });
         }
         case 'end_overlay': {
           if (!this.ai.engine.overlay) return JSON.stringify({ ok: false, error: 'No overlay is on' });
           await this.ai.engine.endOverlay('user');
           this.learned.push({ tool: 'end_overlay' });
+          this.done(`Ended the overlay — back to ${this.ai.engine.mode().name}`, ['overlay']);
           return JSON.stringify({ ok: true, mode: this.ai.engine.mode().name });
         }
         case 'remember': {
@@ -628,13 +877,14 @@ export class Toolbox {
           const ts = Date.now();
           this.ai.store.set(MEMORY_KEY, [...all, { ts, text: fact }].slice(-MEMORY_CAP));
           this.undos.push(this.ai.engine.registerUndo(() => { forgetMemory(this.ai.store, fact); }));
+          this.done(`Remembered “${fact}”`, [`memory:${norm(fact)}`]);
           return JSON.stringify({ ok: true, fact });
         }
         case 'forget': {
           const fact = typeof args.fact === 'string' ? args.fact.trim() : '';
           if (!fact) return JSON.stringify({ ok: false, error: 'Nothing to forget' });
           return forgetMemory(this.ai.store, fact)
-            ? JSON.stringify({ ok: true, forgot: fact })
+            ? (this.done(`Forgot “${fact}”`, [`memory:${norm(fact)}`]), JSON.stringify({ ok: true, forgot: fact }))
             : JSON.stringify({ ok: false, error: `Nothing remembered matching "${fact}"` });
         }
         case 'explain_device': {
@@ -670,8 +920,11 @@ export class Toolbox {
             });
             const w = { reg: this.ai.reg, cfg, now: this.ai.engine.now() };
             const tgt = (tid: string, cmd: object) => { const d = this.ai.reg.get(tid); return d ? targetLabel(d, cmd as Command) : (pseudoLabel(tid, this.ai.config.get().rooms) ?? tid); };
-            return JSON.stringify({ ok: true, id, name: a.name, when: a.triggers.map(t => triggerWords(t, w)), if: a.conditions.map(c => condWords(c, w)), then: a.actions.map(x => actionWords(x, w, tgt)) });
-          } catch (e) { return JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e) }); }
+            const words = { when: a.triggers.map(t => triggerWords(t, w)), if: a.conditions.map(c => condWords(c, w)), then: a.actions.map(x => actionWords(x, w, tgt)) };
+            this.done(`Made the automation “${a.name}”: when ${words.when.join(' or ')}${words.if.length ? `, if ${words.if.join(' and ')}` : ''}, ${words.then.join('; ')}`, [`auto:${norm(a.name)}`, `auto:${id}`],
+              { verify: () => (this.ai.config.get().automations ?? []).some(x => x.id === id) ? null : `The automation “${a.name}” isn’t there any more.` });
+            return JSON.stringify({ ok: true, id, name: a.name, ...words });
+          } catch (e) { return JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e), ...(e instanceof CheckError && e.fix ? { sendInstead: e.fix } : {}) }); }
         }
         case 'update_automation': {
           try {
@@ -697,8 +950,10 @@ export class Toolbox {
             });
             const w = { reg: this.ai.reg, cfg, now: this.ai.engine.now() };
             const tgt = (tid: string, cmd: object) => { const d = this.ai.reg.get(tid); return d ? targetLabel(d, cmd as Command) : (pseudoLabel(tid, this.ai.config.get().rooms) ?? tid); };
-            return JSON.stringify({ ok: true, id, name: a.name, when: a.triggers.map(t => triggerWords(t, w)), if: a.conditions.map(c => condWords(c, w)), then: a.actions.map(x => actionWords(x, w, tgt)) });
-          } catch (e) { return JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e) }); }
+            const words = { when: a.triggers.map(t => triggerWords(t, w)), if: a.conditions.map(c => condWords(c, w)), then: a.actions.map(x => actionWords(x, w, tgt)) };
+            this.done(`Changed the automation “${a.name}”${a.enabled ? '' : ' (it’s off)'}: when ${words.when.join(' or ')}${words.if.length ? `, if ${words.if.join(' and ')}` : ''}, ${words.then.join('; ')}`, [`auto:${id}`, `auto:${norm(a.name)}`]);
+            return JSON.stringify({ ok: true, id, name: a.name, ...words });
+          } catch (e) { return JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e), ...(e instanceof CheckError && e.fix ? { sendInstead: e.fix } : {}) }); }
         }
         case 'delete_automation': {
           try {
@@ -712,52 +967,101 @@ export class Toolbox {
               kind: 'system', device: null, feed: 'system', what: `Ask Kova removed the automation “${cur.name}”`,
               data: { automation: id }, cause: AI_CAUSE,
             });
+            this.done(`Removed the automation “${cur.name}”`, [`auto:${id}`, `auto:${norm(cur.name)}`]);
             return JSON.stringify({ ok: true, id, name: cur.name });
-          } catch (e) { return JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e) }); }
+          } catch (e) { return JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e), ...(e instanceof CheckError && e.fix ? { sendInstead: e.fix } : {}) }); }
         }
         case 'create_room': {
           const name = typeof args.name === 'string' ? args.name.trim().replace(/\s+/g, ' ').slice(0, 40) : '';
           if (!name) return JSON.stringify({ ok: false, error: 'Give the room a name' });
           const icon = typeof args.icon === 'string' && (ROOM_ICONS as readonly string[]).includes(args.icon) ? args.icon : 'meeting_room';
           const rooms = this.ai.config.get().rooms;
+          // The room already exists by that name: use it rather than making a second one.
+          const same = rooms.find(r => norm(r.name) === norm(name));
+          if (same) {
+            this.ctx.roomIds.set(same.id, same.id);
+            this.done(`${same.name} was already a room`, [`room:${norm(name)}`, `room:${same.id}`], { rooms: [same.id] });
+            return JSON.stringify({ ok: true, id: same.id, name: same.name, already: true });
+          }
           let id = slug(name) || 'room', n = 2;
           while (rooms.some(r => r.id === id)) id = `${slug(name) || 'room'}_${n++}`;
           const undo = this.ai.config.update(c => { c.rooms.push({ id, name, icon }); });
           this.undos.push(this.ai.engine.registerUndo(undo));
           this.ai.store.append({ kind: 'system', device: null, feed: 'system', what: `Ask Kova made the room “${name}”`, data: { room: id }, cause: AI_CAUSE });
+          // The model may now use the new id, even when names are private.
+          this.ctx.roomIds.set(id, id);
+          this.done(`Made the room ${name}`, [`room:${norm(name)}`, `room:${id}`], { rooms: [id], verify: () => this.ai.config.get().rooms.some(r => r.id === id) ? null : `The room ${name} isn’t there any more.` });
           return JSON.stringify({ ok: true, id, name });
         }
         case 'update_device': {
           const d = this.device(args.id);
           if (!d) return JSON.stringify({ ok: false, error: `Unknown device ${String(args.id)}` });
-          const rooms = this.ai.config.get().rooms;
           const rawRoom = args.room == null ? undefined : String(args.room).trim();
-          const room = !rawRoom ? rawRoom : this.roomId(rawRoom);
+          const room = !rawRoom ? rawRoom : rawRoom === UNASSIGNED_ROOM ? UNASSIGNED_ROOM : this.roomId(rawRoom);
           if (rawRoom && !room) return JSON.stringify({ ok: false, error: `Unknown room ${rawRoom} — use an id from the Rooms list, or create_room first` });
           const name = args.name == null ? undefined : String(args.name).trim().replace(/\s+/g, ' ').slice(0, 60);
           if (name === '') return JSON.stringify({ ok: false, error: 'Give it a name' });
           const favourite = typeof args.favourite === 'boolean' ? args.favourite : undefined;
           const hidden = typeof args.hidden === 'boolean' ? args.hidden : undefined;
-          if (name === undefined && room === undefined && favourite === undefined && hidden === undefined) return JSON.stringify({ ok: false, error: 'Nothing to change' });
+          // A ducted AC's zones by number: { "1": "Living", "2": "Theatre" } (an empty name clears one).
+          let zoneNames: Record<string, string> | undefined;
+          const zn = listArg(args.zoneNames);
+          if (zn !== undefined && zn !== null) {
+            if (typeof zn !== 'object' || Array.isArray(zn) || Object.keys(zn).some(n => !/^[1-9]\d?$/.test(n))) return JSON.stringify({ ok: false, error: 'zoneNames is { "1": "Living", "2": "Theatre" } by zone number' });
+            if (!d.capabilities.includes('zones')) return JSON.stringify({ ok: false, error: `${d.name} has no zones` });
+            const have = new Set((d.state.zones ?? []).map(z => String(z.n)));
+            const bad = Object.keys(zn).filter(n => have.size && !have.has(n));
+            if (bad.length) return JSON.stringify({ ok: false, error: `${d.name} has no zone ${bad.join(', ')} — its zones are ${[...have].join(', ')}` });
+            zoneNames = Object.fromEntries(Object.entries(zn as Record<string, unknown>).map(([n, v]) => [n, typeof v === 'string' ? v.trim().replace(/\s+/g, ' ').slice(0, 30) : '']));
+          }
+          if (name === undefined && room === undefined && favourite === undefined && hidden === undefined && !zoneNames) return JSON.stringify({ ok: false, error: 'Nothing to change' });
           // Same override model as PATCH /api/devices/:id/settings: store only what differs from the adapter's own.
           const orig = d.original ?? { name: d.name, room: d.room };
+          const was = d.name;
           const undo = this.ai.config.update(c => {
             const s = { ...(c.devices?.[d.id] ?? {}) };
             if (name !== undefined) { if (name === orig.name) delete s.name; else s.name = name; }
             if (room !== undefined) { if (!room || room === orig.room) delete s.room; else s.room = room; }
             if (hidden !== undefined) { if (hidden) s.hidden = true; else delete s.hidden; }
+            if (zoneNames) {
+              const z = { ...(s.zoneNames ?? {}) };
+              for (const [n, v] of Object.entries(zoneNames)) { if (v) z[n] = v; else delete z[n]; }
+              if (Object.keys(z).length) s.zoneNames = z; else delete s.zoneNames;
+            }
             c.devices = { ...(c.devices ?? {}) };
             if (Object.keys(s).length) c.devices[d.id] = s; else delete c.devices[d.id];
             if (favourite !== undefined) { const f = (c.favourites ?? []).filter(x => x !== d.id); c.favourites = favourite ? [...f, d.id] : f; }
+            // A combined device keeps its own room in its entry (that's what it's announced with).
+            if (room !== undefined && d.adapter === 'combined') {
+              const x = (c.combined ?? []).find(y => `combined_${y.id}` === d.id);
+              if (x) { if (room && room !== UNASSIGNED_ROOM) x.room = room; else delete x.room; }
+            }
           });
           this.undos.push(this.ai.engine.registerUndo(undo));
+          const roomName = room !== undefined ? this.roomName(room || orig.room) : undefined;
           const bits: string[] = [];
-          if (name) bits.push(`renamed it “${name}”`);
-          if (room) bits.push(`moved it to ${rooms.find(r => r.id === room)?.name ?? room}`);
-          if (favourite === true) bits.push('favourited it'); else if (favourite === false) bits.push('took it off favourites');
-          if (hidden === true) bits.push('hid it'); else if (hidden === false) bits.push('unhid it');
-          this.ai.store.append({ kind: 'system', device: d.id, feed: 'system', what: `Ask Kova ${bits.join(' and ') || 'updated'} — ${d.name}`, data: { device: d.id }, cause: AI_CAUSE });
-          return JSON.stringify({ ok: true, id: d.id, name: name ?? d.name, room: room ?? d.room });
+          if (name) bits.push(`renamed ${was} “${name}”`);
+          if (room !== undefined) bits.push(`moved ${name ? 'it' : was} to ${roomName}`);
+          if (favourite === true) bits.push(`put ${bits.length ? 'it' : was} on favourites`); else if (favourite === false) bits.push(`took ${bits.length ? 'it' : was} off favourites`);
+          if (hidden === true) bits.push(`hid ${bits.length ? 'it' : was}`); else if (hidden === false) bits.push(`showed ${bits.length ? 'it' : was} again`);
+          if (zoneNames) bits.push(`named ${bits.length ? 'its' : `${was}’s`} zones (${Object.entries(zoneNames).map(([n, v]) => v ? `${n}: ${v}` : `${n}: no name`).join(', ')})`);
+          const said = cap(bits.join(' and '));
+          this.ai.store.append({ kind: 'system', device: d.id, feed: 'system', what: `Ask Kova ${bits.join(' and ') || 'updated'} — ${was}`, data: { device: d.id }, cause: AI_CAUSE });
+          const id = d.id;
+          this.done(said, [id], {
+            ...(room !== undefined && room !== UNASSIGNED_ROOM && (room || orig.room) ? { rooms: [room || orig.room] } : {}),
+            // Re-read the device: the registry applies the settings, so this is what every screen now shows.
+            verify: () => {
+              const now = this.ai.reg.get(id);
+              if (!now) return `${was} isn’t there any more.`;
+              const want = room === undefined || room === UNASSIGNED_ROOM ? undefined : room || orig.room;
+              if (want !== undefined && now.room !== want) return `${now.name} is still in ${this.roomName(now.room)}, not ${roomName}.`;
+              if (name !== undefined && now.name !== name) return `${now.name} wasn’t renamed to ${name}.`;
+              if (hidden !== undefined && !!now.hidden !== hidden) return `${now.name} ${hidden ? 'still shows' : 'is still hidden'}.`;
+              return null;
+            },
+          });
+          return JSON.stringify({ ok: true, id: this.alias(d.id), name: name ?? d.name, room: room !== undefined ? (room || orig.room) : d.room, ...(roomName ? { roomName } : {}), ...(zoneNames ? { zoneNames } : {}) });
         }
         case 'rename_room': {
           const rid = this.roomId(args.room);
@@ -771,7 +1075,10 @@ export class Toolbox {
           const undo = this.ai.config.update(c => { const r = c.rooms.find(x => x.id === room.id)!; if (name) r.name = name; if (icon) r.icon = icon; });
           this.undos.push(this.ai.engine.registerUndo(undo));
           this.ai.store.append({ kind: 'system', device: null, feed: 'system', what: `Ask Kova renamed the room “${was}” to “${name ?? was}”`, data: { room: room.id }, cause: AI_CAUSE });
-          return JSON.stringify({ ok: true, id: room.id, name: name ?? room.name });
+          const rid2 = room.id, want = name ?? room.name;
+          this.done(name && name !== was ? `Renamed the room ${was} to ${name}` : `Changed the room ${was}’s icon`, [`room:${room.id}`], { rooms: [room.id],
+            verify: () => this.ai.config.get().rooms.find(r => r.id === rid2)?.name === want ? null : `The room ${was} wasn’t renamed to ${want}.` });
+          return JSON.stringify({ ok: true, id: room.id, name: want });
         }
         case 'delete_room': {
           const cfg = this.ai.config.get();
@@ -794,49 +1101,104 @@ export class Toolbox {
               if (Object.keys(s).length) c.devices[d.id] = s; else delete c.devices[d.id];
             }
             for (const [g, rooms] of Object.entries(c.groups)) c.groups[g] = rooms.filter(r => r !== room.id);
+            for (const x of c.combined ?? []) if (x.room === room.id) { if (moveTo && moveTo !== UNASSIGNED_ROOM) x.room = moveTo; else delete x.room; }
           });
           this.undos.push(this.ai.engine.registerUndo(undo));
           this.ai.store.append({ kind: 'system', device: null, feed: 'system', what: `Ask Kova removed the room “${room.name}”${inside.length ? `, ${inside.length} device${inside.length === 1 ? '' : 's'} moved` : ''}`, data: { room: room.id, moved: inside.map(d => d.id) }, cause: AI_CAUSE });
-          return JSON.stringify({ ok: true, removed: room.id, moved: inside.map(d => d.id) });
+          this.done(`Removed the room ${room.name}${inside.length ? ` (${inside.length} device${inside.length === 1 ? '' : 's'} moved to ${this.roomName(moveTo)})` : ''}`, [`room:${room.id}`]);
+          return JSON.stringify({ ok: true, removed: room.id, moved: inside.map(d => this.alias(d.id)) });
         }
         case 'combine_devices': {
           const cfg = this.ai.config.get();
-          const raw = Array.isArray(args.members) ? [...new Set(args.members.map(String))] : [];
+          const list0 = listArg(args.members);
+          const raw = Array.isArray(list0) ? [...new Set(list0.map(String))] : [];
+          // What the model may pass: plain devices, a combined device (to add to it), a part of one, or a combined
+          // device it separated earlier in this ask (it means that device's parts).
+          const combos = cfg.combined ?? [];
+          const comboOf = (id: string) => combos.find(x => `combined_${x.id}` === id) ?? combos.find(x => x.members.includes(id));
           const devs: Device[] = [], unknown: string[] = [];
-          for (const m of raw) { const d = this.device(m); if (d) devs.push(d); else unknown.push(m); }
-          if (unknown.length) return JSON.stringify({ ok: false, error: `Unknown device ids: ${unknown.join(', ')}` });
-          if (devs.length < 2) return JSON.stringify({ ok: false, error: 'Pick at least two devices' });
-          const taken = new Set((cfg.combined ?? []).flatMap(x => x.members));
-          for (const d of devs) {
-            if (d.adapter === 'combined' || d.adapter === 'groups') return JSON.stringify({ ok: false, error: `${d.name} is already more than one device` });
-            if (taken.has(d.id)) return JSON.stringify({ ok: false, error: `${d.name} is already part of a combined device` });
+          const into = new Set<string>();
+          for (const m of raw) {
+            const real = this.ctx.deviceIds.get(m) ?? m;
+            const sep = this.separated.get(real);
+            if (sep) { for (const id of sep) { const d = this.ai.reg.get(id); if (d) devs.push(d); } continue; }
+            const d = this.device(m);
+            if (!d) { unknown.push(m); continue; }
+            if (d.adapter === 'groups') return JSON.stringify({ ok: false, error: `${d.name} is a speaker group, not one device` });
+            if (d.adapter === 'combined') { const x = comboOf(d.id); if (x) into.add(x.id); continue; }
+            const x = comboOf(d.id);
+            if (x) into.add(x.id);
+            devs.push(d);
           }
-          const name = (typeof args.name === 'string' ? args.name.trim().replace(/\s+/g, ' ').slice(0, 60) : '') || devs[0]!.name;
-          const room = args.room == null ? undefined : this.roomId(args.room);
-          if (args.room != null && !room) return JSON.stringify({ ok: false, error: `Unknown room ${String(args.room)} — use an id from the Rooms list` });
-          let id = slug(name) || 'device', n = 2;
-          while ((cfg.combined ?? []).some(x => x.id === id)) id = `${slug(name) || 'device'}_${n++}`;
+          if (unknown.length) return JSON.stringify({ ok: false, error: `Unknown device ids: ${unknown.join(', ')}` });
+          const targets = [...into].map(id => combos.find(x => x.id === id)!).filter(Boolean);
+          const memberIds = [...new Set([...targets.flatMap(x => x.members), ...devs.map(d => d.id)])];
+          if (memberIds.length < 2) return JSON.stringify({ ok: false, error: targets.length ? `${targets[0]!.name} already has ${targets[0]!.members.map(id => this.ai.reg.get(id)?.name ?? id).join(' and ')} — name a device to add to it` : 'Pick at least two devices' });
+          const reqName = typeof args.name === 'string' ? args.name.trim().replace(/\s+/g, ' ').slice(0, 60) : '';
+          const room = args.room == null || args.room === '' ? undefined : this.roomId(args.room);
+          if (args.room != null && args.room !== '' && !room) return JSON.stringify({ ok: false, error: `Unknown room ${String(args.room)} — use an id from the Rooms list, or create_room first` });
+          const keep = targets[0];
+          // Into an existing combined device: it keeps its id (and anything that uses it), and gains the new parts.
+          const name = reqName || keep?.name || devs[0]!.name;
+          let id = keep?.id ?? (slug(name) || 'device');
+          if (!keep) { let n = 2; while (combos.some(x => x.id === id)) id = `${slug(name) || 'device'}_${n++}`; }
+          const added = memberIds.filter(m => !keep?.members.includes(m));
+          if (keep && !added.length && targets.length === 1 && (!reqName || reqName === keep.name) && (!room || room === keep.room)) {
+            this.done(`${keep.name} already stands for ${andList(keep.members.map(m => this.ai.reg.get(m)?.name ?? m))}`, [`combined_${keep.id}`, ...keep.members]);
+            return JSON.stringify({ ok: true, id: this.alias(`combined_${keep.id}`), name: keep.name, already: true, parts: keep.members.map(m => this.alias(m)) });
+          }
           const undo = this.ai.config.update(c => {
-            const hid = devs.map(d => d.id).filter(m => !c.devices?.[m]?.hidden);
             c.devices ??= {};
-            for (const m of hid) c.devices[m] = { ...c.devices[m], hidden: true };
-            c.combined = [...(c.combined ?? []), { id, name, members: devs.map(d => d.id), hid, ...(room ? { room } : {}) }];
+            const list = c.combined ?? [];
+            // Parts hidden by being combined (not hidden by the owner before) — they show again when separated.
+            const hidBefore = new Set(list.filter(x => into.has(x.id)).flatMap(x => x.hid ?? []));
+            const newHid = memberIds.filter(m => !hidBefore.has(m) && !c.devices![m]?.hidden);
+            for (const m of newHid) c.devices[m] = { ...c.devices[m], hidden: true };
+            const hid = [...memberIds.filter(m => hidBefore.has(m)), ...newHid];
+            const merged = { id, name, members: memberIds, hid, ...(room ? { room } : keep?.room ? { room: keep.room } : {}) };
+            c.combined = keep ? list.filter(x => x.id === id || !into.has(x.id)).map(x => x.id === id ? merged : x) : [...list, merged];
           });
           this.undos.push(this.ai.engine.registerUndo(undo));
-          this.ai.store.append({ kind: 'system', device: `combined_${id}`, feed: 'system', what: `Ask Kova shows ${devs.map(d => d.name).join(' and ')} as one — “${name}”`, data: { combined: id, members: devs.map(d => d.id) }, cause: AI_CAUSE });
-          return JSON.stringify({ ok: true, id: `combined_${id}`, name });
+          const realId = `combined_${id}`;
+          const partNames = memberIds.map(m => this.ai.reg.get(m)?.name ?? m);
+          this.ai.store.append({ kind: 'system', device: realId, feed: 'system', what: keep ? `Ask Kova added ${andList(added.map(m => this.ai.reg.get(m)?.name ?? m))} to “${name}”` : `Ask Kova shows ${andList(partNames)} as one — “${name}”`, data: { combined: id, members: memberIds }, cause: AI_CAUSE });
+          const roomName = room ? this.roomName(room) : undefined;
+          const said = keep
+            ? `${added.length ? `Added ${andList(added.map(m => this.ai.reg.get(m)?.name ?? m))} to` : 'Updated'} ${name}${keep.name !== name ? ` (was ${keep.name})` : ''} — it now stands for ${andList(partNames)}${roomName ? `, in ${roomName}` : ''}`
+            : `Combined ${andList(partNames)} into one device, “${name}”${roomName ? `, in ${roomName}` : ''}`;
+          this.done(said, [realId, ...memberIds], {
+            ...(room ? { rooms: [room] } : {}),
+            verify: () => {
+              const x = (this.ai.config.get().combined ?? []).find(y => y.id === id);
+              if (!x || !memberIds.every(m => x.members.includes(m))) return `${name} isn’t combined after all.`;
+              const d = this.ai.reg.get(realId);
+              if (!d) return `${name} didn’t show up as one device.`;
+              if (room && d.room !== room) return `${name} is in ${this.roomName(d.room)}, not ${roomName}.`;
+              const showing = memberIds.filter(m => this.ai.reg.get(m) && !this.ai.reg.get(m)!.hidden);
+              if (showing.length) return `${showing.map(m => this.ai.reg.get(m)!.name).join(' and ')} still show${showing.length === 1 ? 's' : ''} separately.`;
+              return null;
+            },
+          });
+          return JSON.stringify({ ok: true, id: this.alias(realId), name, parts: memberIds.map(m => this.alias(m)), ...(roomName ? { room: room!, roomName } : {}) });
         }
         case 'separate_devices': {
-          const want = String(args.id ?? '').replace(/^combined_/, '');
-          const x = (this.ai.config.get().combined ?? []).find(c => c.id === want || `combined_${c.id}` === String(args.id));
-          if (!x) return JSON.stringify({ ok: false, error: `No combined device ${String(args.id)}` });
+          const real = typeof args.id === 'string' ? (this.ctx.deviceIds.get(args.id) ?? String(args.id)) : String(args.id ?? '');
+          const list = this.ai.config.get().combined ?? [];
+          // The combined device's id, its config id, or one of its parts ("separate the TV").
+          const x = list.find(c => `combined_${c.id}` === real || c.id === real.replace(/^combined_/, '')) ?? list.find(c => c.members.includes(real));
+          if (!x) return JSON.stringify({ ok: false, error: this.separated.has(real) ? `${String(args.id)} is already separated` : `No combined device ${String(args.id)}` });
           const undo = this.ai.config.update(c => {
             for (const m of x.hid ?? []) if (c.devices?.[m]) delete c.devices[m].hidden;
             c.combined = (c.combined ?? []).filter(y => y.id !== x.id);
           });
           this.undos.push(this.ai.engine.registerUndo(undo));
+          this.separated.set(`combined_${x.id}`, [...x.members]);
           this.ai.store.append({ kind: 'system', device: `combined_${x.id}`, feed: 'system', what: `Ask Kova separated “${x.name}” back into its devices`, data: { combined: x.id }, cause: AI_CAUSE });
-          return JSON.stringify({ ok: true, separated: x.id });
+          const parts = x.members.filter(m => this.ai.reg.get(m));
+          this.done(`Separated ${x.name} back into ${parts.map(m => this.ai.reg.get(m)!.name).join(' and ')}`, [`combined_${x.id}`, ...x.members], {
+            verify: () => (this.ai.config.get().combined ?? []).some(y => y.id === x.id && x.members.every(m => y.members.includes(m))) ? `${x.name} is still combined.` : null,
+          });
+          return JSON.stringify({ ok: true, separated: this.alias(`combined_${x.id}`), parts: parts.map(m => ({ id: this.alias(m), name: this.ai.lastShare?.names ? this.ai.reg.get(m)!.name : undefined })) });
         }
         case 'review_action': {
           const action = typeof args.action === 'string' ? args.action.trim() : '';
@@ -846,7 +1208,7 @@ export class Toolbox {
           try {
             const r = await jev.gate(action, typeof args.context === 'string' ? args.context : '');
             return JSON.stringify({ ok: true, recommendation: r.recommendation, riskScore: r.riskScore, safeProbability: r.safeProbability, note: r.note });
-          } catch (e) { return JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e) }); }
+          } catch (e) { return JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e), ...(e instanceof CheckError && e.fix ? { sendInstead: e.fix } : {}) }); }
         }
         default:
           return JSON.stringify({ ok: false, error: `Unknown tool ${name}` });
@@ -859,7 +1221,11 @@ export class Toolbox {
 
 // ---------------------------------------------------------------- engines --
 
-export interface EngineResult { text: string }
+export interface EngineResult {
+  text: string;
+  /** It was still calling tools when the round limit came: what it did stands, the reply says it didn't finish. */
+  unfinished?: boolean;
+}
 
 /** A plain conversation turn passed to an engine — the recent thread, ending with the current request. */
 export interface ChatTurn { role: 'user' | 'assistant'; content: string }
@@ -869,6 +1235,19 @@ export interface AiEngine {
   readonly kind: 'local' | 'cloud';
   readonly label: string;
   run(system: string, chat: ChatTurn[], tools: Toolbox): Promise<EngineResult>;
+}
+
+/**
+ * The engine Ask Kova uses for what the built-in parser can't do, for headers and footers: its kind, its name
+ * ("MiniMax", "Local AI") and whether it's set up enough to run.
+ */
+export function engineInfo(s: AssistantSettings): { kind: EngineKind; label: string; model?: string; ready: boolean } {
+  if (s.engine === 'local') return { kind: 'local', label: 'Local AI', ...(s.local.model ? { model: s.local.model } : {}), ready: !!(s.local.url && s.local.model) };
+  if (s.engine === 'cloud') {
+    const p = CLOUD_PROVIDERS[s.cloud.provider] ?? CLOUD_PROVIDERS.anthropic;
+    return { kind: 'cloud', label: p.label, model: s.cloud.model || p.defaultModel, ready: !!s.cloud.apiKey && !!(s.cloud.provider === 'anthropic' || s.cloud.baseUrl || p.baseUrl) };
+  }
+  return { kind: 'builtin', label: 'Built in', ready: true };
 }
 
 /** Friendly reason a request failed, safe to show the user. */
@@ -899,8 +1278,9 @@ export class LocalAiEngine implements AiEngine {
     type Msg = { role: 'system' | 'user' | 'assistant' | 'tool'; content: string | null; tool_calls?: ToolCall[]; tool_call_id?: string };
     type ToolCall = { id: string; type: 'function'; function: { name: string; arguments: string } };
     const messages: Msg[] = [{ role: 'system', content: system }, ...chat];
-    const deadline = Date.now() + this.opts.timeoutMs;
+    // Each round trip has its own time limit: a long request that keeps making progress is never cut off.
     for (let round = 0; round < MAX_ROUNDS; round++) {
+      const deadline = Date.now() + this.opts.timeoutMs;
       let res: Response;
       try {
         res = await fetch(this.endpoint, {
@@ -937,7 +1317,7 @@ export class LocalAiEngine implements AiEngine {
         messages.push({ role: 'tool', tool_call_id: c.id, content: result });
       }
     }
-    throw new AiError(`${this.cap()} kept calling tools without finishing. Try asking more simply.`);
+    return { text: '', unfinished: true };
   }
 }
 
@@ -997,7 +1377,7 @@ export class CloudAiEngine implements AiEngine {
       }
       messages.push({ role: 'user', content: results });
     }
-    throw new AiError('Cloud AI kept calling tools without finishing. Try asking more simply.');
+    return { text: '', unfinished: true };
   }
 }
 
@@ -1007,8 +1387,53 @@ const SYSTEM = `You are Ask Kova, the assistant for a smart home hub. The hub's 
 Use the tools to act: set_devices, start_overlay, end_overlay, explain_device, list_schedule, create_automation, update_automation, delete_automation, create_room, rename_room, delete_room, update_device, combine_devices, separate_devices, remember, forget, review_action. Only use device, room, overlay, mode and person ids from the home context below; never invent ids. When the user answers a question you just asked (yes, sure, the second one, do it), read the recent conversation to see what it refers to before answering.
 Anything asked to happen regularly, at a time, or when something else happens is an automation — build it with create_automation, then tell the user what it will do in the words the tool returns. A single change later ("at 9pm", "in an hour") is a one-time schedule: create_automation with a once trigger.
 For destructive, broad, privacy-sensitive, security-sensitive, or hard-to-undo actions, call review_action first. If it says confirm, ask the user to confirm before acting; if it says block, do not do it. Do not use it for routine light, media, or climate changes.
-Ducted air conditioner zones are numbered; a zone only has a name when the state lists one. If a request names rooms for a zoned AC and the zones are unnamed, ask which zone number is which room instead of guessing.
+Ducted air conditioner zones are numbered; a zone only has a name when the state lists one. "Control it zone by zone" means set_devices with set.zoneSet on that one AC — the AC stays one device for the whole home, in no particular room. If a request names rooms for a zoned AC and the zones are unnamed, ask which zone number is which room instead of guessing; once told, save the names with update_device zoneNames.
+Big requests come in several parts: work through every part, one tool call per change, and check each result before the next step. Several things that are "the same device" go into ONE combine_devices call; to add to a device that is already combined, pass its combined id with the new members (no need to separate it first).
+Rooms: use a room only if it is in the Rooms list under that name (or plainly the same name, e.g. "living" for "Living room"). If the user names a room that isn't there ("entryway" when there is only "Front door"), create it with create_room and use the id it returns — never put the device in a different room that seems close. If you can't tell whether they mean an existing room, ask. In the reply, call every room by the name the tool result gives.
+When a tool call fails because of how it was written (an unknown kind, a bad time, a wrong id), correct it and call again — the error says what to send instead. Never ask the user about formats, ids, schemas or tool shapes; they don't know them and shouldn't see them. Ask the user only about real choices (which automations, which room).
+A request about a group ("the light automations that start at sunset", "all the bedroom lights") means every match: find them all in the home context, change each one (one call each), then name each in the reply.
+Tool results are the truth: each has ok, and when it worked a "result" saying what changed, with real names. Report only what results confirmed. If any call returned ok:false, say plainly what didn't happen and why — never say "all done", "done" or "everything's set" unless every part worked. Don't claim a change you didn't make with a tool.
 If the request can't be done with these tools or the shared context, say so plainly instead of guessing. Reply like a text message — plain text only, no markdown (never ** or # or \` characters — they show raw in the chat). Keep it short: a sentence or two usually; when listing several things, one item per line starting with "- ". Refer to automations and devices by their names, not their ids.`;
+
+/** A reply that says something didn't or can't happen. */
+const NEGATIVE = /\b(can[’']?t|cannot|couldn[’']?t|didn[’']?t|unable|not able|isn[’']?t|aren[’']?t|doesn[’']?t|has no|have no|no such|failed|wasn[’']?t|won[’']?t|not possible)\b/i;
+
+/** "All done", "Done.", "Everything's set" at the start of a reply. */
+const OVERCLAIM = /^\s*(all done|done|all set|all sorted|sorted|everything('s| is)? (done|set|sorted|taken care of))\b[\s.!:,;—–-]*/i;
+
+/**
+ * The hub's check on the model's last word. The reply may only claim what the tools confirmed: when a call failed (and
+ * no later call fixed it), a change didn't hold when re-read, the model ran out of rounds or gave up with an error,
+ * the reply leads with what didn't work and the hub's own "Done: … / Couldn't: …" summary follows. A room the tools
+ * used that the reply never names (it said "entryway" when the lamp went to Front door) gets the summary too.
+ */
+export function honestReply(text: string, o: AskOutcome, opts: { unfinished?: boolean; error?: string; rooms?: string[]; changed?: boolean } = {}): { text: string; flagged: boolean } {
+  const body0 = text.trim();
+  const said = norm(body0);
+  const roomMiss = (opts.rooms ?? []).filter(r => !said.includes(norm(r)));
+  // Nothing was done and the model says so ("The lamp has no child lock"): its words already are the honest answer.
+  const owned = !o.done.length && !opts.unfinished && !opts.error && !OVERCLAIM.test(body0) && NEGATIVE.test(body0);
+  const problems = !owned && (o.couldnt.length > 0 || !!opts.unfinished || !!opts.error);
+  if (!problems && !roomMiss.length) {
+    // "Done." with nothing done: no tool changed anything, so it can't be.
+    if (!opts.changed && OVERCLAIM.test(body0) && /^\s*(all )?done\b/i.test(body0)) {
+      const rest = body0.replace(OVERCLAIM, '').trim();
+      return { text: `I didn’t change anything.${rest ? ` ${cap(rest)}` : ''}`, flagged: true };
+    }
+    return { text: body0, flagged: false };
+  }
+  const lines: string[] = [];
+  if (opts.error) lines.push(opts.error);
+  if (opts.unfinished) lines.push(o.done.length || o.couldnt.length ? 'I didn’t get to the end of that. Here’s where it stands:' : 'I didn’t get to the end of that, and nothing was changed.');
+  else if (problems && !opts.error) lines.push(o.done.length ? 'Not everything worked.' : 'That didn’t work.');
+  // The model's own words stay (answers to questions, follow-up questions), minus any "all done" in front.
+  const body = problems ? cap(body0.replace(OVERCLAIM, '').trim()) : body0;
+  if (body && !opts.error) lines.push(body);
+  const summary: string[] = [];
+  if (o.done.length) summary.push(`Done:\n${o.done.map(x => `- ${x}`).join('\n')}`);
+  if (o.couldnt.length) summary.push(`Couldn’t:\n${o.couldnt.map(x => `- ${x}`).join('\n')}`);
+  return { text: [lines.join('\n\n'), ...summary].filter(Boolean).join('\n\n'), flagged: true };
+}
 
 export interface AiOptions {
   /** Anthropic API base URL (tests point this at a fake server). */
@@ -1036,12 +1461,20 @@ export class AiAssistant {
     const cfg = this.config.get();
     const tz = cfg.timezone;
     const now = this.engine.now();
-    // Things to control. Cameras are never sent; sensors go on their own, read-only, below.
-    const devices = this.reg.list().filter(d => !isCamera(d) && !isSensor(d) && !d.archived);
+    // Things to control. Cameras are never sent; sensors go on their own, read-only, below. Archived devices are
+    // gone as far as Ask Kova goes. A combined device stands for its parts: the parts are listed inside it (their ids
+    // still work, e.g. to separate them), never as devices of their own. Hidden devices are listed apart, by name.
+    const combos = (cfg.combined ?? []).filter(c => this.reg.get(`combined_${c.id}`));
+    const partOf = new Map(combos.flatMap(c => c.members.map(m => [m, `combined_${c.id}`] as const)));
+    const usable = this.reg.list().filter(d => !isCamera(d) && !isSensor(d) && !d.archived && !partOf.has(d.id));
+    const devices = usable.filter(d => !d.hidden);
+    const hiddenDevices = usable.filter(d => d.hidden);
     const sensors = this.reg.list().filter(d => isSensor(d) && !d.hidden && !d.archived);
     // Real ids spell out names ("kitchen_ceiling"); use neutral ones when names are private.
     const deviceIds = new Map<string, string>();
     const roomAlias = new Map(cfg.rooms.map((r, i) => [r.id, share.names ? r.id : `room${i + 1}`]));
+    // Devices in no room yet ("Unsorted" in the app) say so, rather than a room id that isn't in the list.
+    roomAlias.set(UNASSIGNED_ROOM, UNASSIGNED_ROOM);
     const shared: string[] = [];
     const lines: string[] = [];
     lines.push(`Time now: ${clock(now, tz)}, ${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][new Date(`${localDate(now, tz)}T12:00:00Z`).getUTCDay()]} ${localDate(now, tz)} (the home's time; one-time schedules use it as "${localStamp(now, tz)}").`);
@@ -1060,12 +1493,20 @@ export class AiAssistant {
       lines.push('Automations — change these with update_automation or delete_automation instead of adding overlapping ones:', ...autos.map(a => `- ${a.id} "${a.name}"${a.enabled ? '' : ' (off)'}: when ${a.triggers.map(t => triggerWords(t, w)).join(' or ') || 'nothing'}${a.conditions.length ? ` | if ${a.conditions.map(c => condWords(c, w)).join(' and ')}` : ''} | ${a.actions.map(x => actionWords(x, w, tgt)).join('; ') || 'nothing'}`));
     }
 
-    if (share.names) lines.push(`Rooms: ${cfg.rooms.map(r => `${r.id} (${r.name})`).join(', ')}.`);
-    const devLines = devices.map((d, i) => {
-      const id = share.names ? d.id : `device${i + 1}`;
-      deviceIds.set(id, d.id);
+    if (share.names) lines.push(`Rooms: ${cfg.rooms.map(r => `${r.id} (${r.name})`).join(', ')}. A device with room "${UNASSIGNED_ROOM}" isn't in a room yet (the app lists it under Unsorted).`);
+    else lines.push(`Rooms are private: room1, room2… stand for them. "${UNASSIGNED_ROOM}" means no room yet.`);
+    let n = 0;
+    const idFor = (realId: string) => { const id = share.names ? realId : `device${++n}`; deviceIds.set(id, realId); return id; };
+    const devLines = devices.map(d => {
+      const id = idFor(d.id);
       const parts: Record<string, unknown> = { id, type: d.type };
       if (share.names) parts.name = d.name;
+      if (d.adapter === 'combined') {
+        const c = combos.find(x => `combined_${x.id}` === d.id);
+        parts.combined = true;
+        parts.parts = (c?.members ?? []).map(m => this.reg.get(m)).filter((m): m is Device => !!m && !m.archived)
+          .map(m => ({ id: idFor(m.id), ...(share.names ? { name: m.name } : {}), integration: m.integration }));
+      }
       parts.room = roomAlias.get(d.room) ?? `room${cfg.rooms.length + 1}`;
       parts.can = d.capabilities.filter(c => c !== 'events' && c !== 'power');
       if (share.rooms) {
@@ -1078,7 +1519,11 @@ export class AiAssistant {
       }
       return JSON.stringify(parts);
     });
-    lines.push('Devices:', ...devLines);
+    lines.push('Devices (a combined device is one physical device reached through several integrations; its parts are listed inside it and are not separate devices — refer to it, not its parts):', ...devLines);
+    if (hiddenDevices.length) {
+      const hLines = hiddenDevices.map(d => JSON.stringify({ id: idFor(d.id), type: d.type, ...(share.names ? { name: d.name } : {}), room: roomAlias.get(d.room) ?? `room${cfg.rooms.length + 1}` }));
+      lines.push('Hidden devices (the owner hid these: leave them out of lists and answers unless the user asks about hidden devices; update_device hidden:false shows one again):', ...hLines);
+    }
     // Sensors only report: their readings feed the rooms; they can't be set, but automations can start on them.
     if (sensors.length) {
       const sLines = sensors.map((d, i) => {
@@ -1141,7 +1586,7 @@ export class AiAssistant {
       shared.push('activity history');
     }
     const roomIds = new Map(cfg.rooms.map(r => [roomAlias.get(r.id)!, r.id]));
-    return { text: lines.join('\n'), shared, deviceIds, roomIds };
+    return { text: lines.join('\n'), shared, deviceIds, roomIds, realIds: share.names };
   }
 
   /** The engine for the current settings, or a reason it can't run. */
@@ -1210,7 +1655,7 @@ export class AiAssistant {
       }
       const all = this.store.get<Record<string, LearnedEntry>>(LEARNED_KEY) ?? {};
       if (all[key]) { all[key]!.uses++; this.store.set(LEARNED_KEY, all); }
-      return { text: 'Done.', source: 'Learned · no AI needed', actions: [], understood: true, undo: this.undoFor(undos) };
+      return { text: 'Done.', source: 'Learned · no AI needed', actions: [], understood: true, engine: 'builtin', undo: this.undoFor(undos) };
     } catch {
       this.unlearn(key);
       return null;
@@ -1224,8 +1669,8 @@ export class AiAssistant {
     this.store.set(REQUESTS_KEY, all.slice(0, REQUESTS_CAP));
   }
 
-  /** Ask the configured AI engine. Never throws. */
-  async ask(question: string, s: AssistantSettings, engine?: AiEngine): Promise<AskReply> {
+  /** Ask the configured AI engine. Never throws. onSteps hears each tool step as it starts and ends. */
+  async ask(question: string, s: AssistantSettings, engine?: AiEngine, opts: { onSteps?: (steps: AskStep[]) => void } = {}): Promise<AskReply> {
     const e = engine ?? this.engineFor(s);
     const q = question.trim();
     // A phrase the AI already handled: replay it locally, no AI needed — even if no engine is set up.
@@ -1234,11 +1679,13 @@ export class AiAssistant {
       const r = await this.replay(norm(q), hit);
       if (r) return r;
     }
-    if (typeof e === 'string') { this.logRequest('unhandled', q, e, [], false); return { text: e, source: 'Built-in · nothing left your home', actions: [], understood: false }; }
+    if (typeof e === 'string') { this.logRequest('unhandled', q, e, [], false); return { text: e, source: 'Built-in · nothing left your home', actions: [], understood: false, engine: 'builtin' }; }
     const share = { ...s.share, cameras: false as const };
     const history = convoRecent(this.store);
     const chat: ChatTurn[] = [...history.map(t => ({ role: t.role, content: t.text })), { role: 'user', content: q }];
     const source: AskReply['source'] = e.kind === 'local' ? 'Local AI on your server' : `${e.label} · sent ${sharedLabel(share, history.length ? ['recent chat'] : [])}`;
+    const kind: EngineKind = e.kind;
+    let tools: Toolbox | null = null;
     try {
       this.lastShare = share;
       const ctx = this.buildContext(share);
@@ -1250,23 +1697,27 @@ export class AiAssistant {
         data: { engine: e.kind, chars: system.length + q.length, preview: q.length > 40 ? `${q.slice(0, 40)}…` : q, shared: ctx.shared },
         cause: { kind: 'assistant', label: 'Ask Kova' },
       });
-      const tools = new Toolbox(this, ctx);
+      tools = new Toolbox(this, ctx, opts.onSteps);
       const key = norm(q);
-      let text: string;
-      try { text = cleanReply((await e.run(system, chat, tools)).text); } catch (err) {
-        const out = err instanceof AiError ? err.message : `${e.label} failed: ${err instanceof Error ? err.message : String(err)}`;
+      let result: EngineResult;
+      try { result = await e.run(system, chat, tools); } catch (err) {
+        const msg = err instanceof AiError ? err.message : `${e.label} failed: ${err instanceof Error ? err.message : String(err)}`;
+        // Anything already done stays undoable, and the reply says what it was.
+        const out = tools.called.length ? honestReply('', tools.outcome(), { error: msg, changed: tools.changedAnything }).text : msg;
         this.logRequest(e.label, q, out, tools.called, false, tools.calls);
-        // Anything already done stays undoable.
-        return { text: out, source, actions: [], understood: false, undo: this.undoFor(tools.undos) };
+        return { text: out, source, actions: [], understood: false, engine: kind, undo: this.undoFor(tools.undos) };
       }
-      this.logRequest(e.label, q, text, tools.called, true, tools.calls);
+      // The hub's check on the model's words: only what the tools confirmed (re-read now) is claimed.
+      const checked = honestReply(cleanReply(result.text), tools.outcome(), { unfinished: result.unfinished, rooms: tools.roomsUsed(), changed: tools.changedAnything });
+      const text = checked.text;
+      this.logRequest(e.label, q, text, tools.called, !checked.flagged, tools.calls);
       // A clean run that changed something becomes a learned phrase: next time it replays without the AI.
       // Undoing the AI's work drops the phrase — the user said it was wrong.
-      const learnedSomething = tools.okAll && tools.learned.length > 0;
+      const learnedSomething = tools.okAll && !checked.flagged && tools.learned.length > 0;
       if (learnedSomething) this.learn(key, e.label, tools.learned);
-      return { text: text || (tools.undos.length ? 'Done.' : 'I don’t have an answer for that.'), source, actions: [], understood: true, undo: this.undoFor(tools.undos, learnedSomething ? () => this.unlearn(key) : undefined) };
+      return { text: text || (tools.undos.length ? 'Done.' : 'I don’t have an answer for that.'), source, actions: [], understood: true, engine: kind, undo: this.undoFor(tools.undos, learnedSomething ? () => this.unlearn(key) : undefined) };
     } catch (err) {
-      return { text: `${e.label} failed: ${err instanceof Error ? err.message : String(err)}`, source, actions: [], understood: false };
+      return { text: `${e.label} failed: ${err instanceof Error ? err.message : String(err)}`, source, actions: [], understood: false, engine: kind, ...(tools?.undos.length ? { undo: this.undoFor(tools.undos) } : {}) };
     } finally {
       this.lastShare = null;
     }
