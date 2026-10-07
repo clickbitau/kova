@@ -62,7 +62,7 @@ export function wardenRef(v: string): { deviceId?: string; mac?: string; ip?: st
 export function kovaDevicesForWarden(devices: Iterable<Device>, roomName: (id: string) => string | undefined, adapterName: (id: string) => string | undefined) {
   const out: { kovaId: string; ip?: string; mac?: string; name: string; manufacturer?: string; model?: string; kind?: string; room?: string; controls?: { protocol: string; port: number }[] }[] = [];
   for (const d of devices) {
-    if (NOT_ON_LAN.has(d.adapter) || d.hidden) continue;
+    if (NOT_ON_LAN.has(d.adapter) || d.hidden || d.archived) continue;
     const host = d.address.replace(/^https?:\/\//, '').replace(/[:/].*$/, '');
     const ref = MAC.test(d.address) ? { mac: d.address.toLowerCase().replace(/-/g, ':') } : IPV4.test(host) ? { ip: host } : null;
     if (!ref) continue;

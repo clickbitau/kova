@@ -4,7 +4,7 @@ import type { Engine } from '../engine/engine.ts';
 import type { Registry } from '../devices/registry.ts';
 import type { ConfigStore } from '../engine/config.ts';
 import type { Store } from '../store/db.ts';
-import { ROOM_ICONS, type Automation, type Cause, type Command, type Device, type Targets } from '../model/types.ts';
+import { ROOM_ICONS, UNASSIGNED_ROOM, type Automation, type Cause, type Command, type Device, type Targets } from '../model/types.ts';
 import { FIELD_CAP, isPlayer, pseudoLabel, targetLabel } from '../util/describe.ts';
 import { checkAutomation } from '../engine/automation-check.ts';
 import { actionWords, condWords, triggerWords } from '../engine/automations.ts';
@@ -311,7 +311,7 @@ Only use device, person, mode and overlay ids from the home context; never inven
   },
   {
     name: 'delete_room',
-    description: `Remove a room. Devices in it aren't lost — they move to moveTo, another room id from the Rooms list. If the room has devices and no moveTo is given, the call fails with the count so you can ask where they should go.`,
+    description: `Remove a room. Devices in it aren't lost — they move to moveTo, another room id from the Rooms list, or "unassigned" to leave them in no room. If the room has devices and no moveTo is given, the call fails with the count so you can ask where they should go.`,
     parameters: {
       type: 'object',
       properties: {
@@ -766,7 +766,7 @@ export class Toolbox {
           if (!room) return JSON.stringify({ ok: false, error: `Unknown room ${String(args.room)} — use an id from the Rooms list` });
           const inside = this.ai.reg.list().filter(d => d.room === room.id);
           const rawMove = args.moveTo === undefined ? undefined : String(args.moveTo);
-          const moveTo = rawMove === undefined ? undefined : this.roomId(rawMove);
+          const moveTo = rawMove === undefined ? undefined : rawMove === UNASSIGNED_ROOM ? UNASSIGNED_ROOM : this.roomId(rawMove);
           if (inside.length && moveTo === undefined) return JSON.stringify({ ok: false, error: `${inside.length} device${inside.length === 1 ? ' is' : 's are'} in ${room.name} — ask where they should go, then call again with moveTo` });
           if (moveTo !== undefined && moveTo === room.id) return JSON.stringify({ ok: false, error: 'Choose a different room to move them to' });
           if (rawMove !== undefined && moveTo === undefined) return JSON.stringify({ ok: false, error: `Unknown room ${rawMove} to move devices to` });
@@ -1022,7 +1022,7 @@ export class AiAssistant {
     const cfg = this.config.get();
     const tz = cfg.timezone;
     const now = this.engine.now();
-    const devices = this.reg.list().filter(d => d.type !== 'camera');
+    const devices = this.reg.list().filter(d => d.type !== 'camera' && !d.archived);
     // Real ids spell out names ("kitchen_ceiling"); use neutral ones when names are private.
     const deviceIds = new Map<string, string>();
     const roomAlias = new Map(cfg.rooms.map((r, i) => [r.id, share.names ? r.id : `room${i + 1}`]));

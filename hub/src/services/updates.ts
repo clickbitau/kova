@@ -19,7 +19,7 @@ import { localDate, localHour } from '../util/time.ts';
  *   itself when the new one doesn't come up healthy.
  * - Overnight updates (off by default): at the hour set, when an update is waiting and nothing is playing.
  * - It says so: a notification when a new version is out (overnight updates off), and after an update, that it
- *   worked or was undone.
+ *   worked or was undone. Each result is kept (the last 20), for Settings → Software update's history.
  */
 export interface UpdateStatus {
   /** The updater is installed and has run at least once. */
@@ -35,8 +35,16 @@ export interface UpdateStatus {
   checkedAt: number | null;
   checkError: string | null;
   last: { result: 'updated' | 'rolled-back' | 'failed'; from: string; to: string; at: number; log?: string[] } | null;
+  /** Every update this hub has seen, newest first (the last 20). */
+  history: UpdateRecord[];
   auto: { on: boolean; hour: number };
 }
+
+export interface UpdateRecord { result: 'updated' | 'rolled-back' | 'failed'; from: string; to: string; at: number }
+
+/** Where an update notification opens: Settings, where Software update is. */
+export const UPDATE_URL = '/phone.html?page=settings';
+const HISTORY_MAX = 20;
 
 interface Raw {
   updater?: number; state?: string; source?: string; soft?: string | null; checkedAt?: number; checkError?: string[] | null;
@@ -98,6 +106,21 @@ export class Updates {
     return next;
   }
 
+  /** Results kept so far, with the updater's latest added when it isn't yet. */
+  private history(last: UpdateStatus['last']): UpdateRecord[] {
+    const kept = this.hub.store.get<UpdateRecord[]>('updateHistory') ?? [];
+    if (!last || kept.some(h => h.at === last.at)) return kept;
+    return [{ result: last.result, from: last.from, to: last.to, at: last.at }, ...kept].sort((a, b) => b.at - a.at).slice(0, HISTORY_MAX);
+  }
+
+  /** Keep the updater's latest result in the history. */
+  private remember(last: UpdateStatus['last']): void {
+    if (!last) return;
+    const kept = this.hub.store.get<UpdateRecord[]>('updateHistory') ?? [];
+    if (kept.some(h => h.at === last.at)) return;
+    this.hub.store.set('updateHistory', this.history(last));
+  }
+
   status(): UpdateStatus {
     const r = this.raw();
     const req = this.requested();
@@ -113,6 +136,7 @@ export class Updates {
       checkedAt: r?.checkedAt ?? null,
       checkError: r?.checkError?.length ? r.checkError.join(' ').slice(0, 300) : null,
       last: r?.last ?? null,
+      history: this.history(r?.last ?? null),
       auto: this.autoSettings(),
     };
   }
@@ -140,6 +164,7 @@ export class Updates {
   /** Once a minute: say when a new version is out, and update overnight when that's on. */
   tick(): void {
     const st = this.status();
+    this.remember(st.last);
     const said = this.hub.store.get<string>('updateAnnounced');
     if (st.available && said !== st.available.version) {
       this.hub.store.set('updateAnnounced', st.available.version);
@@ -147,8 +172,8 @@ export class Updates {
       if (!st.auto.on) {
         void this.o.notify?.({
           title: `Kova ${st.available.version} is available`,
-          body: [st.available.changes.slice(0, 3).join('; '), 'Update from Integrations.'].filter(Boolean).join('. '),
-          tag: 'kova-update', url: '/phone.html?page=integrations',
+          body: [st.available.changes.slice(0, 3).join('; '), 'Update from Settings, under Software update.'].filter(Boolean).join('. '),
+          tag: 'kova-update', url: UPDATE_URL,
         });
       }
     }
@@ -166,6 +191,7 @@ export class Updates {
   /** After an update (this is the new hub starting, or the old one again): say how it went, once. */
   private announceResult(): void {
     const last = this.status().last;
+    this.remember(last);
     if (!last || this.hub.store.get<number>('updateResultSaid') === last.at) return;
     this.hub.store.set('updateResultSaid', last.at);
     const n = last.result === 'updated'
@@ -173,6 +199,6 @@ export class Updates {
       : last.result === 'rolled-back'
         ? { title: `Kova ${last.from} is back`, body: 'The update didn’t start properly, so Kova went back to the version before, with its data. Nothing to do; it will be offered again.' }
         : { title: 'Kova couldn’t update', body: `${(last.log ?? []).slice(-1)[0] ?? 'See the update log on the box'} (Kova ${last.from} is still running).` };
-    void this.o.notify?.({ ...n, tag: 'kova-update', url: '/phone.html?page=integrations' });
+    void this.o.notify?.({ ...n, tag: 'kova-update', url: UPDATE_URL });
   }
 }

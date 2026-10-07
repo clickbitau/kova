@@ -44,7 +44,8 @@ test('Hub updates: what’s available, Check now and Update ask the updater, a n
     u.tick(); u.tick();
     assert.equal(said.length, 1);
     assert.equal(said[0].title, 'Kova 9.9.9 is available');
-    assert.match(said[0].body, /^Helix boxes: follow a box’s new id; Warn when a link breaks; TV source through SmartThings\. Update from Integrations\.$/);
+    assert.match(said[0].body, /^Helix boxes: follow a box’s new id; Warn when a link breaks; TV source through SmartThings\. Update from Settings, under Software update\.$/);
+    assert.equal((said[0] as { url?: string }).url, '/phone.html?page=settings', 'opens Settings, where Software update is');
 
     // Update: a request the updater (root) picks up.
     const r = await app.inject({ method: 'POST', url: '/api/update/apply' });
@@ -105,6 +106,8 @@ test('Hub updates: overnight at the hour set, not while something plays; and aft
     mk().start(); mk().start();
     assert.equal(said.length, 2);
     assert.equal(said[1].title, `Kova updated to ${KOVA_VERSION}`);
+    // Both results are kept, newest first, for Software update's history.
+    assert.deepEqual(u.status().history.map(h => [h.result, h.at]), [['updated', 6000], ['rolled-back', 5000]]);
   } finally {
     u.stop();
     await t.hub.stop();

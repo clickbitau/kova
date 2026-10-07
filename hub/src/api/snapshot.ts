@@ -60,12 +60,14 @@ export function snapshot(hub: Hub) {
   const now = engine.now();
   const today = localDate(now, tz);
   const devices = reg.devices;
-  const roomName = (id: string) => cfg.rooms.find(r => r.id === id)?.name ?? id;
+  // Devices in none of the home's rooms ("unassigned", or a room that's gone) are in "No room".
+  const roomName = (id: string) => cfg.rooms.find(r => r.id === id)?.name ?? 'No room';
+  const inRoom = (id: string) => cfg.rooms.some(r => r.id === id);
   const mn = engine.planner.modeAt(now);
   /** Editable target rows: which device, what it's set to, and the chip text. */
   const targetList = (t: Targets) => Object.entries(t).map(([id, cmd]) => {
     const d = devices.get(id);
-    return { deviceId: id, name: d ? `${roomName(d.room)} ${d.name.toLowerCase()}` : `${id} (missing)`, label: d ? targetLabel(d, cmd) : 'Device not found', target: cmd, missing: !d };
+    return { deviceId: id, name: d ? (inRoom(d.room) ? `${roomName(d.room)} ${d.name.toLowerCase()}` : d.name) : `${id} (missing)`, label: d ? targetLabel(d, cmd) : 'Device not found', target: cmd, missing: !d };
   });
   const findings = checker.findings();
   // Each part of an automation in words, for lists and the editor's summary.
@@ -87,7 +89,7 @@ export function snapshot(hub: Hub) {
     if (entry) {
       const st = engine.preview(entry.at + 60_000);
       inherit = reg.list().filter(d => isLight(d) && st[d.id]?.on && !m.targets[d.id])
-        .map(d => d.type === 'dimmer' && st[d.id].bri != null && st[d.id].bri! < 100 ? `${d.name} ${st[d.id].bri}%` : `${roomName(d.room)} ${d.name.toLowerCase()}`);
+        .map(d => d.type === 'dimmer' && st[d.id].bri != null && st[d.id].bri! < 100 ? `${d.name} ${st[d.id].bri}%` : inRoom(d.room) ? `${roomName(d.room)} ${d.name.toLowerCase()}` : d.name);
     }
     const moments = kd.items.filter(x => x.kind === 'moment' && x.modeId === m.id).map(x => ({ id: x.refId, t: clock(x.at, tz), text: `${x.label} · ${x.what}` }));
     return {
@@ -169,7 +171,7 @@ export function snapshot(hub: Hub) {
     combineIdeas: combineIdeas(reg.list(), cfg.combined ?? [], cfg.dismissedFindings, id => !!cfg.devices?.[id]?.hidden, a => reg.adapters.get(a)?.name ?? a, netOf(reg)),
     combined: (cfg.combined ?? []).map(c => ({ ...c, deviceId: combinedDeviceId(c), memberNames: c.members.map(m => reg.get(m)?.name ?? m) })),
     automationIdeas: automationIdeas(cfg, reg.devices, hub.screens()).map(i => ({ ...i, ...autoWords(i) })),
-    overlays: cfg.overlays.map(o => ({ id: o.id, name: o.name, icon: o.icon, endsLabel: o.endsLabel, targets: targetList(o.targets) })),
+    overlays: cfg.overlays.map(o => ({ id: o.id, name: o.name, icon: o.icon, endsLabel: o.endsLabel, ends: o.ends, allOff: !!o.allOff, targets: targetList(o.targets) })),
     moments: cfg.moments.map(mo => ({ id: mo.id, label: mo.label, what: mo.what, at: mo.at, atLabel: rhythmLabel(mo.at), targets: targetList(mo.targets) })),
     sources: cfg.sources,
     // Helix music any speaker can play: Shuffle all, Loved, each playlist (empty until Helix is paired).
