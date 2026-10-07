@@ -85,3 +85,8 @@
   /* iOS zooms into inputs under 16px; keep the page still. */
   input, select, textarea { font-size: 16px !important; }
 }
+
+/* Settings → Home: the map is a little shorter on a phone, so the circle and Save stay in reach. */
+@media (max-width: 760px) {
+  [data-kova-map], [data-kova-gmap] img { height: 260px !important; }
+}
