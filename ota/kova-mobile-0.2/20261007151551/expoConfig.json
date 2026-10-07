@@ -1,7 +1,7 @@
 {
   "name": "Kova",
   "slug": "kova",
-  "version": "0.2.32",
+  "version": "0.2.35",
   "runtimeVersion": "kova-mobile-0.2",
   "updates": {
     "enabled": true,
@@ -164,6 +164,14 @@
     },
     "kovaHistory": [
       {
+        "version": "0.2.35",
+        "title": "Household accounts: invite people with a link or QR, roles for adults, children and guests, and each person’s own phone and notifications"
+      },
+      {
+        "version": "0.2.33",
+        "title": "Announcements that play over what speakers are doing and then put them back, speaker loudness so one level sounds the same in every room, and prayer times as an opt-in integration with the waqt on Now"
+      },
+      {
         "version": "0.2.32",
         "title": "Watch live plays the camera right where its picture was: live, with the time, sound off until you turn it on, full screen, and a clear reason when it can’t stream"
       },
@@ -174,14 +182,6 @@
       {
         "version": "0.2.30",
         "title": "Design pass across the app, Ask Kova that finishes big requests and says what didn't work, and AC zones by room"
-      },
-      {
-        "version": "0.2.29",
-        "title": "Whole-home air conditioning: a ducted AC serves the whole home, each zone gets its rooms (suggested from the zone names), rooms show and control their zone, and automations and modes can set a room’s zone"
-      },
-      {
-        "version": "0.2.28",
-        "title": "Ask Kova works through big requests: it shows each step as it happens, never gives up while the hub is still working, finds the answer after the app was closed, says honestly what didn’t work, and names the AI that answered"
       }
     ]
   },
