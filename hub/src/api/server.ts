@@ -235,6 +235,18 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
     return { enabled: true, ...mb.pairingInfo() };
   });
 
+  // Room ACs in voice assistants and other apps: which bridges publish them, their pairing codes (with a QR code to
+  // scan), whether they're paired, and the room ACs each one shows.
+  const qrOf = (text: string) => QRCode.toString(text, { type: 'svg', margin: 1, errorCorrectionLevel: 'M', color: { dark: '#141517', light: '#f1efea' } });
+  app.get('/api/room-climate/pairing', async () => {
+    const mb = opts.matterBridge, hk = opts.homekit;
+    const p = mb?.pairingInfo();
+    return {
+      matter: mb && p ? { enabled: true, running: mb.isRunning, manualCode: p.manualCode, qrSvg: p.qrCode ? await qrOf(p.qrCode) : null, commissioned: p.commissioned, fabrics: p.fabrics, roomAcs: mb.roomAcList() } : { enabled: false },
+      homekit: hk ? { enabled: true, pincode: hk.setupInfo().pincode, qrSvg: await qrOf(hk.setupInfo().setupURI), paired: hk.paired, roomAcs: hk.roomAcList() } : { enabled: false },
+    };
+  });
+
   app.get<{ Querystring: { at?: string; hour?: string } }>('/api/preview', async req => {
     const s = snapshot(hub);
     let at = Number(req.query.at);

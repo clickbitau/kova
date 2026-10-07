@@ -18,6 +18,7 @@ import { PlayCounter, type HelixMusic } from './services/helix-music.ts';
 import { SensorHistory } from './services/sensors.ts';
 import { Security, type SecurityOptions } from './services/security.ts';
 import { Maps, type MapsOptions } from './services/maps.ts';
+import { RoomClimate, outsideFrom } from './engine/room-climate.ts';
 
 export interface HubOptions {
   dbPath: string;
@@ -68,6 +69,8 @@ export class Hub extends EventEmitter<{ changed: [] }> {
   music: HelixMusic | null = null;
   /** Finding the home: the address search, pasted Google Maps links, the Google Maps key (services/maps.ts). */
   readonly maps: Maps;
+  /** Room ACs: each room a ducted unit's zone serves, turned on and off by voice and other apps (engine/room-climate.ts). */
+  readonly roomClimate: RoomClimate;
   /** Updating the hub itself (services/updates.ts); null without an updater set up (tests, Docker). */
   updates: Updates | null = null;
   /** Which media players sit on which TV (and soundbar), for suggested automations. Helix's screens once it's linked. */
@@ -114,6 +117,12 @@ export class Hub extends EventEmitter<{ changed: [] }> {
     this.weather?.on('changed', () => this.emit('changed'));
     this.sensors = new SensorHistory(this.reg, this.store, () => this.engine.now());
     this.security = new Security(this, opts.security ?? {});
+    this.roomClimate = new RoomClimate({
+      reg: this.reg, config: this.config, store: this.store, rooms: this.engine.rooms, now: () => this.engine.now(),
+      apply: (targets, cause) => this.engine.applyMany(targets, cause),
+      outside: () => outsideFrom(this.weather ? { current: this.weather.current, today: this.weather.today } : null),
+    });
+    this.assistant.roomClimate = this.roomClimate;
   }
 
   async start(): Promise<void> {

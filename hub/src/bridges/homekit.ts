@@ -6,7 +6,8 @@ import {
   type CharacteristicValue, type WithUUID,
 } from 'hap-nodejs';
 import type { Hub } from '../hub.ts';
-import type { Cause, Command, Device, DeviceState, Overlay } from '../model/types.ts';
+import type { Cause, Command, Device, DeviceState, HvacMode, Overlay } from '../model/types.ts';
+import type { RoomAc } from '../engine/room-climate.ts';
 
 // Apple Home bridge. Publishes one HAP bridge accessory and exposes Kova's
 // devices and overlays behind it, so iPhones, the Home app and Siri can see
@@ -22,6 +23,9 @@ import type { Cause, Command, Device, DeviceState, Overlay } from '../model/type
 //   media / tv / camera / sensor → not exposed (a speaker has no good HomeKit
 //   service outside AirPlay, and cameras need HomeKit Secure Video streaming).
 //   overlays → a Switch each; on starts the overlay, off ends it.
+//   room ACs → a HeaterCooler each, "<Room> AC", for every room a ducted unit's zone serves (engine/room-climate.ts):
+//     Active is the room's AC on or off (its zone, by the room-AC policy), Heat / Cool / Auto, the set temperature
+//     and the room's temperature. The fan isn't exposed: HomeKit's fan speed has no "auto".
 
 export const CAUSE: Cause = { kind: 'user', label: 'Apple Home' };
 
@@ -145,6 +149,19 @@ export function setupURI(pincode: string, setupID: string, category: number = Ca
 /** Stable accessory UUIDs, so a restart or rename keeps the Home app's room and scene assignments. */
 export const deviceUUID = (id: string) => uuid.generate(`kova:device:${id}`);
 export const overlayUUID = (id: string) => uuid.generate(`kova:overlay:${id}`);
+export const roomAcUUID = (room: string) => uuid.generate(`kova:room-ac:${room}`);
+
+/** A room AC's TargetHeaterCoolerState: heat HEAT (1), cool COOL (2), anything else AUTO (0). */
+export function heaterCoolerTarget(hvac: HvacMode | null): number {
+  return hvac === 'heat' ? 1 : hvac === 'cool' ? 2 : 0;
+}
+/** TargetHeaterCoolerState written in the Home app → a Kova mode. */
+export const heaterCoolerMode = (v: number): HvacMode => (v === 1 ? 'heat' : v === 2 ? 'cool' : 'auto');
+/** CurrentHeaterCoolerState: inactive when the room's AC is off, heating or cooling when the unit is, else idle. */
+export function heaterCoolerCurrent(on: boolean, hvac: HvacMode | null): number {
+  if (!on) return 0;
+  return hvac === 'heat' ? 2 : hvac === 'cool' ? 3 : 1;
+}
 
 /** Whether (and how) a Kova device is exposed. */
 export function homeKitKind(d: Pick<Device, 'type'>): 'lightbulb' | 'outlet' | 'purifier' | 'tv' | null {
@@ -198,6 +215,8 @@ export class HomeKitBridge {
   readonly overlays = new Map<string, Entry>();
   /** TVs, published as their own accessories (HomeKit shows bridged TVs poorly, and only one per bridge). */
   readonly tvs = new Map<string, Entry>();
+  /** Room ACs by room id. */
+  readonly roomAcs = new Map<string, Entry>();
   private published = false;
   private readonly unsubs: (() => void)[] = [];
 
@@ -212,7 +231,7 @@ export class HomeKitBridge {
       .setCharacteristic(Characteristic.FirmwareRevision, '0.1.0');
     this.reconcile();
 
-    const onChange = ({ device }: { device: Device }) => this.push(this.devices.get(device.id) ?? this.tvs.get(device.id));
+    const onChange = ({ device }: { device: Device }) => { this.push(this.devices.get(device.id) ?? this.tvs.get(device.id)); for (const e of this.roomAcs.values()) this.push(e); };
     const onDevices = () => this.reconcile();
     const onEngine = () => { for (const e of this.overlays.values()) this.push(e); };
     const onConfig = () => this.reconcile();
@@ -316,8 +335,15 @@ export class HomeKitBridge {
     const wantOverlays = new Set(this.hub.config.get().overlays.map(o => o.id));
     for (const [id, e] of this.devices) if (!wantDevices.has(id)) { remove.push(e.accessory); this.devices.delete(id); }
     for (const [id, e] of this.overlays) if (!wantOverlays.has(id)) { remove.push(e.accessory); this.overlays.delete(id); }
+    const wantRooms = new Map(this.hub.roomClimate.rooms().filter(r => r.zones.some(z => !exDevices.has(z.device))).map(r => [r.room, r]));
+    for (const [id, e] of this.roomAcs) if (!wantRooms.has(id)) { remove.push(e.accessory); this.roomAcs.delete(id); }
 
-    let count = this.devices.size + this.overlays.size;
+    let count = this.devices.size + this.overlays.size + this.roomAcs.size;
+    for (const r of wantRooms.values()) {
+      if (this.roomAcs.has(r.room) || count >= MAX_BRIDGED) continue;
+      const e = this.roomAcAccessory(r);
+      this.roomAcs.set(r.room, e); add.push(e.accessory); count++;
+    }
     for (const o of this.hub.config.get().overlays) {
       if (this.overlays.has(o.id) || count >= MAX_BRIDGED) continue;
       const e = this.overlayAccessory(o);
@@ -438,6 +464,48 @@ export class HomeKitBridge {
       });
       tv.addLinkedService(sp);
     }
+    const e = { accessory: acc, bindings: b };
+    this.push(e);
+    return e;
+  }
+
+  /** The room ACs on the bridge, with the names the Home app shows. */
+  roomAcList(): { room: string; label: string }[] {
+    return [...this.roomAcs].map(([room, e]) => ({ room, label: e.accessory.displayName }));
+  }
+
+  /** A room AC: a HeaterCooler whose writes go through the room-AC policy. */
+  private roomAcAccessory(r: RoomAc): Entry {
+    const room = r.room, name = homeKitName(r.label);
+    const acc = new Accessory(name, roomAcUUID(room));
+    acc.category = Categories.AIR_CONDITIONER;
+    this.info(acc, 'Kova room AC', `room-ac-${room}`);
+    const s = acc.addService(Service.HeaterCooler, name);
+    const view = () => {
+      const v = this.hub.roomClimate.view(room);
+      if (!v) throw new HapStatusError(HAPStatus.RESOURCE_DOES_NOT_EXIST);
+      if (!v.online) throw new HapStatusError(HAPStatus.SERVICE_COMMUNICATION_FAILURE);
+      return v;
+    };
+    const send = async (change: Parameters<typeof this.hub.roomClimate.apply>[1]) => {
+      try { await this.hub.roomClimate.apply(room, change, CAUSE); } catch { throw new HapStatusError(HAPStatus.SERVICE_COMMUNICATION_FAILURE); }
+    };
+    const b: Binding[] = [];
+    const bind = (type: WithUUID<new () => Characteristic>, read: (v: RoomAc) => CharacteristicValue, write?: (x: CharacteristicValue) => Promise<void>) => {
+      const char = s.getCharacteristic(type);
+      char.onGet(() => read(view()));
+      if (write) char.onSet(write);
+      b.push({ char, read: () => { const v = this.hub.roomClimate.view(room); return v ? read(v) : char.value ?? 0; } });
+    };
+    const temp = (v: RoomAc) => Math.min(100, Math.max(-50, v.temp ?? v.target ?? 22));
+    const setPoint = (v: RoomAc) => Math.min(32, Math.max(16, v.target ?? 24));
+    for (const t of [Characteristic.CoolingThresholdTemperature, Characteristic.HeatingThresholdTemperature]) s.getCharacteristic(t).setProps({ minValue: 16, maxValue: 32, minStep: 0.5 });
+    bind(Characteristic.Active, v => (v.on ? 1 : 0), async x => send({ on: x === 1 }));
+    bind(Characteristic.CurrentHeaterCoolerState, v => heaterCoolerCurrent(v.on, v.hvac));
+    bind(Characteristic.TargetHeaterCoolerState, v => heaterCoolerTarget(v.hvac ?? v.lastHvac), async x => send({ hvac: heaterCoolerMode(Number(x)) }));
+    bind(Characteristic.CurrentTemperature, temp);
+    bind(Characteristic.CoolingThresholdTemperature, setPoint, async x => send({ target: Number(x) }));
+    bind(Characteristic.HeatingThresholdTemperature, setPoint, async x => send({ target: Number(x) }));
     const e = { accessory: acc, bindings: b };
     this.push(e);
     return e;

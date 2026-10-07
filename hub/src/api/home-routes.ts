@@ -7,7 +7,7 @@ import { combinedDeviceId } from '../adapters/combined.ts';
 import { isPlayer } from '../util/describe.ts';
 import { slug } from '../tools/import-ha.ts';
 import { cleanAlerts, isCamera, isSensor } from '../util/sensors.ts';
-import type { AlertPrefs } from '../model/types.ts';
+import type { AlertPrefs, FanSpeed, HvacMode, RoomClimateSettings } from '../model/types.ts';
 
 // Customising the home: its name, rooms and groups of rooms, people, favourites, and each device's name, room,
 // visibility and whether it's archived. Settings live in the home config (so every phone sees the same), and every change
@@ -468,5 +468,41 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
   app.delete<{ Params: { id: string } }>('/api/people/:id', async (req, reply) => {
     if (!hub.config.get().people.some(p => p.id === req.params.id)) return bad(reply, 'Unknown person', 404);
     return edit(c => { c.people = c.people.filter(p => p.id !== req.params.id); });
+  });
+
+  // ------------------------------------------------------------- room ACs --
+  // Room ACs (engine/room-climate.ts): what a room cools to and heats to when Kova chooses, and what Kova does when the
+  // air conditioner is turned on from another app with every zone closed ('off' or 'rooms'). null puts a default back.
+  app.put<{ Body: { coolTo?: number | null; heatTo?: number | null; fromElsewhere?: 'off' | 'rooms' } }>('/api/room-climate', async (req, reply) => {
+    const b = req.body ?? {};
+    const cur: RoomClimateSettings = { ...(hub.config.get().roomClimate ?? {}) };
+    const temp = (v: unknown, lo: number, hi: number, what: string) => {
+      const n = Number(v);
+      if (!Number.isFinite(n) || n < lo || n > hi) throw new Error(`${what} is ${lo}–${hi}°`);
+      return Math.round(n * 2) / 2;
+    };
+    try {
+      if (b.coolTo === null) delete cur.coolTo; else if (b.coolTo !== undefined) cur.coolTo = temp(b.coolTo, 18, 30, 'Cool to');
+      if (b.heatTo === null) delete cur.heatTo; else if (b.heatTo !== undefined) cur.heatTo = temp(b.heatTo, 16, 28, 'Heat to');
+      if (b.fromElsewhere !== undefined) {
+        if (b.fromElsewhere !== 'off' && b.fromElsewhere !== 'rooms') throw new Error('fromElsewhere is off or rooms');
+        cur.fromElsewhere = b.fromElsewhere;
+      }
+    } catch (e) { return bad(reply, (e as Error).message); }
+    if ((cur.coolTo ?? 24) < (cur.heatTo ?? 21)) return bad(reply, 'Cool to can’t be below heat to');
+    return edit(c => { c.roomClimate = cur; });
+  });
+
+  // A room AC on or off, or set (a mode, a set temperature, a fan speed), as a voice assistant would.
+  app.post<{ Params: { room: string }; Body: { on?: boolean; hvac?: HvacMode | 'off'; target?: number; fanSpeed?: FanSpeed } }>('/api/room-climate/:room', async (req, reply) => {
+    const b = req.body ?? {};
+    if (b.hvac !== undefined && !['cool', 'heat', 'dry', 'fan', 'auto', 'off'].includes(b.hvac)) return bad(reply, `${String(b.hvac)} isn’t a climate mode`);
+    if (b.fanSpeed !== undefined && !['auto', 'quiet', 'low', 'medium', 'high', 'turbo'].includes(b.fanSpeed)) return bad(reply, `${String(b.fanSpeed)} isn’t a fan speed`);
+    if (b.target !== undefined && !(Number(b.target) >= 16 && Number(b.target) <= 32)) return bad(reply, 'The set temperature is 16–32°');
+    if (b.on !== undefined && typeof b.on !== 'boolean') return bad(reply, 'on is true or false');
+    try {
+      const r = await hub.roomClimate.apply(req.params.room, { on: b.on, hvac: b.hvac, target: b.target != null ? Number(b.target) : undefined, fanSpeed: b.fanSpeed }, { kind: 'user', label: 'You' });
+      return { ok: true, changed: r.changed, what: r.what, why: r.why, undo: r.undo ?? null, room: hub.roomClimate.view(req.params.room) };
+    } catch (e) { return bad(reply, (e as Error).message); }
   });
 }

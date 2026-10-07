@@ -499,7 +499,16 @@ export interface HomeConfig {
   automations?: Automation[];
   /** Camera and sensor alerts: quiet hours, how long between alerts, and per-room choices. */
   security?: SecuritySettings;
+  /** Room air conditioning by voice and other apps (engine/room-climate.ts). */
+  roomClimate?: RoomClimateSettings;
 }
+
+/**
+ * Room ACs: what a room cools to and heats to when Kova chooses (°C), and what Kova does when the air conditioner is
+ * turned on from another app with every zone closed: nothing ('off', the default) or open the zones of rooms where
+ * someone is ('rooms', asking on the phones when nobody is anywhere).
+ */
+export interface RoomClimateSettings { coolTo?: number; heatTo?: number; fromElsewhere?: 'off' | 'rooms' }
 
 /** How camera and sensor alerts behave across the home. */
 export interface SecuritySettings {
