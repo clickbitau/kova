@@ -1,7 +1,7 @@
 {
   "name": "Kova",
   "slug": "kova",
-  "version": "0.2.35",
+  "version": "0.2.37",
   "runtimeVersion": "kova-mobile-0.2",
   "updates": {
     "enabled": true,
@@ -164,24 +164,24 @@
     },
     "kovaHistory": [
       {
+        "version": "0.2.37",
+        "title": "Speaker groups across brands: a Cast group and a Sonos (or any speaker) play together, with a timing slider per speaker, a sync test you tune by ear, and each speaker’s measured start delay"
+      },
+      {
+        "version": "0.2.36",
+        "title": "Kova learns from what you do: automations that run late, values you always correct, steps you repeat"
+      },
+      {
         "version": "0.2.35",
         "title": "Household accounts: invite people with a link or QR, roles for adults, children and guests, and each person’s own phone and notifications"
       },
       {
+        "version": "0.2.34",
+        "title": "Kova learns from what you do: an automation you start early, a value you always change, one you undo, or two things you do one after the other become suggestions with the days they’re based on, on Modes and the automation’s own screen; Not now, Don’t suggest again, Why?, and Settings → What Kova has learned"
+      },
+      {
         "version": "0.2.33",
         "title": "Announcements that play over what speakers are doing and then put them back, speaker loudness so one level sounds the same in every room, and prayer times as an opt-in integration with the waqt on Now"
-      },
-      {
-        "version": "0.2.32",
-        "title": "Watch live plays the camera right where its picture was: live, with the time, sound off until you turn it on, full screen, and a clear reason when it can’t stream"
-      },
-      {
-        "version": "0.2.31",
-        "title": "Room ACs for voice: each room a ducted zone serves is its own AC in Google Home, Alexa and Apple Home; Settings → Voice and other apps shows them, the pairing codes, comfortable temperatures and what to do about the maker’s own AC in Google Home"
-      },
-      {
-        "version": "0.2.30",
-        "title": "Design pass across the app, Ask Kova that finishes big requests and says what didn't work, and AC zones by room"
       }
     ]
   },
