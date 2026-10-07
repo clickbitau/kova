@@ -283,6 +283,8 @@ export interface Snapshot {
   /** The home's clock, "YYYY-MM-DDTHH:MM", for picking a date and time (one-time schedules). */
   localNow?: string;
   demo?: boolean;
+  /** Who this phone is signed in as, and what their role may do (household accounts, hubs from 0.7.61). Read it with logic/roles.ts meOf. */
+  me?: import('../logic/roles').Me;
 }
 
 export interface AskReply {

@@ -12,8 +12,9 @@ import { DevicesScreen } from './screens/DevicesScreen';
 import { AskScreen } from './screens/AskScreen';
 import { SecurityScreen } from './screens/SecurityScreen';
 import { MoreScreen } from './screens/MoreScreen';
+import { meOf, tabsFor } from './logic/roles';
 
-const TABS: [string, string, string][] = [['Now', 'Now', 'home'], ['Devices', 'Devices', 'lightbulb'], ['Ask', 'Ask', 'graphic_eq'], ['Security', 'Security', 'shield'], ['More', 'More', 'apps']];
+const ALL_TABS: [string, string, string][] = [['Now', 'Now', 'home'], ['Devices', 'Devices', 'lightbulb'], ['Ask', 'Ask', 'graphic_eq'], ['Security', 'Security', 'shield'], ['More', 'More', 'apps']];
 const Tab = createBottomTabNavigator();
 
 /** One tab: its icon fills in amber and pops when chosen. Ask is a raised amber button in the middle. */
@@ -48,6 +49,9 @@ function TabButton({ name, label, icon, active, badge, onPress }: { name: string
 function Bar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const s = useSnap();
+  // Only the tabs this person's role can use (a child or a guest has no Security: no cameras or history).
+  const allowed = tabsFor(meOf(s));
+  const TABS = ALL_TABS.filter(t => allowed.includes(t[0] as never));
   const moreDot = s.findings.length > 0 || s.integrations.some(i => !i.ok);
   const [w, setW] = useState(0);
   const x = useRef(new Animated.Value(state.index)).current;
@@ -83,12 +87,13 @@ function Bar({ state, navigation }: BottomTabBarProps) {
 export function Tabs() {
   // Tabs cross-fade (nothing slides with reduced motion).
   const reduced = useReducedMotion();
+  const security = tabsFor(meOf(useSnap())).includes('Security');
   return (
     <Tab.Navigator tabBar={p => <Bar {...p} />} screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: C.page }, animation: reduced ? 'none' : 'fade' }}>
       <Tab.Screen name="Now" component={NowScreen} />
       <Tab.Screen name="Devices" component={DevicesScreen} />
       <Tab.Screen name="Ask" component={AskScreen} />
-      <Tab.Screen name="Security" component={SecurityScreen} />
+      {security ? <Tab.Screen name="Security" component={SecurityScreen} /> : null}
       <Tab.Screen name="More" component={MoreScreen} />
     </Tab.Navigator>
   );

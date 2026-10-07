@@ -76,6 +76,11 @@ export class Notifier {
   private off: (() => void)[] = [];
   /** Sends in flight, so tests (and stop) can wait for them. */
   private pending = new Set<Promise<unknown>>();
+  /**
+   * Whose phones a notification may reach, by the person a phone belongs to (household accounts set this: a guest's
+   * phone only hears what's sent to them by name). Phones of no one in particular get everything, as before.
+   */
+  audience: (personId: string | undefined, n: Notification) => boolean = () => true;
 
   constructor(private hub: Hub, private opts: NotifyOptions = {}, private env: { dataDir: string; pushAgent?: https.Agent }) {
     this.vapid = loadVapid(join(env.dataDir, 'push'));
@@ -301,6 +306,15 @@ export class Notifier {
     return rest.length !== all.length;
   }
 
+  /** A person lost their access: their phones stop getting notifications. How many were removed. */
+  forgetPerson(personId: string): number {
+    const subs = this.subscriptions(), apps = this.appPhones();
+    const keepSubs = subs.filter(s => s.personId !== personId), keepApps = apps.filter(a => a.personId !== personId);
+    if (keepSubs.length !== subs.length) this.saveSubs(keepSubs);
+    if (keepApps.length !== apps.length) this.saveApps(keepApps);
+    return subs.length - keepSubs.length + apps.length - keepApps.length;
+  }
+
   /** Whether any channel could deliver right now. */
   hasChannels(): boolean { return !!this.opts.ntfy || this.subscriptions().length > 0 || this.appPhones().length > 0; }
 
@@ -308,7 +322,7 @@ export class Notifier {
   async notify(n: Notification): Promise<{ push: number; ntfy: boolean; removed: number; app: number }> {
     const out = { push: 0, ntfy: false, removed: 0, app: 0 };
     if (!this.hasChannels()) return out;
-    const subs = this.subscriptions().filter(s => !n.people?.length || !s.personId || n.people.includes(s.personId));
+    const subs = this.subscriptions().filter(s => (!n.people?.length || !s.personId || n.people.includes(s.personId)) && this.audience(s.personId, n));
     const payload = JSON.stringify({ title: n.title, body: n.body, url: n.url ?? '/phone.html', tag: n.tag, actions: n.actions ?? [] });
     const dead: string[] = [];
     const errors: string[] = [];
@@ -331,7 +345,7 @@ export class Notifier {
       this.saveSubs(this.subscriptions().filter(s => !dead.includes(s.subscription.endpoint)));
       out.removed = dead.length;
     }
-    const apps = this.appPhones().filter(a => !n.people?.length || !a.personId || n.people.includes(a.personId));
+    const apps = this.appPhones().filter(a => (!n.people?.length || !a.personId || n.people.includes(a.personId)) && this.audience(a.personId, n));
     if (apps.length) {
       try {
         const r = await this.sendExpo(n, apps);

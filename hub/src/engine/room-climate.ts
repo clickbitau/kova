@@ -1,4 +1,5 @@
 import type { Registry } from '../devices/registry.ts';
+import { AccessDenied, NOT_YOURS, canRoom, currentActor, trusted } from '../services/actor.ts';
 import type { Store } from '../store/db.ts';
 import type { ConfigStore } from './config.ts';
 import type { RoomActivity } from './rooms.ts';
@@ -305,6 +306,8 @@ export class RoomClimate {
    * a mode, temperature or fan is explicit.
    */
   async apply(room: string, change: RoomAcChange, cause: Cause): Promise<{ changed: string[]; failed: { id: string; error: string }[]; undo?: string; what: string; why: string | null }> {
+    // A room AC is the whole home's unit reached through a room's zone: whoever may use the room may use it.
+    if (!canRoom(currentActor(), room)) throw new AccessDenied(NOT_YOURS);
     const view = this.view(room);
     if (!view) throw new Error('No air conditioner zone serves that room');
     const off = change.on === false || change.hvac === 'off';
@@ -314,7 +317,7 @@ export class RoomClimate {
     else if (Object.keys(explicit).length) plan = this.planSet(room, explicit);
     else if (view.on) return { changed: [], failed: [], what: 'already on', why: null };
     else plan = this.planOn(room);
-    const r = await this.d.apply(plan.targets, { ...cause, detail: `${view.label} ${plan.what}${plan.why ? ` (${plan.why})` : ''}` });
+    const r = await trusted(() => this.d.apply(plan.targets, { ...cause, detail: `${view.label} ${plan.what}${plan.why ? ` (${plan.why})` : ''}` }));
     const m = this.memory[room];
     if (off) { if (m?.held) this.remember(room, { ...m, held: false }); }
     else if (Object.keys(explicit).length) {

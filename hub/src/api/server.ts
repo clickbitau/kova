@@ -3,7 +3,12 @@ import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
 import type { WebSocket } from '@fastify/websocket';
 import { timingSafeEqual } from 'node:crypto';
-import { Sessions } from '../services/sessions.ts';
+import { Sessions, type Session } from '../services/sessions.ts';
+import { Accounts } from '../services/accounts.ts';
+import { AccessDenied, actors, actorKey, canDevice, currentActor, type Actor } from '../services/actor.ts';
+import { check, ruleFor } from './access.ts';
+import { registerAccountRoutes } from './account-routes.ts';
+import { viewFor } from './views.ts';
 import type { Hub } from '../hub.ts';
 import type { Cause, Command } from '../model/types.ts';
 import type { AskAction, AskReply } from '../assistant/assistant.ts';
@@ -107,8 +112,16 @@ function tokenOk(req: FastifyRequest, token: string): boolean {
 
 const isLoopback = (ip: string) => ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
 
+const apiRoutes = new WeakMap<FastifyInstance, string[]>();
+/** The API routes a server registered ("POST /api/devices/:id"). */
+export const routesOf = (app: FastifyInstance): string[] => apiRoutes.get(app) ?? [];
+
 export async function buildServer(hub: Hub, opts: ServerOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
+  // Every API route as registered, so a test can hold each one to the access allow-list (api/access.ts).
+  const routes: string[] = [];
+  app.addHook('onRoute', r => { for (const m of [r.method].flat()) if (m !== 'HEAD' && r.url.startsWith('/api/')) routes.push(`${m} ${r.url}`); });
+  apiRoutes.set(app, routes);
   await app.register(fastifyWebsocket);
   await app.register(fastifyStatic, { root: opts.webRoot, index: ['index.html'] });
 
@@ -133,18 +146,101 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
     return !!opts.helixLink && !!given && opts.helixLink.isToken(given) && opts.helixLink.allows(req.method, path);
   };
 
-  // Browsers signed in with a code from someone already signed in (services/sessions.ts).
+  // Signed-in devices (services/sessions.ts) and the household's accounts (services/accounts.ts).
   const sessions = new Sessions(hub.store);
+  const accounts = new Accounts(hub.store, hub.config, sessions, () => hub.engine.now());
+  // Losing access takes everything: their phones' notifications and their presence key go too.
+  accounts.onRevoke = personId => { opts.notifier?.forgetPerson(personId); opts.presence?.rotateKey(personId); hub.emit('changed'); };
+  if (opts.notifier) {
+    // A guest's phone hears only what's sent to them by name (never the doorbell's camera, or the network's news).
+    opts.notifier.audience = (personId, n) => {
+      if (personId && !hub.config.get().people.some(p => p.id === personId)) return false;
+      const m = accounts.member(personId);
+      if (!m) return true;
+      if (accounts.expired(m)) return false;
+      return m.role !== 'guest' || !!n.people?.includes(m.personId);
+    };
+  }
+  const MASTER: Actor = { role: 'owner', name: 'Owner', via: 'master' };
+
+  /**
+   * Who a request is from: the master key (the owner), a signed-in device's key (its person and role), or, on a hub
+   * with no master key set, the owner. `null`: no key, or one that no longer works.
+   */
+  const identify = (req: FastifyRequest): Actor | null | 'gone' => {
+    const key = keyOf(req);
+    if (opts.token && key && tokenOk(req, opts.token)) return MASTER;
+    const s = key ? sessions.check(key) : null;
+    if (s) return accounts.actorFor(s) ?? 'gone';
+    return opts.token ? null : { role: 'owner', name: 'Owner', via: 'open' };
+  };
+
+  // The one place access is decided (api/access.ts has the allow-list): who it is, whether their role may call this
+  // route, and whether the device, room or person it's about is theirs. Everything the request does after runs as
+  // them (services/actor.ts), so the engine and Ask Kova check the same person.
+  app.addHook('onRequest', (req, reply, done) => {
+    const path = req.url.split('?')[0];
+    if (!path.startsWith('/api/')) return done();
+    const rule = ruleFor(req);
+    if (rule.perm === 'public') return done();
+    const who = identify(req);
+    if (who === null || who === 'gone') {
+      // Helix's own token, and a phone automation's presence key, are each good for their one thing.
+      if (helixTokenOk(req, path)) { fromHelix.add(req); return done(); }
+      if (personKeyOk(req)) return done();
+      reply.code(401).send(who === 'gone' ? { error: 'This device was signed out of the home.', code: 'signed-out' } : { error: 'unauthorised' });
+      return;
+    }
+    const params = (req.params ?? {}) as Record<string, string>;
+    const no = check(rule, who, params, id => hub.reg.get(id));
+    if (no) { reply.code(no.status).send({ error: no.error, code: 'forbidden' }); return; }
+    actors.run(who, done);
+  });
+  if (opts.helixLink) {
+    app.addHook('preHandler', async (req, reply) => {
+      if (!fromHelix.has(req)) return;
+      reply.header('cache-control', 'no-store');
+      if (req.method === 'GET') return reply.send(opts.helixLink!.state());
+      // Helix's command (D98.11: one key, by its names) as Kova's, from its remote or, with X-Helix-Origin: auto, its own
+      // switching. Answered within Helix's timeout; a slow one (a TV waking up) is accepted and finished in the background.
+      const id = decodeURIComponent(/^\/api\/devices\/([^/]+)$/.exec(req.url.split('?')[0])?.[1] ?? '');
+      const auto = String(req.headers['x-helix-origin'] ?? '').toLowerCase() === 'auto';
+      const r = await opts.helixLink!.command(id, (req.body ?? {}) as Record<string, unknown>, auto);
+      return reply.code(r.status).send(r.body);
+    });
+  }
+  // A refusal from deeper in (the engine, Ask Kova's tools): 403 with its words.
+  app.setErrorHandler((err, _req, reply) => {
+    if (err instanceof AccessDenied) return reply.code(403).send({ error: err.message, code: 'forbidden' });
+    return reply.send(err);
+  });
+
   app.post<{ Body: { name?: string } | undefined }>('/api/login/start', async (req, reply) => { reply.header('cache-control', 'no-store'); return sessions.start(req.headers['user-agent'], req.body?.name); });
   app.get<{ Params: { id: string } }>('/api/login/poll/:id', async (req, reply) => { reply.header('cache-control', 'no-store'); return sessions.poll(req.params.id); });
+  // Signing in another device of your own: the new key is yours (your person and role; the owner's for the master key).
   app.post<{ Body: { code?: string } }>('/api/login/approve', async (req, reply) => {
-    const ok = sessions.approve(String(req.body?.code ?? ''), sessions.check(keyOf(req))?.name ?? 'Kova app');
+    const a = currentActor();
+    const ok = sessions.approve(String(req.body?.code ?? ''), sessions.check(keyOf(req))?.name ?? 'Kova app', { personId: a?.personId });
     return ok ? { ok: true, name: ok.name } : reply.code(400).send({ error: 'That code isn’t right, or it has expired. Codes last 5 minutes.' });
   });
-  app.get('/api/sessions', async req => ({ sessions: sessions.list(keyOf(req)) }));
-  app.delete<{ Params: { id: string } }>('/api/sessions/:id', async (req, reply) => (sessions.remove(req.params.id) ? { ok: true } : reply.code(404).send({ error: 'No such session' })));
+  // Signed-in devices: the owner sees every one (and whose it is); anyone else, their own.
+  const mine = (a: Actor | undefined) => (x: Session) => (a?.personId ? x.personId === a.personId : !x.personId);
+  app.get('/api/sessions', async req => {
+    const a = currentActor();
+    const people = hub.config.get().people;
+    const all = a?.role === 'owner';
+    return { sessions: sessions.list(keyOf(req), all ? undefined : mine(a)).map(x => ({ ...x, ...(all ? { personName: people.find(p => p.id === x.personId)?.name ?? null } : {}) })) };
+  });
+  app.delete<{ Params: { id: string } }>('/api/sessions/:id', async (req, reply) => {
+    const a = currentActor(), x = sessions.get(req.params.id);
+    if (!x || (a?.role !== 'owner' && !mine(a)(x))) return reply.code(404).send({ error: 'No such session' });
+    sessions.remove(x.id);
+    return { ok: true };
+  });
   // Sign this browser out (its own key stops working).
   app.post('/api/logout', async req => { const s = sessions.check(keyOf(req)); if (s) sessions.remove(s.id); return { ok: true, signedOut: !!s }; });
+
+  registerAccountRoutes(app, hub, { accounts, sessions, presence: opts.presence, remoteUrl: () => (opts.remoteUrl ?? (() => opts.integrations?.raw('notify')?.publicUrl))(), port: () => { const a = app.server.address(); return typeof a === 'object' && a ? a.port : Number(process.env.KOVA_PORT ?? 8140); }, hubId: () => (opts.hubId ?? (() => hub.updates?.catalog.hubId()))() });
 
   // A phone app reporting its own crash: logged to the event store so a pattern can be found in Activity.
   app.post<{ Body: { message?: string; stack?: string; kind?: string; screen?: string; crumbs?: string[]; app?: string; platform?: string; at?: number } }>('/api/app/crash', async req => {
@@ -159,52 +255,23 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
     return { ok: true };
   });
 
-  if (opts.token || opts.helixLink) {
-    app.addHook('onRequest', async (req, reply) => {
-      const path = req.url.split('?')[0];
-      if (!path.startsWith('/api/') || path === '/api/health' || path === '/api/hello') return;
-      // App updates: expo-updates asks without a token (api/app-updates.ts explains why).
-      if (req.method === 'GET' && (path === '/api/app/manifest' || path.startsWith('/api/app/assets/'))) return;
-      // A doorbell picture for Helix to fetch: its random key is the credential (services/screen-notices.ts).
-      if (req.method === 'GET' && path.startsWith('/api/snap/')) return;
-      // Announcement audio for the speakers, which can't send a token: a clip's random id is its key (announce-routes.ts).
-      if ((req.method === 'GET' || req.method === 'HEAD') && path.startsWith('/api/clip/')) return;
-      if (opts.token && tokenOk(req, opts.token)) return;
-      // Signing a browser in (no key yet): ask for a code, and wait for it to be approved.
-      if ((req.method === 'POST' && path === '/api/login/start') || (req.method === 'GET' && path.startsWith('/api/login/poll/'))) return;
-      // A signed-in browser's own key.
-      if (opts.token && sessions.check(keyOf(req))) return;
-      if (helixTokenOk(req, path)) { fromHelix.add(req); return; }
-      if (opts.token && !personKeyOk(req)) return reply.code(401).send({ error: 'unauthorised' });
-    });
-    app.addHook('preHandler', async (req, reply) => {
-      if (!fromHelix.has(req)) return;
-      reply.header('cache-control', 'no-store');
-      if (req.method === 'GET') return reply.send(opts.helixLink!.state());
-      // Helix's command (D98.11: one key, by its names) as Kova's, from its remote or, with X-Helix-Origin: auto, its own
-      // switching. Answered within Helix's timeout; a slow one (a TV waking up) is accepted and finished in the background.
-      const id = decodeURIComponent(/^\/api\/devices\/([^/]+)$/.exec(req.url.split('?')[0])?.[1] ?? '');
-      const auto = String(req.headers['x-helix-origin'] ?? '').toLowerCase() === 'auto';
-      const r = await opts.helixLink!.command(id, (req.body ?? {}) as Record<string, unknown>, auto);
-      return reply.code(r.status).send(r.body);
-    });
-  }
-
   // iOS Shortcuts' "Form" request body.
   app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_req, body, done) => done(null, Object.fromEntries(new URLSearchParams(String(body)))));
 
-  const fail = (reply: { code: (n: number) => { send: (b: unknown) => unknown } }, err: unknown) => reply.code(400).send({ error: err instanceof Error ? err.message : String(err) });
+  const fail = (reply: { code: (n: number) => { send: (b: unknown) => unknown } }, err: unknown) => reply.code(err instanceof AccessDenied ? 403 : 400).send({ error: err instanceof Error ? err.message : String(err) });
 
   const jev = opts.jev ?? new JevAdvisor({ store: hub.store });
   registerJevRoutes(app, hub, jev);
 
   // ---------------------------------------------------------------- read --
-  app.get('/api/state', async () => snapshot(hub));
+  // What each person sees is the home as their role allows (api/views.ts): a child or a guest only their rooms.
+  const stateFor = (a: Actor | undefined) => viewFor(snapshot(hub), a, accounts);
+  app.get('/api/state', async () => stateFor(currentActor()));
 
   // Loaded by the web app before it renders so the first paint has real data.
   app.get('/api/boot.js', async (_req, reply) => {
     reply.type('application/javascript').header('cache-control', 'no-store');
-    return `window.KOVA_BOOT=${JSON.stringify(snapshot(hub)).replace(/</g, '\\u003c')};`;
+    return `window.KOVA_BOOT=${JSON.stringify(stateFor(currentActor())).replace(/</g, '\\u003c')};`;
   });
 
   // Pairing info for the Apple Home bridge (setup code + X-HM:// payload for a QR code).
@@ -599,9 +666,16 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
     if (!opts.notifier) return reply.code(404).send({ error: 'notifications are not running' });
     return { publicKey: opts.notifier.vapid.publicKey };
   });
+  // Whose phone this is: a member's own key says who they are, and only the owner may register a phone for someone else.
+  const pushPerson = (asked: string | undefined): string | undefined | Error => {
+    const a = currentActor();
+    if (a?.personId && asked && asked !== a.personId && a.role !== 'owner') return new AccessDenied('You can only get notifications on your own phone.');
+    return asked || a?.personId;
+  };
   app.post<{ Body: { subscription?: PushSubscription; personId?: string } }>('/api/push/subscribe', async (req, reply) => {
     if (!opts.notifier) return reply.code(404).send({ error: 'notifications are not running' });
-    const personId = req.body?.personId;
+    const personId = pushPerson(req.body?.personId);
+    if (personId instanceof Error) return fail(reply, personId);
     if (personId && !hub.config.get().people.some(p => p.id === personId)) return reply.code(400).send({ error: 'unknown person' });
     try { opts.notifier.subscribe(req.body?.subscription as PushSubscription, personId); hub.emit('changed'); return { ok: true }; } catch (e) { return fail(reply, e); }
   });
@@ -612,7 +686,8 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
   // The Kova phone app: its Expo push token, and who the phone belongs to.
   app.post<{ Body: { token?: string; personId?: string; name?: string; platform?: string } }>('/api/push/app', async (req, reply) => {
     if (!opts.notifier) return reply.code(404).send({ error: 'notifications are not running' });
-    const personId = req.body?.personId;
+    const personId = pushPerson(req.body?.personId);
+    if (personId instanceof Error) return fail(reply, personId);
     if (personId && !hub.config.get().people.some(p => p.id === personId)) return reply.code(400).send({ error: 'unknown person' });
     try { opts.notifier.registerApp(String(req.body?.token ?? ''), { personId, name: req.body?.name, platform: req.body?.platform }); hub.emit('changed'); return { ok: true }; } catch (e) { return fail(reply, e); }
   });
@@ -627,7 +702,9 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
 
   // Every light off (the "Turn them off" action on "Everyone's out").
   app.post('/api/lights/off', async () => {
-    const ds = hub.reg.list().filter(d => isLight(d) && d.state.on);
+    // Every light the person asking may use (a child: the lights in their rooms).
+    const a = currentActor();
+    const ds = hub.reg.list().filter(d => isLight(d) && d.state.on && canDevice(a, d));
     return hub.engine.applyMany(Object.fromEntries(ds.map(d => [d.id, { on: false }])), { ...USER, label: 'All lights off' });
   });
 
@@ -666,8 +743,9 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
   const remember = (text: string, out: AskReply, asked: number, job?: string) => {
     // Keep the exchange so follow-ups — "yes", "the second one", "do it" — still land, and a phone that was away
     // finds the answer (GET /api/ask/history).
-    convoAdd(hub.store, 'user', text, { ts: asked, job });
-    convoAdd(hub.store, 'assistant', out.text, { job, source: out.source, engine: out.engine, undo: out.undo, failed: out.understood === false && out.engine !== 'builtin' ? true : undefined });
+    const who = actorKey(currentActor());
+    convoAdd(hub.store, 'user', text, { ts: asked, job, who });
+    convoAdd(hub.store, 'assistant', out.text, { job, source: out.source, engine: out.engine, undo: out.undo, failed: out.understood === false && out.engine !== 'builtin' ? true : undefined, who });
   };
   app.post<{ Body: { text: string; job?: boolean } }>('/api/ask', async req => {
     const text = String(req.body?.text ?? '');
@@ -683,7 +761,7 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
     }
     if (req.body?.job === true) {
       const info = engineInfo(settings);
-      const job = jobs.start(text, { kind: info.kind, label: info.label }, progress => ai.ask(text, settings, undefined, { onSteps: progress }), j => { if (j.reply) remember(text, j.reply, asked, j.id); });
+      const job = jobs.start(text, { kind: info.kind, label: info.label }, progress => ai.ask(text, settings, undefined, { onSteps: progress }), j => { if (j.reply) remember(text, j.reply, asked, j.id); }, actorKey(currentActor()));
       return { job: jobView(job) };
     }
     const out = await ai.ask(text, settings);
@@ -695,17 +773,18 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
     const rev = Number(req.query.rev ?? 0) || 0;
     const wait = Math.max(0, Math.min(25, Number(req.query.wait ?? 0) || 0)) * 1000;
     const j = await jobs.wait(req.params.id, rev, wait);
+    if (j && (j.who ?? 'owner') !== actorKey(currentActor())) return reply.code(404).send({ error: 'No such request', code: 'job-gone' });
     if (!j) return reply.code(404).send({ error: 'The hub restarted before it finished that request. Some of it may have been done — check, then ask again.', code: 'job-gone' });
     return jobView(j);
   });
   // The conversation so far (8 hours), with each reply's source and undo, and anything still being worked on.
-  app.get('/api/ask/history', async () => ({ turns: convoRecent(hub.store), jobs: jobs.running().map(jobView), engine: engineInfo(loadSettings(hub.store)) }));
+  app.get('/api/ask/history', async () => { const who = actorKey(currentActor()); return { turns: convoRecent(hub.store, who), jobs: jobs.running(who).map(jobView), engine: engineInfo(loadSettings(hub.store)) }; });
   // What Kova understood, as chips, without running anything (for the live preview while typing).
   app.post<{ Body: { text: string } }>('/api/ask/parse', async req => {
     const i = hub.assistant.parse(String(req.body?.text ?? ''));
     return { understood: !!i, kind: i?.kind ?? null, chips: hub.assistant.chips(i) };
   });
-  app.post<{ Body: { action: AskAction } }>('/api/ask/act', async req => hub.assistant.act(req.body.action));
+  app.post<{ Body: { action: AskAction } }>('/api/ask/act', async (req, reply) => { try { return await hub.assistant.act(req.body.action); } catch (e) { return fail(reply, e); } });
 
   // ------------------------------------------------------------- backups --
   const noBackups = (reply: { code: (n: number) => { send: (b: unknown) => unknown } }) => reply.code(404).send({ error: 'Backups are not enabled' });
@@ -752,14 +831,26 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
   // ------------------------------------------------------------ realtime --
   const clients = new Set<WebSocket>();
   let pending: NodeJS.Timeout | null = null;
+  // Who each socket is: each one hears the home as its person may see it.
+  const socketActor = new WeakMap<WebSocket, Actor | undefined>();
   hub.on('changed', () => {
     if (pending || !clients.size) return;
     pending = setTimeout(() => {
       pending = null;
-      const msg = JSON.stringify({ type: 'state', data: snapshot(hub) });
-      for (const c of clients) c.send(msg);
+      const snap = snapshot(hub);
+      const msgs = new Map<string, string>();
+      for (const c of clients) {
+        const a = socketActor.get(c);
+        // A device signed out (or a member removed) since it connected: its socket closes.
+        if (a?.sessionId && !stillIn(a)) { clients.delete(c); try { c.close(4001, 'signed out'); } catch { /* gone */ } continue; }
+        const k = viewKey(a);
+        if (!msgs.has(k)) msgs.set(k, JSON.stringify({ type: 'state', data: viewFor(snap, a, accounts) }));
+        c.send(msgs.get(k)!);
+      }
     }, 80);
   });
+  const stillIn = (a: Actor) => { const s = sessions.get(a.sessionId!); const now = s && accounts.actorFor(s); return !!now && now.role === a.role && JSON.stringify(now.rooms) === JSON.stringify(a.rooms) && JSON.stringify(now.devices) === JSON.stringify(a.devices); };
+  const viewKey = (a: Actor | undefined) => a ? `${a.role}|${a.personId ?? ''}` : '';
   // Keep the UI's clock and "now" line moving even when nothing changes. This is also the socket's heartbeat: a
   // client hears from the hub at least every 30 s, so one that hasn't for longer knows its socket is dead (the
   // phone app reconnects then, see mobile/src/logic/link.ts).
@@ -777,10 +868,12 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
   app.addHook('onClose', async () => { clearInterval(heartbeat); clearInterval(pinger); });
 
   app.get('/api/ws', { websocket: true }, socket => {
+    const a = currentActor();
     clients.add(socket);
+    socketActor.set(socket, a);
     alive.set(socket, true);
     socket.on('pong', () => alive.set(socket, true));
-    socket.send(JSON.stringify({ type: 'state', data: snapshot(hub) }));
+    socket.send(JSON.stringify({ type: 'state', data: stateFor(a) }));
     socket.on('close', () => clients.delete(socket));
   });
 

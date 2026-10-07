@@ -10,6 +10,7 @@ import { clock, localDate } from '../util/time.ts';
 import { isLight, isPlayer, targetLabel } from '../util/describe.ts';
 import { Automations } from './automations.ts';
 import { RoomActivity } from './rooms.ts';
+import { actorKey, allows, currentActor, demand, demandTargets, withWho } from '../services/actor.ts';
 
 export interface ActiveOverlay {
   id: string;
@@ -39,7 +40,7 @@ export class Engine extends EventEmitter<{ changed: [] }> {
   /** A mode that started while nobody was home; its "on" targets wait for an arrival. */
   pendingEntry: string | null = null;
   private way = new Map<string, WayTimer>();
-  private undos = new Map<string, { fn: Undo; at: number }>();
+  private undos = new Map<string, { fn: Undo; at: number; by?: string }>();
   private lastTick = 0;
   private timer: NodeJS.Timeout | null = null;
 
@@ -186,6 +187,10 @@ export class Engine extends EventEmitter<{ changed: [] }> {
   async startOverlay(id: string, by: Cause = { kind: 'user', label: 'You' }): Promise<string> {
     const o = this.cfg.overlays.find(x => x.id === id);
     if (!o) throw new Error(`Unknown overlay ${id}`);
+    // Someone switching the home (the apps, Ask Kova): only a role that may change modes, and Activity says who.
+    const person = by.kind === 'user' || by.kind === 'assistant';
+    if (person) demand('modes');
+    const who = person ? withWho(by).by : undefined;
     if (this.overlay?.id === id) return this.registerUndo(() => this.endOverlay('undo'));
     if (this.overlay) await this.endOverlay('replaced');
     const targets = this.overlayTargets(o);
@@ -201,7 +206,7 @@ export class Engine extends EventEmitter<{ changed: [] }> {
     const endsAt = o.ends.kind === 'time' ? this.nextRhythm(o.ends.at, now) : null;
     this.overlay = { id, since: now, endsAt, snapshot };
     this.store.set('overlay', this.overlay);
-    const cause: Cause = { kind: 'overlay', id, label: `${o.name} started`, detail: by.kind === 'user' ? undefined : by.label };
+    const cause: Cause = { kind: 'overlay', id, label: `${o.name} started`, detail: by.kind === 'user' ? undefined : by.label, ...(who ? { by: who } : {}) };
     const { changed } = await this.reg.applyTargets(targets, cause);
     this.store.append({ kind: 'run', device: null, feed: 'auto', what: `${o.name} on · ${plural(changed.length, 'device')} changed`, data: { overlay: id, changed }, cause });
     this.emit('changed');
@@ -233,12 +238,24 @@ export class Engine extends EventEmitter<{ changed: [] }> {
 
   // ------------------------------------------------------------- devices --
 
+  /**
+   * A change someone asked for (the apps, Ask Kova): it must be theirs to make (services/actor.ts), and it carries who
+   * they are. Modes, automations and the hub's own work aren't anyone's, so they aren't checked.
+   */
+  private asked(targets: Targets, cause: Cause): Cause {
+    if (cause.kind !== 'user' && cause.kind !== 'assistant') return cause;
+    demandTargets(targets, id => this.reg.get(id));
+    return withWho(cause);
+  }
+
   async command(id: string, cmd: Command, cause: Cause = { kind: 'user', label: 'You' }): Promise<string> {
+    cause = this.asked({ [id]: cmd }, cause);
     const prev = await this.reg.command(id, cmd, cause);
     return this.registerUndo(async () => { await this.reg.command(id, prev, { kind: 'undo', label: 'Undo' }); });
   }
 
   async applyMany(targets: Targets, cause: Cause): Promise<{ undo: string; changed: string[]; failed: { id: string; error: string }[] }> {
+    cause = this.asked(targets, cause);
     const { changed, prev, failed } = await this.reg.applyTargets(targets, cause);
     if (changed.length) this.store.append({ kind: 'run', device: null, feed: cause.kind === 'user' || cause.kind === 'assistant' ? 'device' : 'auto', what: `${cause.label} · ${plural(changed.length, 'device')} changed`, data: { changed }, cause });
     return { changed, failed, undo: this.registerUndo(async () => { await this.reg.applyTargets(prev, { kind: 'undo', label: 'Undo' }); }) };
@@ -366,13 +383,20 @@ export class Engine extends EventEmitter<{ changed: [] }> {
 
   registerUndo(fn: Undo): string {
     const id = randomUUID();
-    this.undos.set(id, { fn, at: this.now() });
+    const a = currentActor();
+    this.undos.set(id, { fn, at: this.now(), ...(a ? { by: actorKey(a) } : {}) });
     return id;
   }
 
+  /**
+   * Undo. A child or a guest may only undo their own changes; anyone who may change the home's modes may undo
+   * anything (as the shared undo always worked).
+   */
   async undo(id: string): Promise<boolean> {
     const u = this.undos.get(id);
     if (!u) return false;
+    const a = currentActor();
+    if (a && !allows(a, 'modes') && u.by !== actorKey(a)) return false;
     this.undos.delete(id);
     await u.fn();
     this.emit('changed');

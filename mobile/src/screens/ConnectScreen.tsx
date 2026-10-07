@@ -6,13 +6,14 @@ import * as Network from 'expo-network';
 import { C, F, R, SHADOW, SP } from '../theme';
 import { call, findHub, hello, HubError } from '../api/client';
 import { addressesOf, chooseAddress, display, kindFor } from '../logic/addresses';
-import { normalizeHubUrl, parseConnectLink, subnetCandidates, type HubConfig } from '../logic/connect';
+import { normalizeHubUrl, parseConnectLink, parseInviteLink, subnetCandidates, type HubConfig, type InviteLink } from '../logic/connect';
 import { useHub } from '../state/hub';
 import { Icon } from '../ui/Icon';
 import { Button, Card, IconWell, Mark, Spinner } from '../ui/kit';
 import { Glow } from '../ui/Screen';
 import { Appear, haptic } from '../ui/motion';
 import { T } from '../ui/Text';
+import { JoinScreen } from './JoinScreen';
 
 type Step = 'start' | 'scan' | 'type';
 
@@ -31,6 +32,8 @@ export function ConnectScreen({ again }: { again?: { onCancel(): void } } = {}) 
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [perm, askPerm] = useCameraPermissions();
+  // An invite to someone's home (scanned, or pasted as a link): joining it has its own screen.
+  const [invite, setInvite] = useState<InviteLink | null>(null);
   const scanned = useRef(false);
   const cancelled = useRef(false);
   useEffect(() => () => { cancelled.current = true; }, []);
@@ -77,11 +80,15 @@ export function ConnectScreen({ again }: { again?: { onCancel(): void } } = {}) 
   };
 
   const typed = () => {
+    const inv = parseInviteLink(addr);
+    if (inv) { setErr(null); setInvite(inv); return; }
     const url = normalizeHubUrl(addr);
     if (!url) { setErr('Type the hub’s address, e.g. 192.168.1.20'); return; }
     // Typed by the owner, so it may be plain http even when remote.
     void tryHub({ url, addresses: [{ url, kind: kindFor(url), manual: true }], ...(token.trim() ? { token: token.trim() } : {}) });
   };
+
+  if (invite) return <JoinScreen invite={invite} onClose={() => { setInvite(null); setStep('start'); }} />;
 
   if (step === 'scan') {
     if (!perm?.granted) {
@@ -101,6 +108,8 @@ export function ConnectScreen({ again }: { again?: { onCancel(): void } } = {}) 
         <CameraView style={{ flex: 1 }} facing="back" barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
           onBarcodeScanned={({ data }) => {
             if (scanned.current) return;
+            const inv = parseInviteLink(data);
+            if (inv) { haptic.success(); setInvite(inv); return; }
             const cfg = parseConnectLink(data);
             if (!cfg) return;
             scanned.current = true;
@@ -159,12 +168,12 @@ export function ConnectScreen({ again }: { again?: { onCancel(): void } } = {}) 
                 <Icon name="qr_code_2" size={18} color={C.green} />
                 <T v="headline" size={14}>Where’s the code?</T>
               </View>
-              <T v="footnote" color={C.stone}>Open Kova on a computer and choose “Kova on your phone” in the sidebar.</T>
+              <T v="footnote" color={C.stone}>Open Kova on a computer and choose “Kova on your phone” in the sidebar. Invited to someone’s home? Scan their invite’s code, or paste its link under Type the address.</T>
             </Card>
           </View>
         ) : (
           <View style={{ gap: SP[4] }}>
-            {field(addr, setAddr, { label: 'Hub address', placeholder: '192.168.1.20', url: true })}
+            {field(addr, setAddr, { label: 'Hub address', placeholder: '192.168.1.20', url: true, hint: 'Or paste the invite link someone sent you.' })}
             {field(token, setToken, { label: 'Token', placeholder: 'Only if your hub has one', secure: true, hint: 'Kova on your computer shows it next to the code.' })}
             <Button size="lg" label="Connect" busy={busy === 'Connecting…'} onPress={typed} />
             <Button kind="ghost" label="Back" onPress={back} />

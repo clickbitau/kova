@@ -82,3 +82,45 @@ export function hubUrl(cfg: HubConfig, path: string, withToken = false): string 
 export function wsUrl(cfg: HubConfig): string {
   return hubUrl({ ...cfg, url: cfg.url.replace(/^http/, 'ws') }, '/api/ws', true);
 }
+
+/** An invite to someone's home (household accounts): where the hub is, and the one-time code. */
+export interface InviteLink {
+  url: string;
+  code: string;
+  hubId?: string;
+  addresses?: HubAddress[];
+}
+
+/** "abcde fghjk" → "ABCDE-FGHJK"; null unless it's an invite code's 10 letters and digits. */
+export function cleanInviteCode(raw: string | null | undefined): string | null {
+  const c = String(raw ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return c.length === 10 ? `${c.slice(0, 5)}-${c.slice(5)}` : null;
+}
+
+/**
+ * The invite the hub makes (Settings → People → Invite), as a link or its QR code:
+ * https://kova.example/join.html#code=ABCDE-FGHJK&hub=<id>&alt=http%3A%2F%2F192.168.1.20%3A8140 (a browser opens
+ * it; the code is after # so it never reaches a server log), or kova://join?url=…&code=…&hub=…&alt=… (the app).
+ * Anything else (a connect link, a bare address) is null: parseConnectLink handles those.
+ */
+export function parseInviteLink(text: string): InviteLink | null {
+  let u: URL;
+  try { u = new URL(text.trim()); } catch { return null; }
+  let base: string | null, q: URLSearchParams;
+  if (u.protocol === 'kova:') {
+    if (!/^kova:\/\/join\/?(\?|$)/i.test(u.href)) return null;
+    q = u.searchParams;
+    base = normalizeHubUrl(q.get('url') ?? '');
+  } else if (u.protocol === 'http:' || u.protocol === 'https:') {
+    if (!/\/join(\.html)?\/?$/.test(u.pathname)) return null;
+    q = new URLSearchParams(u.hash.replace(/^#/, '') || u.search.replace(/^\?/, ''));
+    // The join page sits at the hub's root, wherever that is (a reverse proxy may add a path).
+    base = normalizeHubUrl(`${u.protocol}//${u.host}${u.pathname.replace(/\/join(\.html)?\/?$/, '')}`);
+  } else return null;
+  const code = cleanInviteCode(q.get('code'));
+  if (!base || !code) return null;
+  const hubId = q.get('hub') || undefined;
+  const alt = q.getAll('alt').map(normalizeHubUrl).filter((a): a is string => !!a && a !== base);
+  const addresses = alt.length ? sortAddresses([base, ...new Set(alt)].map(a => ({ url: a, kind: kindFor(a) }))) : undefined;
+  return { url: base, code, ...(hubId ? { hubId } : {}), ...(addresses ? { addresses } : {}) };
+}

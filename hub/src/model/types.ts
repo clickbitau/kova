@@ -187,6 +187,8 @@ export interface Cause {
   label: string;
   /** Optional extra: "doorbell camera saw someone". */
   detail?: string;
+  /** The person who did it (a change from the apps or Ask Kova), by their account: Activity says "Sam turned off…". */
+  by?: { id?: string; name: string };
 }
 
 export interface Room {

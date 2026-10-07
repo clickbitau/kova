@@ -56,6 +56,15 @@ function netOf(reg: Hub['reg']) {
   };
 }
 
+/** An Activity line with who did it: "Sam turned off Lounge lights", "Sam started Movie", "Sam: Lamp set to 40%". */
+export function byline(who: string, what: string, cause: Pick<LogEntry['cause'], 'kind'>): string {
+  const ov = cause.kind === 'overlay' && /^(.+?) on · /.exec(what);
+  if (ov) return `${who} started ${ov[1]}`;
+  const sw = /^(.+?):? (on|off)( · .+)?$/i.exec(what);
+  if (sw) return `${who} turned ${sw[2].toLowerCase()} ${sw[1]}${sw[3] ?? ''}`;
+  return `${who}: ${what}`;
+}
+
 function feedIcon(e: LogEntry): string {
   if (e.kind === 'device_event') return /^power-supply-/.test(String(e.data.type)) ? 'power' : DEVICE_EVENT_ICON[String(e.data.type)] ?? 'person';
   if (e.kind === 'state' && e.data && typeof (e.data.patch as { open?: unknown } | undefined)?.open === 'boolean') return 'sensor_door';
@@ -155,10 +164,20 @@ export function snapshot(hub: Hub) {
     .slice(-6).map(e => ({ hour: localHour(e.ts, tz), label: e.kind === 'presence' ? e.what.replace(' arrived home', ' home').replace(' left home', ' left') : e.cause.kind === 'behaviour' ? 'Light the way' : e.cause.label }));
 
   const feed = store.feed(80);
+  // "Ceiling on" says more as "Baby room ceiling on" once it's someone's doing.
+  const withRoom = (e: LogEntry): string => {
+    const d = e.device ? reg.get(e.device) : undefined;
+    const room = d && cfg.rooms.find(r => r.id === d.room);
+    if (!d || !room || !e.what.startsWith(d.name) || d.name.toLowerCase().includes(room.name.toLowerCase())) return e.what;
+    return `${room.name} ${d.name.toLowerCase()}${e.what.slice(d.name.length)}`;
+  };
   const activity = feed.map(e => ({
     id: e.id, ts: e.ts, t: localDate(e.ts, tz) === today ? clock(e.ts, tz) : `${new Date(e.ts).toLocaleDateString('en-AU', { weekday: 'short', timeZone: tz })} ${clock(e.ts, tz)}`,
-    type: e.feed!, icon: feedIcon(e), what: e.what, device: e.device,
-    why: [e.cause.label, e.cause.detail].filter(Boolean).join(' · '),
+    type: e.feed!, icon: feedIcon(e), device: e.device,
+    // Who did it, by their account: "Sam turned off Lounge lights".
+    what: e.cause.by && ['user', 'assistant', 'overlay'].includes(e.cause.kind) ? byline(e.cause.by.name, withRoom(e), e.cause) : e.what,
+    who: e.cause.by?.name ?? null, whoId: e.cause.by?.id ?? null,
+    why: [e.cause.by && e.cause.label === 'You' ? null : e.cause.label, e.cause.detail].filter(Boolean).join(' · '),
   }));
 
   const ov = engine.overlay && cfg.overlays.find(o => o.id === engine.overlay!.id);

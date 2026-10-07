@@ -15,6 +15,7 @@ import { combineChoices, placeChoices, placeName } from '../logic/customise';
 import { Icon } from '../ui/Icon';
 import { Button, Card, Chips, Group, IconButton, Notice, IconWell, Pill, HScroll, Press, Row, Section, Segmented, Sheet, Slider, Stat, Switch, SwitchRow, Tag } from '../ui/kit';
 import { T } from '../ui/Text';
+import { features, meOf } from '../logic/roles';
 import { CameraStill } from './SecurityScreen';
 import { SensorReadings, WatchSettings } from './SensorPanel';
 import { isSensor } from '../logic/sensors';
@@ -361,7 +362,7 @@ export function DeviceSheet() {
           <View style={{ aspectRatio: 16 / 9, borderRadius: R.lg, overflow: 'hidden', backgroundColor: C.inset }}>
             <CameraStill uri={cfg ? hubUrl(cfg, `/api/devices/${encodeURIComponent(D.id)}/snapshot`, true) : null} off={D.online === false} label={`Latest picture from ${D.name}`} />
           </View>
-          <Button full icon="videocam" label="View camera" onPress={() => { close(); nav.navigate('Camera', { id: D.id }); }} />
+          {features(meOf(snap)).security ? <Button full icon="videocam" label="View camera" onPress={() => { close(); nav.navigate('Camera', { id: D.id }); }} /> : null}
         </View>
       ) : null}
 
@@ -387,7 +388,8 @@ export function DeviceSheet() {
         </Group>
       ) : null}
 
-      <View style={{ gap: SP[4] }}>
+      {/* A device's settings are the home's (rename, move, hide): not for a child's or a guest's account. */}
+      {features(meOf(snap)).customise ? <View style={{ gap: SP[4] }}>
         <T v="overline" color={C.stone2}>Settings</T>
         <View style={{ gap: SP[2] }}>
           <T v="footnote" weight={600} color={C.bone2}>Name</T>
@@ -438,7 +440,7 @@ export function DeviceSheet() {
           </Card>
         ) : null}
         <T mono size={11} color={C.stone2} center>{`${D.integration} · ${D.address}`}</T>
-      </View>
+      </View> : null}
     </Sheet>
   );
 }

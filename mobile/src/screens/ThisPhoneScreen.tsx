@@ -11,6 +11,7 @@ import { Icon } from '../ui/Icon';
 import { Avatar, Button, Card, Empty, Group, IconWell, Press, Section, SwitchRow } from '../ui/kit';
 import { animateLayout } from '../ui/motion';
 import { locationPlan } from '../logic/presence';
+import { meOf, presenceKeyFrom } from '../logic/roles';
 import { Screen } from '../ui/Screen';
 import { T } from '../ui/Text';
 import { HubAddresses } from './HubAddresses';
@@ -26,7 +27,10 @@ export function ThisPhoneScreen() {
   const canLock = Platform.OS === 'ios';
   const [busy, setBusy] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
-  const me = s.people.find(p => p.id === cfg?.personId);
+  // Signed in as one of the home's people (household accounts): this phone is theirs, and that's not a choice here.
+  const account = meOf(s);
+  const signedInAs = account.via === 'session' ? account.personId : null;
+  const me = s.people.find(p => p.id === (signedInAs ?? cfg?.personId));
   // Warden or the router may already know when this person is home: then location is only an extra.
   const plan = locationPlan(me);
   const [extra, setExtra] = useState(false);
@@ -44,8 +48,10 @@ export function ThisPhoneScreen() {
     if (!home || (!home.latitude && !home.longitude)) { say('Set the home’s location on the hub first', { error: true }); return; }
     setBusy('geo');
     try {
-      const setup = await api<{ people: { id: string; key: string }[] }>('GET', '/api/presence/setup');
-      const key = setup.people.find(p => p.id === me.id)?.key;
+      // The owner reads every person's key; anyone else their own, from their account.
+      const key = account.can.owner
+        ? (await api<{ people: { id: string; key: string }[] }>('GET', '/api/presence/setup')).people.find(p => p.id === me.id)?.key
+        : presenceKeyFrom((await api<{ presence: { arriveUrl: string } | null }>('GET', '/api/me')).presence?.arriveUrl);
       if (!key) throw new Error('The hub has no key for this person yet');
       const r = await startArriveLeave({ hubUrl: route?.url ?? cfg.url, addresses, hubId: cfg.hubId ?? null, personId: me.id, key, home });
       if (!r.ok) { say(r.why, { error: true }); return; }
@@ -72,7 +78,7 @@ export function ThisPhoneScreen() {
     try {
       const r = await pushToken();
       if (!r.ok) { say(r.why, { error: true }); return; }
-      await api('POST', '/api/push/app', { token: r.token, personId: cfg?.personId, name: Device.deviceName ?? undefined, platform: Platform.OS });
+      await api('POST', '/api/push/app', { token: r.token, personId: signedInAs ?? cfg?.personId, name: Device.deviceName ?? undefined, platform: Platform.OS });
       setPush(true);
       say('Notifications are on');
     } catch (e) { say((e as Error).message, { error: true }); } finally { setBusy(null); }
@@ -87,7 +93,15 @@ export function ThisPhoneScreen() {
   return (
     <Screen title="This phone" over={s.home.name} onBack={() => nav.goBack()} gap={SP[6]}>
       <Section title="Whose phone is this?" caption>
-        {s.people.length ? (
+        {signedInAs && me ? (
+          <Card style={{ padding: SP[4], flexDirection: 'row', alignItems: 'center', gap: SP[3] }}>
+            <Avatar name={me.name} home={me.home} size={40} ring={C.card} />
+            <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+              <T v="headline" numberOfLines={2}>{`${me.name}’s phone`}</T>
+              <T v="footnote" color={C.stone}>{`Signed in as ${me.name} (${account.roleLabel.toLowerCase()}). Their notifications and arriving and leaving come here.`}</T>
+            </View>
+          </Card>
+        ) : s.people.length ? (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SP[2] + 2 }}>
             {s.people.map(p => {
               const on = cfg?.personId === p.id;
