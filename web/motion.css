@@ -63,3 +63,7 @@ main > [style*="radial-gradient"] { animation: k-fade 0.4s var(--k-out); }
   *, *::before, *::after { animation: none !important; transition: none !important; }
   [style*="cursor: pointer"]:active { transform: none; }
 }
+
+/* Work under way with no known end (Settings → Software update while Kova updates). */
+@keyframes kovaSlide { 0% { left: -35%; } 100% { left: 100%; } }
+@media (prefers-reduced-motion: reduce) { .kova-indeterminate { animation: none !important; left: 0 !important; width: 100% !important; opacity: 0.6; } }

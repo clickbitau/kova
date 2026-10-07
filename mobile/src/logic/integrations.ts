@@ -384,6 +384,8 @@ export interface HubUpdate {
   checkedAt: number | null;
   checkError: string | null;
   last: { result: 'updated' | 'rolled-back' | 'failed'; from: string; to: string; at: number } | null;
+  /** Every update the hub has seen, newest first (older hubs leave it out). */
+  history?: { result: 'updated' | 'rolled-back' | 'failed'; from: string; to: string; at: number }[];
   auto: { on: boolean; hour: number };
 }
 
@@ -393,7 +395,7 @@ const ago = (t: number | null, now: number) => {
   return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`;
 };
 
-/** The hub's own software, as the card on Integrations says it (notifications about hub updates open this screen). */
+/** The hub's own software, as Settings → Software update says it (notifications about hub updates open Settings). */
 export function describeHubUpdate(u: HubUpdate, now: number) {
   const a = u.available, l = u.last, busy = u.state !== 'idle';
   const title = u.state === 'updating' ? `Updating Kova to ${a?.version ?? 'the new version'}…` : u.state === 'requested' ? 'Asked the hub to update…'

@@ -107,6 +107,11 @@ export interface Device {
   state: DeviceState;
   /** Hidden by the owner: kept working, left out of everyday lists. */
   hidden?: boolean;
+  /**
+   * Archived by the owner: a device that's gone or not wanted. Out of every list, the assistant and alerts, and modes,
+   * moments and overlays leave it alone; restoring it brings it all back.
+   */
+  archived?: boolean;
   /** The name and room the integration gave it, when the owner has changed them. */
   original?: { name: string; room: string };
 }
@@ -120,7 +125,7 @@ export type AlertPrefs = Partial<Record<RoomEventKind, AlertWhen>>;
 
 /** What the owner changed about a device: a better name, the right room, or hidden from lists. */
 export interface DeviceSettings {
-  name?: string; room?: string; hidden?: boolean;
+  name?: string; room?: string; hidden?: boolean; archived?: boolean;
   /** Cameras and sensors: it looks at (or sits) outside, not inside the home. Unset: from the room, and doorbells are outside. */
   outdoor?: boolean;
   /** Cameras and sensors: when their events alert phones. */
@@ -162,6 +167,9 @@ export interface Room {
   /** Outside the living space (a porch, a yard, the garage): what happens there isn't someone inside. Unset: from its icon. */
   outdoor?: boolean;
 }
+
+/** The room id of devices that are in none of the home's rooms (a deleted room's devices go here). */
+export const UNASSIGNED_ROOM = 'unassigned';
 
 /** Material Symbols icons a room can have — offered wherever a room is made or renamed. */
 export const ROOM_ICONS = ['weekend', 'kitchen', 'desk', 'bed', 'single_bed', 'crib', 'music_note', 'local_laundry_service', 'garage_home', 'door_front', 'yard', 'bathtub', 'stairs', 'meeting_room', 'chair', 'tv', 'deck', 'balcony', 'fitness_center', 'checkroom'];

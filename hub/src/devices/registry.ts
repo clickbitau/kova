@@ -173,8 +173,9 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
     const s = this.settings()[d.id] ?? {};
     const name = s.name?.trim() || o.name, room = s.room || o.room;
     const out: Device = { ...d, name, room };
-    delete out.hidden; delete out.original;
+    delete out.hidden; delete out.archived; delete out.original;
     if (s.hidden) out.hidden = true;
+    if (s.archived) out.archived = true;
     if (name !== o.name || room !== o.room) out.original = o;
     return out;
   }
@@ -184,9 +185,10 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
     let changed = false;
     for (const d of this.devices.values()) {
       const n = this.withSettings(d);
-      if (n.name !== d.name || n.room !== d.room || !!n.hidden !== !!d.hidden) changed = true;
+      if (n.name !== d.name || n.room !== d.room || !!n.hidden !== !!d.hidden || !!n.archived !== !!d.archived) changed = true;
       d.name = n.name; d.room = n.room;
       if (n.hidden) d.hidden = true; else delete d.hidden;
+      if (n.archived) d.archived = true; else delete d.archived;
       if (n.original) d.original = n.original; else delete d.original;
     }
     if (changed) this.emit('devices');
@@ -260,7 +262,8 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
   }
 
   async applyTargets(targets: Targets, cause: Cause): Promise<{ changed: string[]; prev: Targets }> {
-    const expanded = this.expandTargets(targets);
+    // Archived devices are left alone: a mode or overlay that still names one skips it.
+    const expanded = Object.fromEntries(Object.entries(this.expandTargets(targets)).filter(([id]) => !this.devices.get(id)?.archived));
     const changed: string[] = [];
     const prev: Targets = {};
     await Promise.all(Object.entries(expanded).map(async ([id, cmd]) => {

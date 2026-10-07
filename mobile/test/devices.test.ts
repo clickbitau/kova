@@ -68,6 +68,9 @@ test('devices by room, filtered and searched; hidden ones only on request', () =
   assert.deepEqual(groupDevices(Object.values(all), rooms, { q: 'kitch' }).flatMap(x => x.devices.map(y => y.id)), ['speaker'], 'search matches the room too');
   assert.ok(!groupDevices(Object.values(all), rooms, {}).some(x => x.devices.some(y => y.id === 'old')));
   assert.ok(groupDevices(Object.values(all), rooms, { showHidden: true }).some(x => x.devices.some(y => y.id === 'old')));
+  // Archived: never, not even with hidden ones shown.
+  const arch = Object.values(all).map(d => d.id === 'lamp' ? { ...d, archived: true } : d);
+  assert.ok(!groupDevices(arch, rooms, { showHidden: true }).some(x => x.devices.some(y => y.id === 'lamp')));
   assert.deepEqual(favourites(snap, all).map(x => x.id), ['lamp', 'ceiling'], 'no favourites set: the first visible lights and plugs');
 });
 

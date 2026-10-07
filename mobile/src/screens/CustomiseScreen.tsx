@@ -6,7 +6,7 @@ import { useSheet } from '../state/sheet';
 import { useNav } from '../navigation';
 import type { Person, Room } from '../api/types';
 import { combinedOf, combineIdeasOf, devs, ICON, type CombineIdea, type Combined } from '../logic/devices';
-import { cleanName, devicesIn, favouriteList, moveStep, plural, ROOM_ICONS, roomDelete, roomRows } from '../logic/customise';
+import { archivedList, cleanName, devicesIn, favouriteList, moveStep, plural, ROOM_ICONS, roomDelete, roomGroupError, roomGroups, roomRows, UNASSIGNED } from '../logic/customise';
 import { Icon } from '../ui/Icon';
 import { Avatar, Button, Card, Empty, HScroll, IconButton, Pill, Press, Row, Section, Sheet, Tag } from '../ui/kit';
 import { animateLayout } from '../ui/motion';
@@ -46,14 +46,15 @@ function Mover({ dir, onPress, disabled, name }: { dir: -1 | 1; onPress: () => v
   );
 }
 
-/** A room: its name and icon, and deleting it (its devices move to another room). */
+/** A room: its name and icon, and deleting it (its devices go to no room, or another room picked), after a confirmation. */
 function RoomSheet({ room, onClose }: { room: Room | null; onClose: () => void }) {
   const s = useSnap();
   const { act } = useHub();
   const [name, setName] = useState('');
   const [icon, setIcon] = useState('');
   const [moveTo, setMoveTo] = useState<string | null>(null);
-  useEffect(() => { if (room) { setName(room.name); setIcon(room.icon); setMoveTo(null); } }, [room?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [confirming, setConfirming] = useState(false);
+  useEffect(() => { if (room) { setName(room.name); setIcon(room.icon); setMoveTo(null); setConfirming(false); } }, [room?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const R0 = room;
   if (!R0) return <Sheet open={false} onClose={onClose}>{null}</Sheet>;
   const del = roomDelete(R0.id, s.rooms, s.devices, moveTo);
@@ -66,7 +67,6 @@ function RoomSheet({ room, onClose }: { room: Room | null; onClose: () => void }
     return ok;
   };
   const remove = async () => {
-    if (del.blocked) return false;
     const ok = await act('DELETE', `/api/rooms/${encodeURIComponent(R0.id)}`, del.body, `${R0.name} deleted`);
     if (ok) onClose();
     return ok;
@@ -92,14 +92,24 @@ function RoomSheet({ room, onClose }: { room: Room | null; onClose: () => void }
       </Section>
       <Button full kind={changed ? 'primary' : 'secondary'} icon="check" label="Save" onPress={changed ? save : undefined} />
       <Section title="Delete this room" caption gap={SP[2]}>
-        {del.inside && !del.blocked ? (
+        {del.inside ? (
           <>
-            <T v="footnote" color={C.stone}>{`Its ${plural(del.inside, 'device')} move to:`}</T>
-            <HScroll>{s.rooms.filter(r => r.id !== R0.id).map(r => <Pill key={r.id} icon={r.icon} label={r.name} on={del.moveTo === r.id} onPress={() => setMoveTo(r.id)} />)}</HScroll>
+            <T v="footnote" color={C.stone}>{`Its ${plural(del.inside, 'device')} go to:`}</T>
+            <HScroll>
+              <Pill icon="category" label="No room" on={del.moveTo === UNASSIGNED} onPress={() => { setMoveTo(null); setConfirming(false); }} />
+              {s.rooms.filter(r => r.id !== R0.id).map(r => <Pill key={r.id} icon={r.icon} label={r.name} on={del.moveTo === r.id} onPress={() => { setMoveTo(r.id); setConfirming(false); }} />)}
+            </HScroll>
           </>
         ) : null}
-        {del.blocked ? <T v="footnote" color={C.stone}>{del.blocked}</T> : null}
-        <Button full kind="danger" icon="delete" label={`Delete ${R0.name}`} onPress={del.blocked ? undefined : remove} />
+        {confirming ? (
+          <Card tint={C.red} style={{ padding: SP[4], gap: SP[3] }}>
+            <T v="callout" weight={600}>{del.confirm}</T>
+            <View style={{ flexDirection: 'row', gap: SP[2] }}>
+              <View style={{ flex: 1 }}><Button full kind="secondary" label="Keep it" onPress={() => setConfirming(false)} /></View>
+              <View style={{ flex: 1 }}><Button full kind="danger" icon="delete" label="Delete" onPress={remove} /></View>
+            </View>
+          </Card>
+        ) : <Button full kind="danger" icon="delete" label={`Delete ${R0.name}…`} onPress={() => setConfirming(true)} />}
         <T v="footnote" color={C.stone2} center>You can undo it for a few seconds afterwards.</T>
       </Section>
     </Sheet>
@@ -109,6 +119,7 @@ function RoomSheet({ room, onClose }: { room: Room | null; onClose: () => void }
 /** Someone who lives here: their name, what tells Kova they're home, and removing them. */
 function PersonSheet({ person, onClose }: { person: Person | null; onClose: () => void }) {
   const { act } = useHub();
+  const nav = useNav();
   const [name, setName] = useState('');
   const [detail, setDetail] = useState('');
   useEffect(() => { if (person) { setName(person.name); setDetail(person.detail); } }, [person?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -144,6 +155,10 @@ function PersonSheet({ person, onClose }: { person: Person | null; onClose: () =
         <T v="footnote" color={C.stone2}>Usually the phone that tells Kova they’re home, like “iPhone”.</T>
       </Section>
       <Button full kind={changed ? 'primary' : 'secondary'} icon="check" label="Save" onPress={changed ? save : undefined} />
+      <Section title="Phones and presence" caption gap={SP[2]}>
+        <T v="footnote" color={C.stone}>{P.via?.length ? `Kova knows ${P.name} is home from ${P.via.join(' and ')}.` : `Only ${P.name}’s phone tells Kova now: the Kova app’s arrive and leave on it.`}</T>
+        <Button full kind="secondary" icon="router" label="Link phones and presence" onPress={() => { onClose(); nav.navigate('Integration', { id: 'presence' }); }} />
+      </Section>
       <Button full kind="danger" icon="remove_circle" label={`Remove ${P.name}`} onPress={remove} />
     </Sheet>
   );
@@ -179,6 +194,53 @@ function CombinedSheet({ c, onClose }: { c: Combined | null; onClose: () => void
   );
 }
 
+/** A group of rooms ("Upstairs"): its name and rooms, or a new one; deleting it leaves the rooms as they are. */
+function RoomGroupSheet({ name, onClose }: { name: string | null; onClose: () => void }) {
+  const s = useSnap();
+  const { act } = useHub();
+  const isNew = name === '';
+  const cur = name ? (s.groups ?? {})[name] : undefined;
+  const [draft, setDraft] = useState('');
+  const [picked, setPicked] = useState<string[]>([]);
+  useEffect(() => { if (name !== null) { setDraft(name); setPicked((cur ?? []).filter(id => s.rooms.some(r => r.id === id))); } }, [name]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (name === null) return <Sheet open={false} onClose={onClose}>{null}</Sheet>;
+  const err = roomGroupError(draft, picked, s.groups, s.rooms, isNew ? null : name);
+  const n = cleanName(draft);
+  const save = async () => {
+    if (err) return false;
+    const ok = isNew
+      ? await act('POST', '/api/groups', { name: n, rooms: picked }, `${n} added`)
+      : await act('PUT', `/api/groups/${encodeURIComponent(name)}`, { name: n, rooms: picked }, `${n} saved`);
+    if (ok) onClose();
+    return ok;
+  };
+  const remove = async () => {
+    const ok = await act('DELETE', `/api/groups/${encodeURIComponent(name)}`, {}, `${name} deleted`);
+    if (ok) onClose();
+    return ok;
+  };
+  const toggle = (id: string) => setPicked(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
+  return (
+    <Sheet open onClose={onClose} label={isNew ? 'New group of rooms' : name}>
+      <SheetHead kicker={isNew ? 'New group of rooms' : `Group · ${plural(picked.length, 'room')}`} title={n || 'Group of rooms'} icon="home_work" color={C.amber} />
+      <Section title="Name" caption gap={SP[2]}>
+        <TextField value={draft} onChange={setDraft} label="Group name" placeholder="e.g. Upstairs" />
+        <T v="footnote" color={C.stone2}>{`Then “turn off the ${n ? n.toLowerCase() : 'upstairs'} lights” works in Ask Kova.`}</T>
+      </Section>
+      <Section title="Rooms in it" caption gap={SP[2]}>
+        {s.rooms.length ? (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+            {s.rooms.map(r => <Pill key={r.id} icon={r.icon} label={r.name} on={picked.includes(r.id)} onPress={() => toggle(r.id)} />)}
+          </View>
+        ) : <T v="footnote" color={C.stone}>Add rooms first.</T>}
+      </Section>
+      {err && (n || picked.length) ? <T v="footnote" color={C.amber}>{err}</T> : null}
+      <Button full kind={err ? 'secondary' : 'primary'} icon="check" label={isNew ? 'Add group' : 'Save'} onPress={err ? undefined : save} />
+      {!isNew ? <Button full kind="danger" icon="delete" label={`Delete ${name}`} onPress={remove} /> : null}
+    </Sheet>
+  );
+}
+
 /** A text box with an Add button beside it, for adding a room or a person. */
 function AddField({ placeholder, label, onAdd }: { placeholder: string; label: string; onAdd: (name: string) => Promise<boolean> }) {
   const [v, setV] = useState('');
@@ -189,8 +251,8 @@ function AddField({ placeholder, label, onAdd }: { placeholder: string; label: s
 }
 
 /**
- * Customise home: the home's name, rooms (add, rename, icon, order, delete), people, devices (rename, room, hide,
- * favourites and their order), speaker groups, and devices combined from two integrations.
+ * Customise home: the home's name, rooms (add, rename, icon, order, delete), groups of rooms, people, devices (rename,
+ * room, hide, archive, favourites and their order), speaker groups, and devices combined from two integrations.
  */
 export function CustomiseScreen() {
   const s = useSnap();
@@ -206,14 +268,17 @@ export function CustomiseScreen() {
   const [person, setPerson] = useState<string | null>(null);
   const [group, setGroup] = useState<string | null>(null);
   const [combo, setCombo] = useState<string | null>(null);
+  const [rgroup, setRgroup] = useState<string | null>(null);
   const [devRoom, setDevRoom] = useState<string>(s.rooms[0]?.id ?? 'unassigned');
   const homeDraft = home ?? s.home.name;
   const rows = roomRows(s.rooms, list);
   const favs = favouriteList(s.favourites, list);
-  const hidden = list.filter(d => d.hidden).sort((a, b) => a.name.localeCompare(b.name));
+  const hidden = list.filter(d => d.hidden && !d.archived).sort((a, b) => a.name.localeCompare(b.name));
+  const archived = archivedList(list);
+  const rgroups = roomGroups(s.groups, s.rooms);
   const rn = (id: string) => s.rooms.find(r => r.id === id)?.name ?? 'No room';
-  const hasLoose = list.some(d => !s.rooms.some(r => r.id === d.room));
-  const roomPills = [...s.rooms.map(r => ({ id: r.id, name: r.name, icon: r.icon })), ...(hasLoose ? [{ id: 'unassigned', name: 'No room', icon: 'category' }] : [])];
+  const hasLoose = list.some(d => !d.archived && !s.rooms.some(r => r.id === d.room));
+  const roomPills = [...s.rooms.map(r => ({ id: r.id, name: r.name, icon: r.icon })), ...(hasLoose ? [{ id: UNASSIGNED, name: 'No room', icon: 'category' }] : [])];
   const inRoom = devicesIn(list, s.rooms, devRoom);
   const ideas = combineIdeasOf(s);
   const combined = combinedOf(s);
@@ -244,6 +309,16 @@ export function CustomiseScreen() {
           </Card>
         ) : <Empty compact icon="meeting_room" title="No rooms yet" text="Add the rooms of your home, then put devices in them." />}
         <AddField placeholder="New room, e.g. Hallway" label="New room" onAdd={n => act('POST', '/api/rooms', { name: n }, `${n} added`)} />
+      </Section>
+
+      <Section title={`Groups of rooms · ${rgroups.length}`} caption action={s.rooms.length ? 'New group' : undefined} onAction={() => setRgroup('')} gap={SP[2]}>
+        {rgroups.length ? (
+          <Card style={{ overflow: 'hidden' }}>
+            {rgroups.map((g, i) => (
+              <Row key={g.name} first={!i} icon="home_work" iconFg={C.amber} title={g.name} sub={g.roomNames.length ? g.roomNames.join(', ') : 'No rooms'} onPress={() => setRgroup(g.name)} />
+            ))}
+          </Card>
+        ) : <Empty compact icon="home_work" tone={C.amber} title="No groups yet" text="Put rooms together, like Upstairs or Bedrooms, to switch them all at once." action={s.rooms.length ? 'Make one' : undefined} onAction={() => setRgroup('')} />}
       </Section>
 
       <Section title={`People · ${s.people.length}`} caption gap={SP[2]}>
@@ -298,7 +373,7 @@ export function CustomiseScreen() {
             })}
           </Card>
         ) : <Empty compact icon="devices" title="Nothing in this room" text="Open a device and choose its room to move it here." />}
-        <T v="footnote" color={C.stone2} style={{ paddingHorizontal: 4 }}>Tap a device to rename it, move it to another room or hide it.</T>
+        <T v="footnote" color={C.stone2} style={{ paddingHorizontal: 4 }}>Tap a device to rename it, move it to another room, hide, combine or archive it.</T>
       </Section>
 
       {hidden.length ? (
@@ -309,6 +384,18 @@ export function CustomiseScreen() {
                 right={<Button size="sm" kind="secondary" label="Show" onPress={() => settings(d.id, { hidden: false }, `${d.name} shown again`)} />} />
             ))}
           </Card>
+        </Section>
+      ) : null}
+
+      {archived.length ? (
+        <Section title={`Archived · ${archived.length}`} caption gap={SP[2]}>
+          <Card style={{ overflow: 'hidden' }}>
+            {archived.map((d, i) => (
+              <Row key={d.id} first={!i} icon={ICON[d.type] ?? 'devices'} iconFg={C.stone2} title={d.name} sub={`${rn(d.room)} · ${d.integration} · left alone by modes`}
+                right={<Button size="sm" kind="secondary" label="Restore" onPress={() => settings(d.id, { archived: false }, `${d.name} restored`)} />} />
+            ))}
+          </Card>
+          <T v="footnote" color={C.stone2} style={{ paddingHorizontal: 4 }}>Archived devices are out of every list, Ask Kova and alerts. Restore one to bring it all back.</T>
         </Section>
       ) : null}
 
@@ -338,6 +425,7 @@ export function CustomiseScreen() {
       <PersonSheet person={s.people.find(p => p.id === person) ?? null} onClose={() => setPerson(null)} />
       <CombinedSheet c={combined.find(c => c.id === combo) ?? null} onClose={() => setCombo(null)} />
       <SpeakerGroupSheet id={group} onClose={() => setGroup(null)} />
+      <RoomGroupSheet name={rgroup} onClose={() => setRgroup(null)} />
     </Screen>
   );
 }

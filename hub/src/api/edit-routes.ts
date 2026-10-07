@@ -1,13 +1,15 @@
 import type { FastifyInstance } from 'fastify';
 import { randomUUID } from 'node:crypto';
 import type { Hub } from '../hub.ts';
-import type { Command, HomeConfig, Rhythm, Targets } from '../model/types.ts';
+import type { Automation, Command, HomeConfig, OverlayEnd, Rhythm, Targets } from '../model/types.ts';
+import { resolveRhythm, rhythmPhrase } from '../rhythms/rhythms.ts';
+import { localDate } from '../util/time.ts';
 import { checkAutomation } from '../engine/automation-check.ts';
 import { isOneTime, nextOnce, upgradeAutomation } from '../engine/automations.ts';
 const autoUpgrade = (a: object) => upgradeAutomation(a as Record<string, unknown>);
 import { cleanTarget, validRhythm } from '../engine/validate.ts';
 
-// Editing the home's behaviour: modes, moments, overlays and media sources.
+// Editing the home's behaviour: modes, moments, overlays, automations and media sources.
 // Every edit returns an undo id, like device commands do.
 
 /** How long Run now waits for a run to end before answering "running". */
@@ -31,17 +33,73 @@ export function registerEditRoutes(app: FastifyInstance, hub: Hub): void {
     return out;
   };
 
+  const name = (v: unknown, max = 40) => typeof v === 'string' ? v.trim().replace(/\s+/g, ' ').slice(0, max) : '';
+  const idFor = (label: string, taken: (id: string) => boolean, fallback: string) => {
+    const base = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 30) || fallback;
+    let id = base, n = 2;
+    while (taken(id)) id = `${base}_${n++}`;
+    return id;
+  };
+  const checkIcon = (v: unknown) => { if (typeof v !== 'string' || !/^[a-z0-9_]{1,40}$/.test(v)) throw new Error('That icon isn’t one Kova knows'); return v; };
+  const checkColor = (v: unknown) => { if (typeof v !== 'string' || !/^#[0-9a-f]{6}$/i.test(v)) throw new Error('A colour is #rrggbb'); return v.toLowerCase(); };
+  /** Automations that name a mode or an overlay, which would stop working without it. */
+  const usedBy = (kind: 'mode' | 'overlay', id: string): string[] => {
+    const hit = (o: unknown): boolean => {
+      if (Array.isArray(o)) return o.some(hit);
+      if (!o || typeof o !== 'object') return false;
+      const x = o as Record<string, unknown>;
+      if (kind === 'mode' && ((x.kind === 'mode' && (x.mode === id || (Array.isArray(x.modes) && x.modes.includes(id)))))) return true;
+      if (kind === 'overlay' && x.kind === 'overlay' && x.overlay === id) return true;
+      return Object.values(x).some(hit);
+    };
+    return (hub.config.get().automations ?? []).filter((a: Automation) => hit([a.triggers, a.conditions, a.actions])).map(a => a.name);
+  };
+  const inUse = (what: string, names: string[]) => `${what} is used by ${names.length === 1 ? 'the automation' : 'the automations'} ${names.map(n => `“${n}”`).join(', ')}. Change ${names.length === 1 ? 'it' : 'them'} first.`;
+
   // ---------------------------------------------------------------- modes --
-  app.put<{ Params: { id: string }; Body: { name?: string; start?: Rhythm; targets?: Targets; lightTheWay?: boolean; onlyWhenSomeoneHome?: boolean } }>('/api/modes/:id', async (req, reply) => {
+  // A new mode goes into the day where its start falls (modes run in order through the day; the first starts it).
+  // copyFrom starts it with another mode's targets.
+  app.post<{ Body: { name?: string; icon?: string; color?: string; start?: Rhythm; copyFrom?: string } }>('/api/modes', async (req, reply) => {
+    try {
+      const b = req.body ?? {};
+      const n = name(b.name);
+      if (!n) throw new Error('A mode needs a name');
+      if (!validRhythm(b.start)) throw new Error('That start time isn’t valid');
+      const cfg = hub.config.get();
+      if (cfg.modes.some(m => m.name.toLowerCase() === n.toLowerCase())) throw new Error(`There’s already a mode called ${n}`);
+      const from = b.copyFrom === undefined ? undefined : cfg.modes.find(m => m.id === b.copyFrom);
+      if (b.copyFrom !== undefined && !from) throw new Error('Unknown mode to copy from');
+      const icon = b.icon === undefined ? 'routine' : checkIcon(b.icon);
+      const color = b.color === undefined ? '#a3a09a' : checkColor(b.color);
+      const id = idFor(n, x => cfg.modes.some(m => m.id === x), 'mode');
+      const start = b.start;
+      // Where it goes: after the modes that start before it, counted from the first mode's start today.
+      const today = localDate(hub.engine.now(), cfg.timezone), DAY = 86_400_000;
+      const t0 = resolveRhythm(cfg.modes[0].start, today, cfg) ?? 0;
+      const rel = (r: Rhythm) => { const t = resolveRhythm(r, today, cfg); return t == null ? DAY : (((t - t0) % DAY) + DAY) % DAY; };
+      const mine = rel(start);
+      let at = cfg.modes.length;
+      for (let i = 1; i < cfg.modes.length; i++) if (rel(cfg.modes[i].start) > mine) { at = i; break; }
+      return { id, ...edit(c => { c.modes.splice(at, 0, { id, name: n, icon, color, start, targets: structuredClone(from?.targets ?? {}), ...(from?.lightTheWay ? { lightTheWay: true } : {}), ...(from?.onlyWhenSomeoneHome ? { onlyWhenSomeoneHome: true } : {}) }); }) };
+    } catch (e) { return bad(reply, e); }
+  });
+
+  app.put<{ Params: { id: string }; Body: { name?: string; icon?: string; color?: string; start?: Rhythm; targets?: Targets; lightTheWay?: boolean; onlyWhenSomeoneHome?: boolean } }>('/api/modes/:id', async (req, reply) => {
     if (!hub.config.get().modes.some(m => m.id === req.params.id)) return reply.code(404).send({ error: 'unknown mode' });
     try {
       const b = req.body ?? {};
       if (b.start !== undefined && !validRhythm(b.start)) throw new Error('That start time isn’t valid');
       if (b.name !== undefined && !String(b.name).trim()) throw new Error('A mode needs a name');
+      const n = b.name !== undefined ? name(b.name) : undefined;
+      if (n && hub.config.get().modes.some(m => m.id !== req.params.id && m.name.toLowerCase() === n.toLowerCase())) throw new Error(`There’s already a mode called ${n}`);
+      const icon = b.icon !== undefined ? checkIcon(b.icon) : undefined;
+      const color = b.color !== undefined ? checkColor(b.color) : undefined;
       const targets = b.targets !== undefined ? cleanTargets(b.targets) : undefined;
       return edit(c => {
         const m = c.modes.find(x => x.id === req.params.id)!;
-        if (b.name !== undefined) m.name = String(b.name).trim();
+        if (n) m.name = n;
+        if (icon) m.icon = icon;
+        if (color) m.color = color;
         if (b.start !== undefined) m.start = b.start;
         if (targets) m.targets = targets;
         if (b.lightTheWay !== undefined) m.lightTheWay = !!b.lightTheWay;
@@ -69,6 +127,80 @@ export function registerEditRoutes(app: FastifyInstance, hub: Hub): void {
     });
   targetRoute('modes');
   targetRoute('overlays');
+
+  // The home needs at least one mode, and automations that name a mode keep working only while it's there.
+  app.delete<{ Params: { id: string } }>('/api/modes/:id', async (req, reply) => {
+    const cfg = hub.config.get(), m = cfg.modes.find(x => x.id === req.params.id);
+    if (!m) return reply.code(404).send({ error: 'unknown mode' });
+    if (cfg.modes.length < 2) return reply.code(400).send({ error: 'The home needs at least one mode' });
+    const users = usedBy('mode', m.id);
+    if (users.length) return reply.code(400).send({ error: inUse(m.name, users) });
+    const r = edit(c => { c.modes = c.modes.filter(x => x.id !== m.id); });
+    // Deleting the mode that's on now: carry on in whichever mode is on at this time without it (nothing changes now).
+    if (hub.engine.modeId === m.id) hub.engine.modeId = hub.engine.planner.modeAt(hub.engine.now()).mode.id;
+    return r;
+  });
+
+  // ------------------------------------------------------------- overlays --
+  const endsCheck = (e: unknown): OverlayEnd => {
+    const x = (e ?? {}) as Record<string, unknown>;
+    if (x.kind === 'manual' || x.kind === 'arrival') return { kind: x.kind };
+    if (x.kind === 'time') { if (!validRhythm(x.at)) throw new Error('That end time isn’t valid'); return { kind: 'time', at: x.at }; }
+    if (x.kind === 'device_off') { const d = hub.reg.get(String(x.device ?? '')); if (!d) throw new Error('Pick the device whose switching off ends it'); return { kind: 'device_off', device: d.id }; }
+    throw new Error('How it ends is manual, time, device_off or arrival');
+  };
+  const endsLabel = (e: OverlayEnd): string =>
+    e.kind === 'manual' ? 'Ends when you end it'
+      : e.kind === 'arrival' ? 'Ends when someone comes home'
+        : e.kind === 'device_off' ? `Ends when the ${(hub.reg.get(e.device)?.name ?? e.device).toLowerCase()} turns off`
+          : e.at.kind === 'time' && e.at.at === '00:00' ? 'Ends at midnight' : `Ends at ${rhythmPhrase(e.at)}`;
+  type OverlayBody = { name?: string; icon?: string; ends?: OverlayEnd; allOff?: boolean; targets?: Targets; copyFrom?: string };
+  app.post<{ Body: OverlayBody }>('/api/overlays', async (req, reply) => {
+    try {
+      const b = req.body ?? {};
+      const n = name(b.name);
+      if (!n) throw new Error('An overlay needs a name');
+      const cfg = hub.config.get();
+      if (cfg.overlays.some(o => o.name.toLowerCase() === n.toLowerCase())) throw new Error(`There’s already an overlay called ${n}`);
+      const from = b.copyFrom === undefined ? undefined : cfg.overlays.find(o => o.id === b.copyFrom);
+      if (b.copyFrom !== undefined && !from) throw new Error('Unknown overlay to copy from');
+      const ends = b.ends === undefined ? from?.ends ?? { kind: 'manual' as const } : endsCheck(b.ends);
+      const icon = b.icon === undefined ? from?.icon ?? 'layers' : checkIcon(b.icon);
+      const targets = b.targets !== undefined ? cleanTargets(b.targets) : structuredClone(from?.targets ?? {});
+      const id = idFor(n, x => cfg.overlays.some(o => o.id === x), 'overlay');
+      const allOff = b.allOff ?? from?.allOff;
+      return { id, ...edit(c => { c.overlays.push({ id, name: n, icon, ends, endsLabel: endsLabel(ends), targets, ...(allOff ? { allOff: true } : {}) }); }) };
+    } catch (e) { return bad(reply, e); }
+  });
+  app.put<{ Params: { id: string }; Body: OverlayBody }>('/api/overlays/:id', async (req, reply) => {
+    if (!hub.config.get().overlays.some(o => o.id === req.params.id)) return reply.code(404).send({ error: 'unknown overlay' });
+    try {
+      const b = req.body ?? {};
+      if (b.name !== undefined && !name(b.name)) throw new Error('An overlay needs a name');
+      const n = b.name !== undefined ? name(b.name) : undefined;
+      if (n && hub.config.get().overlays.some(o => o.id !== req.params.id && o.name.toLowerCase() === n.toLowerCase())) throw new Error(`There’s already an overlay called ${n}`);
+      const icon = b.icon !== undefined ? checkIcon(b.icon) : undefined;
+      const ends = b.ends !== undefined ? endsCheck(b.ends) : undefined;
+      if (b.allOff !== undefined && typeof b.allOff !== 'boolean') throw new Error('allOff must be true or false');
+      const targets = b.targets !== undefined ? cleanTargets(b.targets) : undefined;
+      return edit(c => {
+        const o = c.overlays.find(x => x.id === req.params.id)!;
+        if (n) o.name = n;
+        if (icon) o.icon = icon;
+        if (ends) { o.ends = ends; o.endsLabel = endsLabel(ends); }
+        if (b.allOff !== undefined) { if (b.allOff) o.allOff = true; else delete o.allOff; }
+        if (targets) o.targets = targets;
+      });
+    } catch (e) { return bad(reply, e); }
+  });
+  app.delete<{ Params: { id: string } }>('/api/overlays/:id', async (req, reply) => {
+    const o = hub.config.get().overlays.find(x => x.id === req.params.id);
+    if (!o) return reply.code(404).send({ error: 'unknown overlay' });
+    if (hub.engine.overlay?.id === o.id) return reply.code(400).send({ error: `${o.name} is on now. End it first.` });
+    const users = usedBy('overlay', o.id);
+    if (users.length) return reply.code(400).send({ error: inUse(o.name, users) });
+    return edit(c => { c.overlays = c.overlays.filter(x => x.id !== o.id); });
+  });
 
   // -------------------------------------------------------------- moments --
   type MomentBody = { label: string; what?: string; at: Rhythm; targets: Targets };

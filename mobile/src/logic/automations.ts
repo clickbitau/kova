@@ -470,6 +470,12 @@ export function presets(t: TargetInfo, sources: { name: string }[], music: Music
 export const commandOptions = (d: Dev | undefined, sources: { name: string }[]): [Command, string][] => (d ? presets(targetInfo(d.id, [d], []), sources) : []);
 const cmdKey = (c: Command) => JSON.stringify(Object.keys(c).sort().reduce<Record<string, unknown>>((o, k) => { o[k] = (c as Record<string, unknown>)[k]; return o; }, {}));
 export const commandKey = cmdKey;
+/** A device's preset commands as choices, with the current one (words for anything not a preset) first: for mode, moment and overlay editors. */
+export function commandChoices(d: Dev | undefined, sources: { name: string }[], cur?: Command): Opt[] {
+  const l = commandOptions(d, sources).map(([c, label]) => ({ v: cmdKey(c), label }));
+  if (cur && !l.some(o => o.v === cmdKey(cur))) l.unshift({ v: cmdKey(cur), label: commandWords(cur) });
+  return l;
+}
 export const commandFromKey = (k: string) => JSON.parse(k) as Command;
 export const sameCommand = (a: Command, b: Command) => cmdKey(a) === cmdKey(b);
 

@@ -1,6 +1,6 @@
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useNavigation } from '@react-navigation/native';
-import type { Draft } from './logic/automations';
+import type { Draft, Rhythm } from './logic/automations';
 
 export type Tab = 'Now' | 'Devices' | 'Ask' | 'Security' | 'More';
 
@@ -13,13 +13,19 @@ export type Stack = {
   /** An automation by id, or a new one (optionally starting from a draft, such as a suggestion). */
   AutomationEditor: { id?: string; draft?: Draft; tab?: 'edit' | 'history'; /** Schedule once: the time first, then what to do. */ schedule?: boolean } | undefined;
   Customise: undefined;
+  /** A mode's name, icon, colour, start, what it sets and its moments; or a new mode (no id). */
+  ModeEditor: { id?: string } | undefined;
+  /** An overlay: its name, icon, how it ends, what it sets; or a new overlay (no id). */
+  OverlayEditor: { id?: string } | undefined;
+  /** A moment in the day; or a new one (no id), starting at `start`. */
+  MomentEditor: { id?: string; start?: Rhythm } | undefined;
   /** More → Sign in a browser: approve a browser's sign-in code; signed-in browsers. */
   Browsers: undefined;
   /** More → Settings: where the home is, its timezone and prayer method, behaviours. */
   Settings: undefined;
   Energy: undefined;
   Media: undefined;
-  /** More → Integrations: what's connected, and the hub's own updates. */
+  /** More → Integrations: what's connected, and adding one. */
   Integrations: undefined;
   /** Add integration: the catalog, minus what's set up. */
   IntegrationAdd: undefined;

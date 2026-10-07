@@ -92,7 +92,7 @@ export function rainText(r: WeatherToday['rain'], now: number, tz: string): stri
 }
 
 export function glance(x: InsightInputs): Glance {
-  const visible = x.devices.filter(d => !x.cfg.devices?.[d.id]?.hidden);
+  const visible = x.devices.filter(d => !x.cfg.devices?.[d.id]?.hidden && !x.cfg.devices?.[d.id]?.archived);
   const w = x.weather;
   return {
     outside: w?.current ? { ...w.current, ...(w.today ? { high: w.today.high, low: w.today.low, uvMax: w.today.uvMax, rain: rainText(w.today.rain, x.now, x.cfg.timezone) } : {}) } : null,
@@ -105,7 +105,7 @@ export function glance(x: InsightInputs): Glance {
 
 export function insights(x: InsightInputs): Insight[] {
   const out: Insight[] = [];
-  const visible = x.devices.filter(d => !x.cfg.devices?.[d.id]?.hidden);
+  const visible = x.devices.filter(d => !x.cfg.devices?.[d.id]?.hidden && !x.cfg.devices?.[d.id]?.archived);
   const tz = x.cfg.timezone, today = localDate(x.now, tz);
   for (const d of visible) {
     const s = d.state;

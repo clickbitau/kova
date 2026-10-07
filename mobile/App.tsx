@@ -22,6 +22,7 @@ import { ConnectScreen } from './src/screens/ConnectScreen';
 import { SignInAgainScreen } from './src/screens/SignInAgainScreen';
 import { display } from './src/logic/addresses';
 import { ModesScreen } from './src/screens/ModesScreen';
+import { ModeEditor, OverlayEditor, MomentEditor } from './src/screens/BehaviourEditors';
 import { ActivityScreen } from './src/screens/ActivityScreen';
 import { ThisPhoneScreen } from './src/screens/ThisPhoneScreen';
 import { WebScreen } from './src/screens/WebScreen';
@@ -109,6 +110,9 @@ function Home() {
         <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.page }, animation: 'slide_from_right', gestureEnabled: true, fullScreenGestureEnabled: true }}>
           <Stack.Screen name="Tabs" component={Tabs} />
           <Stack.Screen name="Modes" component={ModesScreen} />
+          <Stack.Screen name="ModeEditor" component={ModeEditor} />
+          <Stack.Screen name="OverlayEditor" component={OverlayEditor} />
+          <Stack.Screen name="MomentEditor" component={MomentEditor} />
           <Stack.Screen name="Activity" component={ActivityScreen} />
           <Stack.Screen name="ThisPhone" component={ThisPhoneScreen} />
           <Stack.Screen name="Integrations" component={IntegrationsScreen} />

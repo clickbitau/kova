@@ -203,7 +203,7 @@ export class Notifier {
     const t = this.now;
     const limit = (this.opts.offlineAfterMin ?? 10) * 60_000;
     for (const d of this.hub.reg.list()) {
-      if (d.state.online !== false) {
+      if (d.state.online !== false || d.archived) {
         this.offlineSince.delete(d.id);
         this.offlineNotified.delete(d.id);
         continue;

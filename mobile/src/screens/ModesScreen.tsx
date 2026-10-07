@@ -5,7 +5,7 @@ import { useHub, useSnap } from '../state/hub';
 import { useNav } from '../navigation';
 import type { ModeView } from '../api/types';
 import { Icon } from '../ui/Icon';
-import { Button, Card, Group, IconWell, Press, Row, Section, Tag } from '../ui/kit';
+import { Button, Card, Empty, Group, IconWell, Press, Row, Section, Tag } from '../ui/kit';
 import { automationsOf } from '../logic/automations';
 import { Screen } from '../ui/Screen';
 import { T } from '../ui/Text';
@@ -116,12 +116,37 @@ export function ModesScreen() {
           })}
         </Section>
       ) : null}
-      <Section title="Through the day" gap={SP[2] + 2}>
+      <Section title="Through the day" action="New mode" onAction={() => nav.navigate('ModeEditor')} gap={SP[2] + 2}>
         {s.modes.map((m, i) => (
           <ModeCard key={m.id} m={m} index={i} now={m.id === s.current.modeId} open={open === m.id}
             onToggle={() => { animateLayout(); setOpen(open === m.id ? '' : m.id); }}
-            onEdit={() => nav.navigate('Web', { title: `Edit ${m.name}`, path: '/phone.html?embed=1&page=modes' })} />
+            onEdit={() => nav.navigate('ModeEditor', { id: m.id })} />
         ))}
+      </Section>
+      <Section title="On top" action="New overlay" onAction={() => nav.navigate('OverlayEditor')} gap={SP[2]}>
+        <T v="footnote" color={C.stone} style={{ paddingHorizontal: 4 }}>For a while, over whatever mode it is: a film, guests, everyone away.</T>
+        {s.overlays.length ? (
+          <Card style={{ overflow: 'hidden' }}>
+            {s.overlays.map((o, i) => {
+              const on = s.current.overlay?.id === o.id;
+              return (
+                <Row key={o.id} first={!i} icon={o.icon} iconFg={on ? C.amber : C.bone} fill={on} title={o.name} sub={on ? `On now · ${o.endsLabel}` : o.endsLabel} subColor={on ? C.amber : C.stone}
+                  onPress={() => nav.navigate('OverlayEditor', { id: o.id })}
+                  right={<Button size="sm" kind={on ? 'secondary' : 'ghost'} icon={on ? 'stop' : 'play_arrow'} label={on ? 'End' : 'Start'}
+                    onPress={() => on ? act('POST', '/api/overlays/end', {}, `${o.name} ended`) : act('POST', `/api/overlays/${encodeURIComponent(o.id)}/start`, {}, `${o.name} is on`)} />} />
+              );
+            })}
+          </Card>
+        ) : <Empty compact icon="layers" title="No overlays" text="Make one for a film night or for when everyone’s away." action="New overlay" onAction={() => nav.navigate('OverlayEditor')} />}
+      </Section>
+      <Section title="Moments" action="New moment" onAction={() => nav.navigate('MomentEditor')} gap={SP[2]}>
+        {(s.moments ?? []).length ? (
+          <Card style={{ overflow: 'hidden' }}>
+            {(s.moments ?? []).map((m, i) => (
+              <Row key={m.id} first={!i} icon="schedule" iconFg={C.amber} title={m.label} sub={[m.atLabel, m.what].filter(Boolean).join(' · ')} onPress={() => nav.navigate('MomentEditor', { id: m.id })} />
+            ))}
+          </Card>
+        ) : <Empty compact icon="schedule" title="No moments" text="A one-off at a time of day, like rain sounds at 21:00." action="New moment" onAction={() => nav.navigate('MomentEditor')} />}
       </Section>
       <Group title="Alongside your modes">
         <Row first icon="account_tree" iconFg={C.amber} title="Automations" sub={autos.length ? `${autos.length} · ${autos.filter(a => a.enabled).length} on` : 'When something happens, do something'} onPress={() => nav.navigate('Automations')} />

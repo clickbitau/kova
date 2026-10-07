@@ -107,8 +107,8 @@ export function toggleCommand(d: Dev, sources: { name: string }[]): Command | nu
 
 /** The Now screen's favourites: the owner's list, or the first few visible lights and plugs. */
 export function favourites(s: Pick<Snapshot, 'favourites' | 'devices'>, all: Record<string, Dev>): Dev[] {
-  const ids = s.favourites ?? s.devices.filter(d => !d.hidden && !isSensor(d) && (isLight(d) || d.type === 'plug')).slice(0, 4).map(d => d.id);
-  return ids.map(id => all[id]).filter((d): d is Dev => !!d);
+  const ids = s.favourites ?? s.devices.filter(d => !d.hidden && !d.archived && !isSensor(d) && (isLight(d) || d.type === 'plug')).slice(0, 4).map(d => d.id);
+  return ids.map(id => all[id]).filter((d): d is Dev => !!d && !d.archived);
 }
 
 export const TYPES: { id: string; label: string; icon: string; test: (d: Dev) => boolean }[] = [
@@ -127,14 +127,14 @@ export interface DevGroup { id: string; name: string; icon: string; devices: Dev
 
 /**
  * The Devices screen: devices by room in the home's room order (then anything in no room), filtered by
- * room, type and a search over name, room and integration. Hidden devices only when asked for. Sensors never:
- * they only report, and have a screen of their own.
+ * room, type and a search over name, room and integration. Hidden devices only when asked for; archived ones never
+ * (Customise home → Archived lists them). Sensors never: they only report, and have a screen of their own.
  */
 export function groupDevices(all: Dev[], rooms: Room[], f: { room?: string; type?: string; q?: string; showHidden?: boolean }): DevGroup[] {
   const q = (f.q ?? '').trim().toLowerCase();
   const typeTest = TYPES.find(t => t.id === (f.type ?? 'all'))?.test ?? (() => true);
-  const roomName = (id: string) => rooms.find(r => r.id === id)?.name ?? (id === 'unassigned' ? 'Other' : id);
-  const shown = all.filter(d => !isSensor(d) && (f.showHidden || !d.hidden) && typeTest(d) && (!f.room || f.room === 'all' || d.room === f.room)
+  const roomName = (id: string) => rooms.find(r => r.id === id)?.name ?? (id === 'unassigned' ? 'No room' : id);
+  const shown = all.filter(d => !d.archived && !isSensor(d) && (f.showHidden || !d.hidden) && typeTest(d) && (!f.room || f.room === 'all' || d.room === f.room)
     && (!q || `${d.name} ${roomName(d.room)} ${d.integration}`.toLowerCase().includes(q)));
   const order = [...rooms.map(r => r.id), ...new Set(shown.map(d => d.room).filter(id => !rooms.some(r => r.id === id)))];
   return order.map(id => {

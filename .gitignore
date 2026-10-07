@@ -7,3 +7,4 @@ dist/
 .claude/worktrees/
 /releases/
 /current
+node_modules

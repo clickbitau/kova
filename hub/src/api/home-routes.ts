@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { Hub } from '../hub.ts';
-import { ROOM_ICONS, type HomeConfig } from '../model/types.ts';
+import { ROOM_ICONS, UNASSIGNED_ROOM, type HomeConfig } from '../model/types.ts';
 import { groupDeviceId } from '../adapters/groups.ts';
 import { combinedDeviceId } from '../adapters/combined.ts';
 import { isPlayer } from '../util/describe.ts';
@@ -8,8 +8,8 @@ import { slug } from '../tools/import-ha.ts';
 import { cleanAlerts, isCamera, isSensor } from '../util/sensors.ts';
 import type { AlertPrefs } from '../model/types.ts';
 
-// Customising the home: its name, rooms, people, favourites, and each device's name, room and
-// visibility. Settings live in the home config (so every phone sees the same), and every change
+// Customising the home: its name, rooms and groups of rooms, people, favourites, and each device's name, room,
+// visibility and whether it's archived. Settings live in the home config (so every phone sees the same), and every change
 // returns an undo id.
 
 type Reply = { code: (n: number) => { send: (b: { error: string }) => unknown } };
@@ -110,11 +110,15 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
   });
 
   // ---------------------------------------------------------------- devices --
-  app.patch<{ Params: { id: string }; Body: { name?: string | null; room?: string | null; hidden?: boolean; favourite?: boolean; watts?: number | null; zoneNames?: Record<string, string | null>; outdoor?: boolean | null; alerts?: AlertPrefs | null } }>('/api/devices/:id/settings', async (req, reply) => {
+  // room: a room id, "unassigned" for none of the home's rooms, or null for the room its integration gave it.
+  // archived: out of every list, the assistant and alerts, and modes leave it alone, until it's restored.
+  app.patch<{ Params: { id: string }; Body: { name?: string | null; room?: string | null; hidden?: boolean; archived?: boolean; favourite?: boolean; watts?: number | null; zoneNames?: Record<string, string | null>; outdoor?: boolean | null; alerts?: AlertPrefs | null } }>('/api/devices/:id/settings', async (req, reply) => {
     const d = hub.reg.get(req.params.id);
     if (!d) return bad(reply, 'Unknown device', 404);
     const b = req.body ?? {};
-    if (b.room != null && !hub.config.get().rooms.some(r => r.id === b.room)) return bad(reply, 'Unknown room');
+    if (b.room != null && b.room !== UNASSIGNED_ROOM && !hub.config.get().rooms.some(r => r.id === b.room)) return bad(reply, 'Unknown room');
+    if (b.hidden !== undefined && typeof b.hidden !== 'boolean') return bad(reply, 'hidden must be true or false');
+    if (b.archived !== undefined && typeof b.archived !== 'boolean') return bad(reply, 'archived must be true or false');
     if (b.name !== undefined && b.name !== null && !text(b.name)) return bad(reply, 'Give it a name');
     if (b.watts != null && !(typeof b.watts === 'number' && b.watts >= 0 && b.watts <= 10_000)) return bad(reply, 'watts must be 0–10000');
     // Cameras and sensors: inside or outside, and when their events alert.
@@ -133,6 +137,7 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
       if (b.name !== undefined) { const n = b.name === null ? '' : text(b.name); if (!n || n === orig.name) delete s.name; else s.name = n; }
       if (b.room !== undefined) { if (!b.room || b.room === orig.room) delete s.room; else s.room = b.room; }
       if (b.hidden !== undefined) { if (b.hidden) s.hidden = true; else delete s.hidden; }
+      if (b.archived !== undefined) { if (b.archived) s.archived = true; else delete s.archived; }
       if (b.watts !== undefined) { if (b.watts == null) delete s.watts; else s.watts = Math.round(b.watts); }
       if (b.outdoor !== undefined) { if (b.outdoor == null) delete s.outdoor; else s.outdoor = b.outdoor; }
       // Alerts merge by kind: a choice sets it, null clears it (back to the room's or Kova's).
@@ -153,8 +158,10 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
       if (Object.keys(s).length) c.devices[d.id] = s; else delete c.devices[d.id];
       if (b.favourite !== undefined) {
         const f = (c.favourites ?? []).filter(x => x !== d.id);
-        c.favourites = b.favourite ? [...f, d.id] : f;
+        c.favourites = b.favourite && !s.archived ? [...f, d.id] : f;
       }
+      // An archived device leaves the Now screen too.
+      if (b.archived && c.favourites?.includes(d.id)) c.favourites = c.favourites.filter(x => x !== d.id);
     });
   });
 
@@ -172,7 +179,7 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
     if (!name) return bad(reply, 'Give the room a name');
     const rooms = hub.config.get().rooms;
     let id = slug(name) || 'room', n = 2;
-    while (rooms.some(r => r.id === id)) id = `${slug(name) || 'room'}_${n++}`;
+    while (rooms.some(r => r.id === id) || id === UNASSIGNED_ROOM || id === 'order') id = `${slug(name) || 'room'}_${n++}`;
     const icon = ROOM_ICONS.includes(String(req.body?.icon)) ? String(req.body!.icon) : 'meeting_room';
     return { id, ...edit(c => { c.rooms.push({ id, name, icon }); }) };
   });
@@ -201,14 +208,15 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
     });
   });
 
-  // Devices still in the room move to `moveTo`; without it, a room with devices can't be deleted.
+  // Devices still in the room move to `moveTo`: another room, or "unassigned" (in no room, until they're given one).
+  // Without it, a room with devices can't be deleted, so nothing moves by surprise.
   app.delete<{ Params: { id: string }; Body: { moveTo?: string } }>('/api/rooms/:id', async (req, reply) => {
     const id = req.params.id, cfg = hub.config.get();
     if (!cfg.rooms.some(r => r.id === id)) return bad(reply, 'Unknown room', 404);
     const inside = hub.reg.list().filter(d => d.room === id);
     const moveTo = req.body?.moveTo;
     if (inside.length && !moveTo) return bad(reply, `${inside.length} device${inside.length === 1 ? ' is' : 's are'} in this room. Choose where ${inside.length === 1 ? 'it goes' : 'they go'}.`);
-    if (moveTo && (moveTo === id || !cfg.rooms.some(r => r.id === moveTo))) return bad(reply, 'Unknown room to move devices to');
+    if (moveTo && moveTo !== UNASSIGNED_ROOM && (moveTo === id || !cfg.rooms.some(r => r.id === moveTo))) return bad(reply, 'Unknown room to move devices to');
     return edit(c => {
       c.rooms = c.rooms.filter(r => r.id !== id);
       c.devices = { ...(c.devices ?? {}) };
@@ -219,7 +227,51 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
         if (Object.keys(s).length) c.devices[d.id] = s; else delete c.devices[d.id];
       }
       for (const [g, rooms] of Object.entries(c.groups)) c.groups[g] = rooms.filter(r => r !== id);
+      // Speaker groups and combined devices that were in it are in no room now.
+      for (const g of c.speakerGroups ?? []) if (g.room === id) delete g.room;
+      for (const x of c.combined ?? []) if (x.room === id) delete x.room;
     });
+  });
+
+  // ------------------------------------------------------- groups of rooms --
+  // Named groups of rooms ("Upstairs" = the bedrooms and the bathroom), for "turn off upstairs". Keyed by name.
+  const groupRooms = (v: unknown): string[] | string => {
+    if (!Array.isArray(v)) return 'Pick the rooms';
+    const ids = [...new Set(v.map(String))];
+    if (!ids.length) return 'Pick at least one room';
+    const unknown = ids.find(r => !hub.config.get().rooms.some(x => x.id === r));
+    return unknown ? `Unknown room ${unknown}` : ids;
+  };
+  const groupNamed = (name: string) => Object.keys(hub.config.get().groups ?? {}).find(g => g.toLowerCase() === name.toLowerCase());
+  app.post<{ Body: { name?: string; rooms?: string[] } }>('/api/groups', async (req, reply) => {
+    const name = text(req.body?.name, 40);
+    if (!name) return bad(reply, 'Give the group a name');
+    if (groupNamed(name)) return bad(reply, `There’s already a group called ${groupNamed(name)}`);
+    if (hub.config.get().rooms.some(r => r.name.toLowerCase() === name.toLowerCase())) return bad(reply, `${name} is already a room’s name`);
+    const rooms = groupRooms(req.body?.rooms);
+    if (typeof rooms === 'string') return bad(reply, rooms);
+    return { name, ...edit(c => { c.groups = { ...(c.groups ?? {}), [name]: rooms }; }) };
+  });
+  // Change its rooms, or rename it with `name`.
+  app.put<{ Params: { name: string }; Body: { name?: string; rooms?: string[] } }>('/api/groups/:name', async (req, reply) => {
+    const cur = groupNamed(req.params.name);
+    if (!cur) return bad(reply, 'Unknown group', 404);
+    const name = req.body?.name === undefined ? cur : text(req.body.name, 40);
+    if (!name) return bad(reply, 'Give the group a name');
+    const clash = groupNamed(name);
+    if (clash && clash !== cur) return bad(reply, `There’s already a group called ${clash}`);
+    if (hub.config.get().rooms.some(r => r.name.toLowerCase() === name.toLowerCase())) return bad(reply, `${name} is already a room’s name`);
+    const rooms = req.body?.rooms === undefined ? hub.config.get().groups[cur] : groupRooms(req.body.rooms);
+    if (typeof rooms === 'string') return bad(reply, rooms);
+    return { name, ...edit(c => {
+      // Rebuilt in the same order, so a rename keeps the group where it was.
+      c.groups = Object.fromEntries(Object.entries(c.groups ?? {}).map(([g, r]) => g === cur ? [name, rooms] : [g, r]));
+    }) };
+  });
+  app.delete<{ Params: { name: string } }>('/api/groups/:name', async (req, reply) => {
+    const cur = groupNamed(req.params.name);
+    if (!cur) return bad(reply, 'Unknown group', 404);
+    return edit(c => { const g = { ...(c.groups ?? {}) }; delete g[cur]; c.groups = g; });
   });
 
   // --------------------------------------------------------- speaker groups --

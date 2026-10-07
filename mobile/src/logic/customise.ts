@@ -21,43 +21,85 @@ export function moveStep(ids: string[], id: string, dir: -1 | 1): string[] | nul
 export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /** Each room with how many devices are in it, in the home's order. */
-export function roomRows(rooms: Room[], devices: Pick<Device, 'room'>[]): { room: Room; count: number; sub: string }[] {
+export function roomRows(rooms: Room[], devices: Pick<Device, 'room' | 'archived'>[]): { room: Room; count: number; sub: string }[] {
   return rooms.map(room => {
-    const count = devices.filter(d => d.room === room.id).length;
+    const count = devices.filter(d => d.room === room.id && !d.archived).length;
     return { room, count, sub: count ? plural(count, 'device') : 'No devices yet' };
   });
 }
 
+/** The room id of devices in none of the home's rooms (the hub's UNASSIGNED_ROOM). */
+export const UNASSIGNED = 'unassigned';
+
 /**
- * Deleting a room: devices still in it have to go somewhere, so the hub wants `moveTo` (the first other room unless
- * one was chosen). With no other room to move them to, it can't be deleted.
+ * Deleting a room: devices still in it go to no room ("unassigned") unless another room is chosen, so it can always
+ * be deleted. `confirm` says what will happen, for the confirmation before it goes.
  */
-export function roomDelete(id: string, rooms: Room[], devices: Pick<Device, 'room'>[], chosen?: string | null): { inside: number; moveTo: string | null; body: { moveTo?: string }; blocked?: string } {
+export function roomDelete(id: string, rooms: Room[], devices: Pick<Device, 'room'>[], chosen?: string | null): { inside: number; moveTo: string | null; body: { moveTo?: string }; confirm: string } {
   const inside = devices.filter(d => d.room === id).length;
-  const others = rooms.filter(r => r.id !== id);
-  if (!inside) return { inside, moveTo: null, body: {} };
-  const moveTo = others.find(r => r.id === chosen)?.id ?? others[0]?.id ?? null;
-  if (!moveTo) return { inside, moveTo: null, body: {}, blocked: 'Add another room first: its devices need somewhere to go.' };
-  return { inside, moveTo, body: { moveTo } };
+  const name = rooms.find(r => r.id === id)?.name ?? 'this room';
+  if (!inside) return { inside, moveTo: null, body: {}, confirm: `Delete ${name}? It has no devices.` };
+  const to = rooms.find(r => r.id === chosen && r.id !== id);
+  const moveTo = to?.id ?? UNASSIGNED;
+  const its = inside === 1 ? 'Its device goes' : `Its ${inside} devices go`;
+  return { inside, moveTo, body: { moveTo }, confirm: `Delete ${name}? ${its} to ${to ? to.name : 'No room'}${to ? '' : ', until you give them a room'}.` };
+}
+
+// --------------------------------------------------------- groups of rooms --
+
+export interface RoomGroup { name: string; rooms: string[]; roomNames: string[] }
+
+/** The home's groups of rooms ("Upstairs" = the bedrooms), with the rooms' names; rooms that are gone are left out. */
+export function roomGroups(groups: Record<string, string[]> | null | undefined, rooms: Room[]): RoomGroup[] {
+  return Object.entries(groups ?? {}).map(([name, ids]) => {
+    const kept = ids.filter(id => rooms.some(r => r.id === id));
+    return { name, rooms: kept, roomNames: kept.map(id => rooms.find(r => r.id === id)!.name) };
+  });
+}
+
+/** What's still missing before a group of rooms can be saved, or null. Names are unique and aren't a room's name. */
+export function roomGroupError(name: string, picked: string[], groups: Record<string, string[]> | null | undefined, rooms: Room[], editing?: string | null): string | null {
+  const n = cleanName(name);
+  if (!n) return 'Give the group a name';
+  const clash = Object.keys(groups ?? {}).find(g => g.toLowerCase() === n.toLowerCase() && g !== editing);
+  if (clash) return `There’s already a group called ${clash}`;
+  if (rooms.some(r => r.name.toLowerCase() === n.toLowerCase())) return `${n} is already a room’s name`;
+  if (!picked.length) return 'Pick at least one room';
+  return null;
+}
+
+// ----------------------------------------------------------------- archived --
+
+/** Devices the owner archived, by name: they're out of every other list. */
+export function archivedList<D extends Pick<Device, 'archived' | 'name'>>(devices: D[]): D[] {
+  return devices.filter(d => d.archived).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** Devices a device can be combined with: real devices (not groups or combined ones), not already in one, not archived. */
+export function combineChoices<D extends Pick<Device, 'id' | 'name' | 'adapter' | 'archived'>>(self: string, devices: D[], combined: { members: string[] }[], q = ''): D[] {
+  const taken = new Set(combined.flatMap(c => c.members));
+  const t = q.trim().toLowerCase();
+  return devices.filter(d => d.id !== self && !d.archived && d.adapter !== 'groups' && d.adapter !== 'combined' && !taken.has(d.id) && (!t || d.name.toLowerCase().includes(t)))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /** The owner's favourites, in order, leaving out devices that are gone. */
-export function favouriteList<D extends Pick<Device, 'id'>>(favs: string[] | null | undefined, devices: D[]): D[] {
-  return (favs ?? []).map(id => devices.find(d => d.id === id)).filter((d): d is D => !!d);
+export function favouriteList<D extends Pick<Device, 'id' | 'archived'>>(favs: string[] | null | undefined, devices: D[]): D[] {
+  return (favs ?? []).map(id => devices.find(d => d.id === id)).filter((d): d is D => !!d && !d.archived);
 }
 
-/** Devices in a room (or in no room the home knows, for 'unassigned'), by name. */
-export function devicesIn<D extends Pick<Device, 'room' | 'name'>>(devices: D[], rooms: Room[], room: string): D[] {
+/** Devices in a room (or in no room the home knows, for 'unassigned'), by name. Archived ones are left out. */
+export function devicesIn<D extends Pick<Device, 'room' | 'name' | 'archived'>>(devices: D[], rooms: Room[], room: string): D[] {
   const known = new Set(rooms.map(r => r.id));
-  return devices.filter(d => room === 'unassigned' ? !known.has(d.room) : d.room === room).sort((a, b) => a.name.localeCompare(b.name));
+  return devices.filter(d => !d.archived && (room === UNASSIGNED ? !known.has(d.room) : d.room === room)).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 // ------------------------------------------------------------ speaker groups --
 
 /** Speakers that can be in a group: speakers and TVs, not other groups, by room then name. */
-export function speakerChoices<D extends Pick<Device, 'type' | 'adapter' | 'room' | 'name'>>(devices: D[], rooms: Room[]): D[] {
+export function speakerChoices<D extends Pick<Device, 'type' | 'adapter' | 'room' | 'name' | 'archived'>>(devices: D[], rooms: Room[]): D[] {
   const rn = (id: string) => rooms.find(r => r.id === id)?.name ?? '';
-  return devices.filter(d => isPlayer(d) && d.adapter !== 'groups').sort((a, b) => rn(a.room).localeCompare(rn(b.room)) || a.name.localeCompare(b.name));
+  return devices.filter(d => isPlayer(d) && d.adapter !== 'groups' && !d.archived).sort((a, b) => rn(a.room).localeCompare(rn(b.room)) || a.name.localeCompare(b.name));
 }
 
 export interface GroupDraft { name: string; members: string[]; room: string }
