@@ -3,7 +3,7 @@ import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import { hello } from '../api/client';
 import { chooseAddress, type HubAddress } from '../logic/addresses';
-import { GEOFENCE_TASK, HOME_RADIUS_M, presenceFor, type LatLon } from '../logic/geo';
+import { GEOFENCE_TASK, HOME_RADIUS_M, homeMoved, presenceFor, type LatLon } from '../logic/geo';
 import { getJson, setJson } from './storage';
 
 // Arriving and leaving from this phone's location. The OS watches a circle around the home and wakes the app
@@ -73,6 +73,23 @@ export async function followHub(addresses: HubAddress[], hubId: string | null, c
   if (!c || !addresses.length) return;
   const next: ArriveLeave = { ...c, hubUrl: current || c.hubUrl, addresses, hubId: hubId ?? c.hubId ?? null };
   if (JSON.stringify(next) !== JSON.stringify(c)) await setJson(KEY, next);
+}
+
+/**
+ * The home moved, or its circle changed (Settings, on any phone or the web): watch the new circle. Only when
+ * arriving and leaving is on and the permission is still there; it never asks for anything. Runs whenever the
+ * app sees the hub's state, so every phone picks the change up the next time Kova opens.
+ */
+export async function followHome(home: LatLon | null | undefined): Promise<boolean> {
+  if (Platform.OS === 'web' || !home) return false;
+  const c = await getJson<ArriveLeave>(KEY);
+  if (!c || !homeMoved(c.home, home)) return false;
+  const next: ArriveLeave = { ...c, home: { latitude: home.latitude, longitude: home.longitude, ...(home.radiusM ? { radiusM: home.radiusM } : {}) } };
+  await setJson(KEY, next);
+  const bg = await Location.getBackgroundPermissionsAsync().catch(() => null);
+  if (!bg?.granted || !(await Location.hasStartedGeofencingAsync(GEOFENCE_TASK).catch(() => false))) return false;
+  await Location.startGeofencingAsync(GEOFENCE_TASK, [{ identifier: 'home', latitude: next.home.latitude, longitude: next.home.longitude, radius: next.home.radiusM ?? HOME_RADIUS_M, notifyOnEnter: true, notifyOnExit: true }]);
+  return true;
 }
 
 export async function arriveLeaveOn(): Promise<boolean> {

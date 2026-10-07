@@ -139,7 +139,7 @@ export interface EnergyToday {
 }
 
 export interface Snapshot {
-  home: { name: string; timezone: string; now: number; nowHour: number; date: string; dateLabel: string; clock: string; location?: { latitude: number; longitude: number; radiusM?: number; source?: 'manual' | 'geocode' | 'phone' | 'import'; updatedAt?: number | null }; prayerMethod?: string; pauseForDoorbell?: boolean; /** The street address chosen in Settings. */ address?: string | null };
+  home: { name: string; timezone: string; now: number; nowHour: number; date: string; dateLabel: string; clock: string; location?: { latitude: number; longitude: number; radiusM?: number; source?: 'manual' | 'geocode' | 'phone' | 'import' | 'map'; updatedAt?: number | null; /** Google's point (shown on Google's map only) or OpenStreetMap's, from an address search. */ provider?: 'google' | 'osm' }; /** Whether the address search goes through Google. */ maps?: { google: boolean }; prayerMethod?: string; pauseForDoorbell?: boolean; /** The street address chosen in Settings. */ address?: string | null };
   rooms: Room[];
   /** Groups of rooms by name ("Upstairs": room ids), for "turn off upstairs". */
   groups?: Record<string, string[]>;

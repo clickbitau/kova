@@ -5,7 +5,7 @@ import { call, hello, HubError } from '../api/client';
 import type { Command, Snapshot } from '../api/types';
 import { addressesOf, chooseAddress, learn, type HubAddress, type Route } from '../logic/addresses';
 import { wsUrl, type HubConfig } from '../logic/connect';
-import { followHub } from '../native/arrive-leave';
+import { followHome, followHub } from '../native/arrive-leave';
 import { getJson, setJson } from '../native/storage';
 import { applyAppUpdate, checkForAppUpdate, pointUpdatesAtHub } from '../native/updates';
 import { haptic } from '../ui/motion';
@@ -265,6 +265,14 @@ export function HubProvider({ children }: { children: ReactNode }) {
     const sub = AppState.addEventListener('change', st => { if (st === 'active') check(); });
     return () => sub.remove();
   }, [routeUrl, addressKey, say]);
+
+  // The home's circle moved (Settings, here or anywhere): the phone watches the new one (native/arrive-leave.ts).
+  const homeAt = snap?.home.location;
+  const homeKey = homeAt ? `${homeAt.latitude},${homeAt.longitude},${homeAt.radiusM ?? ''}` : '';
+  useEffect(() => {
+    if (homeAt && (homeAt.latitude || homeAt.longitude)) void followHome(homeAt).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [homeKey]);
 
   // Arriving and leaving reports from the background: give it every address too (native/arrive-leave.ts).
   useEffect(() => {
