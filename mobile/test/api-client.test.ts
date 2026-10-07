@@ -32,3 +32,26 @@ test('API calls can use a longer per-request timeout for Ask Kova', async () => 
     globalThis.fetch = original;
   }
 });
+
+test('a failed request says which kind of trouble it is: nothing answered, signed out, or the hub said no', async () => {
+  const original = globalThis.fetch;
+  const answer = (status: number, body: unknown) => { globalThis.fetch = (async () => new Response(JSON.stringify(body), { status })) as typeof fetch; };
+  try {
+    answer(401, { error: 'unauthorised' });
+    await assert.rejects(call(cfg, 'GET', '/api/state'), (e: unknown) => {
+      assert.ok(e instanceof HubError);
+      assert.equal(e.problem, 'signedOut');
+      assert.match(e.message, /didn’t accept this phone’s key/);
+      return true;
+    });
+    // A route's own 401 with its own reason isn't the hub signing this phone out.
+    answer(401, { error: 'wrong key for this person' });
+    await assert.rejects(call(cfg, 'POST', '/api/people/x/presence'), (e: unknown) => e instanceof HubError && e.problem === 'hub' && e.message === 'wrong key for this person');
+    answer(503, { error: 'Starting up' });
+    await assert.rejects(call(cfg, 'GET', '/api/state'), (e: unknown) => e instanceof HubError && e.problem === 'hub' && e.status === 503);
+    globalThis.fetch = (async () => { throw new TypeError('Network request failed'); }) as typeof fetch;
+    await assert.rejects(call(cfg, 'GET', '/api/state'), (e: unknown) => e instanceof HubError && e.problem === 'unreachable' && !e.timedOut);
+  } finally {
+    globalThis.fetch = original;
+  }
+});

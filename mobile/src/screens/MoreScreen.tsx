@@ -10,6 +10,7 @@ import { Screen } from '../ui/Screen';
 import { T } from '../ui/Text';
 import appVersion from '../version.json';
 import { display, KIND_LABEL } from '../logic/addresses';
+import { linkWords } from '../logic/link';
 import { automationsOf } from '../logic/automations';
 
 const TONE = { ok: C.green, ready: C.amber, busy: C.stone, error: C.red, muted: C.stone } as const;
@@ -66,14 +67,16 @@ export function MoreScreen() {
   const players = s.devices.filter(d => (d.type === 'media' || d.type === 'tv') && d.state.on).length;
   const me = s.people.find(p => p.id === cfg?.personId);
   const live = conn === 'live';
+  const words = linkWords({ state: conn });
+  const tone = words.tone === 'ok' ? C.green : words.tone === 'down' ? C.red : C.amber;
   return (
     <Screen title="More" over={s.home.name} gap={SP[6]}>
       <Card style={{ padding: SP[4], flexDirection: 'row', alignItems: 'center', gap: SP[3] }}>
-        <IconWell icon="router" color={live ? C.green : conn === 'connecting' ? C.amber : C.red} size={40} />
+        <IconWell icon="router" color={tone} size={40} />
         <View style={{ flex: 1, gap: 2 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2] }}>
-            <PulseDot color={live ? C.green : conn === 'connecting' ? C.amber : C.red} size={7} />
-            <T v="headline">{live ? 'Connected to your hub' : conn === 'connecting' ? 'Connecting…' : 'Can’t reach your hub'}</T>
+            <PulseDot color={tone} size={7} />
+            <T v="headline">{words.title}</T>
           </View>
           <T v="footnote" color={C.stone} numberOfLines={1}>{live && route ? `${KIND_LABEL[route.kind]} · ${display(route.url)}` : display(cfg?.url)}</T>
         </View>

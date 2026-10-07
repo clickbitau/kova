@@ -1,12 +1,30 @@
 import { hubUrl, type HubConfig } from '../logic/connect.ts';
 import { parseHello, type Hello } from '../logic/addresses.ts';
 
+/** What went wrong with a request, for what to do about it. */
+export type Problem = 'unreachable' | 'signedOut' | 'hub';
+
 export class HubError extends Error {
   readonly status: number;
   readonly timedOut: boolean;
+  /** The hub's own `error`, as it sent it ("unauthorised" from its sign-in check). */
+  readonly detail?: string;
   /** status 0: nothing answered. `timedOut`: the request may have reached the hub, so a write isn't re-sent. */
-  constructor(message: string, status: number, timedOut = false) { super(message); this.status = status; this.timedOut = timedOut; }
+  constructor(message: string, status: number, timedOut = false, detail?: string) { super(message); this.status = status; this.timedOut = timedOut; this.detail = detail; }
+  /**
+   * Nothing answered (try again, or another address), the hub refused this phone's key (sign in again), or the hub
+   * answered with an error. A 401 is "signed out" when it's the hub's sign-in check saying so (or a proxy with no
+   * words); a route's own 401 with a reason ("wrong key for this person") is that route's answer.
+   */
+  get problem(): Problem {
+    if (this.status === 0) return 'unreachable';
+    if (this.status === 401 && (!this.detail || this.detail === 'unauthorised')) return 'signedOut';
+    return 'hub';
+  }
 }
+
+/** The words for a refused key: what happened and what fixes it. */
+export const SIGNED_OUT = 'Your hub didn’t accept this phone’s key. Sign in again: scan the code in Kova on your computer, or get a sign-in code.';
 
 /** Ask Kova can wait on a cloud/local model and several tool calls; give it more than the normal 12 s. */
 export const ASK_TIMEOUT_MS = 120_000;
@@ -35,8 +53,9 @@ export async function call<T = unknown>(cfg: HubConfig, method: 'GET' | 'POST' |
     let json: unknown = null;
     try { json = text ? JSON.parse(text) : null; } catch { json = text; }
     if (!res.ok) {
-      const msg = json && typeof json === 'object' && 'error' in json ? String((json as { error: unknown }).error) : `HTTP ${res.status}`;
-      throw new HubError(res.status === 401 ? 'The hub wants its token. Scan the code in Kova on your computer, or enter the token.' : msg, res.status);
+      const detail = json && typeof json === 'object' && 'error' in json ? String((json as { error: unknown }).error) : undefined;
+      const e = new HubError(detail ?? `HTTP ${res.status}`, res.status, false, detail);
+      throw e.problem === 'signedOut' ? new HubError(SIGNED_OUT, res.status, false, detail) : e;
     }
     return json as T;
   } catch (e) {

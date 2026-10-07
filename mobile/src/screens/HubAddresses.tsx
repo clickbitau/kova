@@ -3,6 +3,7 @@ import { TextInput, View } from 'react-native';
 import { C, F, R, SP } from '../theme';
 import { hello } from '../api/client';
 import { addManual, display, kindFor, KIND_LABEL, remove, sameHub } from '../logic/addresses';
+import { linkWords } from '../logic/link';
 import { normalizeHubUrl } from '../logic/connect';
 import { useHub } from '../state/hub';
 import { Icon } from '../ui/Icon';
@@ -36,7 +37,7 @@ export function HubAddresses() {
 
   return (
     <Group title="Hub" note="Kova uses the home network address at home and the remote one away, by itself.">
-      <Row first icon="router" iconFg={conn === 'live' ? C.green : conn === 'offline' ? C.red : C.amber} title={conn === 'live' && route ? `Connected · ${KIND_LABEL[route.kind]}` : conn === 'offline' ? 'Can’t reach it right now' : 'Connecting…'} />
+      <Row first icon="router" iconFg={{ ok: C.green, down: C.red, busy: C.amber, warn: C.amber }[linkWords({ state: conn }).tone]} title={conn === 'live' && route ? `Connected · ${KIND_LABEL[route.kind]}` : linkWords({ state: conn }).short} />
       {addresses.map(a => {
         const inUse = route?.url === a.url;
         return (

@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Network from 'expo-network';
 import { C, F, R, SHADOW, SP } from '../theme';
-import { call, findHub, hello } from '../api/client';
+import { call, findHub, hello, HubError } from '../api/client';
 import { addressesOf, chooseAddress, display, kindFor } from '../logic/addresses';
 import { normalizeHubUrl, parseConnectLink, subnetCandidates, type HubConfig } from '../logic/connect';
 import { useHub } from '../state/hub';
@@ -20,10 +20,12 @@ type Step = 'start' | 'scan' | 'type';
  * First run: connect to the home's hub. Scan the code Kova shows on a computer (More → Kova on your phone),
  * let the app look for the hub on this Wi-Fi, or type its address (and token, if the hub has one).
  */
-export function ConnectScreen() {
-  const { connect } = useHub();
+export function ConnectScreen({ again }: { again?: { onCancel(): void } } = {}) {
+  const { cfg: had, connect } = useHub();
   const insets = useSafeAreaInsets();
-  const [step, setStep] = useState<Step>('start');
+  // Signing in again (SignInAgainScreen): straight to the camera, and Back goes back there.
+  const [step, setStep] = useState<Step>(again ? 'scan' : 'start');
+  const back = () => { setErr(null); if (again) again.onCancel(); else setStep('start'); };
   const [addr, setAddr] = useState('');
   const [token, setToken] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
@@ -46,12 +48,15 @@ export function ConnectScreen() {
       const cfg: HubConfig = { ...given, url: r.url, ...(r.hubId ? { hubId: r.hubId } : {}) };
       await call(cfg, 'GET', '/api/state');
       haptic.success();
-      await connect(cfg);
+      // The same hub again (signing in again): keep whose phone this is and the addresses it already knew.
+      const same = had && (!had.hubId || !cfg.hubId || had.hubId === cfg.hubId);
+      await connect(same ? { ...had, ...cfg, personId: had.personId, addresses: cfg.addresses ?? had.addresses, removed: had.removed } : cfg);
     } catch (e) {
-      const m = (e as Error).message;
       haptic.error();
-      setErr(m);
-      if (/token/i.test(m)) { setAddr(given.url); setStep('type'); }
+      if (e instanceof HubError && e.problem === 'signedOut') {
+        setErr(given.token ? 'The hub didn’t accept that token. Scan the code in Kova on your computer, or check the token.' : 'This hub needs its token. Scan the code in Kova on your computer, or enter the token.');
+        setAddr(given.url); setStep('type');
+      } else setErr((e as Error).message);
     } finally {
       setBusy(null);
     }
@@ -86,7 +91,7 @@ export function ConnectScreen() {
           <T v="title">The camera, to scan the code</T>
           <T v="body" color={C.stone}>Kova only uses it here, to read the code on your computer’s screen.</T>
           <Button size="lg" label="Allow the camera" onPress={() => void askPerm()} />
-          <Button kind="ghost" label="Back" onPress={() => setStep('start')} />
+          <Button kind="ghost" label="Back" onPress={back} />
         </View>
       );
     }
@@ -116,7 +121,7 @@ export function ConnectScreen() {
           <T v="footnote" color={C.bone2} center>On a computer: Kova → Kova on your phone</T>
         </View>
         <View style={{ position: 'absolute', left: SP[6], right: SP[6], bottom: insets.bottom + SP[6] }}>
-          <Button kind="secondary" label="Cancel" onPress={() => setStep('start')} />
+          <Button kind="secondary" label="Cancel" onPress={back} />
         </View>
       </View>
     );
@@ -162,7 +167,7 @@ export function ConnectScreen() {
             {field(addr, setAddr, { label: 'Hub address', placeholder: '192.168.1.20', url: true })}
             {field(token, setToken, { label: 'Token', placeholder: 'Only if your hub has one', secure: true, hint: 'Kova on your computer shows it next to the code.' })}
             <Button size="lg" label="Connect" busy={busy === 'Connecting…'} onPress={typed} />
-            <Button kind="ghost" label="Back" onPress={() => { setErr(null); setStep('start'); }} />
+            <Button kind="ghost" label="Back" onPress={back} />
           </View>
         )}
 

@@ -65,15 +65,24 @@ add-on: nothing in Kova depends on HA. The design reference lives in
     (`&hub=…`); after connecting the app reads `GET /api/connect/addresses` and keeps them (the owner
     can add or remove some under More → This phone; a remote one must be https unless added by hand).
     Every address is asked `GET /api/hello` (no token) at once: the first home-network one that
-    answers with this hub's ID wins; a remote one only once the home-network ones have had ~1.5 s.
+    answers with this hub's ID wins; a remote one only once the home-network ones have had ~2 s (4 s on the try that decides "can't reach").
     Only an address that passed gets the token. It's chosen again on returning to the front, on a
     network change, every minute while remote with a home-network address to go back to, when the
     socket drops and when a request can't reach the hub (a GET is then retried once on the new
     address; a write that timed out isn't). More shows "Connected · Home network" or "· Remote". The
     over-the-air updater stays on one of the addresses (`logic/ota.ts` `updateBase`), because
     expo-updates only launches updates from the origin it's pointed at now.
-  - **Live state:** `/api/ws`, reconnecting with backoff and when the app comes to the front;
-    changes show at once and the hub's snapshot has the final word; every action's undo is a toast.
+  - **Live state:** `/api/ws`, run by `logic/link.ts` (tested under Node). It reconnects by itself
+    with backoff (1 s, 2 s, 4 s … 20 s), and at once on coming to the front, a network change or
+    "Try now". The socket is closed in the background and reopened with a fresh snapshot. A socket
+    quiet for over 70 s is dead (the hub sends at least every 30 s) and is replaced. "Can't reach
+    your hub" shows only once no address answers as this hub, twice running. When requests work
+    but the socket doesn't, the app stays connected and fetches `/api/state` every 15 s. A refused
+    key (401 from the hub's sign-in check) is **signed out**, not offline. The app then offers to
+    sign in again by code (`/api/login/start` with `{name}`, approved from a signed-in browser or
+    phone) or by scanning the QR code, keeping the hub's addresses and the phone's settings. A hub
+    that answers with errors, or a different hub at the address, is a **hub problem**. Changes show
+    at once and the hub's snapshot has the final word; every action's undo is a toast.
   - **Arrive and leave:** the OS watches a 150 m circle around the home (`home.location` in the
     snapshot) and wakes the app on crossing it, which posts to `/api/people/:id/presence` with that
     person's own key (source "Kova app (location)"). A "left" inside the circle is ignored.
@@ -527,7 +536,7 @@ a row on the Integrations screen ("Router: 2 phones seen").
 | GET | `/api/state` | Everything the UI needs |
 | GET | `/api/boot.js` | Same, as a script, for the first paint |
 | GET | `/api/preview?hour=23.5` | Device states at that hour, per today's plan |
-| WS | `/api/ws` | Pushes `{type:'state'}` on every change |
+| WS | `/api/ws` | Pushes `{type:'state'}` on every change, and at least every 30 s; pings each client and drops one that stops answering |
 | POST | `/api/devices/:id` | Command `{on, bri, k, color, mode, media, vol}` → `{undo}` |
 | POST | `/api/devices/:id/event` | Device event `{type:'person'|'ring'|…}` (webhooks, testing) |
 | POST | `/api/integrations/tuya/cloud-import` | `{clientId, secret, region?, uid?}`: fetch Tuya local keys and data points from the Tuya IoT cloud and merge them into `integrations.json` → `{ok, devices, restartNeeded}` (never returns keys) |

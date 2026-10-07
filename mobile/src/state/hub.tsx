@@ -3,14 +3,20 @@ import { AppState } from 'react-native';
 import * as Network from 'expo-network';
 import { call, hello, HubError } from '../api/client';
 import type { Command, Snapshot } from '../api/types';
-import { addressesOf, chooseAddress, learn, type HubAddress, type Route } from '../logic/addresses';
-import { wsUrl, type HubConfig } from '../logic/connect';
+import { addressesOf, learn, type HubAddress, type Route } from '../logic/addresses';
+import { HubLink, type LinkState, type LinkStatus, type SocketLike } from '../logic/link';
+import type { HubConfig } from '../logic/connect';
 import { followHub } from '../native/arrive-leave';
 import { getJson, setJson } from '../native/storage';
 import { applyAppUpdate, checkForAppUpdate, pointUpdatesAtHub } from '../native/updates';
 import { haptic } from '../ui/motion';
 
-export type Conn = 'connecting' | 'live' | 'offline';
+/**
+ * How the link to the hub is (logic/link.ts): connecting; live (the hub answers); offline (nothing answers as this
+ * hub, at home or remotely); signedOut (the hub answers but refuses this phone's key); hubError (it answers with
+ * errors, or a different hub is at the address).
+ */
+export type Conn = LinkState;
 
 export interface Toast { id: number; text: string; undo?: string; error?: boolean; action?: { label: string; run: () => void } }
 
@@ -23,6 +29,8 @@ interface HubCtx {
   loading: boolean;
   snap: Snapshot | null;
   conn: Conn;
+  /** More about `conn`: whether the live socket is up, when it tries again, and what went wrong. */
+  link: LinkStatus;
   /** The address in use and which way it goes (home network or remote); null while none has answered. */
   route: Route | null;
   /** Every address this hub may be reached at, home network first. */
@@ -43,8 +51,10 @@ interface HubCtx {
   act(method: 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, body: unknown, done: string): Promise<boolean>;
   say(text: string, opts?: { undo?: string; error?: boolean; action?: Toast['action'] }): void;
   undo(id: string): Promise<void>;
-  /** Pull to refresh: the hub's state read again now, and the live link reopened if it had dropped. */
+  /** Pull to refresh, "Try now": the link tried again at once, and the hub's state read again. */
   refresh(): Promise<void>;
+  /** Signed out: sign in again with a new key, keeping the hub, its addresses and this phone's settings. */
+  signIn(token: string): Promise<void>;
 }
 
 const Ctx = createContext<HubCtx | null>(null);
@@ -56,7 +66,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
   const [cfg, setCfg] = useState<HubConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [snap, setSnap] = useState<Snapshot | null>(null);
-  const [conn, setConn] = useState<Conn>('connecting');
+  const [link, setLink] = useState<LinkStatus>({ state: 'connecting', socket: false });
   const [route, setRoute] = useState<Route | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   const [pending, setPending] = useState<Pending>({});
@@ -65,23 +75,10 @@ export function HubProvider({ children }: { children: ReactNode }) {
     if (p) n[id] = p; else delete n[id];
     return n;
   }), []);
-  const ws = useRef<WebSocket | null>(null);
-  const connRef = useRef<Conn>(conn);
-  useEffect(() => { connRef.current = conn; }, [conn]);
-  const retry = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  /** Bumped to reopen the live link at once (pull to refresh while offline). */
-  const [kick, setKick] = useState(0);
-  // The latest of each, for the address choosing below, which runs outside React's render.
+  // The latest config, for the link, which runs outside React's render.
   const cfgRef = useRef<HubConfig | null>(null);
-  const routeRef = useRef<Route | null>(null);
-  const choosing = useRef<Promise<Route | null> | null>(null);
   const learned = useRef<string | null>(null);
-  /** Bumped when the phone connects to a hub or forgets it, so a choice still under way for the old one is dropped. */
-  const gen = useRef(0);
-
-  // Whatever the keychain says (or fails to), the app moves on from the splash.
-  useEffect(() => { void getJson<HubConfig>(KEY).catch(() => null).then(c => { cfgRef.current = c; setCfg(c); setLoading(false); }); }, []);
 
   /** Save the hub (keychain) and show it. */
   const save = useCallback(async (next: HubConfig | null) => {
@@ -90,136 +87,71 @@ export function HubProvider({ children }: { children: ReactNode }) {
     await setJson(KEY, next);
   }, []);
 
-  /**
-   * Pick the address to use now (logic/addresses.ts): home network whenever one answers as this hub, else the
-   * remote one. Only an address that passed that check gets the token. One choice at a time; callers share it.
-   * `keep`: a look-again while things work; when nothing answers (a slow moment), keep the address in use rather
-   * than drop a live connection. A real failure (the socket closing, a request failing) chooses without it.
-   */
-  const choose = useCallback((opts: { keep?: boolean } = {}): Promise<Route | null> => {
-    if (choosing.current) return choosing.current;
-    const p: Promise<Route | null> = (async () => {
-      const c = cfgRef.current, g = gen.current;
-      if (!c) return null;
-      const r = await chooseAddress(addressesOf(c), { hello, hubId: c.hubId, lastGood: routeRef.current?.url ?? c.url });
-      if (g !== gen.current) return null; // forgotten, or another hub, meanwhile
-      if (!r && opts.keep && routeRef.current) return null;
-      routeRef.current = r;
-      setRoute(prev => (prev?.url === r?.url && prev?.kind === r?.kind ? prev : r));
-      const now = cfgRef.current;
-      if (r && now && (now.url !== r.url || (!now.hubId && r.hubId))) {
-        // Remember the one that worked (it's tried first next time) and, the first time, which hub this is.
-        await save({ ...now, url: r.url, ...(r.hubId && !now.hubId ? { hubId: r.hubId } : {}), addresses: addressesOf(now) });
-      }
-      return r;
-    })().finally(() => { if (choosing.current === p) choosing.current = null; });
-    choosing.current = p;
-    return p;
-  }, [save]);
+  // The link to the hub (logic/link.ts): the address, the socket, reconnecting, and what to say when it's down.
+  const linkRef = useRef<HubLink | null>(null);
+  if (!linkRef.current) {
+    linkRef.current = new HubLink({
+      config: () => cfgRef.current,
+      hello,
+      get: (c, path, timeoutMs) => call(c, 'GET', path, undefined, timeoutMs),
+      socket: url => new WebSocket(url) as unknown as SocketLike,
+      onSnapshot: s => setSnap(s as Snapshot),
+      onStatus: setLink,
+      onRoute: r => {
+        setRoute(prev => (prev?.url === r?.url && prev?.kind === r?.kind ? prev : r));
+        const now = cfgRef.current;
+        if (r && now && (now.url !== r.url || (!now.hubId && r.hubId))) {
+          // Remember the one that worked (it's tried first next time) and, the first time, which hub this is.
+          void save({ ...now, url: r.url, ...(r.hubId && !now.hubId ? { hubId: r.hubId } : {}), addresses: addressesOf(now) });
+        }
+      },
+    });
+  }
+  const hub = linkRef.current;
 
-  /** The route to send a request on: the current one, or a fresh choice when there's none. */
-  const ready = useCallback(async (): Promise<{ c: HubConfig; r: Route }> => {
-    const c = cfgRef.current;
-    if (!c) throw new HubError('Not connected to a hub', 0);
-    const r = routeRef.current ?? await choose();
-    if (!r) throw new HubError('Can’t reach the hub, at home or remotely.', 0);
-    return { c: cfgRef.current ?? c, r };
-  }, [choose]);
+  // Whatever the keychain says (or fails to), the app moves on from the splash.
+  useEffect(() => {
+    void getJson<HubConfig>(KEY).catch(() => null).then(c => {
+      cfgRef.current = c; setCfg(c); setLoading(false);
+      if (c) hub.start();
+    });
+    return () => hub.stop();
+  }, [hub]);
 
   const hasCfg = !!cfg;
-  const token = cfg?.token;
   const routeUrl = route?.url ?? null;
 
-  // A hub chosen (or forgotten): pick an address before anything is sent.
-  useEffect(() => {
-    routeRef.current = null;
-    setRoute(null);
-    learned.current = null;
-    choosing.current = null;
-    if (hasCfg) void choose();
-  }, [hasCfg, token, choose]);
-
-  // Live state over the hub's socket on the chosen address. When it drops, the address is chosen again first (the
-  // phone may have left home or come back), so the socket reopens on whichever answers; with none, it keeps looking.
-  useEffect(() => {
-    if (!hasCfg) return;
-    let closed = false, attempt = 0;
-    const wait = () => Math.min(15_000, 1000 * 2 ** attempt++);
-    const again = () => {
-      retry.current = setTimeout(async () => {
-        const r = await choose();
-        if (closed) return;
-        if (!r) { setConn('offline'); again(); return; }
-        if (r.url === routeUrl) open();
-        // Otherwise the route changed and this effect runs again for it.
-      }, wait());
-    };
-    const open = () => {
-      const c = cfgRef.current, r = routeRef.current;
-      if (closed || !c || !r) return;
-      setConn(x => (x === 'live' ? x : 'connecting'));
-      const sock = new WebSocket(wsUrl({ ...c, url: r.url }));
-      ws.current = sock;
-      sock.onmessage = ev => {
-        try {
-          const m = JSON.parse(String(ev.data)) as { type: string; data: Snapshot };
-          if (m.type === 'state') { setSnap(m.data); setConn('live'); attempt = 0; }
-        } catch { /* ignore */ }
-      };
-      sock.onclose = () => {
-        if (ws.current === sock) ws.current = null;
-        if (closed) return;
-        setConn('offline');
-        again();
-      };
-      sock.onerror = () => sock.close();
-    };
-    if (!routeUrl) {
-      // Nothing chosen yet, or nothing answered: keep looking (the first choice is already under way).
-      setConn(x => (x === 'live' ? 'connecting' : x));
-      void (choosing.current ?? Promise.resolve(null)).then(r => { if (!closed && !r) { setConn('offline'); again(); } });
-    } else {
-      // A first snapshot over HTTP, so the screens fill in even before the socket opens.
-      const c = cfgRef.current;
-      if (c) void call<Snapshot>({ ...c, url: routeUrl }, 'GET', '/api/state').then(s => { if (!closed) setSnap(s); }).catch(() => {});
-      open();
-    }
-    return () => {
-      closed = true;
-      if (retry.current) clearTimeout(retry.current);
-      ws.current?.close();
-      ws.current = null;
-    };
-  }, [hasCfg, token, routeUrl, kick, choose]);
-
-  // Look again when the best way to the hub may have changed: back in the foreground (the phone may have moved
-  // while the app slept), a change of network (left the home Wi-Fi, or back on it), and every minute while on the
-  // remote address with a home-network one to go back to.
+  // Try again at once when the best way to the hub may have changed: back in the foreground (the phone may have
+  // moved, or slept through a hub restart; the socket was closed in the background and reopens with a fresh
+  // snapshot), a change of network (left the home Wi-Fi, or back on it), and every minute while on the remote
+  // address with a home-network one to go back to.
   useEffect(() => {
     if (!hasCfg) return;
     let lastNet = '';
-    const netKey = (s: Network.NetworkState) => `${s.type}:${s.isConnected}`;
+    const netKey = (s: Network.NetworkState) => `${s.type}:${s.isConnected}:${s.isInternetReachable}`;
     void Network.getNetworkStateAsync().then(s => { lastNet ||= netKey(s); }).catch(() => {});
-    const recheck = () => void choose({ keep: true }).then(r => {
-      if (r && r.url === routeRef.current?.url && !ws.current) { if (retry.current) clearTimeout(retry.current); setKick(k => k + 1); }
+    const app = AppState.addEventListener('change', st => {
+      if (st === 'active') hub.resume();
+      else if (st === 'background') hub.pause();
     });
-    const app = AppState.addEventListener('change', st => { if (st === 'active') recheck(); });
     let net: { remove(): void } | null = null;
+    let netTimer: ReturnType<typeof setTimeout> | null = null;
     try {
       net = Network.addNetworkStateListener(s => {
         const k = netKey(s);
         if (k === lastNet) return;
         lastNet = k;
         // A moment for the new network to hand out an address and routes.
-        setTimeout(recheck, 800);
+        if (netTimer) clearTimeout(netTimer);
+        netTimer = setTimeout(() => hub.networkChanged(), 800);
       });
     } catch { /* no listener here (the web build): the foreground and failures still re-check */ }
     const timer = setInterval(() => {
-      const c = cfgRef.current, r = routeRef.current;
-      if (AppState.currentState === 'active' && c && r?.kind === 'remote' && addressesOf(c).some(a => a.kind === 'local')) recheck();
+      const c = cfgRef.current, r = hub.route;
+      if (AppState.currentState === 'active' && c && r?.kind === 'remote' && addressesOf(c).some(a => a.kind === 'local')) void hub.recheck();
     }, AWAY_CHECK_MS);
-    return () => { app.remove(); net?.remove(); clearInterval(timer); };
-  }, [hasCfg, choose]);
+    return () => { app.remove(); net?.remove(); if (netTimer) clearTimeout(netTimer); clearInterval(timer); };
+  }, [hasCfg, hub]);
 
   // Once connected, ask the hub for every address it has (GET /api/connect/addresses) and keep them, so a phone set
   // up at home can reach it away too. Once per hub per run; an older hub without the route just keeps the one it has.
@@ -232,13 +164,13 @@ export function HubProvider({ children }: { children: ReactNode }) {
         const now = cfgRef.current;
         if (!now || now.token !== c.token || !Array.isArray(got?.addresses)) return;
         if (got.hubId && now.hubId && got.hubId !== now.hubId) return; // not the hub this phone knows
-        const addresses = learn(addressesOf(now), got.addresses, routeRef.current?.url ?? now.url, now.removed);
+        const addresses = learn(addressesOf(now), got.addresses, hub.route?.url ?? now.url, now.removed);
         const hubId = now.hubId ?? got.hubId ?? undefined;
         if (JSON.stringify(addresses) === JSON.stringify(now.addresses) && hubId === now.hubId) return;
         await save({ ...now, addresses, ...(hubId ? { hubId } : {}) });
       })
       .catch(() => {});
-  }, [routeUrl, save]);
+  }, [routeUrl, save, hub]);
 
   const say = useCallback((text: string, opts: { undo?: string; error?: boolean; action?: Toast['action'] } = {}) => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -255,7 +187,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
     if (!c || !routeUrl) return;
     let source: string | null = null, first = true, told = false;
     const check = () => {
-      if (source !== routeRef.current?.url) return;
+      if (source !== hub.route?.url) return;
       const force = first; first = false;
       void checkForAppUpdate(force).then(u => {
         if (u.state === 'ready' && !told) { told = true; say(u.version ? `Kova ${u.version} is ready` : 'A new version of Kova is ready', { action: { label: 'Restart', run: () => void applyAppUpdate() } }); }
@@ -264,7 +196,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
     void pointUpdatesAtHub(addressesOf(c), routeUrl).then(s => { source = s; check(); });
     const sub = AppState.addEventListener('change', st => { if (st === 'active') check(); });
     return () => sub.remove();
-  }, [routeUrl, addressKey, say]);
+  }, [routeUrl, addressKey, say, hub]);
 
   // Arriving and leaving reports from the background: give it every address too (native/arrive-leave.ts).
   useEffect(() => {
@@ -273,34 +205,35 @@ export function HubProvider({ children }: { children: ReactNode }) {
   }, [addressKey, routeUrl, cfg?.hubId]);
 
   /**
-   * A request on the chosen address. When nothing answers there, the address is chosen again and, if another one
+   * A request on the address in use. When nothing answers there, the address is chosen again and, if another one
    * answers as this hub, the request goes once more there. A write that timed out isn't re-sent (it may have
-   * reached the hub).
+   * reached the hub). What happened tells the link: a request that landed means the hub answers, whatever the
+   * socket is doing; a refused key means signed out (logic/link.ts).
    */
-  // A request that landed means the hub answers, whatever the live socket is doing — say so, and nudge the
-  // socket back open at once rather than waiting out the backoff.
-  const noteReachable = useCallback(() => {
-    if (connRef.current === 'live') return;
-    connRef.current = 'live';
-    setConn('live');
-    if (!ws.current || ws.current.readyState !== WebSocket.OPEN) setKick(k => k + 1);
-  }, []);
-
   const api = useCallback(async <T,>(method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, body?: unknown, timeoutMs?: number): Promise<T> => {
-    const { c, r } = await ready();
+    const c = cfgRef.current;
+    if (!c) throw new HubError('Not connected to a hub', 0);
+    const r = hub.route ?? await hub.choose();
+    if (!r) throw new HubError('Can’t reach your hub, at home or remotely.', 0);
+    const attempt = async (url: string) => {
+      try {
+        const out = await call<T>({ ...(cfgRef.current ?? c), url }, method, path, body, timeoutMs);
+        hub.reachable(url);
+        return out;
+      } catch (e) {
+        if (e instanceof HubError && e.problem === 'signedOut') hub.signedOut();
+        throw e;
+      }
+    };
     try {
-      const out = await call<T>({ ...c, url: r.url }, method, path, body, timeoutMs);
-      noteReachable();
-      return out;
+      return await attempt(r.url);
     } catch (e) {
       if (!(e instanceof HubError) || e.status !== 0) throw e;
-      const next = await choose();
+      const next = await hub.lost();
       if (!next || next.url === r.url || (method !== 'GET' && e.timedOut)) throw e;
-      const out = await call<T>({ ...(cfgRef.current ?? c), url: next.url }, method, path, body, timeoutMs);
-      noteReachable();
-      return out;
+      return attempt(next.url);
     }
-  }, [ready, choose, noteReachable]);
+  }, [hub]);
 
   const send = useCallback(async (id: string, cmd: Command, done?: string) => {
     haptic.select();
@@ -339,16 +272,34 @@ export function HubProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     if (!cfgRef.current) return;
-    if (!ws.current || ws.current.readyState !== WebSocket.OPEN) setKick(k => k + 1);
-    try { setSnap(await api<Snapshot>('GET', '/api/state')); } catch (e) { say((e as Error).message, { error: true }); }
-  }, [api, say]);
+    hub.retryNow();
+    if (hub.current.state === 'signedOut') return;
+    try { setSnap(await api<Snapshot>('GET', '/api/state')); } catch (e) {
+      // Offline already says so on screen; anything else is news.
+      if (!(e instanceof HubError) || e.problem !== 'unreachable') say((e as Error).message, { error: true });
+    }
+  }, [api, say, hub]);
 
   const connect = useCallback(async (c: HubConfig) => {
-    gen.current++;
     setSnap(null);
+    learned.current = null;
     await save({ ...c, addresses: addressesOf(c) });
-  }, [save]);
-  const forget = useCallback(async () => { gen.current++; setSnap(null); await save(null); }, [save]);
+    hub.reset();
+  }, [save, hub]);
+  const forget = useCallback(async () => {
+    hub.stop();
+    setSnap(null);
+    setLink({ state: 'connecting', socket: false });
+    setRoute(null);
+    await save(null);
+  }, [save, hub]);
+  const signIn = useCallback(async (token: string) => {
+    const c = cfgRef.current;
+    if (!c) return;
+    learned.current = null;
+    await save({ ...c, token });
+    hub.reset();
+  }, [save, hub]);
   const setPerson = useCallback(async (personId: string | undefined) => {
     const c = cfgRef.current;
     if (c) await save({ ...c, personId });
@@ -359,14 +310,15 @@ export function HubProvider({ children }: { children: ReactNode }) {
     const gone = addressesOf(c).map(a => a.url).filter(u => !list.some(a => a.url === u));
     const removed = [...new Set([...(c.removed ?? []), ...gone])].filter(u => !list.some(a => a.url === u));
     await save({ ...c, addresses: list, ...(removed.length ? { removed } : { removed: undefined }) });
-    // The one in use may be gone, or a better one added: choose again (and move the socket if that changed).
-    if (!list.some(a => a.url === routeRef.current?.url)) { routeRef.current = null; setRoute(null); }
-    void choose();
-  }, [save, choose]);
+    // The one in use may be gone (start over on the list), or a better one added (look again, move if it answers).
+    if (!list.some(a => a.url === hub.route?.url)) hub.reset();
+    else void hub.recheck();
+  }, [save, hub]);
 
+  const conn = link.state;
   const addresses = useMemo(() => (cfg ? addressesOf(cfg) : []), [cfg]);
-  const value = useMemo<HubCtx>(() => ({ cfg, loading, snap, conn, route, addresses, toast, pending, connect, forget, setPerson, setAddresses, api, send, act, say, undo, refresh }),
-    [cfg, loading, snap, conn, route, addresses, toast, pending, connect, forget, setPerson, setAddresses, api, send, act, say, undo, refresh]);
+  const value = useMemo<HubCtx>(() => ({ cfg, loading, snap, conn, link, route, addresses, toast, pending, connect, forget, setPerson, setAddresses, api, send, act, say, undo, refresh, signIn }),
+    [cfg, loading, snap, conn, link, route, addresses, toast, pending, connect, forget, setPerson, setAddresses, api, send, act, say, undo, refresh, signIn]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
