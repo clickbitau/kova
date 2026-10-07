@@ -117,3 +117,9 @@ test('“That’s expected”: hidden for as long as it stays so, back when it c
     assert.ok((await ids()).includes('filter:lamp'), 'back, and shown');
   } finally { await app.close(); await t.hub.stop(); }
 });
+
+test('an integration whose devices are only offline isn’t “needs attention”; its own failure is', async () => {
+  const { onlyDevicesOffline } = await import('../src/hub.ts');
+  for (const n of ['7 of 10 not responding', '1 of 1 offline (cloud)', '2 of 3 offline']) assert.equal(onlyDevicesOffline(n), true, n);
+  for (const n of ['Tapo handshake failed (HTTP 403)', 'Sign in again: the token expired', '', undefined]) assert.equal(onlyDevicesOffline(n), false, String(n));
+});

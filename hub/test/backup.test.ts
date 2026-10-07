@@ -135,7 +135,7 @@ test('backup: nightly at the configured time in the home\'s timezone', async () 
   for (let i = 0; i < 200 && !changed; i++) await new Promise(r => setTimeout(r, 10));
   await b.stop();
   assert.equal(b.list().length, 1);
-  assert.match(hub.store.feed(1)[0].what, /^Nightly backup finished · /);
+  assert.ok(hub.store.feed(20).some(e => /^Nightly backup finished · /.test(e.what)), 'in Activity');
   assert.equal(b.nextAt, at(3.25, '2026-10-01'));
   await hub.stop();
   rmSync(dataDir, { recursive: true, force: true });

@@ -17,6 +17,7 @@ import { Energy } from './services/energy.ts';
 import { PlayCounter, type HelixMusic } from './services/helix-music.ts';
 import { SensorHistory } from './services/sensors.ts';
 import { Security, type SecurityOptions } from './services/security.ts';
+import { suggestZoneRooms } from './util/zones.ts';
 import { Maps, type MapsOptions } from './services/maps.ts';
 
 export interface HubOptions {
@@ -39,6 +40,13 @@ export interface HubOptions {
 /** Wires the hub's parts together. One per home. */
 /** Something shown on the Integrations screen that isn't a device adapter (e.g. a bridge). */
 export interface Service { id: string; name: string; icon: string; kind: 'Local' | 'Cloud'; devices?: number; status(): { ok: boolean; note?: string } }
+
+/**
+ * An integration whose only trouble is that some of its devices aren't answering ("7 of 10 not responding", "1 of 1
+ * offline") is working: those devices are the offline-devices alert's business, not "needs attention" for the
+ * integration (that's for a sign-in, a cloud or a connection of its own failing).
+ */
+export const onlyDevicesOffline = (note?: string) => !!note && /^\s*\d+ of \d+ (?:not responding|offline)(?: \([^)]*\))?\s*$/i.test(note);
 
 export class Hub extends EventEmitter<{ changed: [] }> {
   readonly store: Store;
@@ -98,6 +106,7 @@ export class Hub extends EventEmitter<{ changed: [] }> {
     this.config.on('changed', () => this.groups.sync());
     this.combined = new CombinedAdapter(this.reg, () => this.config.get().combined ?? []);
     this.config.on('changed', () => this.combined.sync());
+    this.config.on('changed', () => this.linkNamedZones());
     this.engine = new Engine(this.store, this.reg, this.config, opts.now);
     this.checker = new Checker(this.engine, this.store, this.config, () => this.reg.devices);
     this.assistant = new Assistant(this.engine, this.reg, this.config);
@@ -108,12 +117,58 @@ export class Hub extends EventEmitter<{ changed: [] }> {
     this.engine.on('changed', () => this.emit('changed'));
     this.insights = new Insights(this.reg, this.store, () => ({
       cfg: this.config.get(), now: this.engine.now(), weather: this.weather ? { current: this.weather.current, today: this.weather.today } : null,
-      failing: [...this.reg.adapters.values()].filter(a => a.id !== 'virtual' && !a.status().ok).map(a => ({ id: a.id, name: a.name, note: a.status().note })),
+      failing: [...this.reg.adapters.values()].filter(a => a.id !== 'virtual' && !a.status().ok && !this.coveredElsewhere(a.id) && !onlyDevicesOffline(a.status().note)).map(a => ({ id: a.id, name: a.name, note: a.status().note })),
     }));
     this.reg.on('measure', () => this.emit('changed'));
     this.weather?.on('changed', () => this.emit('changed'));
     this.sensors = new SensorHistory(this.reg, this.store, () => this.engine.now());
     this.security = new Security(this, opts.security ?? {});
+    this.linkNamedZones();
+  }
+
+  /**
+   * An integration that isn't working needs no alert when every device it reaches is also reached another way and
+   * that way works: a TV combined from its local connection and SmartThings keeps working when the TV refuses the
+   * local one. The integration page still says what's wrong.
+   */
+  /**
+   * Zones whose names plainly are rooms ("Theatre", "Office & Guest") are linked to those rooms without asking: the
+   * owner already said which is which by naming them. Each zone name is linked once; changing or removing a link
+   * afterwards is the owner's and stays.
+   */
+  linkNamedZones(): void {
+    const cfg = this.config.get();
+    const todo: [string, string, string[], string][] = [];
+    for (const [id, s] of Object.entries(cfg.devices ?? {})) {
+      if (!s?.zoneNames) continue;
+      const sug = suggestZoneRooms(s.zoneNames, cfg.rooms);
+      for (const [n, rooms] of Object.entries(sug)) {
+        const name = s.zoneNames[n]!;
+        if (s.zoneRooms?.[n]?.length || s.zoneRoomsAuto?.[n] === name) continue;
+        todo.push([id, n, rooms, name]);
+      }
+    }
+    if (!todo.length) return;
+    this.config.update(c => {
+      for (const [id, n, rooms, name] of todo) {
+        const s = (c.devices ??= {})[id] ??= {};
+        (s.zoneRooms ??= {})[n] = rooms;
+        (s.zoneRoomsAuto ??= {})[n] = name;
+      }
+    });
+    for (const [id, n, rooms, name] of todo) {
+      this.store.append({ kind: 'system', device: id, feed: 'system', what: `Zone ${n} (“${name}”) serves ${rooms.map(r => cfg.rooms.find(x => x.id === r)?.name ?? r).join(' and ')}`, data: { zone: n, rooms }, cause: { kind: 'system', label: 'Kova', detail: 'matched by the zone’s name' } });
+    }
+  }
+
+  private coveredElsewhere(adapterId: string): boolean {
+    const mine = [...this.reg.devices.values()].filter(d => d.adapter === adapterId);
+    if (!mine.length) return false;
+    const combos = this.config.get().combined ?? [];
+    return mine.every(d => combos.some(c => c.members.includes(d.id) && c.members.some(m => {
+      const o = this.reg.get(m);
+      return !!o && o.adapter !== adapterId && o.state.online !== false && this.reg.adapters.get(o.adapter)?.status().ok !== false;
+    })));
   }
 
   async start(): Promise<void> {

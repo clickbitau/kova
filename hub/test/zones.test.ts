@@ -22,8 +22,11 @@ const mapped = (c: HomeConfig) => { c.devices!.ducted_ac = { ...c.devices!.ducte
 const open: (() => Promise<void>)[] = [];
 after(async () => { for (const d of open) await d(); });
 
-async function setup(tweak?: (c: HomeConfig) => void, hour = 12) {
-  const t = await testHub(hour, tweak);
+/** The demo AC as if its zones had been linked by name once and the owner then cleared them: tests start unlinked. */
+const unlinked = (c: HomeConfig) => { const s = c.devices?.ducted_ac; if (s?.zoneNames) s.zoneRoomsAuto = { ...s.zoneNames }; };
+
+async function setup(tweak?: (c: HomeConfig) => void, hour = 12, link = false) {
+  const t = await testHub(hour, c => { if (!link) unlinked(c); tweak?.(c); });
   const app = await buildServer(t.hub, { webRoot, ai: { timeoutMs: 3000 } });
   const patch = (id: string, payload: unknown) => app.inject({ method: 'PATCH', url: `/api/devices/${id}/settings`, payload: payload as object });
   const state = async () => (await app.inject({ url: '/api/state' })).json();
@@ -325,4 +328,20 @@ test('The AI: the context lists zones with their rooms, and set_devices takes a 
   assert.equal(tool.ok, false);
   assert.match(tool.error, /No air conditioner zone serves music/);
   await h.done(); await fake.close();
+});
+
+test('Zones named like rooms link to them by themselves, once; a link the owner removes stays removed', async () => {
+  const h = await setup(undefined, 12, true);
+  const s = () => h.hub.config.get().devices!.ducted_ac!;
+  // The demo AC's zones are Lounge, Kitchen, Master, Baby, Office & Guest and Music.
+  assert.deepEqual(s().zoneRooms, { 1: ['lounge'], 2: ['kitchen'], 3: ['master'], 4: ['baby'], 5: ['office', 'guest'], 6: ['music'] });
+  assert.ok(h.hub.store.between(0, Number.MAX_SAFE_INTEGER).some(e => /Zone 5 \(“Office & Guest”\) serves/.test(e.what)), 'said in Activity');
+  // The owner clears zone 1: it isn't linked again.
+  assert.equal((await h.patch('ducted_ac', { zoneRooms: { 1: [] } })).statusCode, 200);
+  h.hub.linkNamedZones();
+  assert.equal(s().zoneRooms?.['1'], undefined);
+  // Renamed to another room's name: that's new, so it links.
+  assert.equal((await h.patch('ducted_ac', { zoneNames: { 1: 'Kitchen' } })).statusCode, 200);
+  assert.deepEqual(s().zoneRooms?.['1'], ['kitchen']);
+  await h.done();
 });

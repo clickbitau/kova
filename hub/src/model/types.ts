@@ -154,6 +154,9 @@ export interface DeviceSettings {
   zoneNames?: Record<string, string>;
   /** Ducted air conditioners: the rooms each zone serves, by zone number ("5": ["office", "guest"]). The owner confirms them. */
   zoneRooms?: Record<string, string[]>;
+  /** Zones Kova linked to rooms by itself because the zone's name plainly is the room's, by zone, with the name it matched:
+   *  once done for a name, never redone, so a link the owner removes stays removed. */
+  zoneRoomsAuto?: Record<string, string>;
 }
 
 /**
