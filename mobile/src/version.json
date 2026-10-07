@@ -2,8 +2,12 @@
   "//": "The Kova app's version (docs/VERSIONING.md). store: the X.Y.0 a store binary on this train carries (app.json version). version: what runs, store or over the air (X.Y.Z, PATCH only). train: the native runtime (app.json runtimeVersion). history: newest first; an over-the-air release adds an entry.",
   "train": "kova-mobile-0.2",
   "store": "0.2.0",
-  "version": "0.2.35",
+  "version": "0.2.36",
   "history": [
+    {
+      "version": "0.2.36",
+      "title": "Kova learns from what you do: automations that run late, values you always correct, steps you repeat"
+    },
     {
       "version": "0.2.35",
       "title": "Household accounts: invite people with a link or QR, roles for adults, children and guests, and each person’s own phone and notifications"
