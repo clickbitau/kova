@@ -6,7 +6,7 @@ import { isLight, pseudoLabel, targetLabel } from '../util/describe.ts';
 import { rhythmLabel } from '../rhythms/rhythms.ts';
 import { automationIdeas } from '../engine/automation-ideas.ts';
 import { combineIdeas, combinedDeviceId } from '../adapters/combined.ts';
-import { actionWords, condWords, triggerWords } from '../engine/automations.ts';
+import { AUTOMATION_EVENTS, actionWords, condWords, triggerWords } from '../engine/automations.ts';
 import { wattsSetting } from '../services/energy.ts';
 import SunCalc from 'suncalc';
 
@@ -169,6 +169,8 @@ export function snapshot(hub: Hub) {
     combineIdeas: combineIdeas(reg.list(), cfg.combined ?? [], cfg.dismissedFindings, id => !!cfg.devices?.[id]?.hidden, a => reg.adapters.get(a)?.name ?? a, netOf(reg)),
     combined: (cfg.combined ?? []).map(c => ({ ...c, deviceId: combinedDeviceId(c), memberNames: c.members.map(m => reg.get(m)?.name ?? m) })),
     automationIdeas: automationIdeas(cfg, reg.devices, hub.screens()).map(i => ({ ...i, ...autoWords(i) })),
+    // The device events automations can start on, for the editors (engine/automations.ts AUTOMATION_EVENTS).
+    automationEvents: AUTOMATION_EVENTS,
     overlays: cfg.overlays.map(o => ({ id: o.id, name: o.name, icon: o.icon, endsLabel: o.endsLabel, targets: targetList(o.targets) })),
     moments: cfg.moments.map(mo => ({ id: mo.id, label: mo.label, what: mo.what, at: mo.at, atLabel: rhythmLabel(mo.at), targets: targetList(mo.targets) })),
     sources: cfg.sources,

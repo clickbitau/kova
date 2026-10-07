@@ -255,6 +255,7 @@ export class Engine extends EventEmitter<{ changed: [] }> {
       person: 'saw a person', ring: 'rang', motion: 'detected motion',
       'internet-down': 'is down', 'internet-up': 'is back', 'internet-failover': 'switched to the backup connection', 'new-device': 'saw a new device join', threat: 'blocked an attack',
       'video-started': 'started playing', 'music-started': 'started playing', paused: 'paused', resumed: 'carried on playing', stopped: 'stopped',
+      ended: 'played to the end', 'screen-asleep': 'went to sleep', 'screen-shutdown': 'shut down', 'screen-awake': 'woke up',
     };
     const title = typeof e.data?.title === 'string' && e.data.title && /started$/.test(e.type) ? ` ${e.data.title}` : '';
     this.store.append({

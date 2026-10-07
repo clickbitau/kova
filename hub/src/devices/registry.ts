@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import type { Adapter, AdapterContext, DeviceInfo, Queue } from '../adapters/sdk.ts';
+import type { Adapter, AdapterContext, DeviceInfo, Queue, QueueOptions } from '../adapters/sdk.ts';
 import type { Cause, Command, Device, DeviceSettings, DeviceState, Targets } from '../model/types.ts';
 import type { Store } from '../store/db.ts';
 import { CAPS, changeSentence, fitCommand, PSEUDO_TARGET, typeMatch } from '../util/describe.ts';
@@ -26,6 +26,24 @@ export interface DeviceEvent { device: Device; type: string; data: Record<string
 export interface SentEvent { device: Device; cmd: Command; cause: Cause }
 
 /**
+ * The last change of a device's input that Kova saw: what it was changed to, when (Unix ms), by whom ("helix-auto" for
+ * Helix switching by itself, "remote" for the device's own remote, else who asked: "You", "Helix remote", an automation's
+ * name), and whether that was a person rather than something automatic.
+ */
+export interface InputChange { input: string; at: number; by: string; person: boolean; /** The input before. */ from?: string }
+
+/** Who changed an input, from the cause of the change. */
+export function inputChangeBy(cause: Cause): { by: string; person: boolean } {
+  if (cause.id === 'helix-auto') return { by: 'helix-auto', person: false };
+  if (cause.kind === 'device') return { by: 'remote', person: true };
+  if (cause.kind === 'user' || cause.kind === 'assistant' || cause.kind === 'undo') return { by: cause.label, person: true };
+  return { by: cause.label, person: false };
+}
+
+/** A readback this soon after Kova asked for an input, still showing another, is the device catching up, not someone changing it. */
+const INPUT_SETTLE_MS = 20_000;
+
+/**
  * Holds every device and its live state. All changes go through here so each
  * one is written to the event log with its cause.
  */
@@ -39,11 +57,14 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
   /** Devices marked offline because their adapter was removed; a new adapter announcing them clears that. */
   private orphaned = new Set<string>();
 
+  /** The last input change of each device with an input, kept across restarts (inputChange()). */
+  private inputLog: Record<string, InputChange>;
+
   /** What each integration called a device and where it put it, before the owner's settings. */
   private origin = new Map<string, { name: string; room: string }>();
 
   /** Music by name → a play queue (services/helix-music.ts); set by the hub. */
-  queues: ((media: string, opts: { shuffle?: boolean }) => Promise<Queue | null>) | null = null;
+  queues: ((media: string, opts: QueueOptions) => Promise<Queue | null>) | null = null;
   /** Whether a name is music (not a radio source), for a plain answer on speakers that can't play a queue. */
   isMusic: ((media: string) => boolean) | null = null;
 
@@ -53,6 +74,20 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
   constructor(private store: Store, private sourceUrl: (name: string) => string | undefined = () => undefined, private settings: () => Record<string, DeviceSettings> = () => ({})) {
     super();
     this.saved = store.get<Record<string, DeviceState>>('deviceState') ?? {};
+    this.inputLog = store.get<Record<string, InputChange>>('inputLog') ?? {};
+  }
+
+  /** The last input change Kova saw on this device: asked for through Kova, or read back from the device. */
+  inputChange(id: string): InputChange | undefined { return this.inputLog[id]; }
+
+  private recordInput(id: string, input: string, cause: Cause, from?: string): void {
+    this.inputLog[id] = { input, at: Date.now(), ...inputChangeBy(cause), ...(from && from !== input ? { from } : {}) };
+    this.persist();
+  }
+
+  /** The input a device was last known on: the last change Kova saw, else what it read back. */
+  private knownInput(d: Device): string | undefined {
+    return this.inputLog[d.id]?.input ?? (typeof d.state.input === 'string' && d.state.input ? d.state.input : undefined);
   }
 
   private persist(): void {
@@ -63,6 +98,7 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
   flush(): void {
     for (const d of this.devices.values()) this.saved[d.id] = d.state;
     this.store.set('deviceState', this.saved);
+    this.store.set('inputLog', this.inputLog);
   }
 
   async addAdapter(a: Adapter): Promise<void> {
@@ -77,6 +113,7 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
       queueFor: (media, opts) => this.queues ? this.queues(media, opts ?? {}) : Promise.resolve(null),
       derive: (id, state) => { const d = this.devices.get(id); if (!d) return; const patch = this.diff(d, state); if (!Object.keys(patch).length) return; d.state = { ...d.state, ...patch }; this.emit('measure'); },
       peer: id => this.adapters.get(id),
+      known: id => this.devices.has(id) || id in this.saved,
       retract: ids => { let n = 0; for (const id of ids) if (this.devices.get(id)?.adapter === a.id) { this.devices.delete(id); n++; } if (n) this.emit('devices'); },
     };
     try {
@@ -180,6 +217,7 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
     if (!Object.keys(patch).length) return {};
     const adapter = this.adapters.get(d.adapter);
     if (!adapter) throw new Error(`No adapter ${d.adapter} for ${id}`);
+    const before = this.knownInput(d);
     // Who asked a device for what, before it's done (the Helix link tells Helix who last changed an input).
     this.emit('sent', { device: d, cmd: patch, cause });
     let did: void | DeviceState;
@@ -189,6 +227,8 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
       this.store.append({ kind: 'system', device: id, feed: 'system', what: `${d.name} didn't respond`, data: { error: String(err), patch }, cause });
       throw err;
     }
+    // Who changed the input, even where the device can't say which input it's on (a TV's remote API).
+    if (typeof patch.input === 'string' && patch.input) this.recordInput(d.id, patch.input, cause, before);
     // zoneSet is a change to some zones: what's kept is the zones as the adapter reports them after it.
     const { skip: _skip, volStep: _step, zoneSet: _zones, ...kept } = did ? { ...patch, ...did } : patch;
     // A skip changes the song (which the speaker reports), a step the volume: log it, keep no state for it.
@@ -250,6 +290,7 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
     if (!d) return;
     const patch = this.diff(d, state);
     if (!Object.keys(patch).length) return;
+    if (typeof patch.input === 'string' && patch.input) this.inputReadBack(d, patch.input);
     const onlyOnline = Object.keys(patch).every(k => MEASUREMENTS.has(k));
     if (onlyOnline) {
       const wasOnline = d.state.online;
@@ -276,6 +317,20 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
       return;
     }
     this.apply(d, patch, { kind: 'device', label: `${d.integration}`, detail: 'changed at the device or in another app' });
+  }
+
+  /**
+   * An input read back from the device that isn't the one Kova knew: changed at the device (its own remote, or another
+   * app). The first reading, with nothing known before, says nothing about who; one that still shows another input just
+   * after Kova asked for one is the device catching up.
+   */
+  private inputReadBack(d: Device, input: string): void {
+    const log = this.inputLog[d.id];
+    const before = this.knownInput(d);
+    if (before === undefined || before === input) return;
+    // Still the input from before Kova's own change, just after it: the device catching up.
+    if (log && log.from === input && Date.now() - log.at < INPUT_SETTLE_MS && log.by !== 'remote') return;
+    this.recordInput(d.id, input, { kind: 'device', label: d.integration }, before);
   }
 
   /** A momentary event from a device (camera saw a person, doorbell rang). */

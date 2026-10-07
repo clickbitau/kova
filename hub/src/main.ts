@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { automationIdeas, carryOverTvOff } from './engine/automation-ideas.ts';
+import { automationIdeas, carryOverTvOff, upgradeTvOffOnce } from './engine/automation-ideas.ts';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Hub } from './hub.ts';
@@ -163,13 +163,23 @@ helixLink.start();
 // A Helix box going dark while its TV still shows it: suggested as an automation the owner can add.
 hub.screens = () => helixLink.screens().flatMap(s => {
   const box = [...hub.reg.devices.values()].find(d => d.adapter === 'helix' && d.address === s.playerId);
-  return box ? [{ player: box.id, tv: s.tvDeviceId, input: s.helixInput, soundbar: s.soundbarDeviceId }] : [];
+  return box ? [{
+    player: box.id, tv: s.tvDeviceId, input: s.helixInput, soundbar: s.soundbarDeviceId,
+    ...(s.soundbarDeviceId ? { soundbarInputs: [...new Set([s.soundbarTvInput ?? 'tv', s.soundbarAdapterInput ?? 'hdmi1'])] } : {}),
+  }] : [];
 });
 carryOverTvOff({
   done: () => !!hub.store.get('carried.tvOffWithBox'), markDone: () => hub.store.set('carried.tvOffWithBox', true),
   wasOff: () => { const v = (setup.raw('helix') as { tvOffWithBox?: unknown } | undefined)?.tvOffWithBox; return v === false || v === 'off'; },
   ideas: () => automationIdeas(hub.config.get(), hub.reg.devices, hub.screens()),
   add: a => { hub.config.update(c => { (c.automations ??= []).push({ id: `tv_off_${randomUUID().slice(0, 6)}`, ...a }); }); },
+  on: fn => { hub.reg.on('devices', fn); return () => hub.reg.off('devices', fn); },
+});
+// The TV-off automations made before 0.7.44 get today's conditions: still on the box's input, and nobody switched it.
+upgradeTvOffOnce({
+  done: () => !!hub.store.get('carried.tvOffWithBox.v2'), markDone: () => hub.store.set('carried.tvOffWithBox.v2', true),
+  automations: () => hub.config.get().automations ?? [], screens: () => hub.screens(), devices: () => hub.reg.devices,
+  save: a => { hub.config.update(c => { c.automations = (c.automations ?? []).map(x => x.id === a.id ? a : x); }); },
   on: fn => { hub.reg.on('devices', fn); return () => hub.reg.off('devices', fn); },
 });
 // The doorbell on the TV: a card with its snapshot on every Helix screen that's on.

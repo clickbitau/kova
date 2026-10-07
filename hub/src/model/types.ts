@@ -258,7 +258,12 @@ export interface LightTheWayTrigger {
 export interface StateMatch {
   on?: boolean;
   online?: boolean;
+  /** On this input: as the device reads it back, else the one Kova last switched it to (a TV that can't say). */
   input?: string;
+  /** Who changed the input last, exactly ("helix-auto": Helix switching by itself; see Registry.inputChange). */
+  inputBy?: string;
+  /** Whether a person (the app, Ask, a remote) changed the input last. No change seen counts as no person. */
+  inputByPerson?: boolean;
   hvac?: HvacMode;
   activity?: VacuumActivity;
   playing?: boolean;
