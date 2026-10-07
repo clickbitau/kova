@@ -2,8 +2,12 @@
   "//": "The Kova app's version (docs/VERSIONING.md). store: the X.Y.0 a store binary on this train carries (app.json version). version: what runs, store or over the air (X.Y.Z, PATCH only). train: the native runtime (app.json runtimeVersion). history: newest first; an over-the-air release adds an entry.",
   "train": "kova-mobile-0.2",
   "store": "0.2.0",
-  "version": "0.2.30",
+  "version": "0.2.31",
   "history": [
+    {
+      "version": "0.2.31",
+      "title": "Room ACs for voice: each room a ducted zone serves is its own AC in Google Home, Alexa and Apple Home; Settings → Voice and other apps shows them, the pairing codes, comfortable temperatures and what to do about the maker’s own AC in Google Home"
+    },
     {
       "version": "0.2.30",
       "title": "Design pass across the app, Ask Kova that finishes big requests and says what didn't work, and AC zones by room"

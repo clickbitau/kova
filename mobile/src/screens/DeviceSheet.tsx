@@ -6,6 +6,7 @@ import { C, F, R, SP, alpha } from '../theme';
 import { useHub } from '../state/hub';
 import { useSheet } from '../state/sheet';
 import { useNav } from '../navigation';
+import { VoiceNote } from './VoiceScreen';
 import { hubUrl } from '../logic/connect';
 import { AIR, combinedOf, devs, FAN_SPEEDS, filterNote, has, HVAC, ICON, iconOf, isPlayer, routerPanel, stateOf, tint, type Dev } from '../logic/devices';
 import { arcPath, clampTarget, TARGET_MAX, TARGET_MIN } from '../logic/climate';
@@ -223,6 +224,7 @@ export function DeviceSheet() {
           {block('hvac', 'Mode', <Segmented label="Mode" value={D.on ? D.hvac ?? null : null} options={HVAC.map(([id, label, icon, color]) => ({ id, label, icon, color }))} onChange={id => void send(D.id, { on: true, hvac: id as Dev['hvac'] })} />)}
           {block('fan', 'Fan', <Chips label="Fan speed" value={D.fanSpeed ?? null} color={C.blue} options={FAN_SPEEDS.map(([id, label]) => ({ id, label }))} onChange={id => void send(D.id, { fanSpeed: id as Dev['fanSpeed'] })} />)}
           {D.zones?.length ? <Zones D={D} /> : null}
+          {D.zones?.length && snap?.roomClimate ? <VoiceNote integration={D.integration} onOpen={() => { close(); nav.navigate('Voice'); }} /> : null}
         </View>
       ) : null}
 

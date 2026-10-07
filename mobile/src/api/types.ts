@@ -232,6 +232,8 @@ export interface Snapshot {
   /** The hub's own software updates (null when the hub has no updater). */
   update?: HubUpdate | null;
   weather: { temp: number; text: string; icon: string } | null;
+  /** Room ACs for voice assistants and other apps (hubs from 0.7.57). */
+  roomClimate?: import('../logic/voice').RoomClimateSnap;
   /** The home at a glance (hub services/insights.ts): outside (with today), inside temperatures, the air. */
   glance?: Glance;
   /** Alerts and warnings worth acting on, most urgent first. */
