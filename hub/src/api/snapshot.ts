@@ -31,6 +31,13 @@ export function timelineRows(hub: Hub, events: import('../engine/rooms.ts').Room
   }));
 }
 
+/** Cameras: whether their integration can stream them live (WebRTC through the hub). */
+function liveSetting(reg: Hub['reg'], d: Device): { live: boolean } | null {
+  if (d.type !== 'camera') return null;
+  const lv = reg.adapters.get(d.adapter)?.liveView;
+  return { live: !!lv && (lv.supports?.(d) ?? true) };
+}
+
 const IPV4 = /\b(?:\d{1,3}\.){3}\d{1,3}\b/;
 
 /** Which physical device (MAC) a registry device sits on, via the router's device table. */
@@ -199,7 +206,8 @@ export function snapshot(hub: Hub) {
     // owner confirmed them; zoneSuggest: rooms Kova suggests for the named zones not yet confirmed, from their names.
     // `watts` / `typicalWatts`: what a device with no meter draws while on, the owner's figure and Kova's (Energy page).
     // `kind`: device (something to control), sensor (only reports) or camera. Sensors stay here so ids keep working.
-    devices: reg.list().map(d => ({ ...d, kind: kindOf(d), why: engine.why(d.id), usedIn: engine.usedIn(d.id), ...wattsSetting(d, cfg.devices?.[d.id]?.watts), ...zoneSettings(d, cfg) })),
+    // `live` (cameras): whether the apps can play its live video (its integration streams it over WebRTC).
+    devices: reg.list().map(d => ({ ...d, kind: kindOf(d), why: engine.why(d.id), usedIn: engine.usedIn(d.id), ...wattsSetting(d, cfg.devices?.[d.id]?.watts), ...zoneSettings(d, cfg), ...liveSetting(reg, d) })),
     modes,
     current: {
       modeId: mn.mode.id, since: mn.since, until: mn.until, untilLabel: clock(mn.until, tz), nextId: mn.next.id,

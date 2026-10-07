@@ -92,7 +92,7 @@ function Home() {
     const data = last.notification.request.content.data as { url?: string } | undefined;
     const r = routeFor(last.actionIdentifier === 'lights-off' ? '/phone.html?do=lights-off' : data?.url);
     // A camera alert opens the camera: what it saw (the picture from that moment) and Watch live.
-    if (r.cam) nav.current?.navigate(snap.devices.some(d => d.id === r.cam) ? 'Camera' : 'Web', snap.devices.some(d => d.id === r.cam) ? { id: r.cam } as never : { title: 'Camera', path: `/phone.html?embed=1&cam=${encodeURIComponent(r.cam)}` } as never);
+    if (r.cam) nav.current?.navigate('Camera', { id: r.cam });
     else if (r.lightsOff) void api<{ changed: string[]; undo: string }>('POST', '/api/lights/off').then(x => say(`${x.changed.length} lights off`, { undo: x.undo })).catch(() => {});
     else if (r.page && NATIVE_PAGES[r.page]) nav.current?.navigate(NATIVE_PAGES[r.page]);
     else if (r.setup) nav.current?.navigate('Integration', { id: r.setup });

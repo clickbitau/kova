@@ -13,6 +13,7 @@ import { isCamera, isSensor } from '../logic/sensors';
 import { Screen } from '../ui/Screen';
 import { T } from '../ui/Text';
 import { Appear } from '../ui/motion';
+import { liveSupport } from '../logic/live';
 
 /**
  * A camera's latest picture: shimmering while it comes, the camera icon if there's none yet (or it's
@@ -31,20 +32,21 @@ export function CameraStill({ uri, off, label }: { uri: string | null; off?: boo
   );
 }
 
-/** A camera: its latest picture (shimmering until it comes), its name and last event; tap for live video. */
-function CameraCard({ c, uri, wide, index, onPress, room }: { c: Dev; uri: string | null; wide: boolean; index: number; onPress: () => void; room: string }) {
+/** A camera: its latest picture (shimmering until it comes), its name and last event; tap for live video (or its screen). */
+function CameraCard({ c, uri, wide, index, onPress, room }: { c: Dev; uri: string | null; wide: boolean; index: number; onPress: (live: boolean) => void; room: string }) {
   const [st, fg] = stateOf(c);
   const off = c.online === false;
+  const can = liveSupport(c).can;
   const line = c.why?.now && !/No change/.test(c.why.now) ? c.why.now : st;
   return (
     <Appear index={index} style={{ flexBasis: wide ? '100%' : '47%', flexGrow: 1 }}>
-      <Press onPress={onPress} give="soft" label={`${c.name}, ${line}. Watch live`}>
+      <Press onPress={() => onPress(can)} give="soft" label={`${c.name}, ${line}.${can ? ' Watch live' : ''}`}>
         <Card style={{ overflow: 'hidden' }}>
           <View style={{ aspectRatio: 16 / 9, backgroundColor: C.inset, alignItems: 'center', justifyContent: 'center' }}>
             <CameraStill uri={uri} off={off} />
             <View style={{ position: 'absolute', left: SP[2] + 2, top: SP[2] + 2, flexDirection: 'row', alignItems: 'center', gap: 6, height: 24, paddingHorizontal: 9, borderRadius: R.full, backgroundColor: 'rgba(14,15,16,0.72)' }}>
               {off ? <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: C.red }} /> : <PulseDot color={C.green} size={7} />}
-              <T v="micro" color={C.bone}>{off ? 'Offline' : 'Watch live'}</T>
+              <T v="micro" color={C.bone} numberOfLines={1}>{off ? 'Offline' : can ? 'Watch live' : 'Latest picture'}</T>
             </View>
           </View>
           <View style={{ paddingVertical: SP[3], paddingHorizontal: SP[3] + 2, gap: 2 }}>
@@ -57,7 +59,7 @@ function CameraCard({ c, uri, wide, index, onPress, room }: { c: Dev; uri: strin
   );
 }
 
-/** Cameras (latest picture, tap for live), who's home, the network, and today's comings and goings. */
+/** Cameras (latest picture, tap for live video on the camera's screen), who's home, the network, and today's comings and goings. */
 export function SecurityScreen() {
   const s = useSnap();
   const { cfg, act } = useHub();
@@ -76,7 +78,7 @@ export function SecurityScreen() {
   const [tick, setTick] = useState(0);
   useEffect(() => { const t = setInterval(() => setTick(x => x + 1), 60_000); return () => clearInterval(t); }, []);
   const [openRoom, setOpenRoom] = useState<string | null>(null);
-  const watch = (id: string) => nav.navigate('Camera', { id });
+  const watch = (id: string, live: boolean) => nav.navigate('Camera', { id, live });
   const netBad = internet?.on === false || internet?.online === false;
   const status = securityStatus({ people: s.people, cams, rooms: s.rooms, roomStatus: s.roomStatus, netDown: !!internet && netBad, quietNow: !!sec?.quietNow });
 
@@ -93,7 +95,7 @@ export function SecurityScreen() {
       {cams.length ? (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SP[2] + 2 }}>
           {cams.map((c, i) => (
-            <CameraCard key={c.id} c={c} index={i} wide={cams.length === 1 || (cams.length % 2 === 1 && i === cams.length - 1)} onPress={() => watch(c.id)}
+            <CameraCard key={c.id} c={c} index={i} wide={cams.length === 1 || (cams.length % 2 === 1 && i === cams.length - 1)} onPress={live => watch(c.id, live)}
               room={s.rooms.find(r => r.id === c.room)?.name ?? 'No room'}
               uri={cfg ? (frameOf(c.id) ? hubUrl(cfg, frameOf(c.id)!, true) : `${hubUrl(cfg, `/api/devices/${encodeURIComponent(c.id)}/snapshot`, true)}${cfg.token ? '&' : '?'}t=${tick}`) : null} />
           ))}
