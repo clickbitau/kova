@@ -211,7 +211,7 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
       // Zone names merge: a name sets it, null or "" clears it.
       if (b.zoneNames) {
         const z = { ...(s.zoneNames ?? {}) };
-        for (const [n, v] of Object.entries(b.zoneNames)) { const t = v ? text(v, 30) : ''; if (t) z[n] = t; else delete z[n]; }
+        for (const [n, v] of Object.entries(b.zoneNames)) { const t = v ? text(v, 40) : ''; if (t) z[n] = t; else delete z[n]; }
         if (Object.keys(z).length) s.zoneNames = z; else delete s.zoneNames;
       }
       // Zone rooms merge by zone too: a list sets it, [] or null clears it; null for the whole map clears them all.

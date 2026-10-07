@@ -115,3 +115,8 @@
 @media (max-width: 760px) {
   [data-kova-map], [data-kova-gmap] img { height: 260px !important; }
 }
+
+/* A room's air conditioner zone on a very narrow screen (or with large text): its name gets the room the icon took. */
+@media (max-width: 360px) {
+  [data-kova-zoneicon] { display: none !important; }
+}

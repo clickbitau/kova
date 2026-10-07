@@ -421,55 +421,81 @@ function Zones({ D }: { D: Dev }) {
     void settings({ zoneNames: { [n]: draft.trim() || null } }, draft.trim() ? `Zone ${n} is “${draft.trim()}”` : `Zone ${n} unnamed`);
   };
   const serve = (z: { n: number; name: string }, ids: string[]) => settings(zoneRoomsBody(z.n, ids), ids.length ? `${z.name} serves ${roomWords(ids, rooms)}` : `${z.name} serves no room`);
-  const right = (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[4] }}>
-      {suggested ? <Press onPress={() => void settings(suggested, 'Zones matched to rooms')} label="Use Kova’s suggested rooms for every zone" hitSlop={10}><T v="footnote" weight={700} color={C.amber}>Use suggestions</T></Press> : null}
-      {total > zones.length || all ? <Press onPress={() => setAll(!all)} label={all ? 'Show only zones in use' : `Show all ${total} zones`} hitSlop={10}><T v="footnote" weight={700} color={C.amber}>{all ? 'In use' : `All ${total}`}</T></Press> : null}
-    </View>
-  );
+  const pending = zones.filter(z => z.suggest.length).length;
+  const right = total > zones.length || all
+    ? <Press onPress={() => setAll(!all)} label={all ? 'Show only zones in use' : `Show all ${total} zones`} hitSlop={10}><T v="footnote" weight={700} color={C.amber}>{all ? 'In use' : `All ${total}`}</T></Press>
+    : undefined;
   return (
     <Section title="Zones" caption gap={SP[2]} right={right}>
+      {suggested ? (
+        // Kova's suggestions, all at once: the app's suggestion card (as for combining devices).
+        <Card tint={C.amber} style={{ gap: SP[2], padding: SP[4], backgroundColor: alpha(C.amber, 0.07) }}>
+          <View style={{ flexDirection: 'row', gap: SP[2], alignItems: 'flex-start' }}>
+            <Icon name="auto_awesome" size={20} color={C.amber} />
+            <View style={{ flex: 1, gap: 2 }}>
+              <T v="eyebrow" color={C.amber}>Suggested rooms</T>
+              <T v="headline">{`Kova matched ${Object.keys(suggested.zoneRooms).length === 1 ? 'a zone' : `${Object.keys(suggested.zoneRooms).length} zones`} to rooms`}</T>
+              <T v="footnote" color={C.stone}>From the zones’ names. Check each one below, or use them all.</T>
+            </View>
+          </View>
+          <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+            <Button size="sm" label="Use all suggestions" onPress={() => settings(suggested, 'Zones matched to rooms')} />
+          </View>
+        </Card>
+      ) : null}
       {!zones.length ? <T v="footnote" color={C.stone}>No zones open.</T> : null}
       {zones.map(z => (
-        <Card key={z.n} style={{ padding: SP[3], gap: SP[2] }}>
-          <View style={{ gap: SP[2], opacity: z.on ? 1 : 0.7 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2] }}>
-              {editing === z.n ? (
-                <TextInput autoFocus value={draft} onChangeText={setDraft} onSubmitEditing={() => rename(z.n)} onBlur={() => rename(z.n)} placeholder={`Zone ${z.n}`} placeholderTextColor={C.stone3}
-                  accessibilityLabel={`Name for zone ${z.n}`} returnKeyType="done" style={{ flex: 1, color: C.bone, fontFamily: F[700], fontSize: 15, paddingVertical: 2 }} />
-              ) : (
-                <Press onPress={() => { setDraft(D.zoneNames?.[String(z.n)] ?? ''); setEditing(z.n); }} label={`${z.name}, rename`} style={{ flex: 1, minWidth: 0 }}>
-                  <T v="headline" numberOfLines={1}>{z.name}</T>
-                </Press>
-              )}
-              <T v="footnote" color={C.stone}>{z.on ? `${z.open}% open` : 'Closed'}</T>
-              <Switch on={z.on} color={C.blue} label={`${z.name} on`} onChange={v => set(z.n, { on: v })} />
+        <Card key={z.n} style={{ padding: SP[4], gap: SP[3] }}>
+          {/* Name (never cut short: it wraps), then open or closed and the switch, which drop below when space is short. */}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', columnGap: SP[3], rowGap: SP[2] }}>
+            {editing === z.n ? (
+              <TextInput autoFocus value={draft} onChangeText={setDraft} onSubmitEditing={() => rename(z.n)} onBlur={() => rename(z.n)} placeholder={`Zone ${z.n}`} placeholderTextColor={C.stone3}
+                accessibilityLabel={`Name for zone ${z.n}`} returnKeyType="done" style={{ flexGrow: 1, flexBasis: 140, color: C.bone, fontFamily: F[700], fontSize: 15, paddingVertical: 2 }} />
+            ) : (
+              <Press onPress={() => { setDraft(D.zoneNames?.[String(z.n)] ?? ''); setEditing(z.n); }} label={`${z.name}, rename`} style={{ flexGrow: 1, flexShrink: 1, flexBasis: 'auto', maxWidth: '100%' }}>
+                <T v="headline" color={z.on ? C.bone : C.bone2}>{z.name}</T>
+              </Press>
+            )}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2], marginLeft: 'auto' }}>
+              <T v="footnote" color={z.on ? C.blue : C.stone}>{z.on ? `${z.open}% open` : 'Closed'}</T>
+              <Switch on={z.on} color={C.blue} label={`${z.name} open`} onChange={v => set(z.n, { on: v })} />
             </View>
-            <Slider value={z.open} color={C.blue} label={`${z.name} opening`} onRelease={v => set(z.n, { on: true, open: snapOpen(v) })} />
           </View>
-          <Press onPress={() => setPicking(picking === z.n ? null : z.n)} haptic="select" label={`${z.name} serves ${servesLine(z, rooms)}. Change rooms`}
-            style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2], minHeight: 36 }}>
-            <Icon name="meeting_room" size={17} color={z.rooms.length ? C.stone : C.stone2} />
-            <T v="footnote" weight={600} color={z.rooms.length ? C.bone2 : C.stone2} numberOfLines={2} style={{ flex: 1 }}>{z.rooms.length ? `Serves ${servesLine(z, rooms)}` : 'Serves no room yet'}</T>
-            <T v="footnote" weight={700} color={C.amber}>{picking === z.n ? 'Done' : 'Rooms'}</T>
-          </Press>
-          {z.suggest.length && picking !== z.n ? (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', gap: SP[2], padding: SP[2], paddingLeft: SP[3], borderRadius: R.sm, backgroundColor: C.amberTint, borderWidth: 1, borderColor: C.amberLine }}>
-              <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 150, flexDirection: 'row', alignItems: 'center', gap: SP[2] }}>
-                <Icon name="auto_awesome" size={16} color={C.amber} />
-                <T v="footnote" color={C.bone2} numberOfLines={3} style={{ flex: 1 }}>{`Kova suggests ${roomWords(z.suggest, rooms)}`}</T>
+          {/* How far open, while it's open (as on the room's card); closed, the switch opens it. */}
+          {z.on ? <Slider value={z.open} color={C.blue} onColor={C.onBlue} label={`${z.name} opening`} onRelease={v => set(z.n, { on: true, open: snapOpen(v) })} /> : null}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', columnGap: SP[3], rowGap: SP[2], paddingTop: SP[3], borderTopWidth: 1, borderTopColor: C.hairline }}>
+            <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 150, flexDirection: 'row', alignItems: 'center', gap: SP[2] }}>
+              <Icon name="meeting_room" size={18} color={z.rooms.length ? C.stone : C.stone2} />
+              <View style={{ flex: 1, gap: 1 }}>
+                <T v="eyebrow" color={C.stone2}>Serves</T>
+                <T v="callout" weight={600} color={z.rooms.length ? C.bone : C.stone}>{z.rooms.length ? servesLine(z, rooms) : 'No room yet'}</T>
               </View>
-              <Button size="sm" kind="secondary" label="Confirm" onPress={() => serve(z, z.suggest)} />
             </View>
-          ) : null}
+            <View style={{ marginLeft: 'auto' }}>
+              <Button size="sm" kind="secondary" icon={picking === z.n ? 'check' : 'edit'} label={picking === z.n ? 'Done' : 'Choose rooms'} onPress={() => setPicking(picking === z.n ? null : z.n)} />
+            </View>
+          </View>
           {picking === z.n ? (
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
               {rooms.map(r => <Pill key={r.id} icon={r.icon} label={r.name} on={z.rooms.includes(r.id)} onPress={() => void serve(z, toggleRoom(z.rooms, r.id))} />)}
             </View>
+          ) : z.suggest.length ? (
+            <Card tint={C.amber} style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: SP[3], rowGap: SP[2], padding: SP[3], backgroundColor: alpha(C.amber, 0.07) }}>
+              <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 150, flexDirection: 'row', gap: SP[2], alignItems: 'flex-start' }}>
+                <Icon name="auto_awesome" size={18} color={C.amber} />
+                <View style={{ flex: 1, gap: 2 }}>
+                  <T v="eyebrow" color={C.amber}>Kova suggests</T>
+                  <T v="headline">{roomWords(z.suggest, rooms)}</T>
+                </View>
+              </View>
+              <View style={{ marginLeft: 'auto' }}>
+                <Button size="sm" label="Confirm" onPress={() => serve(z, z.suggest)} />
+              </View>
+            </Card>
           ) : null}
         </Card>
       ))}
-      {zones.some(z => z.rooms.length) ? <T v="micro" color={C.stone2}>Each room shows its zone in Devices. A zone can serve several rooms.</T> : null}
+      {pending === 0 && zones.some(z => z.rooms.length) ? <T v="micro" color={C.stone2}>Each room shows its zone in Devices. A zone can serve several rooms.</T> : null}
     </Section>
   );
 }
