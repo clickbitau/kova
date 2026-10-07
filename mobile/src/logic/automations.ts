@@ -140,7 +140,7 @@ export const ACTION_KINDS = opts<Action['kind']>([['set', 'Set devices'], ['dela
 export const RUN_MODES = opts<RunMode>([['single', 'Ignore the new start'], ['restart', 'Start over'], ['queued', 'Run again after'], ['parallel', 'Run alongside']]);
 
 export const FIELDS = opts<NumericField>([['temp', 'temperature'], ['target', 'set temperature'], ['power', 'power (W)'], ['energy', 'energy today (kWh)'], ['battery', 'battery (%)'], ['bri', 'brightness (%)'], ['vol', 'volume (%)']]);
-export const EVENTS = opts([['person', 'sees a person'], ['ring', 'rings'], ['motion', 'detects motion'], ['video-started', 'starts a video'], ['music-started', 'starts music'], ['paused', 'pauses'], ['stopped', 'stops playing'], ['internet-down', 'internet goes down'], ['internet-up', 'internet comes back'], ['new-device', 'a new device joins']]);
+export const EVENTS = opts([['person', 'sees a person'], ['ring', 'rings'], ['motion', 'detects motion'], ['video-started', 'starts a video'], ['music-started', 'starts music'], ['paused', 'pauses'], ['stopped', 'stops playing'], ['internet-down', 'internet goes down'], ['internet-up', 'internet comes back'], ['new-device', 'a new device joins'], ['power-supply-changed', 'a power supply changes'], ['power-supply-failed', 'a power supply fails'], ['power-supply-restored', 'a power supply comes back']]);
 export const PRESENCE_EVENTS = opts<'arrives' | 'leaves' | 'first-arrives' | 'last-leaves'>([['arrives', 'comes home'], ['leaves', 'leaves'], ['first-arrives', 'first home (nobody was)'], ['last-leaves', 'last one out']]);
 export const DAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 export const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];

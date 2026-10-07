@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Animated, View } from 'react-native';
 import { C, R, SP } from '../theme';
 import { useHub } from '../state/hub';
-import { ICON, isLight, stateOf, tint, type Dev } from '../logic/devices';
+import { iconOf, isLight, stateOf, tint, type Dev } from '../logic/devices';
 import { AnimatedIcon, Icon } from './Icon';
 import { Press, Skeleton, Spinner } from './kit';
 import { Appear, reducedMotion, shake, spring, useStateValue } from './motion';
@@ -44,7 +44,7 @@ export function Tile({ d, onToggle, onOpen }: { d: Dev; onToggle: () => void; on
   }, [p]);
   useEffect(() => { if (p === 'failed') shake(x); }, [p, x]);
   const dead = d.online === false && d.type !== 'camera' && d.type !== 'sensor';
-  const icon = dead ? 'wifi_off' : ICON[d.type] ?? 'devices';
+  const icon = dead ? 'wifi_off' : iconOf(d);
   const level = levelOf(d);
   return (
     <Animated.View style={{ flex: 1, transform: [{ translateX: x }] }}>

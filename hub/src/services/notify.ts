@@ -6,6 +6,7 @@ import webpush, { type PushSubscription } from 'web-push';
 import type { Hub } from '../hub.ts';
 import type { DeviceEvent } from '../devices/registry.ts';
 import { isLight } from '../util/describe.ts';
+import { powerTrouble } from '../util/hardware.ts';
 
 /** Push notifications. Lives under `notify` in integrations.json; Web Push to the Kova phone app works with no config. */
 export interface NotifyOptions {
@@ -90,12 +91,14 @@ export class Notifier {
     const onEvent = (e: DeviceEvent) => {
       if (e.type === 'ring' && this.rule('doorbell')) this.track(this.onRing(e));
       if (e.device.adapter === 'warden' && this.rule('network')) this.track(this.onNetwork(e));
+      // The router's power changed: the alert (an insight) goes out now, not at the next look.
+      if (e.type === 'power-supply-changed') { try { this.hub.insights.current(); } catch { /* next minute */ } }
     };
     this.hub.reg.on('event', onEvent);
     // The home's alerts and warnings (filter, the air, heat and cold, batteries): told once, when each first appears.
     const onInsight = (i: import('./insights.ts').Insight) => {
-      if (!this.rule('home')) return;
-      this.track(this.notify({ title: i.title, body: i.detail ?? '', tag: `insight-${i.id}`, url: i.device ? `/phone.html?device=${encodeURIComponent(i.device)}` : '/phone.html' }));
+      if (!this.rule(i.rule ?? 'home')) return;
+      this.track(this.notify({ title: i.title, body: i.detail ?? '', tag: i.tag ?? `insight-${i.id}`, url: i.device ? `/phone.html?device=${encodeURIComponent(i.device)}` : '/phone.html' }));
     };
     this.hub.insights.on('new', onInsight);
     // Insights are worked out when someone looks; this looks every minute too, so a push doesn't wait for a screen.
@@ -174,6 +177,10 @@ export class Notifier {
     else if (e.type === 'internet-failover') await this.notify({ title: text('title') || 'Switched to the backup connection', body: [text('body'), 'Everything stays online; it may be slower until the main connection is back.'].filter(Boolean).join(' '), tag: 'internet', url });
     else if (e.type === 'new-device') await this.notify({ title: text('title') || 'A new device joined your network', body: text('body') || 'Open Warden to name it or block it.', tag: 'warden-new-device', url });
     else if (e.type === 'threat') await this.notify({ title: text('title') || 'Warden blocked an attack', body: text('body'), tag: 'warden-threat', url });
+    // A supply came back and nothing about the router's power is wrong now (while it is, the alert says so).
+    else if (e.type === 'power-supply-restored' && !powerTrouble(e.device.state)) {
+      await this.notify({ title: `${e.device.name} power is back to normal`, body: [`${text('name') || 'The power supply'} is OK again.`, e.device.state.redundancy ? `Redundancy ${e.device.state.redundancy}.` : ''].filter(Boolean).join(' '), tag: `power-${e.device.id}`, url: `/phone.html?device=${encodeURIComponent(e.device.id)}` });
+    }
   }
 
   private onPresence(): void {

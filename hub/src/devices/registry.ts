@@ -6,9 +6,10 @@ import { CAPS, changeSentence, fitCommand, PSEUDO_TARGET, typeMatch } from '../u
 
 /**
  * Readings that update silently: they're not "changes" anyone made. A vacuum's
- * activity rides along with `on`, which is what gets logged.
+ * activity rides along with `on`, which is what gets logged. A server's power supplies and
+ * sensors (the router's BMC) too: a supply that changes comes with an event, and that's logged.
  */
-const MEASUREMENTS = new Set(['online', 'power', 'energy', 'grid', 'load', 'battery', 'activity']);
+const MEASUREMENTS = new Set(['online', 'power', 'energy', 'grid', 'load', 'battery', 'activity', 'supplies', 'redundancy', 'sensors', 'fanMode', 'fanPercent']);
 
 /** Value equality for state fields: objects (extras, zones, track) compare by content, not reference. */
 function same(a: unknown, b: unknown): boolean {

@@ -42,7 +42,47 @@ export function devs(s: Pick<Snapshot, 'devices'>): Record<string, Dev> {
 const INPUT_NAMES: Record<string, string> = { hdmi1: 'HDMI 1', hdmi2: 'HDMI 2', hdmi3: 'HDMI 3', hdmi4: 'HDMI 4', bluetooth: 'Bluetooth', wifi: 'Wi-Fi' };
 const inputName = (d: Dev) => d.input ? (d.input === 'tv' ? (has(d, 'sound') ? 'TV (eARC)' : 'TV') : INPUT_NAMES[d.input] ?? d.input) : '';
 
+/** The router (Warden, from its BMC). */
+export const ROUTER_ID = 'warden_router';
+const PROBLEM: Record<string, string> = { 'no input power': 'No input power', failed: 'Failed', 'predicted to fail': 'Predicted to fail', 'input power out of range': 'Input out of range', 'not installed': 'Not installed' };
+const REDUNDANCY: Record<string, [string, string, string]> = { full: ['Full', C.green, 'The supplies back each other up'], degraded: ['Degraded', C.amber, 'Still running, with less backup'], lost: ['Lost', C.red, 'One more failure and it goes off'] };
+
+/** The icon for a device: its type's, or the router's own. */
+export const iconOf = (d: Pick<Device, 'id' | 'type'>) => d.id === ROUTER_ID ? 'dns' : ICON[d.type] ?? 'devices';
+
+/** The router's power panel, shown on the Router and on the Internet device: null when Warden can't read its hardware. */
+export function routerPanel(s: Pick<Snapshot, 'devices' | 'insights'>, d: Pick<Device, 'id'>) {
+  const all = devs(s);
+  const R = d.id === ROUTER_ID ? all[ROUTER_ID] : d.id === 'warden_internet' ? all[ROUTER_ID] : undefined;
+  if (!R || !(Array.isArray(R.supplies) || Array.isArray(R.sensors) || R.power != null)) return null;
+  const red = R.redundancy ? REDUNDANCY[R.redundancy] : undefined;
+  const alert = (s.insights ?? []).find(i => i.device === R.id && i.id.startsWith('power:'));
+  return {
+    title: d.id === R.id ? 'Power' : 'Router power',
+    watts: R.power != null ? `${Math.round(R.power)} W` : '—',
+    wattsNote: R.online === false ? 'Warden can’t read it right now' : R.power != null ? 'Drawing now' : 'Not measured by this hardware',
+    redundancy: red ? { label: red[0], color: red[1], note: red[2] } : { label: '—', color: C.stone, note: 'Not reported' },
+    alert: alert ? { text: alert.title, color: alert.level === 'alert' ? C.red : C.amber } : null,
+    supplies: (R.supplies ?? []).map(x => {
+      const warn = x.problem === 'predicted to fail';
+      return { name: x.name, badge: x.ok ? 'OK' : PROBLEM[x.problem ?? ''] ?? 'Not OK', color: x.ok ? C.green : warn ? C.amber : C.red, icon: x.ok ? 'check_circle' : warn ? 'warning' : 'power_off' };
+    }),
+    temps: (R.sensors ?? []).filter(x => x.kind === 'temp').map(x => ({ name: x.name, value: `${x.value}°`, color: x.value >= 80 ? C.red : x.value >= 65 ? C.amber : '#f1efea' })),
+    fans: (R.sensors ?? []).filter(x => x.kind === 'fan').map(x => `${x.name} · ${x.value} rpm`),
+    fanMode: R.fanMode ? `${R.fanMode[0].toUpperCase()}${R.fanMode.slice(1)}${R.fanPercent != null ? ` · ${R.fanPercent}%` : ''}` : '',
+  };
+}
+
 export function stateOf(d: Dev): [string, string] {
+  if (d.id === ROUTER_ID) {
+    const bad = (d.supplies ?? []).filter(x => !x.ok), w = d.power != null ? `${Math.round(d.power)} W` : '';
+    if (d.online === false) return ['Not answering', C.red];
+    if (bad.length || (d.redundancy && d.redundancy !== 'full')) {
+      const what = bad.length ? `${bad.length === 1 ? bad[0].name : `${bad.length} supplies`} not OK` : `Redundancy ${d.redundancy}`;
+      return [[what, w].filter(Boolean).join(' · '), d.redundancy === 'lost' || bad.some(x => x.problem !== 'predicted to fail') ? C.red : C.amber];
+    }
+    return [w || 'OK', C.green];
+  }
   if (d.id === 'warden_internet') return d.online === false ? ['Warden not answering', C.red] : d.on ? ['Internet up', C.green] : ['Internet down', C.red];
   if (d.type === 'camera' || d.type === 'sensor') return d.online === false ? ['Offline', C.red] : ['Live', C.green];
   if (d.online === false) return ['Not responding', C.red];

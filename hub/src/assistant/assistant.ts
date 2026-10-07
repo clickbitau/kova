@@ -5,6 +5,7 @@ import type { ConfigStore } from '../engine/config.ts';
 import type { Cause, Device, Overlay, Targets } from '../model/types.ts';
 import { isLight, isPlayer } from '../util/describe.ts';
 import { clock } from '../util/time.ts';
+import { hardwareSummary, hasHardware } from '../util/hardware.ts';
 
 // Ask Kova, built in: a deterministic intent parser that runs on the hub.
 // No AI, nothing leaves the home. Requests are parsed into an Intent first,
@@ -37,7 +38,9 @@ export type Intent =
   /** "next song", "previous song in the kitchen". */
   | { kind: 'skip'; delta: 1 | -1; label: string; devices: string[] }
   /** "what's playing?", "what song is this?" */
-  | { kind: 'nowPlaying' };
+  | { kind: 'nowPlaying' }
+  /** "is the router OK?", "how much power is the router using?": a device whose hardware Kova reads (the router, from Warden). */
+  | { kind: 'hardware'; device: string; label: string };
 
 /** A follow-up the user can tap, executed by POST /api/ask/act. */
 export type AskAction =
@@ -142,6 +145,11 @@ export class Assistant {
     // A message that is only a greeting — "hey turn the lights on" still parses as a command.
     if (/^(hi+|hello+|hey+|yo|hiya|howdy|morning|good (morning|afternoon|evening))( there)?( kova)?$/.test(t)) return { kind: 'greeting' };
     if (/^who(s| is)?\b.*\b(home|in|here|out)\b/.test(t)) return { kind: 'whoHome' };
+    // "is the router ok", "how much power is the router using", "router power supplies", "how hot is the router"
+    const hw = this.reg.list().filter(hasHardware).find(d => new RegExp(`\\b(${[norm(d.name), d.adapter === 'warden' ? 'router|warden' : ''].filter(Boolean).join('|')})\\b`).test(t));
+    if (hw && /\b(ok|okay|alright|fine|healthy|good|working|power|watts?|using|draw(ing|s)?|use|supply|supplies|psus?|redundan\w*|temp\w*|hot|warm|fans?|status|how is|hows)\b/.test(t) && !/^(turn|switch|restart|reboot)\b/.test(t)) {
+      return { kind: 'hardware', device: hw.id, label: hw.name };
+    }
     if (/^why\b/.test(t)) {
       const m = t.match(/^why (?:is|are|did) (?:the )?(.+?)(?: (?:on|off|playing|turn on|come on))?$/);
       const r = m ? this.resolve(m[1]) : null;
@@ -248,6 +256,7 @@ export class Assistant {
       case 'skip': return [i.delta > 0 ? 'Next song' : 'Previous song', i.label];
       case 'nowPlaying': return ['Now playing'];
       case 'greeting': return ['Greeting'];
+      case 'hardware': return ['Hardware', i.label];
     }
   }
 
@@ -360,6 +369,10 @@ export class Assistant {
         if (!i.devices.length) return reply(i.resume ? 'Nothing is paused.' : 'Nothing is playing that I can pause.', 'Device control');
         const r = await this.engine.applyMany(Object.fromEntries(i.devices.map(id => [id, { paused: !i.resume }])), { ...CAUSE, label: i.resume ? 'Carry on' : 'Pause' });
         return reply(i.resume ? `Carrying on: ${i.label}.` : `Paused: ${i.label}.`, 'Device control', { undo: r.changed.length ? r.undo : undefined });
+      }
+      case 'hardware': {
+        const d = this.reg.get(i.device);
+        return reply(d ? hardwareSummary(d) : 'Kova can’t read that right now.', 'Built-in · nothing left your home');
       }
       case 'status': {
         const now = this.engine.planner.modeAt(this.engine.now());

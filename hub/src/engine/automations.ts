@@ -487,6 +487,7 @@ export class Automations {
 export const EVENT_WORDS: Record<string, string> = {
   person: 'saw a person', ring: 'rang', motion: 'detected motion', 'video-started': 'started a video', 'music-started': 'started music',
   paused: 'paused', resumed: 'carried on', stopped: 'stopped', 'internet-down': 'internet down', 'internet-up': 'internet back', 'new-device': 'new device joined',
+  'power-supply-changed': 'power supply changed', 'power-supply-failed': 'power supply failed', 'power-supply-restored': 'power supply back',
 };
 
 export const durWords = (s: number) => s >= 3600 && s % 3600 === 0 ? `${s / 3600} h` : s >= 60 ? `${Math.round(s / 60)} min` : `${s} s`;

@@ -42,6 +42,13 @@ export interface DeviceState {
   childLock?: boolean;
   /** Ducted air conditioners (`zones`): each zone's damper, on or off and how far open (0–100). */
   zones?: { n: number; on: boolean; open: number | null }[] | null;
+  /** Server hardware read through its BMC (the router, from Warden): each power supply (a problem while it isn't OK),
+   * whether they still back each other up, temperature (°C) and fan (RPM) sensors, and how the fans run. */
+  supplies?: { name: string; present?: boolean; ok: boolean; problem?: string | null }[] | null;
+  redundancy?: 'full' | 'degraded' | 'lost' | null;
+  sensors?: { name: string; kind: 'temp' | 'fan'; value: number; unit: string }[] | null;
+  fanMode?: string | null;
+  fanPercent?: number | null;
   online?: boolean;
 }
 

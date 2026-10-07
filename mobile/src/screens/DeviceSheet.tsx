@@ -7,7 +7,7 @@ import { useHub } from '../state/hub';
 import { useSheet } from '../state/sheet';
 import { useNav } from '../navigation';
 import { hubUrl } from '../logic/connect';
-import { AIR, combinedOf, devs, FAN_SPEEDS, filterNote, has, HVAC, ICON, isPlayer, stateOf, tint, type Dev } from '../logic/devices';
+import { AIR, combinedOf, devs, FAN_SPEEDS, filterNote, has, HVAC, iconOf, isPlayer, routerPanel, stateOf, tint, type Dev } from '../logic/devices';
 import { arcPath, clampTarget, TARGET_MAX, TARGET_MIN } from '../logic/climate';
 import { snapOpen, visibleZones } from '../logic/zones';
 import { Icon } from '../ui/Icon';
@@ -97,7 +97,8 @@ export function DeviceSheet() {
   const combo = combinedOf(snap).find(c => c.deviceId === D.id);
   const settings = (body: object, done: string) => act('PATCH', `/api/devices/${encodeURIComponent(D.id)}/settings`, body, done);
   const group = snap.speakerGroups.find(g => g.deviceId === D.id);
-  const readings = ([D.power != null && ['Using now', Math.abs(D.power) >= 1000 ? `${(D.power / 1000).toFixed(1)} kW` : `${Math.round(D.power)} W`, 'bolt'], D.energy != null && ['Today', `${D.energy} kWh`, 'electric_meter'], D.battery != null && D.type !== 'vacuum' && ['Battery', `${D.battery}%`, 'battery_full']] as const)
+  const router = routerPanel(snap, D);
+  const readings = ([D.power != null && !router && ['Using now', Math.abs(D.power) >= 1000 ? `${(D.power / 1000).toFixed(1)} kW` : `${Math.round(D.power)} W`, 'bolt'], D.energy != null && ['Today', `${D.energy} kWh`, 'electric_meter'], D.battery != null && D.type !== 'vacuum' && ['Battery', `${D.battery}%`, 'battery_full']] as const)
     .filter((x): x is [string, string, string] => !!x);
   const rooms = snap.rooms.some(r => r.id === D.room) ? snap.rooms : [...snap.rooms, { id: D.room, name: D.room === 'unassigned' ? 'No room' : D.room, icon: 'category' }];
   const roomName = rooms.find(r => r.id === D.room)?.name ?? '';
@@ -119,7 +120,7 @@ export function DeviceSheet() {
   return (
     <Sheet open onClose={close} label={`${D.name} panel`}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3] + 2 }}>
-        <IconWell icon={ICON[D.type] ?? 'devices'} color={D.online === false ? C.red : t.iconFg} bg={D.online === false ? C.redTint : t.iconBg} size={52} radius={26} fill />
+        <IconWell icon={iconOf(D)} color={D.online === false ? C.red : t.iconFg} bg={D.online === false ? C.redTint : t.iconBg} size={52} radius={26} fill />
         <View style={{ flex: 1, gap: 2 }}>
           <T v="footnote" weight={600} color={C.stone}>{roomName}</T>
           <T v="title" numberOfLines={2}>{D.name}</T>
@@ -263,6 +264,7 @@ export function DeviceSheet() {
       ) : null}
 
       {D.type === 'fan' && has(D, 'purifier') ? <Purifier D={D} /> : null}
+      {router ? <RouterPower P={router} /> : null}
       {D.type === 'fan' ? block('fanmode', 'Mode',
         <Segmented label="Fan mode" value={D.on !== false ? D.mode ?? null : null} color={C.blue} options={[{ id: 'Auto', label: 'Auto', icon: 'auto_mode' }, { id: 'Sleep', label: 'Sleep', icon: 'bedtime' }, { id: 'Manual', label: 'Manual', icon: 'tune' }]} onChange={m => void send(D.id, { on: true, mode: m })} />,
       ) : null}
@@ -377,6 +379,61 @@ function Zones({ D }: { D: Dev }) {
         </Card>
       ))}
     </Section>
+  );
+}
+
+/** The router's hardware (Warden, from its BMC): what it draws, each power supply with what's wrong, redundancy, temperatures and fans. */
+function RouterPower({ P }: { P: NonNullable<ReturnType<typeof routerPanel>> }) {
+  return (
+    <View style={{ gap: SP[4] }}>
+      {P.alert ? (
+        <Card tint={P.alert.color} style={{ padding: SP[3] + 2, flexDirection: 'row', gap: SP[3], alignItems: 'flex-start' }}>
+          <Icon name="power_off" size={20} color={P.alert.color} fill />
+          <T v="callout" weight={600} style={{ flex: 1 }}>{P.alert.text}</T>
+        </Card>
+      ) : null}
+      <View style={{ flexDirection: 'row', gap: SP[2] }}>
+        <Card style={{ flex: 1, padding: SP[3] + 2, gap: 2 }}>
+          <T v="footnote" color={C.stone}>{P.title}</T>
+          <T v="title" tabular>{P.watts}</T>
+          <T v="micro" color={C.stone2}>{P.wattsNote}</T>
+        </Card>
+        <Card style={{ flex: 1, padding: SP[3] + 2, gap: 2 }}>
+          <T v="footnote" color={C.stone}>Redundancy</T>
+          <T v="title" color={P.redundancy.color}>{P.redundancy.label}</T>
+          <T v="micro" color={C.stone2}>{P.redundancy.note}</T>
+        </Card>
+      </View>
+      {P.supplies.length ? (
+        <Group title="Power supplies">
+          {P.supplies.map((x, i) => (
+            <View key={x.name} accessible accessibilityLabel={`${x.name}: ${x.badge}`} style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3], paddingHorizontal: SP[4], paddingVertical: SP[3], borderTopWidth: i ? 1 : 0, borderTopColor: C.hairline }}>
+              <Icon name={x.icon} size={20} color={x.color} fill />
+              <T v="body" weight={600} numberOfLines={1} style={{ flex: 1 }}>{x.name}</T>
+              <Tag text={x.badge} color={x.color} />
+            </View>
+          ))}
+        </Group>
+      ) : null}
+      {P.temps.length ? (
+        <Section title="Temperatures" caption gap={SP[2]}>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SP[2] }}>
+            {P.temps.map(x => (
+              <Card key={x.name} style={{ flexBasis: '47%', flexGrow: 1, padding: SP[3], gap: 2 }}>
+                <T v="micro" color={C.stone} numberOfLines={1}>{x.name}</T>
+                <T v="headline" color={x.color} tabular>{x.value}</T>
+              </Card>
+            ))}
+          </View>
+        </Section>
+      ) : null}
+      {P.fans.length || P.fanMode ? (
+        <Section title="Fans" caption gap={SP[2]} right={P.fanMode ? <T v="footnote" color={C.stone}>{P.fanMode}</T> : undefined}>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>{P.fans.map(f => <Tag key={f} text={f} color={C.stone} />)}</View>
+        </Section>
+      ) : null}
+      <T v="micro" color={C.stone2}>From the router’s BMC, through Warden. Read every 5 minutes, and at once when a supply changes.</T>
+    </View>
   );
 }
 

@@ -255,13 +255,18 @@ export class Engine extends EventEmitter<{ changed: [] }> {
       person: 'saw a person', ring: 'rang', motion: 'detected motion',
       'internet-down': 'is down', 'internet-up': 'is back', 'internet-failover': 'switched to the backup connection', 'new-device': 'saw a new device join', threat: 'blocked an attack',
       'video-started': 'started playing', 'music-started': 'started playing', paused: 'paused', resumed: 'carried on playing', stopped: 'stopped',
+      'power-supply-changed': 'power supply changed', 'power-supply-failed': 'power supply failed', 'power-supply-restored': 'power supply back',
     };
     const title = typeof e.data?.title === 'string' && e.data.title && /started$/.test(e.type) ? ` ${e.data.title}` : '';
-    this.store.append({
-      kind: 'device_event', device: e.device.id, feed: 'people',
-      what: `${e.device.name} ${labels[e.type] ?? e.type}${title}`,
-      data: { type: e.type, ...e.data }, cause: { kind: 'device', label: e.device.integration },
-    });
+    // A router power supply: "Router: Power supply 1 has no input power". Events marked quiet ride along with one
+    // that's already logged (power-supply-failed with its power-supply-changed).
+    const what = /^power-supply-/.test(e.type) && typeof e.data?.title === 'string' && e.data.title ? `${e.device.name}: ${e.data.title}` : `${e.device.name} ${labels[e.type] ?? e.type}${title}`;
+    if (e.data?.quiet !== true) {
+      this.store.append({
+        kind: 'device_event', device: e.device.id, feed: 'people', what,
+        data: { type: e.type, ...e.data }, cause: { kind: 'device', label: e.device.integration },
+      });
+    }
     const hits = this.cfg.lightTheWay.triggers.filter(t => 'device' in t.on && t.on.device === e.device.id && t.on.event === e.type);
     for (const t of hits) await this.lightTheWay(t);
     // "Movie starts when the lounge Helix plays a film."
