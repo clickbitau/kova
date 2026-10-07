@@ -15,6 +15,8 @@ export interface AskJob {
   /** What was asked. */
   text: string;
   status: 'working' | 'done';
+  /** Who asked (services/actor.ts actorKey): only they follow it. */
+  who?: string;
   /** The engine working on it, for the header and "Asking MiniMax…". */
   engine: { kind: 'builtin' | 'local' | 'cloud'; label: string };
   /** Each tool step so far, as the person reads it ("Combining Bedroom TV and TV"). */
@@ -41,9 +43,9 @@ export class AskJobs {
    * Start a job: `run` does the work, calling `progress` with the steps as they change, and returns the reply.
    * `run` should not throw; if it does, the job ends with the error as its reply.
    */
-  start(text: string, engine: AskJob['engine'], run: (progress: (steps: AskStep[]) => void) => Promise<AskReply>, onDone?: (job: AskJob) => void): AskJob {
+  start(text: string, engine: AskJob['engine'], run: (progress: (steps: AskStep[]) => void) => Promise<AskReply>, onDone?: (job: AskJob) => void, who?: string): AskJob {
     this.prune();
-    const job: AskJob = { id: randomUUID().replace(/-/g, '').slice(0, 16), text, status: 'working', engine, steps: [], started: this.now(), rev: 1 };
+    const job: AskJob = { id: randomUUID().replace(/-/g, '').slice(0, 16), text, status: 'working', engine, steps: [], started: this.now(), rev: 1, ...(who ? { who } : {}) };
     this.jobs.set(job.id, job);
     const bump = () => { job.rev++; const w = this.waiters.get(job.id); if (w) { this.waiters.delete(job.id); for (const f of w) f(); } };
     void (async () => {
@@ -81,7 +83,8 @@ export class AskJobs {
   }
 
   /** Jobs still being worked on (for a client that comes back). */
-  running(): AskJob[] { return [...this.jobs.values()].filter(j => j.status === 'working'); }
+  /** Jobs still being worked on; `who`: only that person's. */
+  running(who?: string): AskJob[] { return [...this.jobs.values()].filter(j => j.status === 'working' && (who === undefined || (j.who ?? 'owner') === who)); }
 
   /** Let every follower go (the hub is stopping). */
   close(): void {

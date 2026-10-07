@@ -9,6 +9,7 @@ import { isLight, isPlayer } from '../util/describe.ts';
 import { clock, localDate, atLocal } from '../util/time.ts';
 import { hardwareSummary, hasHardware } from '../util/hardware.ts';
 import { isCamera, isDoorbell, isSensor, reading, type ReadingField } from '../util/sensors.ts';
+import { allows, canDevice, currentActor, demand, needs, type Perm } from '../services/actor.ts';
 
 /** A time still to come: "at 9pm", "at 21:30", "in 20 minutes", "in an hour", "tomorrow", "tonight at", "later". */
 export const LATER = /\b(at \d{1,2}(:\d{2})? ?(am|pm)|at \d{1,2}:\d{2}|at (noon|midnight)|in (\d+|an?|half an?) (min|mins|minutes?|hours?|hrs?)|tomorrow|tonight at|later (today|on|tonight)|on (mon|tues|wednes|thurs|fri|satur|sun)day)\b/;
@@ -107,8 +108,8 @@ export class Assistant {
    * The devices answers are about: not archived, not hidden — and so never the parts of a combined device, which
    * stands for them (its parts are hidden while combined). A hidden device is still reached by its exact name.
    */
-  private devs(): Device[] { return this.reg.list().filter(d => !d.archived && !d.hidden); }
-  private hiddenNamed(p: string): Device[] { return this.reg.list().filter(d => !d.archived && d.hidden && norm(d.name) === p); }
+  private devs(): Device[] { const a = currentActor(); return this.reg.list().filter(d => !d.archived && !d.hidden && canDevice(a, d)); }
+  private hiddenNamed(p: string): Device[] { const a = currentActor(); return this.reg.list().filter(d => !d.archived && d.hidden && norm(d.name) === p && canDevice(a, d)); }
   private roomName(id: string) { return this.rooms().find(r => r.id === id)?.name ?? id; }
 
   /** Devices a phrase refers to: a learned label, a room (optionally + device), a device, or everything. */
@@ -287,6 +288,9 @@ export class Assistant {
 
   /** Understand a request without doing anything. */
   parse(q: string): Intent | null {
+    // "My room" is the room of the person asking (their account's own room).
+    const mine = currentActor()?.room;
+    if (mine) q = q.replace(/\b(my|our) (bed)?room\b/gi, this.roomName(mine));
     const t = norm(q);
     const raw = q.toLowerCase().trim().replace(/[.!?]+$/, '');
     const c = this.config.get();
@@ -462,6 +466,9 @@ export class Assistant {
     const reply = (text: string, source: Source, extra: Partial<AskReply> = {}): AskReply => ({ text, source, actions: [], understood: true, ...extra });
     if (!i && LATER.test(q.toLowerCase())) return reply('That’s for later, so it needs a one-time schedule: make one in Automations → Schedule once, or turn on an AI engine in Ask Kova settings and ask again.', 'Built-in · nothing left your home', { understood: false });
     if (!i) return reply('I didn’t catch that. I can switch rooms and devices, set brightness (“lamp to 30%”), start Movie or Away, tell you why something is on, what’s happening tonight, and who’s home.', 'Built-in · nothing left your home', { understood: false });
+    // What the asker's role allows (services/actor.ts): a child doesn't see the cameras or change modes here either.
+    const need = ({ learn: 'home', overlay: 'modes', whoHome: 'people', roomEvents: 'cameras', contact: 'history', hardware: 'owner' } as Partial<Record<Intent['kind'], Perm>>)[i.kind];
+    if (need && !allows(currentActor(), need)) return reply(needs(need), 'Built-in · nothing left your home');
     const tz = this.config.get().timezone;
     switch (i.kind) {
       case 'greeting': {
@@ -667,6 +674,7 @@ export class Assistant {
       return { text: `${a.done}${how}`, undo: r.changed.length ? r.undo : undefined };
     }
     if (a.type === 'learnGroup') {
+      demand('home');
       const undo = this.config.update(c => { c.groups[a.name] = a.rooms; });
       return { text: `Saved. Try “turn off ${a.name}”.`, undo: this.engine.registerUndo(undo) };
     }

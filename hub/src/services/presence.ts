@@ -197,6 +197,22 @@ export class Presence {
     return this.opts.people?.[personId]?.key ?? this.keys[personId];
   }
 
+  /** A new phone-automation key for a person (their old Shortcut URLs stop working), e.g. when they lose their access. */
+  rotateKey(personId: string): void {
+    if (this.opts.people?.[personId]?.key) return; // set by hand in integrations.json: the owner's to change
+    this.keys[personId] = randomBytes(18).toString('base64url');
+    this.hub.store.set('presenceKeys', this.keys);
+  }
+
+  /** One person's arrive and leave URLs. */
+  urlsFor(personId: string, baseUrl: string): { arriveUrl: string; leaveUrl: string } | null {
+    if (!this.hub.config.get().people.some(p => p.id === personId)) return null;
+    const key = this.keyFor(personId);
+    if (!key) return null;
+    const url = `${baseUrl.replace(/\/+$/, '')}/api/people/${encodeURIComponent(personId)}/presence?key=${encodeURIComponent(key)}`;
+    return { arriveUrl: `${url}&home=1`, leaveUrl: `${url}&home=0` };
+  }
+
   /** Whether `key` is this person's phone-automation key. */
   checkKey(personId: string, key: string | undefined): boolean {
     const want = this.keyFor(personId);

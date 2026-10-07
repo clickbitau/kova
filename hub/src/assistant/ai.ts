@@ -16,6 +16,7 @@ import { isCamera, isSensor, readingsOf } from '../util/sensors.ts';
 import { ROOM_EVENT_TEXT } from '../engine/automations.ts';
 import { norm, type AskReply } from './assistant.ts';
 import type { JevAdvisor } from '../services/jev.ts';
+import { AccessDenied, ROLE_LABEL, allows, canDevice, canRoom, currentActor, demandTargets, needs, scoped, type Perm } from '../services/actor.ts';
 
 // Optional AI engines for Ask Kova. They only ever see requests the built-in
 // parser couldn't handle, only the context the user chose to share, never
@@ -382,6 +383,21 @@ export interface AskOutcome { done: string[]; couldnt: string[] }
 const READONLY = new Set(['power', 'energy', 'grid', 'load', 'temp', 'humidity', 'lux', 'pm25', 'airQuality', 'filterLife', 'battery', 'online', 'track', 'fanLevelMax', 'zones']);
 
 /** Models sometimes send a list argument as a JSON string — accept it. */
+/**
+ * "Remind me": a notification to "me" goes to the person asking (their phones), whoever they are. Asked with the
+ * master key (no person), it goes to everyone.
+ */
+export function forMe(v: unknown, personId: string | undefined = currentActor()?.personId): unknown {
+  if (Array.isArray(v)) return v.map(x => forMe(x, personId));
+  if (!v || typeof v !== 'object') return v;
+  const o = Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, forMe(x, personId)]));
+  if (o.kind === 'notify' && Array.isArray(o.people)) {
+    const people = [...new Set((o.people as unknown[]).flatMap(p => (p === 'me' ? (personId ? [personId] : []) : [p])))];
+    if (people.length) o.people = people; else delete o.people;
+  }
+  return o;
+}
+
 const listArg = (v: unknown): unknown => {
   if (typeof v !== 'string') return v;
   try { return JSON.parse(v) as unknown; } catch { return v; }
@@ -479,11 +495,15 @@ export interface ConvoTurn {
   /** The ask job it belongs to (POST /api/ask with job: true). */
   job?: string;
   source?: string; engine?: 'builtin' | 'local' | 'cloud'; undo?: string; failed?: boolean;
+  /** Whose conversation it is (services/actor.ts actorKey); none: from before accounts, the owner's. */
+  who?: string;
 }
 
 /** The last few exchanges, oldest first, so "yes", "the second one" and "do it" still land. */
-export function convoRecent(store: Store): ConvoTurn[] {
-  return (store.get<ConvoTurn[]>(CONVO_KEY) ?? []).filter(t => Date.now() - t.ts < CONVO_AGE_MS).slice(-CONVO_CAP);
+export function convoRecent(store: Store, who?: string): ConvoTurn[] {
+  const all = (store.get<ConvoTurn[]>(CONVO_KEY) ?? []).filter(t => Date.now() - t.ts < CONVO_AGE_MS);
+  // Each person has their own conversation: "yes" follows what *they* were asked.
+  return (who === undefined ? all : all.filter(t => (t.who ?? 'owner') === who)).slice(-CONVO_CAP);
 }
 
 /** Remember one turn of the conversation. Called for every ask, whichever side handled it. */
@@ -491,7 +511,12 @@ export function convoAdd(store: Store, role: ConvoTurn['role'], text: string, ex
   const t = text.trim().slice(0, 2000);
   if (!t) return;
   const turn: ConvoTurn = { role, text: t, ts: Date.now(), ...Object.fromEntries(Object.entries(extra).filter(([, v]) => v !== undefined)) };
-  store.set(CONVO_KEY, [...convoRecent(store), turn].sort((a, b) => a.ts - b.ts).slice(-CONVO_CAP));
+  // Kept per person: each one's last exchanges, everyone's within the age limit.
+  const all = (store.get<ConvoTurn[]>(CONVO_KEY) ?? []).filter(t => Date.now() - t.ts < CONVO_AGE_MS);
+  const who = turn.who ?? 'owner';
+  const theirs = all.filter(t => (t.who ?? 'owner') === who);
+  const drop = new Set(theirs.slice(0, Math.max(0, theirs.length + 1 - CONVO_CAP)));
+  store.set(CONVO_KEY, [...all.filter(t => !drop.has(t)), turn].sort((a, b) => a.ts - b.ts).slice(-CONVO_CAP * 6));
 }
 
 /** Facts the user asked the AI to keep ("note it down"): {ts, text} list, newest last. */
@@ -564,6 +589,17 @@ interface CallRecord {
   rooms?: string[];
 }
 
+/**
+ * What each tool needs of the person asking: Ask Kova acts with the asker's role, never more (services/actor.ts).
+ * Switching devices is checked device by device too (a child: only their rooms).
+ */
+export const TOOL_PERM: Record<string, Perm> = {
+  set_devices: 'control', explain_device: 'view', list_schedule: 'view', review_action: 'view',
+  start_overlay: 'modes', end_overlay: 'modes',
+  create_automation: 'automate', update_automation: 'automate', delete_automation: 'automate',
+  remember: 'home', forget: 'home', create_room: 'home', update_device: 'home', rename_room: 'home', delete_room: 'home', combine_devices: 'home', separate_devices: 'home',
+};
+
 const MUTATING = new Set<string>(['set_devices', 'start_overlay', 'end_overlay', 'remember', 'forget', 'create_automation', 'update_automation', 'delete_automation', 'create_room', 'update_device', 'rename_room', 'delete_room', 'combine_devices', 'separate_devices']);
 
 /** Runs tool calls against the engine, collecting undo ids. One per ask. */
@@ -591,7 +627,8 @@ export class Toolbox {
     if (typeof alias !== 'string') return undefined;
     const id = this.ctx.deviceIds.get(alias) ?? (this.ctx.realIds ? alias : undefined);
     const d = id ? this.ai.reg.get(id) : undefined;
-    return d && !isCamera(d) ? d : undefined;
+    // Only what the person asking may use (a child: their rooms' devices).
+    return d && !isCamera(d) && canDevice(currentActor(), d) ? d : undefined;
   }
 
   /** The id the model should use for a device from now on. */
@@ -716,7 +753,11 @@ export class Toolbox {
     const lastSame = this.records.map(r => !r.ok && r.tool === name && JSON.stringify(r.args ?? null) === sig).lastIndexOf(true);
     const same = lastSame >= 0 && !this.records.slice(lastSame + 1).some(r => r.ok && MUTATING.has(r.tool)) ? 1 : 0;
     let out: string;
-    if (same >= 1 || failed.length >= 3) {
+    const perm = TOOL_PERM[name] ?? 'owner';
+    if (!allows(currentActor(), perm)) {
+      // The asker's role can't do this: refused here, whatever the model sent (no way round it through Ask Kova).
+      out = JSON.stringify({ ok: false, error: `${needs(perm)} Tell them you can’t do that for them; someone who can may.` });
+    } else if (same >= 1 || failed.length >= 3) {
       out = JSON.stringify({ ok: false, error: same ? 'This exact call already failed. Don’t repeat it — fix what the error said, or tell the user what you can’t do.' : `This has failed ${failed.length} times. Don't try again — tell the user what you can't do or what's missing instead.` });
     } else {
       this.note = null;
@@ -942,7 +983,7 @@ export class Toolbox {
           try {
             const cfg = this.ai.config.get();
             const a = checkAutomation(
-              { name: args.name, description: args.description, triggers: listArg(args.when), conditions: listArg(args.if), actions: listArg(args.then), mode: args.runMode, enabled: args.enabled },
+              { name: args.name, description: args.description, triggers: listArg(args.when), conditions: listArg(args.if), actions: forMe(listArg(args.then)), mode: args.runMode, enabled: args.enabled },
               { device: id => this.ai.reg.get(id), cfg, now: this.ai.engine.now() });
             const id = autoSlug(a.name);
             const undo = this.ai.config.update(c => { (c.automations ??= []).push({ id, ...a }); });
@@ -972,7 +1013,7 @@ export class Toolbox {
               {
                 name: args.name ?? cur.name, description: args.description ?? cur.description,
                 triggers: listArg(args.when) ?? cur.triggers, conditions: listArg(args.if) ?? cur.conditions,
-                actions: listArg(args.then) ?? cur.actions, mode: args.runMode ?? cur.mode, enabled: args.enabled ?? cur.enabled,
+                actions: forMe(listArg(args.then)) ?? cur.actions, mode: args.runMode ?? cur.mode, enabled: args.enabled ?? cur.enabled,
               },
               { device: did => this.ai.reg.get(did), cfg, now: this.ai.engine.now() });
             const undo = this.ai.config.update(c => {
@@ -1512,10 +1553,12 @@ export class AiAssistant {
     // still work, e.g. to separate them), never as devices of their own. Hidden devices are listed apart, by name.
     const combos = (cfg.combined ?? []).filter(c => this.reg.get(`combined_${c.id}`));
     const partOf = new Map(combos.flatMap(c => c.members.map(m => [m, `combined_${c.id}`] as const)));
-    const usable = this.reg.list().filter(d => !isCamera(d) && !isSensor(d) && !d.archived && !partOf.has(d.id));
+    // Only what the person asking may use: a child or a guest sees their own rooms' devices, nothing else.
+    const asker = currentActor();
+    const usable = this.reg.list().filter(d => !isCamera(d) && !isSensor(d) && !d.archived && !partOf.has(d.id) && canDevice(asker, d));
     const devices = usable.filter(d => !d.hidden);
     const hiddenDevices = usable.filter(d => d.hidden);
-    const sensors = this.reg.list().filter(d => isSensor(d) && !d.hidden && !d.archived);
+    const sensors = this.reg.list().filter(d => isSensor(d) && !d.hidden && !d.archived && canDevice(asker, d));
     // Real ids spell out names ("kitchen_ceiling"); use neutral ones when names are private.
     const deviceIds = new Map<string, string>();
     const roomAlias = new Map(cfg.rooms.map((r, i) => [r.id, share.names ? r.id : `room${i + 1}`]));
@@ -1523,23 +1566,28 @@ export class AiAssistant {
     roomAlias.set(UNASSIGNED_ROOM, UNASSIGNED_ROOM);
     const shared: string[] = [];
     const lines: string[] = [];
+    // Who's asking: "me", "my room" and "remind me" are theirs, and they can only do what their role allows.
+    if (asker && (asker.personId || asker.role !== 'owner')) {
+      const roomName = asker.room ? cfg.rooms.find(r => r.id === asker.room) : undefined;
+      lines.push(`The person asking: ${share.names ? asker.name : 'a member of the home'} (${ROLE_LABEL[asker.role].toLowerCase()}${asker.role === 'owner' ? '' : `; they can ${[allows(asker, 'control') && (scoped(asker) ? 'control only the devices listed below' : 'control devices'), allows(asker, 'modes') && 'switch modes and overlays', allows(asker, 'automate') && 'make automations', allows(asker, 'home') && 'change rooms and device settings'].filter(Boolean).join(', ')}; refuse anything else`}). For "remind me" or "tell me", a notify action with people ["me"] reaches only them.${roomName ? ` "My room" is ${share.names ? `${roomName.id} (${roomName.name})` : roomAlias.get(roomName.id)}.` : ''}`);
+    }
     lines.push(`Time now: ${clock(now, tz)}, ${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][new Date(`${localDate(now, tz)}T12:00:00Z`).getUTCDay()]} ${localDate(now, tz)} (the home's time; one-time schedules use it as "${localStamp(now, tz)}").`);
     const mode = this.engine.mode();
     lines.push(`Current mode: ${mode.name}.`);
     const ov = this.engine.overlay && cfg.overlays.find(o => o.id === this.engine.overlay!.id);
     lines.push(`Overlay on: ${ov ? `${ov.name} (${ov.id})` : 'none'}.`);
-    lines.push(`Overlays you can start: ${cfg.overlays.map(o => `${o.id} (${o.name}, ${o.endsLabel.toLowerCase()})`).join('; ')}.`);
+    if (allows(asker, 'modes')) lines.push(`Overlays you can start: ${cfg.overlays.map(o => `${o.id} (${o.name}, ${o.endsLabel.toLowerCase()})`).join('; ')}.`);
     lines.push(`Modes: ${cfg.modes.map(m => `${m.id} (${m.name})`).join(', ')}.`);
-    const memory = memoryList(this.store);
+    const memory = allows(asker, 'home') ? memoryList(this.store) : [];
     if (memory.length) lines.push(`Things the user asked you to remember: ${memory.map(m => `"${m.text}"`).join('; ')}.`);
-    const autos = this.engine.automations.list();
+    const autos = allows(asker, 'automate') ? this.engine.automations.list() : [];
     if (autos.length) {
       const w = { reg: this.reg, cfg };
       const tgt = (tid: string, cmd: object) => { const d = this.reg.get(tid); return d ? targetLabel(d, cmd as Command) : (pseudoLabel(tid, cfg.rooms, cmd) ?? tid); };
       lines.push('Automations — change these with update_automation or delete_automation instead of adding overlapping ones:', ...autos.map(a => `- ${a.id} "${a.name}"${a.enabled ? '' : ' (off)'}: when ${a.triggers.map(t => triggerWords(t, w)).join(' or ') || 'nothing'}${a.conditions.length ? ` | if ${a.conditions.map(c => condWords(c, w)).join(' and ')}` : ''} | ${a.actions.map(x => actionWords(x, w, tgt)).join('; ') || 'nothing'}`));
     }
 
-    if (share.names) lines.push(`Rooms: ${cfg.rooms.map(r => `${r.id} (${r.name})`).join(', ')}. A device with room "${UNASSIGNED_ROOM}" isn't in a room yet (the app lists it under Unsorted).`);
+    if (share.names) lines.push(`Rooms: ${cfg.rooms.filter(r => !scoped(asker) || canRoom(asker, r.id)).map(r => `${r.id} (${r.name})`).join(', ')}. A device with room "${UNASSIGNED_ROOM}" isn't in a room yet (the app lists it under Unsorted).`);
     else lines.push(`Rooms are private: room1, room2… stand for them. "${UNASSIGNED_ROOM}" means no room yet.`);
     let n = 0;
     const idFor = (realId: string) => { const id = share.names ? realId : `device${++n}`; deviceIds.set(id, realId); return id; };
@@ -1684,6 +1732,13 @@ export class AiAssistant {
 
   /** Replay learned steps through the engine. Returns null if a step can't replay (the entry is then dropped). */
   private async replay(key: string, entry: LearnedEntry): Promise<AskReply | null> {
+    // A learned phrase replays as the person asking now: anything their role can't do goes to the engine instead
+    // (which refuses it there, in words).
+    const asker = currentActor();
+    if (entry.steps.some(st => !allows(asker, TOOL_PERM[st.tool] ?? 'owner'))) return null;
+    try {
+      for (const st of entry.steps) if (st.tool === 'set_devices') demandTargets(st.targets, id => this.reg.get(id), asker);
+    } catch { return null; }
     try {
       const undos: string[] = [];
       for (const st of entry.steps) {
@@ -1708,7 +1763,8 @@ export class AiAssistant {
       const all = this.store.get<Record<string, LearnedEntry>>(LEARNED_KEY) ?? {};
       if (all[key]) { all[key]!.uses++; this.store.set(LEARNED_KEY, all); }
       return { text: 'Done.', source: 'Learned · no AI needed', actions: [], understood: true, engine: 'builtin', undo: this.undoFor(undos) };
-    } catch {
+    } catch (e) {
+      if (e instanceof AccessDenied) return null;
       this.unlearn(key);
       return null;
     }
