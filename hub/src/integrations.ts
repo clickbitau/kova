@@ -104,7 +104,7 @@ export const ADAPTER_FACTORIES: Factories = {
   homekit: (c, dataDir) => new HomeKitControllerAdapter({ storageDir: join(dataDir, 'homekit-controller'), accessories: c.accessories }),
   nest: (c, dataDir) => c.projectId && c.refreshToken ? new NestAdapter({ ...c, storageDir: c.storageDir ?? join(dataDir, 'nest') }) : null,
   warden: c => c.url && c.token ? new WardenAdapter(c) : null,
-  helix: c => c.url ? new HelixAdapter(c) : null,
+  helix: (c, dataDir) => c.url ? new HelixAdapter({ ...c, storageDir: c.storageDir ?? join(dataDir, 'helix') }) : null,
   smartthings: (c, dataDir) => c.token || (c.clientId && c.clientSecret) ? new SmartThingsAdapter({ ...c, storageDir: join(dataDir, 'smartthings') }) : null,
   connectlife: (c, dataDir) => new ConnectLifeAdapter({ ...c, storageDir: join(dataDir, 'connectlife') }),
   homekitBridge: null,

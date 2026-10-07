@@ -14,7 +14,7 @@ import { CombinedAdapter } from './adapters/combined.ts';
 import type { HomeConfig } from './model/types.ts';
 import type { Weather } from './services/weather.ts';
 import { Energy } from './services/energy.ts';
-import type { HelixMusic } from './services/helix-music.ts';
+import { PlayCounter, type HelixMusic } from './services/helix-music.ts';
 
 export interface HubOptions {
   dbPath: string;
@@ -67,11 +67,10 @@ export class Hub extends EventEmitter<{ changed: [] }> {
     this.music = m;
     this.reg.queues = (media, o) => m.queueFor(media, o);
     this.reg.isMusic = media => m.isMusic(media);
-    // Each song a speaker starts counts as played in Helix (Recently played, play counts), as in Helix's own apps.
-    this.reg.on('change', e => {
-      const t = e.patch.track;
-      if (t?.id && t.id !== e.prev.track?.id) void m.played(t.id, e.device.name);
-    });
+    // A song a speaker played to (nearly) the end counts as played in Helix (Recently played, play counts), as in
+    // Helix's own apps; one skipped part-way doesn't.
+    const plays = new PlayCounter((id, player, durationMs) => void m.played(id, player, durationMs), this.opts.now);
+    this.reg.on('change', e => { if (e.device.state.track !== undefined || e.prev.track) plays.seen(e.device); });
     this.assistant.music = m;
   }
 

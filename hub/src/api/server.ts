@@ -19,7 +19,7 @@ import { LiveViewUnavailable, NEST_DEFAULT_REDIRECT, exchangeNestCode, nestAuthU
 import { connectLifeAuthUrl, exchangeConnectLifeCode } from '../adapters/connectlife.ts';
 import { SMARTTHINGS_DEFAULT_REDIRECT, createSmartThingsApp, exchangeSmartThingsCode, smartThingsAuthUrl } from '../adapters/smartthings.ts';
 import type { Presence } from '../services/presence.ts';
-import { HELIX_AUTO, HELIX_REMOTE, type HelixLink } from '../services/helix-link.ts';
+import type { HelixLink } from '../services/helix-link.ts';
 import type { SnapLinks } from '../services/screen-notices.ts';
 import type { Notifier } from '../services/notify.ts';
 import type { PushSubscription } from 'web-push';
@@ -124,7 +124,6 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
 
   // Helix Server calls back with the token Kova gave it (services/helix-link.ts): only its linked TVs (on and input) and soundbars.
   const fromHelix = new WeakSet<FastifyRequest>();
-  const helixCause = new WeakMap<FastifyRequest, Cause>();
   const helixTokenOk = (req: FastifyRequest, path: string): boolean => {
     const given = req.headers.authorization?.replace(/^Bearer\s+/i, '') ?? '';
     return !!opts.helixLink && !!given && opts.helixLink.isToken(given) && opts.helixLink.allows(req.method, path);
@@ -174,13 +173,14 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
     });
     app.addHook('preHandler', async (req, reply) => {
       if (!fromHelix.has(req)) return;
+      reply.header('cache-control', 'no-store');
       if (req.method === 'GET') return reply.send(opts.helixLink!.state());
-      // Helix's command (D98.11: one key, by its names) as Kova's, from its remote or its own switching.
+      // Helix's command (D98.11: one key, by its names) as Kova's, from its remote or, with X-Helix-Origin: auto, its own
+      // switching. Answered within Helix's timeout; a slow one (a TV waking up) is accepted and finished in the background.
       const id = decodeURIComponent(/^\/api\/devices\/([^/]+)$/.exec(req.url.split('?')[0])?.[1] ?? '');
-      const t = opts.helixLink!.translate(id, (req.body ?? {}) as Record<string, unknown>);
-      if ('error' in t) return reply.code(403).send({ error: t.error });
-      req.body = t.cmd;
-      helixCause.set(req, String(req.headers['x-helix-origin'] ?? '').toLowerCase() === 'auto' ? HELIX_AUTO : HELIX_REMOTE);
+      const auto = String(req.headers['x-helix-origin'] ?? '').toLowerCase() === 'auto';
+      const r = await opts.helixLink!.command(id, (req.body ?? {}) as Record<string, unknown>, auto);
+      return reply.code(r.status).send(r.body);
     });
   }
 
@@ -245,7 +245,7 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
 
   // --------------------------------------------------------------- write --
   app.post<{ Params: { id: string }; Body: Command }>('/api/devices/:id', async (req, reply) => {
-    try { return { undo: await hub.engine.command(req.params.id, req.body ?? {}, helixCause.get(req) ?? USER) }; } catch (e) { return fail(reply, e); }
+    try { return { undo: await hub.engine.command(req.params.id, req.body ?? {}, USER) }; } catch (e) { return fail(reply, e); }
   });
 
   // Momentary events (camera saw a person, doorbell rang). Adapters use this path internally; webhooks can too.

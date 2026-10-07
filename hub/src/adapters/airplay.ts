@@ -147,7 +147,7 @@ export class AirPlayAdapter implements Adapter {
         } else {
           if (this.source && others.length) throw new Error(`AirPlay is playing ${this.source} in other rooms; one source at a time`);
           // Not a stream: maybe music (Helix), which plays as a queue of songs.
-          const q = url ? null : await this.ctx!.queueFor(src, { shuffle });
+          const q = url ? null : await this.ctx!.queueFor(src, { shuffle, format: 'flac' });
           if (!url && !q) throw new Error(`No stream URL set for “${src}”`);
           await this.api('PUT', '/api/outputs/set', { outputs: ids });
           if (q) await this.playQueue(q);
@@ -228,7 +228,7 @@ export class AirPlayAdapter implements Adapter {
   private async reorder(shuffle: boolean): Promise<void> {
     const mu = this.music;
     if (!mu) return;
-    const q = await this.ctx!.queueFor(mu.q.label, { shuffle });
+    const q = await this.ctx!.queueFor(mu.q.label, { shuffle, format: 'flac' });
     if (!q) return;
     const cur = mu.q.tracks[mu.index];
     const player = await this.api<Player>('GET', '/api/player').catch(() => ({ state: 'play' } as Player));

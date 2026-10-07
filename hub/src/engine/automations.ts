@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Action, Automation, AutomationRun, Cause, Condition, DeviceState, HomeConfig, NumericField, StateMatch, Targets, Trigger } from '../model/types.ts';
-import type { ChangeEvent, DeviceEvent, Registry } from '../devices/registry.ts';
+import type { ChangeEvent, DeviceEvent, InputChange, Registry } from '../devices/registry.ts';
 import type { Store } from '../store/db.ts';
 import type { ConfigStore } from './config.ts';
 import type { Notification } from '../services/notify.ts';
@@ -32,10 +32,12 @@ const num = (s: DeviceState, f: NumericField): number | null => {
 };
 
 /** Does a device's state match? Unknown on/off counts as off; unknown online counts as online. */
-export function matches(s: DeviceState, m: StateMatch): boolean {
+export function matches(s: DeviceState, m: StateMatch, input?: InputChange): boolean {
   if (m.on !== undefined && !!s.on !== m.on) return false;
   if (m.online !== undefined && (s.online !== false) !== m.online) return false;
-  if (m.input !== undefined && s.input !== m.input) return false;
+  if (m.input !== undefined && (typeof s.input === 'string' && s.input ? s.input : input?.input) !== m.input) return false;
+  if (m.inputBy !== undefined && input?.by !== m.inputBy) return false;
+  if (m.inputByPerson !== undefined && !!input?.person !== m.inputByPerson) return false;
   if (m.hvac !== undefined && s.hvac !== m.hvac) return false;
   if (m.activity !== undefined && s.activity !== m.activity) return false;
   if (m.playing !== undefined && (!!s.on && !s.paused && s.media !== null) !== m.playing) return false;
@@ -68,7 +70,7 @@ export function holds(c: Condition, x: CondCtx, why: string[] = []): boolean {
   switch (c.kind) {
     case 'device': {
       const d = x.reg.get(c.device);
-      return ok(!!d && matches(d.state, c.is), () => `${name(c.device)} isn’t ${matchText(c.is)}`);
+      return ok(!!d && matches(d.state, c.is, x.reg.inputChange(c.device)), () => `${name(c.device)} isn’t ${matchText(c.is)}`);
     }
     case 'numeric': {
       const d = x.reg.get(c.device);
@@ -115,6 +117,8 @@ export function matchText(m: StateMatch): string {
     m.online !== undefined ? (m.online ? 'online' : 'offline') : '',
     m.playing !== undefined ? (m.playing ? 'playing' : 'not playing') : '',
     m.hvac ? `on ${m.hvac}` : '', m.activity ? m.activity : '', m.muted !== undefined ? (m.muted ? 'muted' : 'not muted') : '', m.mode ? `on ${m.mode}` : '',
+    m.inputBy ? `switched by ${m.inputBy === 'helix-auto' ? 'Helix' : m.inputBy}` : '',
+    m.inputByPerson !== undefined ? (m.inputByPerson ? 'switched by someone' : 'not switched by anyone') : '',
   ].filter(Boolean);
   return parts.join(' and ') || 'anything';
 }
@@ -560,8 +564,23 @@ export class Automations {
 
 export const EVENT_WORDS: Record<string, string> = {
   person: 'saw a person', ring: 'rang', motion: 'detected motion', 'video-started': 'started a video', 'music-started': 'started music',
-  paused: 'paused', resumed: 'carried on', stopped: 'stopped', 'internet-down': 'internet down', 'internet-up': 'internet back', 'new-device': 'new device joined',
+  paused: 'paused', resumed: 'carried on', stopped: 'stopped', ended: 'played to the end',
+  'screen-asleep': 'screen went to sleep', 'screen-shutdown': 'shut down', 'screen-awake': 'screen woke up',
+  'internet-down': 'internet down', 'internet-up': 'internet back', 'new-device': 'new device joined',
 };
+
+/**
+ * The device events an automation can start on, as the editors offer them (the snapshot's `automationEvents`), with
+ * how a trigger reads ("Lounge box shuts down"). Media players: playback started, paused, carried on, stopped, played to
+ * the end; screens (Helix boxes): asleep, shut down (a real power-off, never a restart), awake.
+ */
+export const AUTOMATION_EVENTS: { id: string; label: string }[] = [
+  { id: 'person', label: 'sees a person' }, { id: 'ring', label: 'rings' }, { id: 'motion', label: 'detects motion' },
+  { id: 'video-started', label: 'starts a video' }, { id: 'music-started', label: 'starts music' },
+  { id: 'paused', label: 'pauses' }, { id: 'resumed', label: 'carries on playing' }, { id: 'stopped', label: 'stops playing' }, { id: 'ended', label: 'plays to the end' },
+  { id: 'screen-asleep', label: 'screen goes to sleep' }, { id: 'screen-shutdown', label: 'shuts down' }, { id: 'screen-awake', label: 'screen wakes up' },
+  { id: 'internet-down', label: 'internet goes down' }, { id: 'internet-up', label: 'internet comes back' }, { id: 'new-device', label: 'a new device joins' },
+];
 
 export const durWords = (s: number) => s >= 3600 && s % 3600 === 0 ? `${s / 3600} h` : s >= 60 ? `${Math.round(s / 60)} min` : `${s} s`;
 

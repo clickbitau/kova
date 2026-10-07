@@ -30,13 +30,15 @@ export interface AdapterContext {
    * to play them (already shuffled when asked). Null when it isn't music Kova knows. Asked again within a few
    * seconds it answers the same order, so every speaker of a group plays the same queue.
    */
-  queueFor(media: string, opts?: { shuffle?: boolean }): Promise<Queue | null>;
+  queueFor(media: string, opts?: QueueOptions): Promise<Queue | null>;
   /** Set the state of a device whose state is worked out from others (a speaker group): quietly, without an Activity entry. */
   derive(deviceId: string, state: DeviceState): void;
   /** Remove devices this adapter no longer has (a deleted group). */
   retract(deviceIds: string[]): void;
   /** Another running adapter, by id (a Samsung TV asks SmartThings to switch its source). */
   peer(adapterId: string): Adapter | undefined;
+  /** Whether Kova has had a device by this id (now, or before a restart), so an adapter can keep an id the home already uses. */
+  known?(deviceId: string): boolean;
 }
 
 /**
@@ -72,6 +74,13 @@ export interface LiveView {
 }
 
 export interface Snapshot { contentType: string; body: Buffer }
+
+/**
+ * What a speaker can play best, for the songs' URLs: "flac" (lossless; Helix serves a fitting file as it is, no
+ * transcoding) or "aac" (every song transcoded). Default "aac", which every speaker plays.
+ */
+export type AudioFormat = 'flac' | 'aac';
+export interface QueueOptions { shuffle?: boolean; format?: AudioFormat }
 
 /** One song a speaker can fetch by itself (no headers: any credential is in the URL). */
 export interface QueueTrack extends Track { id: string; url: string; contentType: string }

@@ -47,6 +47,8 @@ export interface SamsungTvOptions {
   /** How long an input asked for right after waking the TV waits for it to come on (default 30 s), and how often to look (1 s). */
   wakeWaitMs?: number;
   wakeCheckMs?: number;
+  /** How long after switching the source through SmartThings Kova checks the TV is on it (default 2 s). */
+  inputCheckMs?: number;
   /** Name shown on the TV's Allow prompt. */
   clientName?: string;
 }
@@ -364,6 +366,12 @@ export class SamsungTvAdapter implements Adapter {
     tv.vol = to;
   }
 
+  /** The source the TV says it's on, a moment after switching it (undefined when it can't be read). */
+  private async inputNow(tv: Tv, via: SourceVia): Promise<string | null | undefined> {
+    await new Promise(r => setTimeout(r, this.opts.inputCheckMs ?? 2000));
+    try { return await via.tvInput(tv); } catch { return undefined; }
+  }
+
   /** SmartThings, if it's running and knows this TV. */
   private via(tv: Tv): SourceVia | null {
     const p = this.ctx?.peer?.('smartthings') as Partial<SourceVia> | undefined;
@@ -436,8 +444,18 @@ export class SamsungTvAdapter implements Adapter {
       // SmartThings switches straight to the source, and can say which one is on: kept as state.
       const via = this.via(tv);
       if (via) {
-        try { if (await via.setTvInput(tv, cmd.input)) return { input: cmd.input }; }
-        catch (err) { this.ctx?.log(`${tv.cfg.host}: SmartThings source failed (${(err as Error).message}), pressing the remote key`); }
+        try {
+          // A TV that has only just come up can take the command and not act on it: Kova checks, asks once more, and
+          // only then presses the remote's key.
+          for (let attempt = 0; attempt < 2; attempt++) {
+            if (!(await via.setTvInput(tv, cmd.input))) break;
+            const on = await this.inputNow(tv, via);
+            // Kept as state only when read back: Helix skips its own switch when the TV says it's already there.
+            if (on === cmd.input) return { input: cmd.input };
+            if (on === undefined || on === null) return { input: null };
+            this.ctx?.log(`${tv.cfg.host}: asked for ${cmd.input} through SmartThings, still on ${on}`);
+          }
+        } catch (err) { this.ctx?.log(`${tv.cfg.host}: SmartThings source failed (${(err as Error).message}), pressing the remote key`); }
       }
       await this.key(tv, inputKey(cmd.input));
       return { input: null };

@@ -158,7 +158,7 @@ export class WardenLink {
         const people = Object.entries(this.o.people?.() ?? {}).filter(([, p]) => p.wardenPerson).map(([id, p]) => ({ kovaPersonId: id, wardenPersonId: p.wardenPerson! }));
         await this.put(c, '/integrations/kova/people', people);
         await this.put(c, '/integrations/kova/outlets', this.outlets(c));
-        const ip = /https?:\/\/([^:/]+)/.exec(kovaAddress(c.url, this.o.port()))?.[1];
+        const ip = /https?:\/\/([^:/]+)/.exec(kovaAddress(c.url, this.o.port()) ?? '')?.[1];
         if (ip && IPV4.test(ip)) await this.put(c, '/integrations/kova/hub', { ip });
         await this.sendMode(c);
         this.needsScope = false;

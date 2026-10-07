@@ -1,5 +1,5 @@
 import dgram from 'node:dgram';
-import type { Adapter, AdapterContext, AdapterStatus, Queue, QueueTrack } from './sdk.ts';
+import type { Adapter, AdapterContext, AdapterStatus, AudioFormat, Queue, QueueTrack } from './sdk.ts';
 import type { Command, Device, DeviceState, Track } from '../model/types.ts';
 
 // Sonos speakers over their local UPnP/SOAP API on port 1400. No cloud, no account.
@@ -13,11 +13,20 @@ const tag = (xml: string, name: string) => xml.match(new RegExp(`<(?:\\w+:)?${na
 
 interface Speaker {
   id: string; host: string; name: string; room: string; media: string | null; udn: string;
+  /** The Sonos software generation its description says (swGen): 2 is S2, which plays 24-bit FLAC; 1 (S1) only 16-bit. */
+  swGen?: number;
   /** A play queue (Helix music): the songs in order, which one plays, and which of them the speaker's queue holds (from..to). */
   queue: { q: Queue; index: number; from: number; to: number } | null;
   /** Paused (on hold, keeping its place), as the speaker last said. */
   paused?: boolean;
 }
+
+/**
+ * The songs' format for a Sonos speaker. S2 plays FLAC up to 24-bit / 48 kHz, which is what Helix sends for "flac" at
+ * maxRate 48000 (the file as it is, no transcoding). S1, or a speaker that doesn't say, gets AAC: it plays only 16-bit
+ * FLAC, and Helix may hand over a 24-bit file.
+ */
+export const sonosFormat = (s: { swGen?: number }): AudioFormat => (s.swGen ?? 0) >= 2 ? 'flac' : 'aac';
 
 /** How many songs the speaker's own queue holds ahead; more are added as it plays. */
 export const SONOS_WINDOW = 50;
@@ -83,7 +92,8 @@ export class SonosAdapter implements Adapter {
       const room = tag(xml, 'roomName') ?? tag(xml, 'friendlyName') ?? host;
       const model = tag(xml, 'displayName') ?? tag(xml, 'modelName') ?? 'Speaker';
       const id = `sonos_${udn.replace(/^RINCON_/, '').toLowerCase()}`;
-      this.speakers.set(id, { id, host, name: room, room, media: null, udn, queue: null });
+      const swGen = Number(tag(xml, 'swGen'));
+      this.speakers.set(id, { id, host, name: room, room, media: null, udn, queue: null, ...(Number.isFinite(swGen) && swGen > 0 ? { swGen } : {}) });
       const kovaRoom = this.opts.roomFor?.(room) ?? room.toLowerCase().replace(/[^a-z0-9]+/g, '_');
       this.ctx!.announce([{ id, name: `${model}`, room: kovaRoom, type: 'media', integration: 'Sonos', address: host, capabilities: ['onoff', 'media', 'volume', 'queue', 'pause'] }]);
     } catch (err) {
@@ -147,13 +157,13 @@ export class SonosAdapter implements Adapter {
         s.queue = null;
       } else {
         // Not a radio source: maybe music (Helix), which plays as a queue of songs.
-        const q = await this.ctx!.queueFor(cmd.media, { shuffle: !!cmd.shuffle });
+        const q = await this.ctx!.queueFor(cmd.media, { shuffle: !!cmd.shuffle, format: sonosFormat(s) });
         if (!q) throw new Error(`No stream URL set for “${cmd.media}”`);
         await this.playQueue(s, q);
       }
     } else if (cmd.shuffle !== undefined && s.queue && cmd.shuffle !== s.queue.q.shuffle) {
       // The same music in a new order (or back in order), carrying on with this song where it is.
-      const q = await this.ctx!.queueFor(s.queue.q.label, { shuffle: cmd.shuffle });
+      const q = await this.ctx!.queueFor(s.queue.q.label, { shuffle: cmd.shuffle, format: sonosFormat(s) });
       if (q) {
         const cur = s.queue.q.tracks[s.queue.index];
         const pos = secsOf(tag(await this.soap(s.host, AVT, 'GetPositionInfo', { InstanceID: 0 }), 'RelTime'));

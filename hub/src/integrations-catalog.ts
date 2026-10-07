@@ -375,8 +375,12 @@ export const CATALOG: CatalogItem[] = [
     id: 'helix', name: 'Helix', icon: 'movie', kind: 'Local', apply: 'hot', testable: true,
     description: 'Your Helix boxes as TVs: what’s playing, pause for the doorbell, “play The Office in the lounge”, and Movie mode when a film starts.',
     fields: [
-      { key: 'url', label: 'Helix Server address', type: 'text', required: true, placeholder: 'http://10.10.10.101:8090', help: '“Find Helix Server” below looks for it.' },
+      { key: 'url', label: 'Helix Server address', type: 'text', required: true, placeholder: 'http://192.168.1.20:8090', help: '“Find Helix Server” below looks for it.' },
       { key: 'token', label: 'Device token', type: 'password', help: 'Filled in by Pair with Helix below.' },
+      {
+        key: 'musicProfile', label: 'Helix profile', type: 'text', placeholder: 'default',
+        help: 'Whose Continue watching, loved songs, playlists, mixes and plays Kova uses, for “play …” on the TVs and Helix music on speakers. Empty: Helix’s default profile. A locked profile can’t be used.',
+      },
       {
         key: 'rooms', label: 'Boxes', type: 'list', shape: 'map', mapKey: 'box', mapValue: 'room', addLabel: 'Put a box in a room',
         item: [{ key: 'box', label: 'Box name', type: 'text', required: true, placeholder: 'Lounge' }, room()],
@@ -392,7 +396,7 @@ export const CATALOG: CatalogItem[] = [
           { key: 'soundbarInput', label: 'Box’s sound goes to the soundbar’s', type: 'select', options: [{ value: 'hdmi1', label: 'HDMI in 1' }, { value: 'hdmi2', label: 'HDMI in 2' }], help: 'For films whose 7.1 or DTS sound the box sends straight to the soundbar. Otherwise the soundbar listens to the TV (eARC).' },
         ],
       },
-      { key: 'kovaUrl', label: 'Kova’s address for Helix', type: 'text', placeholder: 'http://10.10.10.5:8140', help: 'Optional. Kova uses its own address on Helix Server’s network.' },
+      { key: 'kovaUrl', label: 'Kova’s address for Helix', type: 'text', placeholder: 'http://192.168.1.5:8140', help: 'Optional. Kova uses its own address on Helix Server’s network. If you set one, use plain http:// and an IP address (not a .local or tailnet name): Helix doesn’t look names up or follow redirects.' },
     ],
     actions: [
       { id: 'find', label: 'Find Helix Server', icon: 'search', method: 'GET', path: '/api/integrations/helix/find' },

@@ -4,7 +4,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { testHub, at } from './helpers.ts';
 import { buildServer } from '../src/api/server.ts';
-import { holds, inRange, matches, upgradeAutomation } from '../src/engine/automations.ts';
+import { AUTOMATION_EVENTS, EVENT_WORDS, holds, inRange, matchText, matches, triggerWords, upgradeAutomation } from '../src/engine/automations.ts';
 import type { Automation } from '../src/model/types.ts';
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../web');
@@ -470,4 +470,33 @@ test('next run: time of day (on its days), every few minutes, and the soonest of
     assert.equal(get(wk).nextLabel, 'Sat 3 Oct at 08:00');
     assert.equal(get(ev).nextLabel, 'today at 21:45', '21:00 is slot 28 of 45 min; the next is 21:45');
   } finally { await h.close(); }
+
+test('Automation events: screens asleep, shut down and awake, and playback carried on and ended, in words and in the editors’ list', async () => {
+  for (const id of ['screen-asleep', 'screen-shutdown', 'screen-awake', 'resumed', 'ended', 'video-started', 'stopped']) {
+    assert.ok(EVENT_WORDS[id], `${id} has words`);
+    assert.ok(AUTOMATION_EVENTS.some(e => e.id === id), `${id} is offered`);
+  }
+  assert.ok(AUTOMATION_EVENTS.every(e => EVENT_WORDS[e.id]), 'everything offered reads as words too');
+  const t = await testHub(12);
+  try {
+    assert.equal(triggerWords({ kind: 'event', device: 'lamp', event: 'screen-shutdown' }, { reg: t.hub.reg, cfg: t.hub.config.get() }), 'Lamp shut down');
+    const app = await buildServer(t.hub, { webRoot: resolve(dirname(fileURLToPath(import.meta.url)), '../../web') });
+    try {
+      assert.deepEqual((await app.inject({ method: 'GET', url: '/api/state' })).json().automationEvents, AUTOMATION_EVENTS);
+    } finally { await app.close(); }
+  } finally { await t.hub.stop(); }
+});
+
+test('Conditions on who changed an input: the last change Kova saw, and the input it switched a TV to when the TV can’t say', () => {
+  const helix = { input: 'hdmi2', at: 1, by: 'helix-auto', person: false };
+  const you = { input: 'hdmi2', at: 1, by: 'You', person: true };
+  assert.equal(matches({ on: true, input: null }, { on: true, input: 'hdmi2' }, helix), true, 'last switched to it through Kova');
+  assert.equal(matches({ on: true, input: 'hdmi1' }, { input: 'hdmi2' }, helix), false, 'read back on another input');
+  assert.equal(matches({ on: true }, { inputBy: 'helix-auto' }, helix), true);
+  assert.equal(matches({ on: true }, { inputBy: 'helix-auto' }, you), false);
+  assert.equal(matches({ on: true }, { inputByPerson: false }, helix), true);
+  assert.equal(matches({ on: true }, { inputByPerson: false }, you), false);
+  assert.equal(matches({ on: true }, { inputByPerson: false }), true, 'no change seen: no person');
+  assert.equal(matchText({ on: true, input: 'hdmi2', inputByPerson: false }), 'on HDMI 2 and not switched by anyone');
+  assert.equal(matchText({ on: true, inputBy: 'helix-auto' }), 'on and switched by Helix');
 });

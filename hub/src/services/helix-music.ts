@@ -1,9 +1,11 @@
-import type { Queue, QueueTrack } from '../adapters/sdk.ts';
-import { lanJson, trimUrl } from '../util/lan-http.ts';
+import type { AudioFormat, Queue, QueueOptions, QueueTrack } from '../adapters/sdk.ts';
+import type { Device } from '../model/types.ts';
+import { helixFeatures, helixHeaders, profileProblem } from '../adapters/helix.ts';
+import { LanHttpError, lanJson, trimUrl } from '../util/lan-http.ts';
 
 /**
  * Helix music on any speaker: Kova turns a name into the tracks to queue, and the speaker
- * (Cast, Sonos) fetches each song straight from Helix Server.
+ * (Cast, Sonos, AirPlay) fetches each song straight from Helix Server.
  *
  * Names (what a speaker's `media` says while it plays):
  *   "Shuffle all"        the whole library, shuffled
@@ -14,16 +16,24 @@ import { lanJson, trimUrl } from '../util/lan-http.ts';
  *   "Station: <name>"    a station from an artist, album or song: Helix's mix plus the artist's own songs, shuffled
  *   "Artist: <name>", "Album: <name>", "Song: <name>"   what Ask found by name
  *
- * Songs: a speaker can't send headers, so each song gets a URL it can fetch by itself. Helix signs one per song
- * (`POST /v1/items/<id>/play-url {format:'aac', maxRate:48000}`: no token in it, that song only, 6 hours), and
- * Kova asks for them a window at a time, just before a speaker queues those songs (Queue.prepare). A Helix
- * from before signed URLs gets `/v1/music/tracks/<id>/stream?max=aac&token=<Kova's device token>` instead.
- * Shuffle all is Helix's own uniform shuffle of the whole library (`?shuffle=1`) where it has one.
- * Covers are signed the same way: play-url also returns the song's cover as `artUrl`, and any cover still carrying
- * the token (a song from a service, a Helix that signs songs but not covers) goes through `POST /v1/art-urls` in one
- * call per window. Only a Helix with neither keeps the token cover URL.
+ * Everything is for one Helix profile (`musicProfile`, default "default"): loved songs, Most played, playlists,
+ * mixes, Siri-style lookups and plays are per profile. It goes with every call: `?profile=` and X-Helix-Profile on
+ * reads, `profile` in play-url, `profileId` in played. A locked profile (403) or an unknown one (404) is said plainly.
  *
- * Every song a speaker starts is counted as played in Helix (`POST /v1/music/tracks/<id>/played`).
+ * Songs: a speaker can't send headers, so each song gets a URL it can fetch by itself. Helix signs one per song
+ * (`POST /v1/items/<id>/play-url {format, maxRate: 48000, ttl, profile}`: no token in it, that song only), and Kova asks
+ * for them a window at a time, just before a speaker queues those songs (Queue.prepare). The format is the speaker's
+ * (QueueOptions.format): "flac" serves a fitting file as it is, with Range and no transcoding, "aac" transcodes every
+ * song. A signed URL is reused until shortly before its ttl runs out. A song Helix has no file for (a service's song in
+ * Loved or a station: 404 "this song has no file") is skipped. Only a Helix from before signed URLs (play-url itself
+ * missing: a plain 404 or a 405) gets `/v1/music/tracks/<id>/stream?max=aac&token=<Kova's device token>`, which puts
+ * the token in the speaker's hands.
+ * Shuffle all is Helix's own uniform shuffle of the whole library (`?shuffle=1`) where it has one.
+ * Covers are signed the same way: play-url also returns the song's cover as `artUrl` (or null), and any cover still
+ * carrying the token goes through `POST /v1/art-urls` in one call per window. Only a Helix with neither keeps it.
+ *
+ * A song counts as played in Helix (`POST /v1/music/tracks/<id>/played`) once a speaker has played at least 85% of it
+ * (PlayCounter), with the speaker's name and the song's length; Helix marks a repeat within 2 minutes a duplicate.
  */
 export interface HelixMusicConfig { url?: string; token?: string; /** Helix profile whose loved songs and playlists Kova uses. Default "default". */ musicProfile?: string }
 
@@ -55,6 +65,11 @@ type Spec =
 const PREFIX: Record<string, 'station' | 'artist' | 'album' | 'track'> = { station: 'station', artist: 'artist', album: 'album', song: 'track' };
 const LIBRARY_MAX = 4000;
 const SAME_ORDER_MS = 10_000;
+/** How long a signed song URL lasts (Helix takes 60–86400 s), and how long before the end Kova asks for a new one. */
+export const SIGNED_TTL_S = 21_600;
+const RESIGN_BEFORE_MS = 10 * 60_000;
+/** The share of a song a speaker must play for it to count as played. */
+export const PLAYED_SHARE = 0.85;
 
 /** Fisher–Yates, with an injectable random for tests. */
 export function shuffled<T>(a: T[], random = Math.random): T[] {
@@ -63,46 +78,88 @@ export function shuffled<T>(a: T[], random = Math.random): T[] {
   return out;
 }
 
+/**
+ * The content type of a song as Helix serves it: by the `format` it answers ("flac", "mp3", "aac"; "" is the original
+ * file, typed by the song's own codec).
+ */
+export function typeOf(served: string | undefined, codec?: string): string {
+  const f = (served ?? '').toLowerCase();
+  if (f === 'flac') return 'audio/flac';
+  if (f === 'mp3') return 'audio/mpeg';
+  if (f === 'aac') return 'audio/aac';
+  const c = (codec ?? '').toLowerCase();
+  if (/mp3|mpeg/.test(c)) return 'audio/mpeg';
+  if (/aac|m4a|mp4|alac/.test(c)) return 'audio/mp4';
+  if (/opus|ogg|vorbis/.test(c)) return 'audio/ogg';
+  if (/wav/.test(c)) return 'audio/wav';
+  return 'audio/flac';
+}
+
+/** A song URL Helix signed, kept until shortly before it runs out. */
+interface Signed { url: string; contentType: string; art?: string | null; until: number }
+
 export class HelixMusic {
   private playlists: Playlist[] = [];
   private listedAt = 0;
   /** Names Ask resolved, so playing it again doesn't need another lookup. */
   private specs = new Map<string, Spec>();
-  /** Recent answers, so every speaker of a group gets the same order. */
-  private recent = new Map<string, { at: number; queue: Promise<Queue | null> }>();
+  /** Recent answers, so every speaker of a group gets the same order (each format a copy of the same songs). */
+  private recent = new Map<string, { at: number; queue: Promise<Queue | null>; views: Map<AudioFormat, Promise<Queue | null>> }>();
   /** Whether Helix signs per-song URLs (null: not asked yet). */
   private signing: boolean | null = null;
   /** Whether Helix signs cover URLs in a batch (null: not asked yet). */
   private artSigning: boolean | null = null;
-  /** Each song's cover as Helix listed it, without the token, for signing. */
+  /** Each song's cover as Helix listed it, without the token, for signing; and its codec. */
   private artPath = new WeakMap<QueueTrack, string>();
+  private codecOf = new WeakMap<QueueTrack, string>();
+  /** When each queued song's signed URL runs out. */
+  private signedUntil = new WeakMap<QueueTrack, number>();
+  /** Signed URLs by song and format, reused while they last. */
+  private signedCache = new Map<string, Signed>();
+  /** What's wrong with the profile, from Helix's last answer (null: nothing). */
+  private trouble: string | null = null;
+  /** Whether Helix offers music to its clients (`/v1/client/features`); null when it doesn't say. */
+  private musicOn: boolean | null = null;
 
   constructor(private cfg: () => HelixMusicConfig | undefined, private o: { random?: () => number; now?: () => number } = {}) {}
 
   private get now() { return this.o.now?.() ?? Date.now(); }
   private linked(): { url: string; token: string; profile: string } | null {
     const c = this.cfg();
-    return c?.url && c.token ? { url: trimUrl(c.url), token: c.token, profile: c.musicProfile || 'default' } : null;
+    return c?.url && c.token ? { url: trimUrl(c.url), token: c.token, profile: c.musicProfile?.trim() || 'default' } : null;
+  }
+
+  /** What's wrong with the Helix profile Kova uses, if anything (for the integration's status). */
+  problem(): string | null { return this.trouble; }
+
+  private noted<T>(p: Promise<T>, profile: string): Promise<T> {
+    return p.then(r => { this.trouble = null; return r; }, e => {
+      const said = profileProblem(e, profile);
+      if (said) { this.trouble = said; throw new Error(said); }
+      throw e;
+    });
   }
 
   private async get<T>(path: string): Promise<T> {
     const h = this.linked();
     if (!h) throw new Error('Pair Kova with Helix first');
     const sep = path.includes('?') ? '&' : '?';
-    return (await lanJson<T>(`${h.url}${path}${sep}profile=${encodeURIComponent(h.profile)}`, { token: h.token, headers: { 'x-helix-client': 'kova/1', 'x-helix-device': 'Kova' }, timeoutMs: 15_000 })).json;
+    return this.noted(lanJson<T>(`${h.url}${path}${sep}profile=${encodeURIComponent(h.profile)}`, { token: h.token, headers: helixHeaders(h.profile), timeoutMs: 15_000 }).then(r => r.json), h.profile);
   }
 
   private async post<T>(path: string, body: unknown): Promise<T> {
     const h = this.linked();
     if (!h) throw new Error('Pair Kova with Helix first');
-    return (await lanJson<T>(`${h.url}${path}`, { method: 'POST', body, token: h.token, headers: { 'x-helix-client': 'kova/1', 'x-helix-device': 'Kova' }, timeoutMs: 15_000 })).json;
+    return this.noted(lanJson<T>(`${h.url}${path}`, { method: 'POST', body, token: h.token, headers: helixHeaders(h.profile), timeoutMs: 15_000 }).then(r => r.json), h.profile);
   }
 
-  /** Count a song a speaker started as played in Helix (once per song: Helix ignores a repeat within 2 minutes). */
-  async played(trackId: string, player: string): Promise<void> {
+  /** Count a song a speaker played to (nearly) the end as played in Helix, under the speaker's name. */
+  async played(trackId: string, player: string, durationMs?: number): Promise<void> {
     const h = this.linked();
     if (!h || !/^helix:/.test(trackId)) return;
-    await this.post(`/v1/music/tracks/${encodeURIComponent(trackId.replace(/^helix:/, ''))}/played`, { profileId: h.profile, player, playedAt: new Date(this.now).toISOString() }).catch(() => {});
+    await this.post(`/v1/music/tracks/${encodeURIComponent(trackId.replace(/^helix:/, ''))}/played`, {
+      profileId: h.profile, player, playedAt: new Date(this.now).toISOString(), ...(durationMs ? { durationMs: Math.round(durationMs) } : {}),
+    }).catch(() => {});
   }
 
   /**
@@ -110,31 +167,34 @@ export class HelixMusic {
    * from Ask or a mode). The playlists are still read, so their names are known.
    */
   async catalog(force = false): Promise<MusicItem[]> {
-    if (!this.linked()) return [];
+    const h = this.linked();
+    if (!h) return [];
     if (force || this.now - this.listedAt > 5 * 60_000) {
+      const f = await helixFeatures(h.url, h.token, h.profile);
+      this.musicOn = f && typeof f.music === 'boolean' ? f.music : null;
       try {
         this.playlists = ((await this.get<{ playlists?: Playlist[] }>('/v1/playlists?kind=music')).playlists ?? []).filter(p => !p.kind || p.kind === 'music');
         this.listedAt = this.now;
       } catch { /* keep the last list */ }
     }
-    return CHOICES;
+    return this.musicOn === false ? [] : CHOICES;
   }
 
   /** The last catalog, without asking Helix (for the snapshot). */
   cached(): MusicItem[] {
-    if (!this.linked()) return [];
+    if (!this.linked() || this.musicOn === false) return [];
     return CHOICES;
   }
 
   /** Whether a name is Helix music (as opposed to a radio source). */
   isMusic(media: string): boolean {
-    if (!this.linked()) return false;
+    if (!this.linked() || this.musicOn === false) return false;
     const n = media.trim().toLowerCase();
     return CHOICES.some(c => c.name.toLowerCase() === n) || /^(station|artist|album|song): /i.test(media) || this.specs.has(media)
       || this.playlists.some(p => p.title.toLowerCase() === n);
   }
 
-  /** Words someone said ("Bangla Collection", "my loved songs", "Coke Studio") → the name to play, by Helix's own rule. */
+  /** Words someone said ("my loved songs", a playlist's or an artist's name) → the name to play, by Helix's own rule. */
   async find(words: string, opts: { station?: boolean } = {}): Promise<{ media: string; kind: string } | null> {
     const pick = await this.get<SiriPick>(`/v1/music/siri?name=${encodeURIComponent(words)}`).catch(() => null);
     if (!pick || pick.kind === 'none') return null;
@@ -180,16 +240,27 @@ export class HelixMusic {
     return pl ? { kind: 'playlist', id: pl.id, title: pl.title } : null;
   }
 
-  /** A name → the queue to play. The same request within a few seconds gets the same order (a group's speakers). */
-  queueFor(media: string, opts: { shuffle?: boolean } = {}): Promise<Queue | null> {
+  /**
+   * A name → the queue to play, with URLs in the speaker's format. The same request within a few seconds gets the same
+   * order (a group's speakers), each format its own copy of the songs.
+   */
+  queueFor(media: string, opts: QueueOptions = {}): Promise<Queue | null> {
     if (!this.linked()) return Promise.resolve(null);
     const key = `${media}\0${opts.shuffle ? 1 : 0}`;
     for (const [k, v] of this.recent) if (this.now - v.at > SAME_ORDER_MS) this.recent.delete(k);
-    const hit = this.recent.get(key);
-    if (hit) return hit.queue;
-    const queue = this.build(media, opts).catch(e => { this.recent.delete(key); throw e; });
-    this.recent.set(key, { at: this.now, queue });
-    return queue;
+    let hit = this.recent.get(key);
+    if (!hit) {
+      const queue = this.build(media, opts).catch(e => { this.recent.delete(key); throw e; });
+      hit = { at: this.now, queue, views: new Map() };
+      this.recent.set(key, hit);
+    }
+    const format = opts.format ?? 'aac';
+    let view = hit.views.get(format);
+    if (!view) {
+      view = hit.queue.then(q => q && this.view(q, format));
+      hit.views.set(format, view);
+    }
+    return view;
   }
 
   private async build(media: string, opts: { shuffle?: boolean }): Promise<Queue | null> {
@@ -239,6 +310,7 @@ export class HelixMusic {
     return this.queue(media, tracks, shuffle);
   }
 
+  /** The songs in playing order (one list for every format; each format gets its own copy, view()). */
   private queue(label: string, tracks: HelixTrack[], shuffle: boolean, shown = shuffle): Queue | null {
     const h = this.linked()!;
     const seen = new Set<string>();
@@ -249,49 +321,103 @@ export class HelixMusic {
       playable.push(this.track(t, h));
     }
     if (!playable.length) throw new Error(`Helix has no songs to play in “${label}”`);
-    const ordered = shuffle ? shuffled(playable, this.o.random) : playable;
-    const signed = new Set<QueueTrack>();
-    const sign = (tracks: QueueTrack[]) => this.sign(tracks.filter(t => !signed.has(t)), signed);
-    // A method, not an arrow: a speaker that reorders the queue ({...queue, tracks}) gets the songs of its own order signed.
-    return { label, tracks: ordered, shuffle: shown, prepare(from, to) { return sign(this.tracks.slice(from, to)); } };
+    return { label, tracks: shuffle ? shuffled(playable, this.o.random) : playable, shuffle: shown };
   }
 
-  /** Swap the token URLs of these songs for ones Helix signs (no token, that song only). An older Helix keeps the token URLs. */
-  private async sign(tracks: QueueTrack[], done: Set<QueueTrack>): Promise<void> {
+  /** The queue for one format: the same songs in the same order, URLs signed for that format just before they're queued. */
+  private view(q: Queue, format: AudioFormat): Queue {
+    const tracks = q.tracks.map(t => {
+      const c: QueueTrack = { ...t };
+      const art = this.artPath.get(t), codec = this.codecOf.get(t);
+      if (art) this.artPath.set(c, art);
+      if (codec) this.codecOf.set(c, codec);
+      return c;
+    });
+    const sign = (list: QueueTrack[], from: number, to: number) => this.sign(list, from, to, format);
+    // A method, not an arrow: a speaker that reorders the queue ({...queue, tracks}) gets the songs of its own order signed.
+    return { label: q.label, tracks, shuffle: q.shuffle, prepare(from, to) { return sign(this.tracks, from, to); } };
+  }
+
+  /**
+   * Make tracks[from..to) playable by a speaker on its own: a URL Helix signs (no token, that song only), reused while
+   * it lasts. A song Helix has no file for is taken out of the queue and the next one moves up, so the window stays
+   * full. An older Helix keeps the token URLs. Anything else failing takes the song out rather than hand over the token.
+   */
+  private async sign(list: QueueTrack[], from: number, to: number, format: AudioFormat): Promise<void> {
     if (this.signing === false) return;
     const h = this.linked();
     if (!h) return;
-    for (let i = 0; i < tracks.length; i += 8) {
-      await Promise.all(tracks.slice(i, i + 8).map(async t => {
-        // Songs on disk only (a service's song plays through Helix's relay URL as it is).
-        if (!/^helix:/.test(t.id) || done.has(t) || !t.url.includes('/stream?max=aac&token=')) return;
-        try {
-          const r = await this.post<{ url?: string; path?: string; artUrl?: string }>(`/v1/items/${encodeURIComponent(t.id.replace(/^helix:/, ''))}/play-url`, { format: 'aac', maxRate: 48000, ttl: 21600, profile: h.profile });
-          const url = r.url && /^https?:\/\//.test(r.url) ? r.url : r.path ? `${h.url}${r.path}` : null;
-          if (!url) return;
-          t.url = url;
-          t.contentType = 'audio/aac';
-          const art = r.artUrl ? abs(h.url, r.artUrl) : null;
-          if (art) t.art = art;
-          done.add(t);
-          this.signing = true;
-        } catch (e) {
-          // Helix without signed URLs (the route itself is missing: a plain 404 or a 405): stay on token URLs from now on.
-          // A 404 with Helix's own {error} is about that song, not the route.
-          const { status, body } = e as { status?: number; body?: unknown };
-          if (this.signing === null && (status === 405 || (status === 404 && !(body && typeof body === 'object')))) this.signing = false;
-        }
-      }));
+    const fresh = (t: QueueTrack) => (this.signedUntil.get(t) ?? 0) > this.now;
+    let i = from;
+    while (i < Math.min(to, list.length)) {
+      const stretch = list.slice(i, Math.min(i + 8, to, list.length));
+      const need = stretch.filter(t => /^helix:/.test(t.id) && !fresh(t));
+      const out = await Promise.all(need.map(t => this.signOne(t, h, format).then(r => [t, r] as const)));
       if ((this.signing as boolean | null) === false) return;
+      // A song dropped from this stretch: the ones after it move up, and are signed in turn.
+      const drop = out.filter(([, r]) => r === 'drop').map(([t]) => t);
+      for (const t of drop) { const k = list.indexOf(t); if (k >= 0) list.splice(k, 1); }
+      i += stretch.length - drop.length;
     }
-    await this.signArt(tracks.filter(t => t.art?.includes('token=') && this.artPath.has(t)), h.url);
+    const window = list.slice(from, Math.min(to, list.length));
+    await this.signArt(window.filter(t => t.art?.includes('token=') && this.artPath.has(t)), h.url);
+  }
+
+  /** One song's signed URL: 'ok', 'drop' (no file, or Helix won't sign it), or 'old' (a Helix without play-url). */
+  private async signOne(t: QueueTrack, h: { url: string; profile: string }, format: AudioFormat): Promise<'ok' | 'drop' | 'old'> {
+    const id = t.id.replace(/^helix:/, '');
+    const key = `${id}\0${format}\0${h.profile}`;
+    const cached = this.signedCache.get(key);
+    if (cached && cached.until > this.now) { this.apply(t, cached); return 'ok'; }
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        // Helix answers url (absolute), path, expiresAt (Unix seconds), profile, format ("" = the original file), maxRate,
+        // artUrl and artPath (null without a cover).
+        const r = await this.post<{ url?: string; path?: string; artUrl?: string | null; artPath?: string | null; expiresAt?: number; format?: string }>(
+          `/v1/items/${encodeURIComponent(id)}/play-url`, { format, maxRate: 48000, ttl: SIGNED_TTL_S, profile: h.profile });
+        const url = r.url && /^https?:\/\//.test(r.url) ? r.url : r.path ? `${h.url}${r.path}` : null;
+        if (!url) return 'drop';
+        const ends = typeof r.expiresAt === 'number' && Number.isFinite(r.expiresAt) ? r.expiresAt * 1000 : NaN;
+        const lasts = Number.isFinite(ends) && ends > this.now ? ends - this.now : SIGNED_TTL_S * 1000;
+        const cover = r.artUrl ?? r.artPath;
+        const s: Signed = {
+          url, contentType: typeOf(r.format, this.codecOf.get(t)),
+          art: cover === undefined ? undefined : cover === null ? null : abs(h.url, cover),
+          until: this.now + Math.max(30_000, lasts - Math.min(RESIGN_BEFORE_MS, lasts / 4)),
+        };
+        this.signedCache.set(key, s);
+        if (this.signedCache.size > 5000) this.signedCache.delete(this.signedCache.keys().next().value!);
+        this.apply(t, s);
+        this.signing = true;
+        return 'ok';
+      } catch (e) {
+        const { status, body } = e as { status?: number; body?: unknown };
+        // play-url itself missing (a plain 404, or 405): a Helix from before signed URLs. Token URLs from now on.
+        if (status === 405 || (status === 404 && !(body && typeof body === 'object'))) {
+          if (this.signing !== true) { this.signing = false; return 'old'; }
+          return 'drop';
+        }
+        // A 404 with Helix's own {error} is about this song: no file (a service's song). Skipped.
+        if (status === 404) return 'drop';
+        if (e instanceof LanHttpError && e.status >= 400 && e.status < 500) return 'drop';
+        // The network or Helix hiccuped: once more, then the song is left out.
+      }
+    }
+    return 'drop';
+  }
+
+  private apply(t: QueueTrack, s: Signed): void {
+    t.url = s.url;
+    t.contentType = s.contentType;
+    if (s.art) t.art = s.art;
+    this.signedUntil.set(t, s.until);
   }
 
   /** Swap token cover URLs for signed ones in one call. A cover Helix won't sign (null) is dropped rather than sent with the token. */
   private async signArt(tracks: QueueTrack[], base: string): Promise<void> {
     if (!tracks.length || this.artSigning === false) return;
     try {
-      const r = await this.post<{ urls?: (string | null)[] } | (string | null)[]>('/v1/art-urls', { urls: tracks.map(t => this.artPath.get(t)!), ttl: 21600 });
+      const r = await this.post<{ urls?: (string | null)[] } | (string | null)[]>('/v1/art-urls', { urls: tracks.map(t => this.artPath.get(t)!), ttl: SIGNED_TTL_S });
       const urls = Array.isArray(r) ? r : r.urls ?? [];
       if (urls.length !== tracks.length) return;
       tracks.forEach((t, i) => { const u = urls[i] ? abs(base, urls[i]!) : null; if (u) t.art = u; else delete t.art; });
@@ -304,7 +430,8 @@ export class HelixMusic {
 
   private track(t: HelixTrack, h: { url: string; token: string }): QueueTrack {
     const tok = `token=${encodeURIComponent(h.token)}`;
-    // A song on disk: the AAC/MP4 rendition every speaker plays. A service's song: Helix's relay (its url already carries the token).
+    // A song on disk: the AAC/MP4 rendition every speaker plays (only for a Helix that can't sign). A service's song:
+    // Helix's relay (its url already carries the token).
     const url = t.hasFile ? `${h.url}/v1/music/tracks/${encodeURIComponent(t.id.replace(/^helix:/, ''))}/stream?max=aac&${tok}` : t.url!;
     const path = t.posterUrl && !/^https?:\/\//.test(t.posterUrl) ? `${t.posterUrl}${t.posterUrl.includes('?') ? '&' : '?'}w=600` : null;
     const art = path ? `${h.url}${path}&${tok}` : t.posterUrl || undefined;
@@ -315,9 +442,38 @@ export class HelixMusic {
       ...(art ? { art } : {}), ...(t.durationMs ? { durationMs: t.durationMs } : {}),
     };
     if (path) this.artPath.set(q, path);
+    if (t.codec) this.codecOf.set(q, t.codec);
     return q;
   }
 }
 
 /** A URL Helix handed back, absolute or a path on Helix. */
 const abs = (base: string, u: string): string | null => /^https?:\/\//.test(u) ? u : u.startsWith('/') ? `${base}${u}` : null;
+
+/**
+ * Counts a song as played once a speaker has played at least 85% of it: the time it was playing (not paused) between it
+ * starting and the speaker moving on, stopping or switching off. A song skipped part-way doesn't count.
+ */
+export class PlayCounter {
+  private playing = new Map<string, { id: string; durationMs?: number; since: number | null; playedMs: number }>();
+
+  constructor(private count: (trackId: string, player: string, durationMs?: number) => void, private now: () => number = Date.now) {}
+
+  /** A speaker's state after a change: what it plays now, and whether it's paused or off. */
+  seen(d: Pick<Device, 'id' | 'name' | 'state'>): void {
+    const s = d.state, t = s.track;
+    const cur = this.playing.get(d.id);
+    const active = !!t?.id && s.on !== false && s.online !== false;
+    const paused = !!s.paused;
+    if (cur && (!active || t!.id !== cur.id)) {
+      const ms = cur.playedMs + (cur.since != null ? this.now() - cur.since : 0);
+      if (cur.durationMs && ms >= PLAYED_SHARE * cur.durationMs) this.count(cur.id, d.name, cur.durationMs);
+      this.playing.delete(d.id);
+    }
+    if (!active) return;
+    const now = this.playing.get(d.id);
+    if (!now) { this.playing.set(d.id, { id: t!.id!, durationMs: t!.durationMs, since: paused ? null : this.now(), playedMs: 0 }); return; }
+    if (paused && now.since != null) { now.playedMs += this.now() - now.since; now.since = null; }
+    else if (!paused && now.since == null) now.since = this.now();
+  }
+}
