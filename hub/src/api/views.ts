@@ -41,7 +41,8 @@ export function viewFor(s: Snapshot, a: Actor | undefined, accounts?: Accounts) 
     const out = { ...s, me };
     // An adult sees the home and its settings, but not the owner's: updates (with the licence) stay the owner's.
     if (!allows(a, 'owner')) return { ...out, update: null };
-    return out;
+    // The owner: each person's account (role and limits), so People shows them live.
+    return { ...out, accounts: (accounts?.members() ?? []).map(m => ({ personId: m.personId, role: m.role, rooms: m.rooms ?? null, until: m.until ?? null, expired: accounts!.expired(m) })) };
   }
   const devices = s.devices.filter(d => canDevice(a, d));
   const ids = new Set(devices.map(d => d.id));

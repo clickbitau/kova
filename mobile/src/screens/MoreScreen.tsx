@@ -1,3 +1,4 @@
+import { cloneElement, type ReactElement } from 'react';
 import { View } from 'react-native';
 import { C, SP } from '../theme';
 import { useHub, useSnap } from '../state/hub';
@@ -10,6 +11,7 @@ import { T } from '../ui/Text';
 import { display, KIND_LABEL } from '../logic/addresses';
 import { linkWords } from '../logic/link';
 import { automationsOf } from '../logic/automations';
+import { features, meOf } from '../logic/roles';
 
 export function MoreScreen() {
   const s = useSnap();
@@ -25,6 +27,9 @@ export function MoreScreen() {
   const tone = words.tone === 'ok' ? C.green : words.tone === 'down' ? C.red : C.amber;
   // Software update lives in Settings; a waiting one shows here as a note on that row, nothing more.
   const notice = updateNotice(s.update, useAppUpdate());
+  // What this person's role can use (logic/roles.ts); the hub refuses the rest anyway.
+  const who = meOf(s);
+  const can = features(who);
   return (
     <Screen title="More" over={s.home.name} gap={SP[6]}>
       <Card style={{ padding: SP[4], flexDirection: 'row', alignItems: 'center', gap: SP[3] }}>
@@ -40,18 +45,21 @@ export function MoreScreen() {
 
 
       <Group title="Your home">
-        <Row first icon="routine" iconFg={C.amber} title="Modes" sub={`${s.modes.length} modes · now ${mode?.name ?? ''}${s.findings.length ? ` · ${s.findings.length} to look at` : ''}`} subColor={s.findings.length ? C.amber : C.stone} badge={s.findings.length > 0} onPress={() => nav.navigate('Modes')} />
-        <Row icon="account_tree" iconFg={C.amber} title="Automations" sub={autos.length ? `${autos.length} · ${autos.filter(a => a.enabled).length} on` : 'When something happens, do something'} onPress={() => nav.navigate('Automations')} />
-        <Row icon="history" iconFg={C.blue} title="Activity" sub="Everything that happened, and why" onPress={() => nav.navigate('Activity')} />
-        <Row icon="sensors" iconFg={C.green} title="Sensors" sub={s.sensors?.length ? `${s.sensors.length} · temperature, motion, doors and more` : 'Temperature, motion and door sensors'} onPress={() => nav.navigate('Sensors')} />
-        <Row icon="solar_power" iconFg={C.amber} title="Energy" sub="Solar, use and the grid today" onPress={() => nav.navigate('Energy')} />
-        <Row icon="speaker_group" iconFg={C.blue} title="Media" sub={players ? `${players} playing` : 'Speakers, TVs and speaker groups'} onPress={() => nav.navigate('Media')} />
+        {[
+          can.modes && <Row key="modes" icon="routine" iconFg={C.amber} title="Modes" sub={`${s.modes.length} modes · now ${mode?.name ?? ''}${s.findings.length ? ` · ${s.findings.length} to look at` : ''}`} subColor={s.findings.length ? C.amber : C.stone} badge={s.findings.length > 0} onPress={() => nav.navigate('Modes')} />,
+          can.automations && <Row key="autos" icon="account_tree" iconFg={C.amber} title="Automations" sub={autos.length ? `${autos.length} · ${autos.filter(a => a.enabled).length} on` : 'When something happens, do something'} onPress={() => nav.navigate('Automations')} />,
+          can.activity && <Row key="activity" icon="history" iconFg={C.blue} title="Activity" sub={can.modes ? 'Everything that happened, and why' : 'What happened with your devices'} onPress={() => nav.navigate('Activity')} />,
+          can.sensors && <Row key="sensors" icon="sensors" iconFg={C.green} title="Sensors" sub={s.sensors?.length ? `${s.sensors.length} · temperature, motion, doors and more` : 'Temperature, motion and door sensors'} onPress={() => nav.navigate('Sensors')} />,
+          can.energy && <Row key="energy" icon="solar_power" iconFg={C.amber} title="Energy" sub="Solar, use and the grid today" onPress={() => nav.navigate('Energy')} />,
+          <Row key="media" icon="speaker_group" iconFg={C.blue} title="Media" sub={players ? `${players} playing` : 'Speakers, TVs and speaker groups'} onPress={() => nav.navigate('Media')} />,
+        ].filter((r): r is ReactElement<{ first?: boolean }> => !!r).map((r, i) => (i === 0 ? cloneElement(r, { first: true }) : r))}
       </Group>
 
-      <Group title="Set up">
-        <Row first icon="settings" iconFg={C.amber} title="Settings" sub={notice ?? 'The home, behaviours, notifications, software update'} subColor={notice ? C.blue : C.stone} badge={!!notice} onPress={() => nav.navigate('Settings')} />
-        <Row icon="home" title="Customise home" sub="Rooms and groups, people, devices, favourites" onPress={() => nav.navigate('Customise')} />
-        <Row icon="hub" title="Integrations" sub={bad.length ? `${bad.length} need${bad.length === 1 ? 's' : ''} attention` : `${s.integrations.length} connected`} subColor={bad.length ? C.amber : C.stone} badge={bad.length > 0} onPress={() => nav.navigate('Integrations')} />
+      <Group title={can.settings ? 'Set up' : 'Your account'}>
+        <Row first icon="group" iconFg={C.green} title={can.manage ? 'People and access' : 'You'} sub={can.manage ? 'Invite people, roles, their devices' : `${who.name} · ${who.roleLabel}`} onPress={() => nav.navigate('People')} />
+        {can.settings ? <Row icon="settings" iconFg={C.amber} title="Settings" sub={notice ?? 'The home, behaviours, notifications, software update'} subColor={notice ? C.blue : C.stone} badge={!!notice} onPress={() => nav.navigate('Settings')} /> : null}
+        {can.customise ? <Row icon="home" title="Customise home" sub="Rooms and groups, people, devices, favourites" onPress={() => nav.navigate('Customise')} /> : null}
+        {can.integrations ? <Row icon="hub" title="Integrations" sub={bad.length ? `${bad.length} need${bad.length === 1 ? 's' : ''} attention` : `${s.integrations.length} connected`} subColor={bad.length ? C.amber : C.stone} badge={bad.length > 0} onPress={() => nav.navigate('Integrations')} /> : null}
       </Group>
 
       <Group title="This phone">

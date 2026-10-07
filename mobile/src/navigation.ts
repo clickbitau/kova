@@ -21,6 +21,8 @@ export type Stack = {
   MomentEditor: { id?: string; start?: Rhythm } | undefined;
   /** More → Sign in a browser: approve a browser's sign-in code; signed-in browsers. */
   Browsers: undefined;
+  /** More → People and access: members, their roles and devices, invites (the owner); or your own account. */
+  People: undefined;
   /** More → Settings: where the home is, its timezone and prayer method, behaviours. */
   Settings: undefined;
   /** Settings → Voice and other apps: room ACs for Google Home, Alexa and Apple Home, comfort, pairing. */

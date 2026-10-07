@@ -160,11 +160,18 @@ export function snapshot(hub: Hub) {
     .slice(-6).map(e => ({ hour: localHour(e.ts, tz), label: e.kind === 'presence' ? e.what.replace(' arrived home', ' home').replace(' left home', ' left') : e.cause.kind === 'behaviour' ? 'Light the way' : e.cause.label }));
 
   const feed = store.feed(80);
+  // "Ceiling on" says more as "Baby room ceiling on" once it's someone's doing.
+  const withRoom = (e: LogEntry): string => {
+    const d = e.device ? reg.get(e.device) : undefined;
+    const room = d && cfg.rooms.find(r => r.id === d.room);
+    if (!d || !room || !e.what.startsWith(d.name) || d.name.toLowerCase().includes(room.name.toLowerCase())) return e.what;
+    return `${room.name} ${d.name.toLowerCase()}${e.what.slice(d.name.length)}`;
+  };
   const activity = feed.map(e => ({
     id: e.id, ts: e.ts, t: localDate(e.ts, tz) === today ? clock(e.ts, tz) : `${new Date(e.ts).toLocaleDateString('en-AU', { weekday: 'short', timeZone: tz })} ${clock(e.ts, tz)}`,
     type: e.feed!, icon: feedIcon(e), device: e.device,
     // Who did it, by their account: "Sam turned off Lounge lights".
-    what: e.cause.by && ['user', 'assistant', 'overlay'].includes(e.cause.kind) ? byline(e.cause.by.name, e.what, e.cause) : e.what,
+    what: e.cause.by && ['user', 'assistant', 'overlay'].includes(e.cause.kind) ? byline(e.cause.by.name, withRoom(e), e.cause) : e.what,
     who: e.cause.by?.name ?? null, whoId: e.cause.by?.id ?? null,
     why: [e.cause.by && e.cause.label === 'You' ? null : e.cause.label, e.cause.detail].filter(Boolean).join(' · '),
   }));

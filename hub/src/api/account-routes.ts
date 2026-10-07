@@ -3,7 +3,7 @@ import QRCode from 'qrcode';
 import type { Hub } from '../hub.ts';
 import type { Accounts, Member } from '../services/accounts.ts';
 import { AccountError } from '../services/accounts.ts';
-import type { Sessions } from '../services/sessions.ts';
+import { deviceName, type Sessions } from '../services/sessions.ts';
 import type { Presence } from '../services/presence.ts';
 import { ROLE_LABEL, currentActor } from '../services/actor.ts';
 import { slug } from '../tools/import-ha.ts';
@@ -149,7 +149,8 @@ export function registerAccountRoutes(app: FastifyInstance, hub: Hub, o: Account
   app.post<{ Body: { code?: string; personId?: string; name?: string; device?: string } }>('/api/invite/accept', async (req, reply) => {
     reply.header('cache-control', 'no-store');
     try {
-      const r = accounts.accept(req.body?.code, req.body ?? {}, req.ip, name => {
+      const b = req.body ?? {};
+      const r = accounts.accept(b.code, { ...b, device: b.device || deviceName(req.headers['user-agent']) }, req.ip, name => {
         const list = people();
         let id = slug(name) || 'person', n = 2;
         while (list.some(p => p.id === id)) id = `${slug(name) || 'person'}_${n++}`;

@@ -198,6 +198,14 @@ export function HubProvider({ children }: { children: ReactNode }) {
     return () => sub.remove();
   }, [routeUrl, addressKey, say, hub]);
 
+  // Signed in as one of the home's people (an invite, or "This is me"): this phone is theirs, for arriving and
+  // leaving and for their notifications.
+  const mePerson = snap?.me?.via === 'session' ? snap.me.personId : null;
+  useEffect(() => {
+    const c = cfgRef.current;
+    if (mePerson && c && c.personId !== mePerson) void save({ ...c, personId: mePerson });
+  }, [mePerson, save]);
+
   // The home's circle moved (Settings, here or anywhere): the phone watches the new one (native/arrive-leave.ts).
   const homeAt = snap?.home.location;
   const homeKey = homeAt ? `${homeAt.latitude},${homeAt.longitude},${homeAt.radiusM ?? ''}` : '';

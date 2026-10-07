@@ -4,7 +4,7 @@ import type { Device } from '../model/types.ts';
 
 // Who may call what: one allow-list for every route of the API, checked by one hook (server.ts) before any handler
 // runs. A route that isn't listed is the owner's alone, so a new route is closed until someone decides who it's for
-// (test/access.test.ts fails for a route missing here). The roles and what each may do are in services/actor.ts;
+// (test/accounts.test.ts fails for a route missing here). The roles and what each may do are in services/actor.ts;
 // docs/architecture.md has this table in words.
 //
 // `public`: no key at all (health checks, the app's updates, signing in, accepting an invite). Otherwise a Perm, and

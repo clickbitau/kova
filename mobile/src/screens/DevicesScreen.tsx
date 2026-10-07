@@ -13,6 +13,7 @@ import { T } from '../ui/Text';
 import { TileGrid } from '../ui/Tile';
 import { animateLayout } from '../ui/motion';
 import { CombineIdeaCard } from './CustomiseScreen';
+import { features, meOf } from '../logic/roles';
 import { RoomZones } from './RoomZones';
 
 /** A search box: icon, field, a clear button when there's something to clear. */
@@ -53,13 +54,14 @@ export function DevicesScreen() {
   const pills = roomPills(all, s.rooms, zoned);
   const add = () => nav.navigate('IntegrationAdd');
   const filtered = room !== 'all' || type !== 'all' || !!q;
+  const can = features(meOf(s));
 
   return (
     <Screen title="Devices" over={`${plural(visible.length, 'device')} · ${plural(lightsOn, 'light')} on`} right={
       <View style={{ flexDirection: 'row', gap: SP[2], paddingBottom: 4 }}>
-        {sensors ? <IconButton icon="sensors" label={`Sensors, ${sensors}`} onPress={() => nav.navigate('Sensors')} /> : null}
-        <IconButton icon="tune" label="Customise home" onPress={() => nav.navigate('Customise')} />
-        <IconButton icon="add" label="Add a device" tone="amber" onPress={add} />
+        {sensors && can.sensors ? <IconButton icon="sensors" label={`Sensors, ${sensors}`} onPress={() => nav.navigate('Sensors')} /> : null}
+        {can.customise ? <IconButton icon="tune" label="Customise home" onPress={() => nav.navigate('Customise')} /> : null}
+        {can.integrations ? <IconButton icon="add" label="Add a device" tone="amber" onPress={add} /> : null}
       </View>
     }>
       {combineIdeasOf(s).map(ci => <CombineIdeaCard key={ci.key} ci={ci} />)}
@@ -102,7 +104,8 @@ export function DevicesScreen() {
       {!groups.length ? (
         all.length
           ? <Empty icon="search_off" title="Nothing matches" text={q ? `No device called “${q}” here.` : 'No devices of that kind in this room.'} action={filtered ? 'Show everything' : undefined} onAction={() => { animateLayout(); setQ(''); setRoom('all'); setType('all'); }} />
-          : <Empty icon="devices" tone={C.amber} title="No devices yet" text="Add your lights, speakers and cameras. Kova finds some by itself." action="Add a device" onAction={add} />
+          : can.integrations ? <Empty icon="devices" tone={C.amber} title="No devices yet" text="Add your lights, speakers and cameras. Kova finds some by itself." action="Add a device" onAction={add} />
+          : <Empty icon="devices" title="No devices for you yet" text="The home’s owner chooses the rooms and devices you can use." />
       ) : null}
 
       {hidden ? (

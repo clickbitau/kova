@@ -105,7 +105,7 @@ add-on: nothing in Kova depends on HA. The design reference lives in
     The App Shortcuts provider is in the app (`ios-app/`, added by `plugins/withSiriShortcuts.js`);
     the intents are shared with the widget.
   - **Quick actions** (long-press the icon, both platforms): two scenes, all lights off, Ask.
-* **Later:** Kova Cloud (accounts, remote access relay, backups, updates). It doesn't exist yet.
+* **Later:** Kova Cloud (remote access relay, backups, updates). It doesn't exist yet. Household accounts are on the hub (below).
 
 ## Domain model (`hub/src/model/types.ts`)
 
@@ -636,11 +636,107 @@ a row on the Integrations screen ("Router: 2 phones seen").
 | GET, POST | `/api/backups` | List backups / make one now (see [install.md](install.md#backups)) |
 | GET | `/api/backups/:name` | Download a backup (needs `KOVA_TOKEN`, or a request from the machine itself) |
 
-Set `KOVA_TOKEN` to require `Authorization: Bearer <token>` on every API call except `/api/health`.
-Open the UI once with `?token=…` and it remembers the token. This is a stopgap
-until real accounts exist.
-The one exception: `POST /api/people/:id/presence?key=…` with that person's
-own presence key.
+| GET, PATCH | `/api/me` | Who this key is: `{me: {role, personId, name, rooms, devices, until, room, via, can}, presence: {arriveUrl, leaveUrl}}`; PATCH `{room}` sets their own room |
+| POST | `/api/me/claim` | Owner on the master key (or a pre-accounts key): `{personId, name}` makes that person an owner member; a browser's key becomes theirs, the master key gets `{token}`, a new key of theirs |
+| GET | `/api/members` | Owner: `{members: [{personId, name, role, rooms, devices, until, room, lastSeen, sessions}], others, invites, ownerKeys, roles}` |
+| PUT, DELETE | `/api/members/:id` | Owner: `{role?, rooms?, devices?, until?, room?}`; DELETE revokes everything (devices signed out, push registrations dropped, presence key rotated) |
+| POST | `/api/invites`, `/api/invites/:id/resend` | Owner: `{role, personId? \| name?, rooms?, devices?, until?}` → `{invite, code, link, appLink, qrSvg, addresses}` (the code is shown only here) |
+| DELETE | `/api/invites/:id` | Owner: cancel an unused invite |
+| POST | `/api/invite/peek`, `/api/invite/accept` | No key: `{code}` → what it's for; `{code, personId? \| name?, device?}` → `{token, personId, role}`. Rate-limited, single use |
+
+Set `KOVA_TOKEN` to require a key on every API call except the open ones in the matrix below. The master
+token is the owner's (recovery, and the phone app's original pairing); everyone else has a key of their own
+(household accounts, below). Without `KOVA_TOKEN` the hub is open and every request is the owner, so roles
+need it; every install sets one.
+A phone automation may still call `POST /api/people/:id/presence?key=…` with that person's own presence key.
+
+## Household accounts and roles
+
+Kova's accounts live on the hub, never in a cloud (`services/accounts.ts`, `services/sessions.ts`,
+`api/account-routes.ts`).
+
+* **A member** is one of the home's people with a role: **owner**, **adult**, **child** or **guest**. A child
+  and a guest have the rooms they may use; a guest also single devices and an optional end time ("until
+  Sunday"). A member may have their own room ("turn off my room").
+* **Inviting:** Settings → People → *Invite someone* (web), More → People and access (app). The owner picks the
+  role, who it's for (an existing person, a new name, or "let them choose") and the rooms. Kova makes a one-time
+  code (10 letters, ~49 bits), shown as a link `http(s)://<hub>/join.html#code=…&hub=…&alt=…` and its QR code,
+  plus `kova://join?url=…&code=…` for the app. The code is valid 24 hours, single use, kept only as a
+  SHA-256 hash, and guessing is rate-limited (10 wrong tries per address and 40 in all per 15 minutes; 429
+  after). The invitee opens it in a browser (`web/join.html`) or the app (first run, or its connect screen),
+  on the home network or the hub's remote address, picks or creates their person, and gets a key of their own.
+* **Keys:** every signed-in device (browser or app) has its own random key, stored only as its hash, owned by a
+  person (`personId`). Signing in another device with a code (`/api/login/approve`) gives the new device the
+  approver's own identity and role. The master key is the owner. Keys from before accounts became **owner keys**
+  on upgrade (`owner: true`, set once by `Sessions`); the owner can tie one to a person ("I'm Methel" in Settings,
+  `POST /api/me/claim`) or sign it out. The web keeps its key in `localStorage` and sends it as a Bearer header:
+  no cookies, so CSRF has nothing to ride on (unchanged).
+* **Managing:** the owner sees each member's role, last seen and devices, signs a device out, changes a role,
+  rooms or end time, makes a fresh code for an invite (the old one stops working), cancels it, or removes a
+  member: every device of theirs is signed out, their phones' push registrations go, and their presence key is
+  rotated. A guest past their end time is signed out everywhere (401 `signed-out`). Recovery is the master key,
+  as before.
+* **Identity:** each request runs as its person (`services/actor.ts`, an AsyncLocalStorage set by the access
+  hook). A change someone makes carries `cause.by` ({id, name}), so Activity reads "Sam turned off Lounge
+  lights" and the snapshot rows have `who`. Ask Kova knows who's asking: their conversation is their own
+  (`ConvoTurn.who`, jobs too), "my room" is their room, and "remind me" makes a notify action for them alone
+  (`people: ["me"]` → their person). Phones register for notifications as their person (`/api/push/app`
+  defaults to the key's person; a member can't register for someone else), and a guest's phone gets only what's
+  addressed to them. A member's presence URLs are in `/api/me`.
+
+### Where roles are enforced
+
+One `onRequest` hook in `api/server.ts` decides every `/api/*` request against the allow-list in
+`api/access.ts` (`ROUTES`, by method and registered route): who it is, whether the role has the route's
+permission, and whether the device, room or person the route names is theirs. Then the request runs as that
+person, and the same rules are checked again where things happen: the engine (`command`, `applyMany`,
+`startOverlay`, `undo`) refuses device changes outside a child's or guest's rooms and mode changes they can't
+make; room ACs check the room; Ask Kova's built-in parser only sees their devices; its AI tools each need a
+permission (`TOOL_PERM` in `assistant/ai.ts`) and only get the asker's devices in their context; a learned
+phrase replays only for a role that could do it. An unlisted route is owner-only, and
+a test in `test/accounts.test.ts` fails when a registered route has no rule (or a rule has no route). Snapshots
+(`/api/state`, `/api/boot.js`, every WebSocket) go through `api/views.ts`: a child sees only their rooms and
+devices, a guest also no people, activity or history; each carries `me`.
+
+### The role matrix
+
+Permissions (`services/actor.ts`): **view** (signed in), **control** (switch devices; a child or guest only
+theirs, never cameras), **cameras**, **history**, **people** (who's home), **modes** (switch modes and
+overlays), **automate** (automations, editing modes, overlays and moments), **home** (rooms, device settings,
+groups, alerts, Ask Kova's notes), **owner**.
+
+| Permission | Owner | Adult | Child | Guest |
+|---|:-:|:-:|:-:|:-:|
+| view | ✓ | ✓ | ✓ | ✓ |
+| control | ✓ | ✓ | their rooms | their rooms and devices |
+| cameras, history | ✓ | ✓ | – | – |
+| people (who's home) | ✓ | ✓ | ✓ | – |
+| modes | ✓ | ✓ | – | – |
+| automate | ✓ | ✓ | – | – |
+| home | ✓ | ✓ | – | – |
+| owner | ✓ | – | – | – |
+
+| Routes | Needs |
+|---|---|
+| `GET /api/health`, `/api/hello`, `/api/app/manifest`, `/api/app/assets/…`, `/api/snap/:key`; `POST /api/login/start`, `GET /api/login/poll/:id`; `POST /api/invite/peek`, `/api/invite/accept` | open (no key) |
+| `GET /api/state`, `/api/boot.js`, `/api/ws`, `/api/me`, `/api/connect/addresses`, `/api/home/room-icons`; `POST /api/login/approve`, `GET /api/sessions` (own; the owner all), `DELETE /api/sessions/:id` (own; the owner any), `POST /api/logout`, `/api/app/crash`; push (`/api/push/vapid`, `subscribe`, `unsubscribe`, `app`); `POST /api/people/:id/presence` (themselves; the owner anyone); Ask Kova (`/api/ask`, `parse`, `act`, `jobs/:id`, `history`); `GET /api/jev/status` | view |
+| `POST /api/devices/:id` (their device), `/api/rooms/:id/off` and `/api/room-climate/:room` (their room), `/api/lights/off` (their lights), `/api/undo/:id` (a child or guest: their own) | control |
+| `POST /api/devices/:id/webrtc`, `…/webrtc/:op`, `GET /api/devices/:id/snapshot`, `/api/frames/…`, `/api/timeline`, `/api/security` | cameras |
+| `GET /api/sensors`, `/api/sensors/:id/history/:field` | history |
+| `POST /api/overlays/:id/start`, `/api/overlays/end`, `/api/plan/skip`, `GET /api/preview` | modes |
+| automations (all), `POST/PUT/PATCH/DELETE /api/modes…`, overlays and moments editing, targets, findings fix/dismiss | automate |
+| `PATCH /api/devices/:id/settings`, favourites, rooms, groups, speaker groups, combined devices, sources, `PUT /api/security/settings`, `PUT /api/room-climate`, insights snooze, `GET /api/maps/static`, `POST /api/push/test`, Ask Kova memory, `PATCH /api/me` | home |
+| members, invites, `/api/me/claim`, people (`POST/PUT/DELETE /api/people…`), `/api/presence/setup`, `/api/app-link` (it holds the master key), `PUT /api/home`, geocoding and maps settings, Ask Kova settings, requests and learned phrases, `/api/devices/:id/event`, `/physical`, `/api/room-climate/pairing`, Jev decide/gate/presence review, updates, backups, Home Assistant import, every `/api/integrations/…` | owner |
+
+Ask Kova's AI tools: `set_devices` control (and per device); `explain_device`, `list_schedule`, `review_action`
+view; `start_overlay`, `end_overlay` modes; automations automate; `remember`, `forget`, rooms, device settings,
+combine and separate home. The built-in parser refuses "who's home" without people, room events without cameras,
+door contacts without history, starting an overlay without modes, and learning a group without home.
+
+Tests: `hub/test/accounts.test.ts` (invites, rate limits, migration, the matrix for each role on the routes that
+matter, every route on the allow-list, scoped snapshots, guest expiry, undo, identity in Activity, managing
+members, notifications, presence) and `hub/test/accounts-ask.test.ts` (AI tools refusing beyond the asker's role,
+the asker's context, "remind me", learned phrases).
 
 ## What's real and what's sample data in the UI
 

@@ -13,6 +13,7 @@ import { Icon } from '../ui/Icon';
 import { Avatar, Button, Card, Empty, HScroll, IconWell, Mark, Notice, NoticeAction, Press, Section, Skeleton } from '../ui/kit';
 import { Screen } from '../ui/Screen';
 import { T } from '../ui/Text';
+import { features, meOf } from '../logic/roles';
 import { Appear } from '../ui/motion';
 import { TileGrid, TileSkeleton } from '../ui/Tile';
 
@@ -43,6 +44,8 @@ export function NowScreen() {
   const cols = glanceColumns(width, fontScale, cards.length);
   const cardW = Math.floor((width - SP.gutter * 2 - SP[2] * (cols - 1)) / cols) - 1;
   const anyLights = s.devices.some(d => isLight(d) && !d.hidden && !d.archived);
+  // What this person's role can do here (logic/roles.ts): a child or a guest doesn't switch modes or see cameras.
+  const can = features(meOf(s));
 
   return (
     <Screen glow={M?.color} head={
@@ -51,17 +54,17 @@ export function NowScreen() {
           <Mark size={22} />
           <T v="label" color={C.bone2}>{s.home.name}</T>
         </View>
-        <Press onPress={() => nav.navigate('Tabs', { screen: 'Security' } as never)} label={`${plural(s.people.filter(p => p.home).length, 'person', 'people')} home`} style={{ flexDirection: 'row' }}>
+        <Press onPress={can.security ? () => nav.navigate('Tabs', { screen: 'Security' } as never) : undefined} label={`${plural(s.people.filter(p => p.home).length, 'person', 'people')} home`} style={{ flexDirection: 'row' }}>
           {s.people.slice(0, 4).map((p, i) => <View key={p.id} style={{ marginLeft: i ? -8 : 0 }}><Avatar name={p.name} home={p.home} size={32} /></View>)}
         </Press>
       </View>
     }>
       <View style={{ gap: SP[2], marginTop: -SP[1] }}>
         <T v="callout" color={C.stone} tabular>{`${shortDate(s.home.dateLabel)} · ${s.home.clock}${w ? ` · ${w.temp}° ${w.text.toLowerCase()}` : ''}`}</T>
-        <Press onPress={() => nav.navigate('Modes')} label={`${M?.name} mode. Open modes`} style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3], alignSelf: 'flex-start' }}>
+        <Press onPress={can.modes ? () => nav.navigate('Modes') : undefined} label={can.modes ? `${M?.name} mode. Open modes` : `${M?.name} mode`} style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3], alignSelf: 'flex-start' }}>
           <Icon name={M?.icon ?? 'routine'} size={38} color={M?.color} fill />
           <T v="hero">{M?.name ?? ''}</T>
-          <Icon name="chevron_right" size={26} color={C.stone2} />
+          {can.modes ? <Icon name="chevron_right" size={26} color={C.stone2} /> : null}
         </Press>
         <T v="body" color={C.soft}>{`Until ${s.current.untilLabel}, then ${next?.name ?? ''}`}</T>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SP[2], marginTop: SP[1] }}>
@@ -149,10 +152,12 @@ export function NowScreen() {
                     </View>
                     <T v="headline" style={u.skipped ? { textDecorationLine: 'line-through' } : null}>{u.label}</T>
                     <T v="footnote" color={C.stone} numberOfLines={2} style={{ flex: 1 }}>{u.skipped ? 'Skipped tonight' : u.what}</T>
-                    <View style={{ marginTop: SP[1] }}>
-                      <Button size="sm" kind="secondary" label={u.skipped ? 'Undo skip' : 'Skip tonight'}
-                        onPress={() => api('POST', '/api/plan/skip', { id: u.id, skip: !u.skipped }).then(() => true).catch(e => { say((e as Error).message, { error: true }); return false; })} />
-                    </View>
+                    {can.modes ? (
+                      <View style={{ marginTop: SP[1] }}>
+                        <Button size="sm" kind="secondary" label={u.skipped ? 'Undo skip' : 'Skip tonight'}
+                          onPress={() => api('POST', '/api/plan/skip', { id: u.id, skip: !u.skipped }).then(() => true).catch(e => { say((e as Error).message, { error: true }); return false; })} />
+                      </View>
+                    ) : null}
                   </Card>
                 </Appear>
               );
@@ -164,10 +169,11 @@ export function NowScreen() {
       <Section title="Favourites" action={favs.length ? 'All devices' : undefined} onAction={() => nav.navigate('Tabs', { screen: 'Devices' } as never)}>
         {favs.length ? <TileGrid items={favs} onToggle={tap} onOpen={d => sheet.open(d.id)} />
           : s.devices.length ? <Empty compact icon="star" tone={C.amber} title="No favourites yet" text="Star a device in its panel to keep it here." />
-          : <Empty compact icon="devices" tone={C.amber} title="No devices yet" text="Connect your lights, speakers and cameras, and keep the ones you use most here." action="Add an integration" onAction={() => nav.navigate('IntegrationAdd')} />}
+          : can.integrations ? <Empty compact icon="devices" tone={C.amber} title="No devices yet" text="Connect your lights, speakers and cameras, and keep the ones you use most here." action="Add an integration" onAction={() => nav.navigate('IntegrationAdd')} />
+          : <Empty compact icon="devices" title="No devices for you yet" text="The home’s owner chooses the rooms and devices you can use." />}
       </Section>
 
-      {s.overlays.length ? (
+      {s.overlays.length && can.modes ? (
         <Section title="Switch the home to">
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SP[2] + 2 }}>
             {s.overlays.map((o, i) => {
@@ -203,7 +209,7 @@ export function NowScreen() {
         </Press>
       ) : null}
 
-      <Section title="Just happened" action={happened.length ? 'See all' : undefined} onAction={() => nav.navigate('Activity')} gap={SP[1]}>
+      <Section title="Just happened" action={happened.length && can.activity ? 'See all' : undefined} onAction={() => nav.navigate('Activity')} gap={SP[1]}>
         {happened.length ? happened.map((h, i) => (
           <Appear key={h.id} index={i} style={{ flexDirection: 'row', gap: SP[3], paddingVertical: SP[3], borderTopWidth: i ? 1 : 0, borderTopColor: C.hairline }}>
             <T mono size={12} color={C.stone2} style={{ width: 40, paddingTop: 2 }}>{h.t}</T>

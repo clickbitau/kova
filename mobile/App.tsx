@@ -20,6 +20,7 @@ import { NATIVE_PAGES, routeFor } from './src/logic/links';
 import { Tabs } from './src/Tabs';
 import { ConnectScreen } from './src/screens/ConnectScreen';
 import { SignInAgainScreen } from './src/screens/SignInAgainScreen';
+import { JoinScreen, useJoinLink } from './src/screens/JoinScreen';
 import { display } from './src/logic/addresses';
 import { ModesScreen } from './src/screens/ModesScreen';
 import { ModeEditor, OverlayEditor, MomentEditor } from './src/screens/BehaviourEditors';
@@ -32,6 +33,7 @@ import { IntegrationAddScreen, IntegrationsScreen } from './src/screens/Integrat
 import { IntegrationScreen } from './src/screens/IntegrationScreen';
 import { AutomationsScreen } from './src/screens/AutomationsScreen';
 import { BrowsersScreen } from './src/screens/BrowsersScreen';
+import { PeopleScreen } from './src/screens/PeopleScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { VoiceScreen } from './src/screens/VoiceScreen';
 import { HomeLocationScreen } from './src/screens/HomeLocationScreen';
@@ -75,6 +77,8 @@ function Home() {
   const { cfg, loading, snap, conn, toast, undo, api, say } = useHub();
   const insets = useSafeAreaInsets();
   const nav = useRef<NavigationContainerRef<StackParams>>(null);
+  // An invite link opened from outside (kova://join, or the join page): joining takes over until done or put off.
+  const [join, clearJoin] = useJoinLink();
   useEffect(() => initCrashReporting(() => cfg), [cfg]);
 
   // Widgets, the Live Activity and the app icon's quick actions follow the hub.
@@ -102,6 +106,7 @@ function Home() {
   }, [last, !!snap]);
 
   if (loading) return <Splash />;
+  if (join && (!cfg || conn === 'signedOut')) return <JoinScreen invite={join} onClose={clearJoin} />;
   if (!cfg) return <ConnectScreen />;
   if (conn === 'signedOut') return <SignInAgainScreen />;
   if (!snap) return conn === 'offline' || conn === 'hubError' ? <CantReach /> : <NowSkeleton />;
@@ -125,6 +130,7 @@ function Home() {
           <Stack.Screen name="Web" component={WebScreen} />
           <Stack.Screen name="Automations" component={AutomationsScreen} />
           <Stack.Screen name="Browsers" component={BrowsersScreen} />
+          <Stack.Screen name="People" component={PeopleScreen} />
           <Stack.Screen name="Settings" component={SettingsScreen} />
           <Stack.Screen name="Voice" component={VoiceScreen} />
           <Stack.Screen name="HomeLocation" component={HomeLocationScreen} />
