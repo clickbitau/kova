@@ -17,6 +17,7 @@ import { Energy } from './services/energy.ts';
 import { PlayCounter, type HelixMusic } from './services/helix-music.ts';
 import { SensorHistory } from './services/sensors.ts';
 import { Security, type SecurityOptions } from './services/security.ts';
+import { Maps, type MapsOptions } from './services/maps.ts';
 
 export interface HubOptions {
   dbPath: string;
@@ -31,6 +32,8 @@ export interface HubOptions {
   energyMs?: number;
   /** Camera alerts and event frames (services/security.ts): where frames are kept, and timings for tests. */
   security?: SecurityOptions;
+  /** For tests: what the address search and pasted Google Maps links fetch with, and how. */
+  maps?: Partial<Omit<MapsOptions, 'store' | 'near'>>;
 }
 
 /** Wires the hub's parts together. One per home. */
@@ -63,6 +66,8 @@ export class Hub extends EventEmitter<{ changed: [] }> {
   readonly security: Security;
   /** Helix music on any speaker (services/helix-music.ts), once Helix is set up. */
   music: HelixMusic | null = null;
+  /** Finding the home: the address search, pasted Google Maps links, the Google Maps key (services/maps.ts). */
+  readonly maps: Maps;
   /** Updating the hub itself (services/updates.ts); null without an updater set up (tests, Docker). */
   updates: Updates | null = null;
   /** Which media players sit on which TV (and soundbar), for suggested automations. Helix's screens once it's linked. */
@@ -96,6 +101,7 @@ export class Hub extends EventEmitter<{ changed: [] }> {
     this.engine = new Engine(this.store, this.reg, this.config, opts.now);
     this.checker = new Checker(this.engine, this.store, this.config, () => this.reg.devices);
     this.assistant = new Assistant(this.engine, this.reg, this.config);
+    this.maps = new Maps({ now: opts.now, ...opts.maps, store: this.store, near: () => { const c = this.config.get(); return c.latitude || c.longitude ? { latitude: c.latitude, longitude: c.longitude } : null; } });
     this.energy = new Energy(this.store, this.reg, () => this.config.get().timezone, opts.now, () => this.config.get().devices ?? {});
     this._demo = !!opts.demo;
     this.weather = opts.weather;
@@ -122,11 +128,32 @@ export class Hub extends EventEmitter<{ changed: [] }> {
     this.weather?.start(this.config.get());
     // A new location or timezone in Settings: the forecast for the new place.
     this.config.on('changed', () => this.weather?.moved(this.config.get()));
+    // A home point from Google is refreshed before Google's 30 days are up: a minute after starting, then daily.
+    if (this.opts.tickMs !== 0) {
+      const first = setTimeout(() => void this.refreshPlace(), 60_000);
+      this.placeTimer = setInterval(() => void this.refreshPlace(), 86_400_000);
+      first.unref?.(); this.placeTimer.unref?.();
+    }
+  }
+
+  private placeTimer: NodeJS.Timeout | null = null;
+  /** Ask the place's provider for the home's point again when it's due (services/maps.ts refresh). */
+  async refreshPlace(): Promise<boolean> {
+    const before = this.config.get().location;
+    const r = await this.maps.refresh(this.config.get()).catch(() => null);
+    // Not if the owner moved the home meanwhile.
+    if (!r || this.config.get().location?.updatedAt !== before?.updatedAt) return false;
+    this.config.update(c => {
+      c.location = r.location; c.latitude = r.location.latitude; c.longitude = r.location.longitude;
+      if (r.address) c.address = r.address;
+    });
+    return true;
   }
 
   async stop(): Promise<void> {
     await this.security.stop();
     this.sensors.flush();
+    if (this.placeTimer) clearInterval(this.placeTimer);
     this.engine.stop();
     this.energy.stop();
     this.weather?.stop();

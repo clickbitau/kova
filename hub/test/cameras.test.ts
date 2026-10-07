@@ -52,7 +52,7 @@ test('cameras can be put in a room, like any device, and that room is where thei
 
 test('camera events: a timeline per camera and per room, each with the frame kept from its camera', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'kova-frames-'));
-  const t = await testHub(12, undefined, { framesDir: dir, settleMs: 5, frameDelayMs: 5, keepFrames: 2 });
+  const t = await testHub(12, undefined, { security: { framesDir: dir, settleMs: 5, frameDelayMs: 5, keepFrames: 2 } });
   const app = await buildServer(t.hub, { webRoot });
   try {
     t.hub.reg.deviceEvent('doorbell', 'person', { eventId: 'e1' });

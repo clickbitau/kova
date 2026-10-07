@@ -210,6 +210,8 @@ hub.updates = new Updates(hub, {
   catalog: { url: env.KOVA_UPDATE_URL || undefined, channel: env.KOVA_UPDATE_CHANNEL || undefined, product: env.KOVA_PRODUCT || env.CLICKBIT_PRODUCT_ID || undefined },
 });
 hub.updates.start();
+// ClickBIT's location service (Google without a key of the home's own), signed in with the licence, once it runs.
+if (env.KOVA_LOCATION_PROXY_URL) { const cat = hub.updates.catalog; hub.maps.useProxy(env.KOVA_LOCATION_PROXY_URL, () => cat.token()); }
 notifier.start();
 // Automations' "Notify" steps go to the same phones, and so do camera and sensor alerts.
 hub.engine.automations.notify = n => notifier.notify(n);

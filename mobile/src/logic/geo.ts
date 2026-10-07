@@ -21,3 +21,12 @@ export function presenceFor(event: 'enter' | 'exit', where?: LatLon | null, home
   if (where && home && distanceM(where, home) < (home.radiusM ?? HOME_RADIUS_M)) return null;
   return false;
 }
+
+/**
+ * Whether the circle the phone watches is no longer the home's: the point moved more than a metre, or the
+ * radius changed. Then the phone starts watching the new one (native/arrive-leave.ts followHome).
+ */
+export function homeMoved(watching: LatLon | null | undefined, home: LatLon | null | undefined): boolean {
+  if (!watching || !home || (!home.latitude && !home.longitude)) return false;
+  return distanceM(watching, home) > 1 || (watching.radiusM ?? HOME_RADIUS_M) !== (home.radiusM ?? HOME_RADIUS_M);
+}

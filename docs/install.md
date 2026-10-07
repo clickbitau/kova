@@ -118,6 +118,39 @@ With no `integrations.json`, Kova runs a demo home of 28 simulated devices, so y
 can try everything safely. Open the URL the installer printed. With a token set,
 open it once as `http://<ip>:8140/?token=<token>`; the web app remembers it.
 
+## Where the home is
+
+Settings → Home sets the point that weather, sunrise and prayer times, and the
+phones' arriving-and-leaving circle all use. Any of these work, with no key:
+
+- **Paste from Google Maps:** a share link (`maps.app.goo.gl/…`, which the hub
+  follows, only to Google's own addresses), a full google.com/maps address,
+  coordinates (`-33.8568, 151.2153`, with N/S/E/W, or `33°51'24.4"S 151°12'55.1"E`)
+  or a Plus Code. In Google Maps, tap Share and copy the link, or press and hold
+  the spot and copy its coordinates.
+- **The address search** (OpenStreetMap's Nominatim, at most one request a second).
+- **This phone's or browser's location.**
+
+Then check the pin on the map (OpenStreetMap), drag it onto the house, and size the
+circle (50–500 m). A move to another town also changes the timezone (Undo puts both
+back). Phones with arriving and leaving on watch the new circle the next time Kova
+opens.
+
+**Google Places (optional).** With a Google Maps API key, the address search
+suggests Google's matches as you type. Enter the key under Settings → Home →
+Google Maps key (or set `GOOGLE_MAPS_API_KEY` in `kova.env`; the one in Settings
+wins). It stays on the hub: browsers and phones never see it, only its last four
+characters. In Google Cloud, enable **Places API (New)**, **Geocoding API** and
+**Maps Static API** (and optionally **Time Zone API**) for the key, and restrict
+it to those APIs (and to the hub's public IP if it has a fixed one). Google's terms
+apply to its answers: its matches show as text, its points only on Google's own map
+(a picture through the hub), and the hub keeps Google's place id and refreshes
+Google's coordinates before they're 30 days old. Moving the pin makes the point
+your own.
+
+`KOVA_LOCATION_PROXY_URL` is for ClickBIT's location service (Google without a key
+of your own, through the hub's licence), once it's running.
+
 ## Importing from Home Assistant
 
 Kova reads Home Assistant's configuration once. It never talks to Home Assistant,
@@ -163,6 +196,7 @@ What's imported and what isn't (e.g. the VeSync password) is in
 | Device keys and account passwords (Tuya, Tapo, VeSync…) | `/var/lib/kova/integrations.json`, 0600 |
 | Apple Home setup code and pairings, Matter fabric, Samsung TV tokens | `/var/lib/kova/{homekit,matter,samsungtv,…}/` |
 | AI engine API key (Ask Kova) | inside `kova.db` |
+| Google Maps API key (Settings → Home, optional) | inside `kova.db` |
 | **Backups (all of the above)** | `/var/lib/kova/backups/*.tar.gz`, 0600 |
 
 Everything under `/var/lib/kova` belongs to `kova` and is private to it (the

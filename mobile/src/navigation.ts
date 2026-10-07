@@ -23,6 +23,8 @@ export type Stack = {
   Browsers: undefined;
   /** More → Settings: where the home is, its timezone and prayer method, behaviours. */
   Settings: undefined;
+  /** Settings → Where the home is: the address search, paste from Google Maps, the map and the circle. */
+  HomeLocation: undefined;
   Energy: undefined;
   Media: undefined;
   /** More → Integrations: what's connected, and adding one. */

@@ -110,3 +110,8 @@
   [data-kova-asched] > div:last-child { flex: 1 1 100% !important; justify-content: flex-start !important; padding-left: 100px; }
   [data-kova-adone] > div:last-child { padding-left: 34px; }
 }
+
+/* Settings → Home: the map is a little shorter on a phone, so the circle and Save stay in reach. */
+@media (max-width: 760px) {
+  [data-kova-map], [data-kova-gmap] img { height: 260px !important; }
+}
