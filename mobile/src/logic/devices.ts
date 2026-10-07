@@ -2,6 +2,7 @@
 // kept free of React Native so the tests can run them under plain Node.
 import type { Command, Device, DeviceState, Room, Snapshot } from '../api/types';
 import { isSensor } from './sensors.ts';
+import { WHOLE_HOME, WHOLE_HOME_ICON, WHOLE_HOME_NAME } from './zones.ts';
 
 /** A device with its state spread on top, the shape every screen works with. */
 export type Dev = Device & DeviceState;
@@ -105,7 +106,7 @@ export function stateOf(d: Dev): [string, string] {
     return [[d.mode || 'On', d.mode === 'Manual' && d.fanLevel ? `speed ${d.fanLevel}` : '', air ? `air ${air[0].toLowerCase()}` : ''].filter(Boolean).join(' · '), C.blue];
   }
   if (d.type === 'climate') {
-    const m = HVAC.find(h => h[0] === d.hvac), room = d.temp != null ? `room ${d.temp}°` : '';
+    const m = HVAC.find(h => h[0] === d.hvac), room = d.temp != null ? `${d.room === 'whole_home' ? 'inside' : 'room'} ${d.temp}°` : '';
     return d.on ? [[m?.[1] ?? 'On', d.target != null ? `${d.target}°` : '', room].filter(Boolean).join(' · '), m?.[3] ?? C.blue] : [['Off', room].filter(Boolean).join(' · '), C.stone];
   }
   // A soundbar or TV Kova controls but can't stream to: on (and its input) or off, never "Playing".
@@ -169,19 +170,37 @@ export interface DevGroup { id: string; name: string; icon: string; devices: Dev
  * The Devices screen: devices by room in the home's room order (then anything in no room), filtered by
  * room, type and a search over name, room and integration. Hidden devices only when asked for; archived ones never
  * (Customise home → Archived lists them). Sensors never: they only report, and have a screen of their own.
+ * Devices that serve the whole home (a ducted air conditioner) come first, under Whole home, never in a room or
+ * No room. `zoned`: rooms an air conditioner zone serves, kept even with no devices (the room shows its zone), unless
+ * a search or a type other than climate is narrowing the list.
  */
-export function groupDevices(all: Dev[], rooms: Room[], f: { room?: string; type?: string; q?: string; showHidden?: boolean }): DevGroup[] {
+export function groupDevices(all: Dev[], rooms: Room[], f: { room?: string; type?: string; q?: string; showHidden?: boolean; zoned?: string[] }): DevGroup[] {
   const q = (f.q ?? '').trim().toLowerCase();
   const typeTest = TYPES.find(t => t.id === (f.type ?? 'all'))?.test ?? (() => true);
-  const roomName = (id: string) => rooms.find(r => r.id === id)?.name ?? (id === 'unassigned' ? 'No room' : id);
+  const roomName = (id: string) => rooms.find(r => r.id === id)?.name ?? (id === 'unassigned' ? 'No room' : id === WHOLE_HOME ? WHOLE_HOME_NAME : id);
   const shown = all.filter(d => !d.archived && !isSensor(d) && (f.showHidden || !d.hidden) && typeTest(d) && (!f.room || f.room === 'all' || d.room === f.room)
     && (!q || `${d.name} ${roomName(d.room)} ${d.integration}`.toLowerCase().includes(q)));
-  const order = [...rooms.map(r => r.id), ...new Set(shown.map(d => d.room).filter(id => !rooms.some(r => r.id === id)))];
+  const keep = new Set(!q && ['all', 'climate'].includes(f.type ?? 'all') ? (f.zoned ?? []).filter(id => !f.room || f.room === 'all' || f.room === id) : []);
+  const order = [...(shown.some(d => d.room === WHOLE_HOME) ? [WHOLE_HOME] : []), ...rooms.map(r => r.id), ...new Set(shown.map(d => d.room).filter(id => id !== WHOLE_HOME && !rooms.some(r => r.id === id)))];
   return order.map(id => {
     const devices = shown.filter(d => d.room === id).sort((a, b) => a.name.localeCompare(b.name));
-    return { id, name: roomName(id), icon: rooms.find(r => r.id === id)?.icon ?? 'category', devices, lightsOn: devices.filter(d => isLight(d) && d.on).length };
-  }).filter(g => g.devices.length);
+    const icon = rooms.find(r => r.id === id)?.icon ?? (id === WHOLE_HOME ? WHOLE_HOME_ICON : 'category');
+    return { id, name: roomName(id), icon, devices, lightsOn: devices.filter(d => isLight(d) && d.on).length };
+  }).filter(g => g.devices.length || keep.has(g.id));
 }
+
+/** The Devices screen's room pills: every room with something to show (a device, or a zone serving it), Whole home, then No room. */
+export function roomPills(all: Pick<Dev, 'room'>[], rooms: Room[], zoned: string[] = []): { id: string; name: string }[] {
+  return [
+    { id: 'all', name: 'All rooms' },
+    ...(all.some(d => d.room === WHOLE_HOME) ? [{ id: WHOLE_HOME, name: WHOLE_HOME_NAME }] : []),
+    ...rooms.filter(r => all.some(d => d.room === r.id) || zoned.includes(r.id)),
+    ...(all.some(d => d.room === 'unassigned') ? [{ id: 'unassigned', name: 'Other' }] : []),
+  ];
+}
+
+/** Whether a group's "All off" applies: a room's lights. Never Whole home (that's the air conditioner) or No room. */
+export const roomOffApplies = (g: Pick<DevGroup, 'id' | 'lightsOn'>) => g.lightsOn > 0 && g.id !== 'unassigned' && g.id !== WHOLE_HOME;
 
 export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 

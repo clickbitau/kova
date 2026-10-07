@@ -8,6 +8,7 @@ import {
   type Rhythm, type Targets,
 } from '../logic/automations';
 import { OFFSETS, offsetWords } from '../logic/modes';
+import { isZoneTarget, zoneCommandWords, ZONE_PRESETS, zoneTargetLabel, zoneTargetOptions, zoneTargetRoom, type ZoneCommand } from '../logic/zones';
 import { Icon } from '../ui/Icon';
 import { Button, Card, HScroll, IconButton, Pill, Press, Row, Sheet } from '../ui/kit';
 import { T } from '../ui/Text';
@@ -107,6 +108,9 @@ export function DevicePicker({ open, title, exclude = [], onPick, onClose }: { o
   useEffect(() => { if (open) setQ(''); }, [open]);
   const list = s.devices.filter(d => canSet(d) && !d.hidden && !(d as { archived?: boolean }).archived && !exclude.includes(d.id));
   const sections = deviceSections(list, s.rooms, q);
+  // Rooms' air conditioner zones ("Lounge zone"): the zone serving the room, whichever unit serves it.
+  const words = q.trim().toLowerCase();
+  const zones = zoneTargetOptions(s.devices, s.rooms).filter(o => !exclude.includes(o.v) && (!words || o.label.toLowerCase().includes(words)));
   return (
     <Sheet open={open} onClose={onClose} label={title}>
       <T size={18} weight={700}>{title}</T>
@@ -116,6 +120,18 @@ export function DevicePicker({ open, title, exclude = [], onPick, onClose }: { o
           style={{ flex: 1, color: C.bone, fontFamily: F[400], fontSize: 16, paddingVertical: 11 }} />
         {q ? <Press onPress={() => setQ('')} label="Clear search" style={{ padding: 6 }}><Icon name="close" size={19} color={C.stone2} /></Press> : null}
       </View>
+      {zones.length ? (
+        <View style={{ gap: 2 }}>
+          <T v="overline" color={C.stone2}>Room zones</T>
+          {zones.map(o => (
+            <Press key={o.v} haptic="select" label={o.label} onPress={() => { onPick(o.v); onClose(); }}
+              style={{ minHeight: 46, flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11, paddingHorizontal: 12, borderRadius: 12 }}>
+              <T size={15} weight={500} color={C.bone} numberOfLines={1} style={{ flex: 1 }}>{o.label}</T>
+              <Icon name="chevron_right" size={18} color={C.stone2} />
+            </Press>
+          ))}
+        </View>
+      ) : null}
       {sections.map(sec => (
         <View key={sec.room} style={{ gap: 2 }}>
           <T v="overline" color={C.stone2}>{sec.room}</T>
@@ -128,7 +144,7 @@ export function DevicePicker({ open, title, exclude = [], onPick, onClose }: { o
           ))}
         </View>
       ))}
-      {!sections.length ? <T size={13} color={C.stone}>{q ? `Nothing called “${q}”.` : 'No devices to add.'}</T> : null}
+      {!sections.length && !zones.length ? <T size={13} color={C.stone}>{q ? `Nothing called “${q}”.` : 'No devices to add.'}</T> : null}
     </Sheet>
   );
 }
@@ -137,11 +153,13 @@ export function DevicePicker({ open, title, exclude = [], onPick, onClose }: { o
 function CommandSheet({ device, cur, onPick, onClose }: { device: string | null; cur?: Command; onPick: (c: Command) => void; onClose: () => void }) {
   const s = useSnap();
   const d = s.devices.find(x => x.id === device);
-  const opts = commandChoices(d, s.sources, cur);
+  const zone = !!device && isZoneTarget(device);
+  const opts = zone ? zoneChoices(cur) : commandChoices(d, s.sources, cur);
   const now = cur ? commandKey(cur) : '';
+  const name = zone ? zoneTargetLabel(device!, s.rooms) : d?.name;
   return (
     <Sheet open={!!device} onClose={onClose} label="Set it to">
-      <T size={18} weight={700}>{d ? `${d.name}: set it to` : 'Set it to'}</T>
+      <T size={18} weight={700}>{name ? `${name}: set it to` : 'Set it to'}</T>
       <View style={{ gap: 4 }}>
         {opts.map(o => {
           const on = o.v === now;
@@ -156,6 +174,14 @@ function CommandSheet({ device, cur, onPick, onClose }: { device: string | null;
       </View>
     </Sheet>
   );
+}
+
+/** A room's zone target as choices (open, half open, closed, open with the AC cooling or heating), with the current one first. */
+function zoneChoices(cur?: Command): { v: string; label: string }[] {
+  const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
+  const l = ZONE_PRESETS.map(([c, label]) => ({ v: commandKey(c as Command), label }));
+  if (cur && !l.some(o => o.v === commandKey(cur))) l.unshift({ v: commandKey(cur), label: cap(zoneCommandWords(cur as ZoneCommand)) });
+  return l;
 }
 
 /**
@@ -181,15 +207,16 @@ export function TargetsEditor({ rows, onSet, empty = 'Nothing changes yet. Add t
       <Button kind="secondary" icon="add" label="Add a device" onPress={() => setAdding(true)} />
       <DevicePicker open={adding} title="Add a device" exclude={rows.map(r => r.deviceId)} onClose={() => setAdding(false)}
         onPick={id => setTimeout(() => setCmdFor(id), 250)} />
-      <CommandSheet device={cmdFor} cur={cur ?? (cmdFor ? firstCommand(s.devices.find(d => d.id === cmdFor), s.sources) : undefined)} onClose={() => setCmdFor(null)}
+      <CommandSheet device={cmdFor} cur={cur ?? (cmdFor ? (isZoneTarget(cmdFor) ? { on: true } : firstCommand(s.devices.find(d => d.id === cmdFor), s.sources)) : undefined)} onClose={() => setCmdFor(null)}
         onPick={c => { if (cmdFor) void onSet(cmdFor, c); }} />
     </View>
   );
 }
 
 /** Target rows for a local targets map (a moment being edited), in the snapshot's shape. */
-export function rowsOf(t: Targets, devices: Device[], sources: { name: string }[]): TargetRow[] {
+export function rowsOf(t: Targets, devices: Device[], sources: { name: string }[], rooms: { id: string; name: string }[] = []): TargetRow[] {
   return Object.entries(t).map(([id, cmd]) => {
+    if (isZoneTarget(id)) return { deviceId: id, name: zoneTargetLabel(id, rooms), label: zoneChoices(cmd).find(o => o.v === commandKey(cmd))?.label ?? '', target: cmd, missing: !rooms.some(r => r.id === zoneTargetRoom(id)) };
     const d = devices.find(x => x.id === id);
     return { deviceId: id, name: d?.name ?? id, label: commandChoices(d, sources, cmd).find(o => o.v === commandKey(cmd))?.label ?? '', target: cmd, missing: !d };
   });

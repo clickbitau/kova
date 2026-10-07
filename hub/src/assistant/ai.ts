@@ -4,8 +4,9 @@ import type { Engine } from '../engine/engine.ts';
 import type { Registry } from '../devices/registry.ts';
 import type { ConfigStore } from '../engine/config.ts';
 import type { Store } from '../store/db.ts';
-import { ROOM_ICONS, UNASSIGNED_ROOM, type Automation, type Cause, type Command, type Device, type Targets } from '../model/types.ts';
+import { ROOM_ICONS, UNASSIGNED_ROOM, WHOLE_HOME, type Automation, type Cause, type Command, type Device, type Targets } from '../model/types.ts';
 import { FIELD_CAP, isPlayer, pseudoLabel, targetLabel } from '../util/describe.ts';
+import { cleanZoneCommand, ZONE_FIELDS, zonesServing, type ZoneCommand } from '../util/zones.ts';
 import { hardwareSummary, hasHardware } from '../util/hardware.ts';
 import { checkAutomation } from '../engine/automation-check.ts';
 import { actionWords, condWords, nextOnce, triggerWords } from '../engine/automations.ts';
@@ -173,7 +174,7 @@ export function saveSettings(store: Store, patch: SettingsPatch): AssistantSetti
 export const TOOLS = [
   {
     name: 'set_devices',
-    description: 'Change one or more devices. Only use device ids from the home context. bri is brightness 1-100, k is colour temperature in Kelvin, color is #rrggbb, vol is volume 0-100. Turning a speaker or TV off also stops what it plays. paused pauses or carries on (devices with the pause capability). media on a device with the library capability is a film or show title to find and play there (a Helix box). On a speaker with the queue capability, media can also be Helix music: "Shuffle all", "Loved", a playlist title, or "Station: <artist, album or song>"; shuffle true plays it in a shuffled order; skip 1 is the next song, -1 the previous. media can also be a named playable source from the context (ambient loops, radio streams) — prefer those over a station when the name matches. Any other field a device shows in its state is set through "set" — e.g. {"childLock": true}, {"display": false} or {"mode": "Sleep"} on a purifier, {"hvac": "cool", "target": 23, "fanSpeed": "low"} on an air conditioner, {"input": "hdmi1"}, {"muted": true} or {"night": true} on a TV or soundbar, {"zoneSet": {"1": {"on": true, "open": 50}, "2": {"on": false}}} for the named zones of a ducted air conditioner, {"extras": {"eco": true}} for the extra switches a device lists under "extras". Only fields the device actually lists in its state can be set.',
+    description: 'Change one or more devices. Only use device ids from the home context. bri is brightness 1-100, k is colour temperature in Kelvin, color is #rrggbb, vol is volume 0-100. Turning a speaker or TV off also stops what it plays. paused pauses or carries on (devices with the pause capability). media on a device with the library capability is a film or show title to find and play there (a Helix box). On a speaker with the queue capability, media can also be Helix music: "Shuffle all", "Loved", a playlist title, or "Station: <artist, album or song>"; shuffle true plays it in a shuffled order; skip 1 is the next song, -1 the previous. media can also be a named playable source from the context (ambient loops, radio streams) — prefer those over a station when the name matches. Any other field a device shows in its state is set through "set" — e.g. {"childLock": true}, {"display": false} or {"mode": "Sleep"} on a purifier, {"hvac": "cool", "target": 23, "fanSpeed": "low"} on an air conditioner, {"input": "hdmi1"}, {"muted": true} or {"night": true} on a TV or soundbar, {"zoneSet": {"1": {"on": true, "open": 50}, "2": {"on": false}}} for the named zones of a ducted air conditioner (a zone key can also be the id of a room it serves), {"extras": {"eco": true}} for the extra switches a device lists under "extras". Only fields the device actually lists in its state can be set. A room’s air conditioner zone (see "AC zones by room") is the id "zone:<room id>": on opens (true) or closes (false) the zone, open is how far open 0-100, set.hvac / set.target / set.fanSpeed run the AC itself (a mode turns it on), ac true or false turns the whole AC on or off.',
     parameters: {
       type: 'object',
       properties: {
@@ -192,6 +193,8 @@ export const TOOLS = [
               media: { type: 'string' },
               shuffle: { type: 'boolean' },
               skip: { type: 'integer', enum: [-1, 1] },
+              open: { type: 'integer', minimum: 0, maximum: 100, description: 'How far a room zone ("zone:<room id>") opens.' },
+              ac: { type: 'boolean', description: 'For a room zone ("zone:<room id>"): turn the whole air conditioner on or off as well.' },
               set: { type: 'object', description: 'Any other fields from the device state to change, e.g. childLock, display, mode, hvac, target, fanSpeed, input, muted, night, fanLevel.' },
             },
             required: ['id'],
@@ -528,6 +531,29 @@ export class Toolbox {
     return id && rooms.some(r => r.id === id) ? id : undefined;
   }
 
+  /** A room zone's change as the model sent it: on/open at the top, the AC's mode under set (or at the top). */
+  private zoneCommand(x: Record<string, unknown>): ZoneCommand | undefined {
+    const set = x.set && typeof x.set === 'object' && !Array.isArray(x.set) ? x.set as Record<string, unknown> : {};
+    const raw: Record<string, unknown> = {};
+    for (const k of ZONE_FIELDS) { const v = x[k] ?? set[k]; if (v !== undefined) raw[k] = v; }
+    try { return cleanZoneCommand(raw); } catch { return undefined; }
+  }
+
+  /** zoneSet keyed by a room id (or its alias) → the zone numbers of this unit that serve that room. */
+  private zoneKeys(d: Device, v: unknown): unknown {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return v;
+    const rooms = this.ai.config.get().devices?.[d.id]?.zoneRooms ?? {};
+    const out: Record<string, unknown> = {};
+    for (const [k, z] of Object.entries(v as Record<string, unknown>)) {
+      if (/^[1-9]\d?$/.test(k)) { out[k] = z; continue; }
+      const rid = this.roomId(k);
+      const ns = rid ? Object.entries(rooms).filter(([, rs]) => rs.includes(rid)).map(([n]) => n) : [];
+      if (!ns.length) return v;
+      for (const n of ns) out[n] = z;
+    }
+    return out;
+  }
+
   async run(name: string, input: unknown): Promise<string> {
     this.called.push(name);
     // The same call failing again means the model is guessing — tell it to stop and explain.
@@ -556,6 +582,16 @@ export class Toolbox {
           const targets: Targets = {};
           const unknown: string[] = [];
           for (const x of list) {
+            // A room's air conditioner zone: "zone:<room id>".
+            const zm = typeof x?.id === 'string' ? /^zone:(.+)$/.exec(x.id) : null;
+            if (zm) {
+              const rid = this.roomId(zm[1]);
+              const zc = rid ? this.zoneCommand(x) : undefined;
+              if (!rid || !zc) { unknown.push(String(x.id)); continue; }
+              if (!Object.keys(this.ai.reg.expandTargets({ [`zone:${rid}`]: zc as unknown as Command })).length) return JSON.stringify({ ok: false, error: `No air conditioner zone serves ${zm[1]} yet — ask the user which zone it is` });
+              targets[`zone:${rid}`] = zc as unknown as Command;
+              continue;
+            }
             const d = this.device(x?.id);
             if (!d) { unknown.push(String(x?.id)); continue; }
             const c: Command = {};
@@ -579,7 +615,7 @@ export class Toolbox {
                 if (!cap || READONLY.has(key) || !d.capabilities.includes(cap)) continue;
                 if (ENUMS[key] && !(typeof v === 'string' && ENUMS[key]!.includes(v))) continue;
                 if (key === 'zoneSet') {
-                  const zs = cleanZoneSet(v);
+                  const zs = cleanZoneSet(this.zoneKeys(d, v));
                   if (zs) c.zoneSet = zs;
                   continue;
                 }
@@ -669,7 +705,7 @@ export class Toolbox {
               data: { automation: id }, cause: AI_CAUSE,
             });
             const w = { reg: this.ai.reg, cfg, now: this.ai.engine.now() };
-            const tgt = (tid: string, cmd: object) => { const d = this.ai.reg.get(tid); return d ? targetLabel(d, cmd as Command) : (pseudoLabel(tid, this.ai.config.get().rooms) ?? tid); };
+            const tgt = (tid: string, cmd: object) => { const d = this.ai.reg.get(tid); return d ? targetLabel(d, cmd as Command) : (pseudoLabel(tid, this.ai.config.get().rooms, cmd) ?? tid); };
             return JSON.stringify({ ok: true, id, name: a.name, when: a.triggers.map(t => triggerWords(t, w)), if: a.conditions.map(c => condWords(c, w)), then: a.actions.map(x => actionWords(x, w, tgt)) });
           } catch (e) { return JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e) }); }
         }
@@ -696,7 +732,7 @@ export class Toolbox {
               data: { automation: id }, cause: AI_CAUSE,
             });
             const w = { reg: this.ai.reg, cfg, now: this.ai.engine.now() };
-            const tgt = (tid: string, cmd: object) => { const d = this.ai.reg.get(tid); return d ? targetLabel(d, cmd as Command) : (pseudoLabel(tid, this.ai.config.get().rooms) ?? tid); };
+            const tgt = (tid: string, cmd: object) => { const d = this.ai.reg.get(tid); return d ? targetLabel(d, cmd as Command) : (pseudoLabel(tid, this.ai.config.get().rooms, cmd) ?? tid); };
             return JSON.stringify({ ok: true, id, name: a.name, when: a.triggers.map(t => triggerWords(t, w)), if: a.conditions.map(c => condWords(c, w)), then: a.actions.map(x => actionWords(x, w, tgt)) });
           } catch (e) { return JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e) }); }
         }
@@ -1007,7 +1043,7 @@ const SYSTEM = `You are Ask Kova, the assistant for a smart home hub. The hub's 
 Use the tools to act: set_devices, start_overlay, end_overlay, explain_device, list_schedule, create_automation, update_automation, delete_automation, create_room, rename_room, delete_room, update_device, combine_devices, separate_devices, remember, forget, review_action. Only use device, room, overlay, mode and person ids from the home context below; never invent ids. When the user answers a question you just asked (yes, sure, the second one, do it), read the recent conversation to see what it refers to before answering.
 Anything asked to happen regularly, at a time, or when something else happens is an automation — build it with create_automation, then tell the user what it will do in the words the tool returns. A single change later ("at 9pm", "in an hour") is a one-time schedule: create_automation with a once trigger.
 For destructive, broad, privacy-sensitive, security-sensitive, or hard-to-undo actions, call review_action first. If it says confirm, ask the user to confirm before acting; if it says block, do not do it. Do not use it for routine light, media, or climate changes.
-Ducted air conditioner zones are numbered; a zone only has a name when the state lists one. If a request names rooms for a zoned AC and the zones are unnamed, ask which zone number is which room instead of guessing.
+Ducted air conditioner zones are numbered; a zone only has a name when the state lists one, and the rooms it serves when "AC zones by room" lists them. For a room ("cool the bedroom", "turn off the AC in the study", "open the lounge zone to 50%") use set_devices with id "zone:<room id>": "cool"/"heat" opens the zone with set.hvac; "turn off the AC in" a room only closes its zone (Kova turns the AC off by itself when no zone is left open); never turn the whole AC off for one room. If a room has no zone listed, ask which zone serves it instead of guessing.
 If the request can't be done with these tools or the shared context, say so plainly instead of guessing. Reply like a text message — plain text only, no markdown (never ** or # or \` characters — they show raw in the chat). Keep it short: a sentence or two usually; when listing several things, one item per line starting with "- ". Refer to automations and devices by their names, not their ids.`;
 
 export interface AiOptions {
@@ -1056,7 +1092,7 @@ export class AiAssistant {
     const autos = this.engine.automations.list();
     if (autos.length) {
       const w = { reg: this.reg, cfg };
-      const tgt = (tid: string, cmd: object) => { const d = this.reg.get(tid); return d ? targetLabel(d, cmd as Command) : (pseudoLabel(tid, cfg.rooms) ?? tid); };
+      const tgt = (tid: string, cmd: object) => { const d = this.reg.get(tid); return d ? targetLabel(d, cmd as Command) : (pseudoLabel(tid, cfg.rooms, cmd) ?? tid); };
       lines.push('Automations — change these with update_automation or delete_automation instead of adding overlapping ones:', ...autos.map(a => `- ${a.id} "${a.name}"${a.enabled ? '' : ' (off)'}: when ${a.triggers.map(t => triggerWords(t, w)).join(' or ') || 'nothing'}${a.conditions.length ? ` | if ${a.conditions.map(c => condWords(c, w)).join(' and ')}` : ''} | ${a.actions.map(x => actionWords(x, w, tgt)).join('; ') || 'nothing'}`));
     }
 
@@ -1066,12 +1102,12 @@ export class AiAssistant {
       deviceIds.set(id, d.id);
       const parts: Record<string, unknown> = { id, type: d.type };
       if (share.names) parts.name = d.name;
-      parts.room = roomAlias.get(d.room) ?? `room${cfg.rooms.length + 1}`;
+      parts.room = d.room === WHOLE_HOME ? WHOLE_HOME : roomAlias.get(d.room) ?? `room${cfg.rooms.length + 1}`;
       parts.can = d.capabilities.filter(c => c !== 'events' && c !== 'power');
       if (share.rooms) {
         const s = d.state;
-        const zoneNames = cfg.devices?.[d.id]?.zoneNames;
-        parts.state = Object.fromEntries(Object.entries({ on: s.on, bri: s.bri, k: s.k, color: s.color, mode: s.mode, media: s.media, song: s.track ? `${s.track.title}${s.track.artist ? ` by ${s.track.artist}` : ''}` : undefined, shuffle: s.shuffle || undefined, paused: s.paused || undefined, vol: s.vol, hvac: s.hvac, target: s.target, temp: s.temp, humidity: s.humidity, lux: s.lux, fanSpeed: s.fanSpeed, extras: s.extras, fanLevel: s.fanLevel, fanLevelMax: s.fanLevelMax, airQuality: s.airQuality, pm25: s.pm25, filterLife: s.filterLife, display: s.display, childLock: s.childLock, battery: s.battery, activity: s.activity, zones: s.zones?.map(z => ({ zone: z.n, ...(zoneNames?.[String(z.n)] ? { name: zoneNames[String(z.n)] } : {}), on: z.on, open: z.open })),
+        const zoneNames = cfg.devices?.[d.id]?.zoneNames, zoneRooms = cfg.devices?.[d.id]?.zoneRooms;
+        parts.state = Object.fromEntries(Object.entries({ on: s.on, bri: s.bri, k: s.k, color: s.color, mode: s.mode, media: s.media, song: s.track ? `${s.track.title}${s.track.artist ? ` by ${s.track.artist}` : ''}` : undefined, shuffle: s.shuffle || undefined, paused: s.paused || undefined, vol: s.vol, hvac: s.hvac, target: s.target, temp: s.temp, humidity: s.humidity, lux: s.lux, fanSpeed: s.fanSpeed, extras: s.extras, fanLevel: s.fanLevel, fanLevelMax: s.fanLevelMax, airQuality: s.airQuality, pm25: s.pm25, filterLife: s.filterLife, display: s.display, childLock: s.childLock, battery: s.battery, activity: s.activity, zones: s.zones?.map(z => ({ zone: z.n, ...(zoneNames?.[String(z.n)] ? { name: zoneNames[String(z.n)] } : {}), ...(zoneRooms?.[String(z.n)]?.length ? { rooms: zoneRooms[String(z.n)]!.map(r => roomAlias.get(r) ?? r) } : {}), on: z.on, open: z.open, ...(typeof z.temp === 'number' ? { temp: z.temp } : {}) })),
           // Server hardware (the router, from Warden's BMC): what it draws, its power supplies, redundancy, temperatures and fans.
           ...(hasHardware(d) ? { watts: s.power, supplies: s.supplies?.map(x => x.ok ? `${x.name}: OK` : `${x.name}: ${x.problem ?? 'not OK'}`), redundancy: s.redundancy, sensors: s.sensors?.map(x => `${x.name} ${x.value}${x.kind === 'temp' ? '°C' : ' RPM'}`), fanMode: s.fanMode, fanPercent: s.fanPercent, health: hardwareSummary(d) } : {}),
           online: s.online }).filter(([, v]) => v !== undefined && v !== null));
@@ -1079,6 +1115,12 @@ export class AiAssistant {
       return JSON.stringify(parts);
     });
     lines.push('Devices:', ...devLines);
+    // Which room each air conditioner zone serves: what "zone:<room id>" reaches.
+    const zoneLines = cfg.rooms.flatMap(r => zonesServing(r.id, devices, cfg.devices ?? {}).map(({ d, n }) => {
+      const z = d.state.zones?.find(x => x.n === n), name = cfg.devices?.[d.id]?.zoneNames?.[String(n)];
+      return `- zone:${roomAlias.get(r.id)} → ${share.names ? d.id : [...deviceIds].find(([, v]) => v === d.id)?.[0] ?? d.id} zone ${n}${share.names && name ? ` (${name})` : ''}${share.rooms && z ? `: ${z.on ? `open${z.open != null ? ` ${z.open}%` : ''}` : 'closed'}; the AC is ${d.state.on ? `on, ${d.state.hvac ?? 'on'}${d.state.target != null ? ` ${d.state.target}°` : ''}` : 'off'}` : ''}`;
+    }));
+    if (zoneLines.length) lines.push('AC zones by room (a whole_home device serves every room only through these):', ...zoneLines);
     // Sensors only report: their readings feed the rooms; they can't be set, but automations can start on them.
     if (sensors.length) {
       const sLines = sensors.map((d, i) => {

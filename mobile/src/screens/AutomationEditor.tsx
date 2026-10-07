@@ -5,7 +5,7 @@ import { usePreventRemove, useRoute, type NavigationAction, type RouteProp } fro
 import { C, F, R, SP, alpha } from '../theme';
 import { useHub, useSnap } from '../state/hub';
 import { useNav, type Stack } from '../navigation';
-import type { Command, Device, Room } from '../api/types';
+import type { Command, Device, Room, RoomStatus } from '../api/types';
 import {
   ACTION_KINDS, CONDITION_KINDS, DAYS, DAY_NAMES, FIELD_UNIT, KIND_ICON, MONTH_NAMES, PRESENCE_EVENTS, RAMP_FIELDS, RESULT, RHYTHMS, RUN_MODES, STATION_KEY, TITLE_KEY, TRIGGER_KINDS,
   addMinutes, actionText, automationsOf, bodyOf, canMove, canRamp, canSet, carryCommand, changeActionKind, changeKind, clockOf, conditionText, ctxOf, dateOf, dayOn,
@@ -13,7 +13,7 @@ import {
   localNowOf, matchFields, mediaChoices, mediaFromKey, mediaKey, minToSec, monthGrid, moveAt, newAction, newCondition, newTrigger, onceAt, onceChips, onceProblem, onceState, onceWords,
   parseClock, parseStamp, presets, pseudoTargets, pushAt, readingsFor, removeAt, retarget, rhythmFromKey, rhythmKey, runMessage, runTime, sameCommand, sameDraft, scheduleDraft,
   scheduleName, secToMin, setAt, shiftMonth, splitSeconds, stampOf, startRun, targetInfo, timeOf, toSeconds, toggleDay, toggleIn, triggerText, untilWords, withCurrent, withField,
-  withMatch, withOffset, zonesOf, ACTIVE_MIN, roomEventsFor, roomNote, roomOptions, roomProblem, withinProblem,
+  withMatch, withOffset, zonesOf, ACTIVE_MIN, roomEventsFor, roomNote, roomOptions, roomProblem, withinProblem, readingRooms, readingSourceLabel, roomReadingsFor, zoneTargets, ROOM_FIELDS,
   type Action, type AutomationRun, type CmdField, type Condition, type Ctx, type Draft, type MusicItem, type Names, type Opt, type Path, type RampField, type RunAnswer, type Rhythm,
   type StateMatch, type TargetInfo, type Trigger, type Unit,
 } from '../logic/automations';
@@ -34,13 +34,13 @@ import { T } from '../ui/Text';
 type Only = (d: Pick<Device, 'type' | 'capabilities' | 'kind'>) => boolean;
 type Picker =
   | { type: 'list'; title: string; options: Opt[]; value?: string; onPick: (v: string) => void; note?: string }
-  | { type: 'device'; title: string; value?: string; only?: Only; groups?: boolean; onPick: (v: string) => void }
+  | { type: 'device'; title: string; value?: string; only?: Only; groups?: boolean; zones?: boolean; readings?: boolean; onPick: (v: string) => void }
   | { type: 'time'; title: string; value: string; onPick: (v: string) => void }
   | { type: 'datetime'; title: string; value: string; onPick: (v: string) => void }
   | { type: 'menu'; title: string; items: { icon: string; label: string; danger?: boolean; disabled?: boolean; run: () => void }[] };
 
 interface Home {
-  devices: Device[]; rooms: Room[]; people: { id: string; name: string }[]; modes: { id: string; name: string }[]; overlays: { id: string; name: string }[];
+  devices: Device[]; rooms: Room[]; roomStatus?: Record<string, RoomStatus>; people: { id: string; name: string }[]; modes: { id: string; name: string }[]; overlays: { id: string; name: string }[];
   automations: { id: string; name: string }[]; sources: { name: string }[]; music: MusicItem[]; now: string;
 }
 
@@ -95,10 +95,26 @@ function Select({ label, value, options, onChange, empty, icon }: { label: strin
   return <Choice label={label} icon={icon} text={cur?.label ?? (value || empty || 'Choose')} muted={!cur} onPress={() => pick({ type: 'list', title: label, options, value, onPick: onChange })} />;
 }
 
-function DeviceChoice({ value, onChange, only, label = 'Device', groups }: { value: string; onChange: (v: string) => void; only?: Only; label?: string; groups?: boolean }) {
+/**
+ * A device (or group) to pick. `zones`: rooms' air conditioner zones too ("Lounge zone"). `readings`: what a reading
+ * comes from, so rooms with a temperature are offered too ("room:lounge", the room's own reading).
+ */
+function DeviceChoice({ value, onChange, only, label = 'Device', groups, zones, readings }: { value: string; onChange: (v: string) => void; only?: Only; label?: string; groups?: boolean; zones?: boolean; readings?: boolean }) {
   const { pick, home } = useEd();
+  const room = readings && value.startsWith('room:');
   const info = targetInfo(value, home.devices, home.rooms);
-  return <Choice label={label} icon={info.pseudo ? 'category' : 'devices'} text={deviceLabel(value, home.devices, home.rooms)} muted={info.missing} onPress={() => pick({ type: 'device', title: label, value, only, groups, onPick: onChange })} />;
+  const icon = room ? 'meeting_room' : info.type === 'zone' ? 'ac_unit' : info.pseudo ? 'category' : 'devices';
+  const text = room ? readingSourceLabel(value, home.devices, home.rooms) : deviceLabel(value, home.devices, home.rooms);
+  const missing = room ? !home.rooms.some(r => `room:${r.id}` === value) : info.missing;
+  return <Choice label={label} icon={icon} text={text} muted={missing} onPress={() => pick({ type: 'device', title: label, value, only, groups, zones, readings, onPick: onChange })} />;
+}
+
+type Reading = NonNullable<Parameters<typeof readingsFor>[1]>;
+/** The reading a numeric trigger or condition compares, from what it reads: a room's readings, or a device's. */
+function ReadingSelect({ device, value, onChange }: { device: string; value: Reading; onChange: (v: Reading) => void }) {
+  const { home } = useEd();
+  const options = device.startsWith('room:') ? roomReadingsFor(home.roomStatus?.[device.slice(5)], value) : readingsFor(home.devices.find(d => d.id === device), value);
+  return <Select label="Reading" value={value} options={options} onChange={v => onChange(v as Reading)} />;
 }
 
 /** Pills for a few choices that wrap (modes, inputs, fan speeds). */
@@ -392,8 +408,8 @@ function TriggerPart({ t, path, index }: { t: Trigger; path: Path; index: number
       <Field label="And stays so for"><Num label="Minutes it stays so" optional min={0} value={secToMin(t.forSec)} onChange={v => f('forSec', minToSec(v))} unit="min" /></Field>
     </>); if (!t.to && !t.from) problem = 'Say what it changes to (or from).'; break;
     case 'numeric': body = (<>
-      <DeviceChoice value={t.device} onChange={v => f('device', v)} />
-      <Field label="Reading"><Select label="Reading" value={t.field} options={readingsFor(dev, t.field)} onChange={v => f('field', v)} /></Field>
+      <DeviceChoice readings value={t.device} label="Device or room" onChange={v => set(path, { ...t, device: v, ...(v.startsWith('room:') && !ROOM_FIELDS.includes(t.field) ? { field: 'temp' } : {}) })} />
+      <Field label="Reading"><ReadingSelect device={t.device} value={t.field} onChange={v => f('field', v)} /></Field>
       <Field label="Goes above"><Num label="Above" optional value={t.above} unit={FIELD_UNIT[t.field]} onChange={v => f('above', v)} /></Field>
       <Field label="Or goes below"><Num label="Below" optional value={t.below} unit={FIELD_UNIT[t.field]} onChange={v => f('below', v)} /></Field>
       <Field label="For"><Num label="Minutes" optional min={0} value={secToMin(t.forSec)} onChange={v => f('forSec', minToSec(v))} unit="min" /></Field>
@@ -475,10 +491,9 @@ function ConditionPart({ c, path, index, tag, fixed }: { c: Condition; path: Pat
       <Field label="Is"><MatchBuilder required device={c.device} value={c.is} onChange={m => f('is', m)} /></Field>
     </>); if (!c.is) problem = 'Say what state it has to be in.'; break;
     case 'numeric': {
-      const dev = home.devices.find(d => d.id === c.device);
       body = (<>
-        <DeviceChoice value={c.device} onChange={v => f('device', v)} />
-        <Field label="Reading"><Select label="Reading" value={c.field} options={readingsFor(dev, c.field)} onChange={v => f('field', v)} /></Field>
+        <DeviceChoice readings value={c.device} label="Device or room" onChange={v => set(path, { ...c, device: v, ...(v.startsWith('room:') && !ROOM_FIELDS.includes(c.field) ? { field: 'temp' } : {}) })} />
+        <Field label="Reading"><ReadingSelect device={c.device} value={c.field} onChange={v => f('field', v)} /></Field>
         <Field label="Above"><Num label="Above" optional value={c.above} unit={FIELD_UNIT[c.field]} onChange={v => f('above', v)} /></Field>
         <Field label="Below"><Num label="Below" optional value={c.below} unit={FIELD_UNIT[c.field]} onChange={v => f('below', v)} /></Field>
       </>);
@@ -679,7 +694,10 @@ function CommandEditor({ id, cmd, onChange }: { id: string; cmd: Command; onChan
           </View>
         </View>
       ) : null}
-      {info.pseudo ? <T v="footnote" size={11.5} color={C.stone2}>{`Every matching device, including ones added later. Each takes only what it can do.${info.devices.length ? ` Now: ${info.devices.length} device${info.devices.length === 1 ? '' : 's'}.` : ''}`}</T> : null}
+      {info.type === 'zone' ? (info.devices.length
+        ? <T v="footnote" size={11.5} color={C.stone2}>{`The zone serving ${info.label.replace(/ zone$/, '')}, on ${info.devices.map(d => d.name).join(' and ')}. Closing the last open zone turns the air conditioner off.`}</T>
+        : <Hint tone="amber" text="No zone serves this room now. Choose a zone’s rooms in the air conditioner’s panel." />) : null}
+      {info.pseudo && info.type !== 'zone' ? <T v="footnote" size={11.5} color={C.stone2}>{`Every matching device, including ones added later. Each takes only what it can do.${info.devices.length ? ` Now: ${info.devices.length} device${info.devices.length === 1 ? '' : 's'}.` : ''}`}</T> : null}
     </View>
   );
 }
@@ -697,7 +715,7 @@ function TargetsEditor({ a, path }: { a: Extract<Action, { kind: 'set' }>; path:
         <View key={id} style={{ gap: 10, padding: 10, borderRadius: R.sm + 2, backgroundColor: C.card, borderWidth: 1, borderColor: C.edge }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <View style={{ flex: 1 }}>
-              <DeviceChoice value={id} only={canSet} groups onChange={v => swap(id, v)} />
+              <DeviceChoice value={id} only={canSet} groups zones onChange={v => swap(id, v)} />
             </View>
             <Press onPress={() => { animateLayout(); remove([...path, 'targets', id]); }} haptic="select" label={`Remove ${deviceLabel(id, home.devices, home.rooms)}`} style={{ width: 34, height: 34, borderRadius: R.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: C.control2 }}>
               <Icon name="close" size={18} color={C.stone} />
@@ -707,14 +725,14 @@ function TargetsEditor({ a, path }: { a: Extract<Action, { kind: 'set' }>; path:
         </View>
       ))}
       {!entries.length ? <Hint tone="amber" text="Add a device (or a group, like all lights) to set." /> : null}
-      <AddDevice targets={a.targets} onAdd={v => { animateLayout(); set([...path, 'targets', v], firstCommand(targetInfo(v, home.devices, home.rooms), home.sources, home.music)); }} />
+      <AddDevice zones targets={a.targets} onAdd={v => { animateLayout(); set([...path, 'targets', v], firstCommand(targetInfo(v, home.devices, home.rooms), home.sources, home.music)); }} />
     </View>
   );
 }
 
-function AddDevice({ targets, onAdd, only = canSet, text = 'Add a device or group' }: { targets: Record<string, unknown>; onAdd: (id: string) => void; only?: Only; text?: string }) {
+function AddDevice({ targets, onAdd, only = canSet, text = 'Add a device or group', zones }: { targets: Record<string, unknown>; onAdd: (id: string) => void; only?: Only; text?: string; zones?: boolean }) {
   const { pick } = useEd();
-  return <AddButton text={text} onPress={() => pick({ type: 'device', title: text, groups: true, only: d => only(d), onPick: v => { if (!(v in targets)) onAdd(v); } })} />;
+  return <AddButton text={text} onPress={() => pick({ type: 'device', title: text, groups: true, zones, only: d => only(d), onPick: v => { if (!(v in targets)) onAdd(v); } })} />;
 }
 
 function RampEditor({ a, path }: { a: Extract<Action, { kind: 'ramp' }>; path: Path }) {
@@ -863,6 +881,8 @@ function DeviceSheet({ p, close }: { p: Extract<Picker, { type: 'device' }>; clo
   const sections = deviceSections(home.devices.filter(d => !d.hidden || d.id === p.value), home.rooms, q, p.only);
   const words = q.trim().toLowerCase();
   const groups = p.groups ? pseudoTargets(home.devices.filter(d => !p.only || p.only(d)), home.rooms).filter(o => !words || o.label.toLowerCase().includes(words)) : [];
+  const zones = p.zones ? zoneTargets(home.devices, home.rooms).filter(o => !words || o.label.toLowerCase().includes(words)) : [];
+  const roomReads = p.readings ? readingRooms(home.rooms, home.roomStatus, p.value).filter(o => !words || o.label.toLowerCase().includes(words)) : [];
   const row = (o: Opt, label: string, icon?: string) => {
     const on = o.v === p.value;
     return (
@@ -883,6 +903,18 @@ function DeviceSheet({ p, close }: { p: Extract<Picker, { type: 'device' }>; clo
           style={{ flex: 1, color: C.bone, fontFamily: F[400], fontSize: 16, paddingVertical: 11 }} />
         {q ? <Press onPress={() => setQ('')} label="Clear search" style={{ padding: 6 }}><Icon name="close" size={19} color={C.stone2} /></Press> : null}
       </View>
+      {roomReads.length ? (
+        <View style={{ gap: 2 }}>
+          <Label>Rooms</Label>
+          {roomReads.map(o => row(o, o.label, 'meeting_room'))}
+        </View>
+      ) : null}
+      {zones.length ? (
+        <View style={{ gap: 2 }}>
+          <Label>Room zones</Label>
+          {zones.map(o => row(o, o.label, 'ac_unit'))}
+        </View>
+      ) : null}
       {groups.length ? (
         <View style={{ gap: 2 }}>
           <Label>Groups</Label>
@@ -895,7 +927,7 @@ function DeviceSheet({ p, close }: { p: Extract<Picker, { type: 'device' }>; clo
           {s.items.map(o => row(o, `${s.room} ${o.label}`))}
         </View>
       ))}
-      {!sections.length && !groups.length ? <T v="callout" color={C.stone}>{q ? `Nothing called “${q}”.` : 'No devices here yet.'}</T> : null}
+      {!sections.length && !groups.length && !zones.length && !roomReads.length ? <T v="callout" color={C.stone}>{q ? `Nothing called “${q}”.` : 'No devices here yet.'}</T> : null}
     </View>
   );
 }
@@ -1144,7 +1176,7 @@ export function AutomationEditor() {
   useEffect(() => { if (firstMark.current) { firstMark.current = false; return; } void load(); }, [runMark, load]);
 
   const music = useMemo(() => (s.music ?? []) as MusicItem[], [s.music]);
-  const home = useMemo<Home>(() => ({ devices: s.devices, rooms: s.rooms, people: s.people, modes: s.modes, overlays: s.overlays, automations: all, sources: s.sources, music, now }), [s.devices, s.rooms, s.people, s.modes, s.overlays, all, s.sources, music, now]);
+  const home = useMemo<Home>(() => ({ devices: s.devices, rooms: s.rooms, roomStatus: s.roomStatus, people: s.people, modes: s.modes, overlays: s.overlays, automations: all, sources: s.sources, music, now }), [s.devices, s.rooms, s.roomStatus, s.people, s.modes, s.overlays, all, s.sources, music, now]);
   const names = useMemo<Names>(() => ({ devices: home.devices, rooms: home.rooms, people: home.people, modes: home.modes, overlays: home.overlays, automations: home.automations, now }), [home, now]);
   const ctx = useMemo(() => ctxOf({ ...home, self: id }), [home, id]);
   const ed = useMemo<Ed>(() => ({

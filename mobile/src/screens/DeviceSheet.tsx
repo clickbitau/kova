@@ -9,8 +9,8 @@ import { useNav } from '../navigation';
 import { hubUrl } from '../logic/connect';
 import { AIR, combinedOf, devs, FAN_SPEEDS, filterNote, has, HVAC, ICON, iconOf, isPlayer, routerPanel, stateOf, tint, type Dev } from '../logic/devices';
 import { arcPath, clampTarget, TARGET_MAX, TARGET_MIN } from '../logic/climate';
-import { snapOpen, visibleZones } from '../logic/zones';
-import { combineChoices, UNASSIGNED } from '../logic/customise';
+import { servesLine, snapOpen, suggestionsBody, toggleRoom, visibleZones, zoneRoomsBody, zoneRoomViews, roomWords } from '../logic/zones';
+import { combineChoices, placeChoices, placeName } from '../logic/customise';
 import { Icon } from '../ui/Icon';
 import { Button, Card, Group, IconButton, IconWell, Pill, HScroll, Press, Row, Section, Segmented, Sheet, Slider, Stat, Switch, SwitchRow, Tag } from '../ui/kit';
 import { T } from '../ui/Text';
@@ -106,8 +106,9 @@ export function DeviceSheet() {
   const router = routerPanel(snap, D);
   const readings = ([D.power != null && !router && ['Using now', Math.abs(D.power) >= 1000 ? `${(D.power / 1000).toFixed(1)} kW` : `${Math.round(D.power)} W`, 'bolt'], D.energy != null && ['Today', `${D.energy} kWh`, 'electric_meter'], D.battery != null && D.type !== 'vacuum' && ['Battery', `${D.battery}%`, 'battery_full']] as const)
     .filter((x): x is [string, string, string] => !!x);
-  // Every room, then No room (where a deleted room's devices go); a room the home doesn't know is shown as it is.
-  const rooms = [...snap.rooms, ...(snap.rooms.some(r => r.id === D.room) || D.room === UNASSIGNED ? [] : [{ id: D.room, name: D.room, icon: 'category' }]), { id: UNASSIGNED, name: 'No room', icon: 'category' }];
+  // Every room, then Whole home (a ducted air conditioner serves every room) and No room (where a deleted room's
+  // devices go); a room the home doesn't know is shown as it is.
+  const rooms = placeChoices(snap.rooms, D.room);
   const canCombine = !combo && !group && D.adapter !== 'combined' && D.adapter !== 'groups' && !combinedOf(snap).some(c => c.members.includes(D.id));
   const choices = panel === 'combine' ? combineChoices(D.id, snap.devices, combinedOf(snap), combineQ).slice(0, 30) : [];
   const combineWith = async (other: { id: string; name: string }) => {
@@ -376,7 +377,7 @@ export function DeviceSheet() {
               style={{ height: 44, paddingHorizontal: SP[3], borderRadius: R.md, borderWidth: 1, borderColor: C.line, backgroundColor: C.inset, color: C.bone, fontFamily: F[500], fontSize: 15 }} />
             {choices.length ? (
               <Group>
-                {choices.map((o, i) => <Row key={o.id} first={i === 0} icon={ICON[o.type] ?? 'devices'} title={o.name} sub={`${snap.rooms.find(r => r.id === o.room)?.name ?? 'No room'} · ${o.integration}`} onPress={() => void combineWith(o)} />)}
+                {choices.map((o, i) => <Row key={o.id} first={i === 0} icon={ICON[o.type] ?? 'devices'} title={o.name} sub={`${placeName(o.room, snap.rooms)} · ${o.integration}`} onPress={() => void combineWith(o)} />)}
               </Group>
             ) : <T v="footnote" color={C.stone}>{combineQ ? `Nothing called “${combineQ}”.` : 'No other device to combine with.'}</T>}
             <T v="footnote" color={C.stone2}>They show as one, named “{D.name}”; each command goes through whichever of them can do it. Separate them again any time.</T>
@@ -398,39 +399,77 @@ export function DeviceSheet() {
   );
 }
 
-/** A ducted air conditioner's zones: name (tap to rename), on or off, and how far open. The ones in use first. */
+/**
+ * A ducted air conditioner's zones: name (tap to rename), on or off, how far open, and the rooms each one serves
+ * (one or several), so rooms show and control their zone. Kova suggests rooms from the zones' names; the owner
+ * confirms them one by one, or all at once. The ones in use first.
+ */
 function Zones({ D }: { D: Dev }) {
-  const { send, act } = useHub();
+  const { send, act, snap } = useHub();
   const [all, setAll] = useState(false);
   const [editing, setEditing] = useState<number | null>(null);
   const [draft, setDraft] = useState('');
-  const zones = visibleZones(D.zones, D.zoneNames ?? {}, all);
+  const [picking, setPicking] = useState<number | null>(null);
+  const rooms = snap?.rooms ?? [];
+  const zones = zoneRoomViews(visibleZones(D.zones, D.zoneNames ?? {}, all), D, rooms);
   const total = D.zones?.length ?? 0;
+  const suggested = suggestionsBody(D, rooms);
+  const settings = (body: object, done: string) => act('PATCH', `/api/devices/${encodeURIComponent(D.id)}/settings`, body, done);
   const set = (n: number, c: { on?: boolean; open?: number }) => void send(D.id, { zoneSet: { [n]: c } });
   const rename = (n: number) => {
     setEditing(null);
-    void act('PATCH', `/api/devices/${encodeURIComponent(D.id)}/settings`, { zoneNames: { [n]: draft.trim() || null } }, draft.trim() ? `Zone ${n} is “${draft.trim()}”` : `Zone ${n} unnamed`);
+    void settings({ zoneNames: { [n]: draft.trim() || null } }, draft.trim() ? `Zone ${n} is “${draft.trim()}”` : `Zone ${n} unnamed`);
   };
+  const serve = (z: { n: number; name: string }, ids: string[]) => settings(zoneRoomsBody(z.n, ids), ids.length ? `${z.name} serves ${roomWords(ids, rooms)}` : `${z.name} serves no room`);
+  const right = (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[4] }}>
+      {suggested ? <Press onPress={() => void settings(suggested, 'Zones matched to rooms')} label="Use Kova’s suggested rooms for every zone" hitSlop={10}><T v="footnote" weight={700} color={C.amber}>Use suggestions</T></Press> : null}
+      {total > zones.length || all ? <Press onPress={() => setAll(!all)} label={all ? 'Show only zones in use' : `Show all ${total} zones`} hitSlop={10}><T v="footnote" weight={700} color={C.amber}>{all ? 'In use' : `All ${total}`}</T></Press> : null}
+    </View>
+  );
   return (
-    <Section title="Zones" caption gap={SP[2]} right={total > zones.length || all ? <Press onPress={() => setAll(!all)} label={all ? 'Show only zones in use' : `Show all ${total} zones`}><T v="footnote" weight={700} color={C.amber}>{all ? 'In use' : `All ${total}`}</T></Press> : undefined}>
+    <Section title="Zones" caption gap={SP[2]} right={right}>
       {!zones.length ? <T v="footnote" color={C.stone}>No zones open.</T> : null}
       {zones.map(z => (
-        <Card key={z.n} style={{ gap: SP[2], opacity: z.on ? 1 : 0.7 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2] }}>
-            {editing === z.n ? (
-              <TextInput autoFocus value={draft} onChangeText={setDraft} onSubmitEditing={() => rename(z.n)} onBlur={() => rename(z.n)} placeholder={`Zone ${z.n}`} placeholderTextColor={C.stone3}
-                accessibilityLabel={`Name for zone ${z.n}`} returnKeyType="done" style={{ flex: 1, color: C.bone, fontFamily: F[700], fontSize: 15, paddingVertical: 2 }} />
-            ) : (
-              <Press onPress={() => { setDraft(D.zoneNames?.[String(z.n)] ?? ''); setEditing(z.n); }} label={`${z.name}, rename`} style={{ flex: 1 }}>
-                <T v="headline">{z.name}</T>
-              </Press>
-            )}
-            <T v="footnote" color={C.stone}>{z.on ? `${z.open}% open` : 'Closed'}</T>
-            <Switch on={z.on} color={C.blue} label={`${z.name} on`} onChange={v => set(z.n, { on: v })} />
+        <Card key={z.n} style={{ padding: SP[3], gap: SP[2] }}>
+          <View style={{ gap: SP[2], opacity: z.on ? 1 : 0.7 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2] }}>
+              {editing === z.n ? (
+                <TextInput autoFocus value={draft} onChangeText={setDraft} onSubmitEditing={() => rename(z.n)} onBlur={() => rename(z.n)} placeholder={`Zone ${z.n}`} placeholderTextColor={C.stone3}
+                  accessibilityLabel={`Name for zone ${z.n}`} returnKeyType="done" style={{ flex: 1, color: C.bone, fontFamily: F[700], fontSize: 15, paddingVertical: 2 }} />
+              ) : (
+                <Press onPress={() => { setDraft(D.zoneNames?.[String(z.n)] ?? ''); setEditing(z.n); }} label={`${z.name}, rename`} style={{ flex: 1, minWidth: 0 }}>
+                  <T v="headline" numberOfLines={1}>{z.name}</T>
+                </Press>
+              )}
+              <T v="footnote" color={C.stone}>{z.on ? `${z.open}% open` : 'Closed'}</T>
+              <Switch on={z.on} color={C.blue} label={`${z.name} on`} onChange={v => set(z.n, { on: v })} />
+            </View>
+            <Slider value={z.open} color={C.blue} label={`${z.name} opening`} onRelease={v => set(z.n, { on: true, open: snapOpen(v) })} />
           </View>
-          <Slider value={z.open} color={C.blue} label={`${z.name} opening`} onRelease={v => set(z.n, { on: true, open: snapOpen(v) })} />
+          <Press onPress={() => setPicking(picking === z.n ? null : z.n)} haptic="select" label={`${z.name} serves ${servesLine(z, rooms)}. Change rooms`}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2], minHeight: 36 }}>
+            <Icon name="meeting_room" size={17} color={z.rooms.length ? C.stone : C.stone2} />
+            <T v="footnote" weight={600} color={z.rooms.length ? C.bone2 : C.stone2} numberOfLines={2} style={{ flex: 1 }}>{z.rooms.length ? `Serves ${servesLine(z, rooms)}` : 'Serves no room yet'}</T>
+            <T v="footnote" weight={700} color={C.amber}>{picking === z.n ? 'Done' : 'Rooms'}</T>
+          </Press>
+          {z.suggest.length && picking !== z.n ? (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', gap: SP[2], padding: SP[2], paddingLeft: SP[3], borderRadius: R.sm, backgroundColor: C.amberTint, borderWidth: 1, borderColor: C.amberLine }}>
+              <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 150, flexDirection: 'row', alignItems: 'center', gap: SP[2] }}>
+                <Icon name="auto_awesome" size={16} color={C.amber} />
+                <T v="footnote" color={C.bone2} numberOfLines={3} style={{ flex: 1 }}>{`Kova suggests ${roomWords(z.suggest, rooms)}`}</T>
+              </View>
+              <Button size="sm" kind="secondary" label="Confirm" onPress={() => serve(z, z.suggest)} />
+            </View>
+          ) : null}
+          {picking === z.n ? (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+              {rooms.map(r => <Pill key={r.id} icon={r.icon} label={r.name} on={z.rooms.includes(r.id)} onPress={() => void serve(z, toggleRoom(z.rooms, r.id))} />)}
+            </View>
+          ) : null}
         </Card>
       ))}
+      {zones.some(z => z.rooms.length) ? <T v="micro" color={C.stone2}>Each room shows its zone in Devices. A zone can serve several rooms.</T> : null}
     </Section>
   );
 }

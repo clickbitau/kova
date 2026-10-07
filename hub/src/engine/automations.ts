@@ -9,6 +9,7 @@ import { ACTIVE_MIN } from './rooms.ts';
 import { resolveRhythm } from '../rhythms/rhythms.ts';
 import { addDays, atLocal, localDate, localHour, stampAt, stampWords } from '../util/time.ts';
 import { pseudoLabel } from '../util/describe.ts';
+import { roomReading } from '../util/zones.ts';
 
 // Automations: when (any trigger), if (all conditions), then (actions in order), with a run mode for when one
 // starts while still running, and a step-by-step history of each run.
@@ -34,6 +35,18 @@ const num = (s: DeviceState, f: NumericField): number | null => {
   const v = (s as Record<string, unknown>)[f];
   return typeof v === 'number' && Number.isFinite(v) ? v : null;
 };
+
+/**
+ * A reading a numeric trigger or condition compares: a device's, or for "room:<id>" the room's own (its sensors, a
+ * device there, or for temperature the air conditioner zone serving it). `as`: a device's state to read in place of
+ * its current one.
+ */
+export function readNumber(id: string, f: NumericField, reg: Pick<Registry, 'get' | 'list'>, cfg: Pick<HomeConfig, 'devices'>, as?: { id: string; state: DeviceState }): number | null {
+  const rm = /^room:(.+)$/.exec(id);
+  if (rm) return f === 'temp' || f === 'humidity' || f === 'lux' ? roomReading(rm[1], f, reg.list(), cfg.devices ?? {}, as).value : null;
+  const s = as && as.id === id ? as.state : reg.get(id)?.state;
+  return s ? num(s, f) : null;
+}
 
 /** Does a device's state match? Unknown on/off counts as off; unknown online counts as online. */
 export function matches(s: DeviceState, m: StateMatch, input?: InputChange): boolean {
@@ -78,10 +91,7 @@ export function holds(c: Condition, x: CondCtx, why: string[] = []): boolean {
       const d = x.reg.get(c.device);
       return ok(!!d && matches(d.state, c.is, x.reg.inputChange(c.device)), () => `${name(c.device)} isn’t ${matchText(c.is)}`);
     }
-    case 'numeric': {
-      const d = x.reg.get(c.device);
-      return ok(!!d && inRange(num(d.state, c.field), c.above, c.below), () => `${name(c.device)} ${FIELD[c.field]} isn’t ${rangeText(c.above, c.below)}`);
-    }
+    case 'numeric': return ok(inRange(readNumber(c.device, c.field, x.reg, x.cfg), c.above, c.below), () => `${sourceName(c.device, x)} ${FIELD[c.field]} isn’t ${rangeText(c.above, c.below)}`);
     case 'time': {
       const date = localDate(x.now, x.cfg.timezone);
       if (c.days?.length && !c.days.includes(dayOf(date))) return ok(false, () => 'not one of its days');
@@ -323,6 +333,15 @@ export class Automations {
           const why = `${d.name} ${tr.to ? `turned ${matchText(tr.to)}` : `stopped being ${matchText(tr.from!)}`}`;
           this.fireOrArm(a, key, fired, tr.forSec, () => !!this.reg.get(d.id) && (tr.to ? matches(this.reg.get(d.id)!.state, tr.to) : !matches(this.reg.get(d.id)!.state, tr.from!)), why);
           if (tr.forSec && !isTo && tr.to) this.armed.delete(key);
+        }
+        // A room's reading ("room:lounge"): any change to what feeds it (a sensor there, the zone serving it).
+        if (tr.kind === 'numeric' && tr.device.startsWith('room:') && (tr.field in e.patch || (tr.field === 'temp' && 'zones' in e.patch))) {
+          const cfg = this.config.get();
+          const was = inRange(readNumber(tr.device, tr.field, this.reg, cfg, { id: d.id, state: prev }), tr.above, tr.below);
+          const v = readNumber(tr.device, tr.field, this.reg, cfg), is = inRange(v, tr.above, tr.below);
+          const why = `${sourceName(tr.device, { reg: this.reg, cfg })} ${FIELD[tr.field]} went ${rangeText(tr.above, tr.below)} (${v})`;
+          this.fireOrArm(a, key, is && !was, tr.forSec, () => inRange(readNumber(tr.device, tr.field, this.reg, this.config.get()), tr.above, tr.below), why);
+          if (!is) this.armed.delete(key);
         }
         if (tr.kind === 'numeric' && tr.device === d.id && tr.field in e.patch) {
           const was = inRange(num(prev, tr.field), tr.above, tr.below), is = inRange(num(next, tr.field), tr.above, tr.below);
@@ -638,13 +657,19 @@ const rhythmWords = (r: import('../model/types.ts').Rhythm): string => {
 };
 export const timeWords = (t: Extract<Trigger, { kind: 'time' }>) => [rhythmWords(t.at), daysWords(t.days)].filter(Boolean).join(' ');
 
+/** What a trigger or condition reads, by name: a device, or a room ("room:lounge" → "Lounge"). */
+function sourceName(id: string, x: Pick<CondCtx, 'reg' | 'cfg'>): string {
+  const rm = /^room:(.+)$/.exec(id);
+  return rm ? x.cfg.rooms.find(r => r.id === rm[1])?.name ?? rm[1] : x.reg.get(id)?.name ?? id;
+}
+
 /** A trigger in words: "Lounge box turns offline for 2 min". */
 export function triggerWords(t: Trigger, x: Pick<CondCtx, 'reg' | 'cfg'> & { now?: number }): string {
   const n = (id: string) => x.reg.get(id)?.name ?? id;
   const forW = (s?: number) => s ? ` for ${durWords(s)}` : '';
   switch (t.kind) {
     case 'device': return `${n(t.device)} ${t.to ? `turns ${matchText(t.to)}` : `stops being ${matchText(t.from ?? {})}`}${t.to && t.from ? ` from ${matchText(t.from)}` : ''}${forW(t.forSec)}`;
-    case 'numeric': return `${n(t.device)} ${FIELD[t.field]} goes ${rangeText(t.above, t.below)}${forW(t.forSec)}`;
+    case 'numeric': return `${sourceName(t.device, x)} ${FIELD[t.field]} goes ${rangeText(t.above, t.below)}${forW(t.forSec)}`;
     case 'event': return `${n(t.device)} ${EVENT_WORDS[t.event] ?? t.event}`;
     case 'room': return `${cap(ROOM_EVENT_TEXT[t.event] ?? t.event)} in ${x.cfg.rooms.find(r => r.id === t.room)?.name ?? t.room}`;
     case 'time': return `At ${timeWords(t)}`;
@@ -669,7 +694,7 @@ export function condWords(c: Condition, x: Pick<CondCtx, 'reg' | 'cfg'>): string
   const n = (id: string) => x.reg.get(id)?.name ?? id;
   switch (c.kind) {
     case 'device': return `${n(c.device)} is ${matchText(c.is)}`;
-    case 'numeric': return `${n(c.device)} ${FIELD[c.field]} is ${rangeText(c.above, c.below)}`;
+    case 'numeric': return `${sourceName(c.device, x)} ${FIELD[c.field]} is ${rangeText(c.above, c.below)}`;
     case 'time': return [c.after && c.before ? `between ${rhythmWords(c.after)} and ${rhythmWords(c.before)}` : c.after ? `after ${rhythmWords(c.after)}` : c.before ? `before ${rhythmWords(c.before)}` : '', daysWords(c.days)].filter(Boolean).join(' ') || 'any time';
     case 'presence': return c.who === 'anyone' ? (c.home ? 'someone’s home' : 'nobody’s home') : c.who === 'no-one' ? (c.home ? 'nobody’s home' : 'someone’s home') : `${x.cfg.people.find(p => p.id === c.who)?.name ?? c.who} is ${c.home ? 'home' : 'out'}`;
     case 'mode': return `in ${c.modes.map(m => x.cfg.modes.find(y => y.id === m)?.name ?? m).join(' or ')}`;

@@ -2,6 +2,7 @@
 // tests run it under plain Node. The hub checks everything again (hub/src/api/home-routes.ts).
 import type { Device, Room, SpeakerGroup } from '../api/types';
 import { isPlayer } from './devices.ts';
+import { WHOLE_HOME, WHOLE_HOME_ICON, WHOLE_HOME_NAME } from './zones.ts';
 
 /** The icons a room can have: the same list the hub accepts (GET /api/home/room-icons). */
 export const ROOM_ICONS = ['weekend', 'kitchen', 'desk', 'bed', 'single_bed', 'crib', 'music_note', 'local_laundry_service', 'garage_home', 'door_front', 'yard', 'bathtub', 'stairs', 'meeting_room', 'chair', 'tv', 'deck', 'balcony', 'fitness_center', 'checkroom'];
@@ -88,11 +89,23 @@ export function favouriteList<D extends Pick<Device, 'id' | 'archived'>>(favs: s
   return (favs ?? []).map(id => devices.find(d => d.id === id)).filter((d): d is D => !!d && !d.archived);
 }
 
-/** Devices in a room (or in no room the home knows, for 'unassigned'), by name. Archived ones are left out. */
+/** Devices in a room (or in no room the home knows, for 'unassigned'; Whole home is a place of its own), by name. Archived ones are left out. */
 export function devicesIn<D extends Pick<Device, 'room' | 'name' | 'archived'>>(devices: D[], rooms: Room[], room: string): D[] {
   const known = new Set(rooms.map(r => r.id));
-  return devices.filter(d => !d.archived && (room === UNASSIGNED ? !known.has(d.room) : d.room === room)).sort((a, b) => a.name.localeCompare(b.name));
+  return devices.filter(d => !d.archived && (room === UNASSIGNED ? !known.has(d.room) && d.room !== WHOLE_HOME : d.room === room)).sort((a, b) => a.name.localeCompare(b.name));
 }
+
+/**
+ * Where a device can be put, for a room picker: Whole home first (for something that serves every room, like a
+ * ducted air conditioner; first, as on the Devices tab), every room, then No room. A place the home doesn't know (the device's own) is shown as it is.
+ */
+export function placeChoices(rooms: Room[], current?: string): { id: string; name: string; icon: string }[] {
+  const odd = current && current !== UNASSIGNED && current !== WHOLE_HOME && !rooms.some(r => r.id === current) ? [{ id: current, name: current, icon: 'category' }] : [];
+  return [{ id: WHOLE_HOME, name: WHOLE_HOME_NAME, icon: WHOLE_HOME_ICON }, ...rooms.map(r => ({ id: r.id, name: r.name, icon: r.icon })), ...odd, { id: UNASSIGNED, name: 'No room', icon: 'category' }];
+}
+
+/** A place's name: a room's, Whole home, or No room. */
+export const placeName = (id: string, rooms: Pick<Room, 'id' | 'name'>[]) => rooms.find(r => r.id === id)?.name ?? (id === WHOLE_HOME ? WHOLE_HOME_NAME : 'No room');
 
 // ------------------------------------------------------------ speaker groups --
 

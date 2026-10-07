@@ -1,4 +1,5 @@
 import type { Command, Device, DeviceType, Capability } from '../model/types.ts';
+import { zoneCommandWords, type ZoneCommand } from './zones.ts';
 
 export const CAPS: Record<DeviceType, Capability[]> = {
   light: ['onoff'],
@@ -124,19 +125,23 @@ export function zoneWords(set: Record<string, { on?: boolean; open?: number }>):
   return Object.entries(set).map(([n, z]) => `zone ${n}${z.on === false ? ' off' : z.on ? ' on' : ''}${z.open != null && z.on !== false ? ` at ${z.open}%` : ''}`).join(', ');
 }
 
-/** A target that isn't one device: "type:light" or "room:lounge" — resolved when the action runs, so devices added later join in. */
-export const PSEUDO_TARGET = /^(type|room):(.+)$/;
+/**
+ * A target that isn't one device: "type:light", "room:lounge", or "zone:lounge" (the air conditioner zone serving
+ * that room, util/zones.ts) — resolved when the action runs, so devices added later join in.
+ */
+export const PSEUDO_TARGET = /^(type|room|zone):(.+)$/;
 
 /** Does this device match a "type:" word? "light" includes dimmers, "media" includes TVs. */
 export function typeMatch(d: Pick<Device, 'type'>, t: string): boolean {
   return d.type === t || (t === 'light' && isLight(d)) || (t === 'media' && isPlayer(d));
 }
 
-/** A pseudo-target in words: "all lights", "everything in the Lounge". */
-export function pseudoLabel(id: string, rooms: { id: string; name: string }[]): string | null {
+/** A pseudo-target in words: "all lights", "everything in the Lounge", "Lounge zone open 50%" (with what it's set to). */
+export function pseudoLabel(id: string, rooms: { id: string; name: string }[], cmd?: object): string | null {
   const m = PSEUDO_TARGET.exec(id);
   if (!m) return null;
   if (m[1] === 'room') return `everything in ${rooms.find(r => r.id === m[2])?.name ?? m[2]}`;
+  if (m[1] === 'zone') return `${rooms.find(r => r.id === m[2])?.name ?? m[2]} zone${cmd ? ` ${zoneCommandWords(cmd as ZoneCommand)}` : ''}`;
   const t = m[2]!;
   return t === 'light' ? 'all lights' : t === 'media' ? 'all media players' : `all ${t}s`;
 }

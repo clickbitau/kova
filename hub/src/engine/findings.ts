@@ -50,7 +50,9 @@ export class Checker {
     const devices = this.devices();
     if (!devices.size) return [];
     return this.config.get().modes.flatMap(m => {
-      const gone = Object.keys(m.targets).filter(id => !devices.has(id));
+      // A room's zone ("zone:lounge") isn't a device; it's gone only with its room.
+      const rooms = this.config.get().rooms;
+      const gone = Object.keys(m.targets).filter(id => id.startsWith('zone:') ? !rooms.some(r => r.id === id.slice(5)) : !devices.has(id));
       if (!gone.length) return [];
       return [{
         id: `missing:${m.id}`, modeId: m.id, kind: 'Check', icon: 'link_off', tone: 'alert' as const,
@@ -176,7 +178,7 @@ export class Checker {
     if (id.startsWith('learn:')) return this.learner.apply(id);
     const [kind, a, b] = id.split(':');
     if (kind === 'empty-house') return this.config.update(c => { const m = c.modes.find(x => x.id === a); if (m) m.onlyWhenSomeoneHome = true; });
-    if (kind === 'missing') return this.config.update(c => { const m = c.modes.find(x => x.id === a); const devices = this.devices(); if (m) for (const id of Object.keys(m.targets)) if (!devices.has(id)) delete m.targets[id]; });
+    if (kind === 'missing') return this.config.update(c => { const m = c.modes.find(x => x.id === a); const devices = this.devices(); if (m) for (const id of Object.keys(m.targets)) if (id.startsWith('zone:') ? !c.rooms.some(r => r.id === id.slice(5)) : !devices.has(id)) delete m.targets[id]; });
     if (kind === 'movie-starts') {
       const tv = this.devices().get(b);
       return this.config.update(c => {

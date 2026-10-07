@@ -4,7 +4,8 @@ import { C, F, R, SP, alpha } from '../theme';
 import { useHub, useSnap } from '../state/hub';
 import { useSheet } from '../state/sheet';
 import { useNav } from '../navigation';
-import { combineIdeasOf, devs, groupDevices, isLight, isSensor, plural, toggleCommand, TYPES, type Dev } from '../logic/devices';
+import { combineIdeasOf, devs, groupDevices, isLight, isSensor, plural, roomOffApplies, roomPills, toggleCommand, TYPES, type Dev } from '../logic/devices';
+import { zonesByRoom } from '../logic/zones';
 import { Icon } from '../ui/Icon';
 import { Button, Empty, HScroll, IconButton, Pill, Press } from '../ui/kit';
 import { Screen } from '../ui/Screen';
@@ -12,6 +13,7 @@ import { T } from '../ui/Text';
 import { TileGrid } from '../ui/Tile';
 import { animateLayout } from '../ui/motion';
 import { CombineIdeaCard } from './CustomiseScreen';
+import { RoomZones } from './RoomZones';
 
 /** A search box: icon, field, a clear button when there's something to clear. */
 export function SearchField({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
@@ -39,13 +41,16 @@ export function DevicesScreen() {
   // Sensors only report: they're on their own screen, not here or in the counts.
   const all = Object.values(devs(s)).filter(d => !isSensor(d));
   const sensors = (s.sensors ?? []).filter(x => !x.hidden).length;
-  const groups = groupDevices(all, s.rooms, { room, type, q, showHidden });
+  // Each room's air conditioner zones: the room shows them, even when nothing else is in it.
+  const zones = zonesByRoom(s.roomStatus);
+  const zoned = Object.keys(zones);
+  const groups = groupDevices(all, s.rooms, { room, type, q, showHidden, zoned });
   const visible = all.filter(d => !d.hidden);
   const lightsOn = visible.filter(d => isLight(d) && d.on).length;
   const hidden = all.filter(d => d.hidden).length;
   const types = TYPES.filter(t => t.id === 'all' || all.some(t.test));
   const tap = (d: Dev) => { const c = toggleCommand(d, s.sources); if (c) void send(d.id, c); else sheet.open(d.id); };
-  const pills = [{ id: 'all', name: 'All rooms' }, ...s.rooms.filter(r => all.some(d => d.room === r.id)), ...(all.some(d => d.room === 'unassigned') ? [{ id: 'unassigned', name: 'Other' }] : [])];
+  const pills = roomPills(all, s.rooms, zoned);
   const add = () => nav.navigate('IntegrationAdd');
   const filtered = room !== 'all' || type !== 'all' || !!q;
 
@@ -83,13 +88,14 @@ export function DevicesScreen() {
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2], flexShrink: 1 }}>
               <Icon name={g.icon} size={19} color={C.stone} />
               <T v="heading" size={17} numberOfLines={1} style={{ flexShrink: 1 }}>{g.name}</T>
-              <T v="footnote" color={C.stone2}>{String(g.devices.length)}</T>
+              {g.devices.length ? <T v="footnote" color={C.stone2}>{String(g.devices.length)}</T> : null}
             </View>
-            {g.lightsOn && g.id !== 'unassigned' ? (
+            {roomOffApplies(g) ? (
               <Button size="sm" kind="ghost" icon="light_off" label="All off" onPress={() => act('POST', `/api/rooms/${encodeURIComponent(g.id)}/off`, {}, `${g.name}: lights off`)} />
             ) : null}
           </View>
-          <TileGrid items={g.devices} onToggle={tap} onOpen={d => sheet.open(d.id)} />
+          {zones[g.id] ? <RoomZones room={g.id} zones={zones[g.id]} rooms={s.rooms} /> : null}
+          {g.devices.length ? <TileGrid items={g.devices} onToggle={tap} onOpen={d => sheet.open(d.id)} /> : null}
         </View>
       ))}
 

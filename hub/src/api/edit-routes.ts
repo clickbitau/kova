@@ -8,6 +8,7 @@ import { checkAutomation } from '../engine/automation-check.ts';
 import { isOneTime, nextOnce, upgradeAutomation } from '../engine/automations.ts';
 const autoUpgrade = (a: object) => upgradeAutomation(a as Record<string, unknown>);
 import { cleanTarget, validRhythm } from '../engine/validate.ts';
+import { cleanZoneCommand } from '../util/zones.ts';
 
 // Editing the home's behaviour: modes, moments, overlays, automations and media sources.
 // Every edit returns an undo id, like device commands do.
@@ -23,13 +24,20 @@ export function registerEditRoutes(app: FastifyInstance, hub: Hub): void {
     reply.code(400).send({ error: e instanceof Error ? e.message : String(e) });
 
   /** Validate a whole targets map against the devices Kova knows. */
+  /** One target: a device, or "zone:<room>" for the air conditioner zone serving a room. */
+  const cleanOne = (id: string, cmd: Command): Command => {
+    const zm = /^zone:(.+)$/.exec(id);
+    if (zm) {
+      if (!hub.config.get().rooms.some(r => r.id === zm[1])) throw new Error(`Unknown room ${zm[1]}`);
+      return cleanZoneCommand(cmd) as unknown as Command;
+    }
+    const d = hub.reg.get(id);
+    if (!d) throw new Error(`Unknown device ${id}`);
+    return cleanTarget(d, cmd);
+  };
   const cleanTargets = (t: Targets): Targets => {
     const out: Targets = {};
-    for (const [id, cmd] of Object.entries(t ?? {})) {
-      const d = hub.reg.get(id);
-      if (!d) throw new Error(`Unknown device ${id}`);
-      out[id] = cleanTarget(d, cmd);
-    }
+    for (const [id, cmd] of Object.entries(t ?? {})) out[id] = cleanOne(id, cmd);
     return out;
   };
 
@@ -114,10 +122,8 @@ export function registerEditRoutes(app: FastifyInstance, hub: Hub): void {
       const list = hub.config.get()[kind] as { id: string; targets: Targets }[];
       if (!list.some(x => x.id === req.params.id)) return reply.code(404).send({ error: `unknown ${kind.slice(0, -1)}` });
       try {
-        const d = hub.reg.get(req.params.device);
         const t = req.body?.target;
-        if (t !== null && !d) throw new Error(`Unknown device ${req.params.device}`);
-        const clean = t === null ? null : cleanTarget(d!, t);
+        const clean = t === null ? null : cleanOne(req.params.device, t);
         return edit(c => {
           const x = (c[kind] as { id: string; targets: Targets }[]).find(y => y.id === req.params.id)!;
           if (clean === null) delete x.targets[req.params.device];
