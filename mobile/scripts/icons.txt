@@ -28,3 +28,5 @@ mosque
 brightness_6
 # Sensors, room activity and camera events
 trending_up trending_down trending_flat battery_alert directions_car pets package_2 humidity_percentage
+# Alerts and editors: names the hub sends (insights, integrations, updates, Ask)
+build device_thermostat event extension_off filter_alt new_releases power_off psychology rule expand_less

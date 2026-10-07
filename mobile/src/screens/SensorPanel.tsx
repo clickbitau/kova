@@ -2,13 +2,13 @@
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
-import { C, R, SP, alpha } from '../theme';
+import { C, SP, alpha } from '../theme';
 import { useHub } from '../state/hub';
 import type { SensorView } from '../api/types';
 import { alertRows, sparkPath, TREND } from '../logic/sensors';
 import type { Dev } from '../logic/devices';
 import { Icon } from '../ui/Icon';
-import { Card, Section, Segmented } from '../ui/kit';
+import { Card, ExpandRow, Group, Section, Segmented } from '../ui/kit';
 import { T } from '../ui/Text';
 
 /** A sensor's readings, which way each is heading and since when, and the main one's day as a chart. */
@@ -31,10 +31,12 @@ export function SensorReadings({ v }: { v: SensorView }) {
           const tr = r.trend ? TREND[r.trend] : null;
           return (
             <View key={r.field} accessible accessibilityLabel={`${r.label} ${r.text}${tr ? `, ${tr[2].toLowerCase()}` : ''}`} style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3], paddingVertical: SP[3], paddingHorizontal: SP[4], borderTopWidth: i ? 1 : 0, borderTopColor: C.hairline }}>
-              <T v="callout" color={C.stone} style={{ flex: 1 }}>{r.label}</T>
+              <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
+                <T v="callout" color={C.bone2}>{r.label}</T>
+                {r.changedLabel ? <T v="footnote" color={C.stone2}>{`Since ${r.changedLabel}`}</T> : null}
+              </View>
               <T v="headline" tabular>{r.text}</T>
               <View style={{ width: 20 }}>{tr ? <Icon name={tr[0]} size={18} color={tr[1]} /> : null}</View>
-              <T v="micro" size={11} color={C.stone2} style={{ minWidth: 64, textAlign: 'right' }}>{r.changedLabel ? `since ${r.changedLabel}` : ''}</T>
             </View>
           );
         })}
@@ -67,6 +69,7 @@ export function WatchSettings({ D }: { D: Dev }) {
   const { snap, act } = useHub();
   const sec = snap?.security;
   const s = sec?.devices[D.id];
+  const [open, setOpen] = useState<string | null>(null);
   if (!s) return null;
   const settings = (body: object, done: string) => act('PATCH', `/api/devices/${encodeURIComponent(D.id)}/settings`, body, done);
   const rows = alertRows(D, sec);
@@ -80,16 +83,13 @@ export function WatchSettings({ D }: { D: Dev }) {
       </Section>
       {rows.length ? (
         <Section title="Alerts to phones" caption gap={SP[2]}>
-          {rows.map(r => (
-            <View key={r.kind} style={{ gap: 6, padding: SP[3], borderRadius: R.md, backgroundColor: C.card }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2] }}>
-                <Icon name={r.icon} size={18} color={C.stone} />
-                <T v="label" style={{ flex: 1 }}>{r.label}</T>
-                <T v="micro" size={11} color={C.stone2}>{r.note}</T>
-              </View>
-              <Segmented compact label={`${r.label} alerts`} value={r.value} options={WHEN} onChange={id => void settings({ alerts: { [r.kind]: id || null } }, id ? `${r.label}: ${id === 'away' ? 'while nobody’s home' : id}` : `${r.label}: back to the default`)} />
-            </View>
-          ))}
+          <Group>
+            {rows.map((r, i) => (
+              <ExpandRow key={r.kind} first={i === 0} icon={r.icon} title={r.label} sub={r.value ? `${WHEN.find(w => w.id === r.value)?.label}, set for this one` : r.note} open={open === r.kind} onToggle={() => setOpen(open === r.kind ? null : r.kind)}>
+                <Segmented compact label={`${r.label} alerts`} value={r.value} options={WHEN} onChange={id => void settings({ alerts: { [r.kind]: id || null } }, id ? `${r.label}: ${id === 'away' ? 'while nobody’s home' : id}` : `${r.label}: back to the default`)} />
+              </ExpandRow>
+            ))}
+          </Group>
           <T v="footnote" color={C.stone2}>Quiet hours and each room’s choices are on Security.</T>
         </Section>
       ) : null}

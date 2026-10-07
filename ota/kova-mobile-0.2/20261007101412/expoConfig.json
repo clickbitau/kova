@@ -1,7 +1,7 @@
 {
   "name": "Kova",
   "slug": "kova",
-  "version": "0.2.25",
+  "version": "0.2.27",
   "runtimeVersion": "kova-mobile-0.2",
   "updates": {
     "enabled": true,
@@ -164,6 +164,14 @@
     },
     "kovaHistory": [
       {
+        "version": "0.2.27",
+        "title": "A design pass: alerts on Now as clear cards with Open, Not now and That’s expected as buttons; a calmer Security page with the home’s status first; nothing cut off or spilling out on small phones or with larger text"
+      },
+      {
+        "version": "0.2.26",
+        "title": "Alerts: “That’s expected” hides one for as long as it stays like that"
+      },
+      {
         "version": "0.2.25",
         "title": "Where the home is: paste a Google Maps link or coordinates, check it on a map, drag the pin and size the arriving-and-leaving circle; phones follow the new circle"
       },
@@ -174,14 +182,6 @@
       {
         "version": "0.2.22",
         "title": "Settings has Software update for the hub and the app; rooms go to No room when deleted, groups of rooms, archive and combine devices, and edit modes, overlays and moments in the app"
-      },
-      {
-        "version": "0.2.21",
-        "title": "Sensors get their own screen (readings, trends, batteries) and leave Devices; cameras show their room and what they saw, with the picture from each moment; alert choices per camera and room, quiet hours"
-      },
-      {
-        "version": "0.2.20",
-        "title": "Stays connected to the hub: reconnects by itself (at once back in the front or on a new network), notices a dead link, says “can’t reach” only when nothing answers, and tells signed out (sign in again with a code) from a hub problem"
       }
     ]
   },

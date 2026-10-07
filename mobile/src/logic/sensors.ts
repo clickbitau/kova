@@ -137,3 +137,33 @@ export function sparkPath(points: [number, number][], w: number, h: number): { l
   const line = xy.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
   return { line, area: `${line} L${(w - 2).toFixed(1)} ${h} L2 ${h} Z`, min: lo, max: hi };
 }
+
+// ---------------------------------------------------------------- security --
+
+export interface SecurityStatus { title: string; sub: string; color: string; icon: string }
+
+/**
+ * The top of Security in a few words: what's wrong (the internet, a camera offline), movement while nobody's home,
+ * or that all is well; then who's home, the cameras, and quiet hours.
+ */
+export function securityStatus(x: { people: { name: string; home: boolean }[]; cams: { online?: boolean }[]; rooms: Room[]; roomStatus?: Record<string, RoomStatus>; netDown: boolean; quietNow: boolean }): SecurityStatus {
+  const home = x.people.filter(p => p.home);
+  const off = x.cams.filter(c => c.online === false).length;
+  const busy = x.rooms.filter(r => x.roomStatus?.[r.id]?.occupied && !x.roomStatus?.[r.id]?.outdoor).map(r => r.name);
+  const who = !x.people.length ? '' : !home.length ? 'Nobody home' : home.length === x.people.length && home.length > 1 ? 'Everyone home' : `${home.map(p => p.name).join(' and ')} home`;
+  const cams = x.cams.length ? `${x.cams.length - off} of ${x.cams.length} camera${x.cams.length === 1 ? '' : 's'} live` : '';
+  const sub = [who, cams, x.quietNow ? 'quiet hours' : ''].filter(Boolean).join(' · ');
+  if (x.netDown) return { title: 'The internet is down', sub, color: C.red, icon: 'wifi_off' };
+  if (off) return { title: off === 1 ? 'A camera is offline' : `${off} cameras are offline`, sub, color: C.red, icon: 'videocam_off' };
+  if (x.people.length && !home.length && busy.length) return { title: busy.length === 1 ? `Movement in the ${busy[0]}` : `Movement in ${busy.length} rooms`, sub: `While nobody’s home${cams ? ` · ${cams}` : ''}`, color: C.amber, icon: 'directions_walk' };
+  return { title: home.length ? 'All well' : 'All quiet', sub, color: C.green, icon: 'shield' };
+}
+
+const WHEN_SHORT: Record<AlertWhen, string> = { always: 'always', away: 'when away', never: 'off' };
+
+/** A room's alert settings in one line: "People: always · Motion: default". */
+export function roomAlertLine(sec: Pick<SecurityState, 'rooms'> | undefined, room: string): string {
+  const r = sec?.rooms[room] ?? {};
+  const w = (k: string) => { const v = r[k]; return v ? WHEN_SHORT[v] : 'default'; };
+  return `People: ${w('person')} · Motion: ${w('motion')}`;
+}

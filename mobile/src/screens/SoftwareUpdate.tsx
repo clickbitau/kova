@@ -31,11 +31,11 @@ function HubUpdateCard({ u }: { u: HubUpdate }) {
     <Card tint={ready ? C.blue : undefined} style={{ overflow: 'hidden' }}>
       <View style={{ padding: SP[4], gap: SP[3] }}>
         <T v="eyebrow" color={C.stone2}>Kova on your hub</T>
-        <View style={{ flexDirection: 'row', gap: SP[3], alignItems: 'center' }} accessibilityLiveRegion="polite">
+        <View style={{ flexDirection: 'row', gap: SP[3], alignItems: 'flex-start' }} accessibilityLiveRegion="polite">
           {progress ? (
             <View style={{ width: 40, height: 40, borderRadius: 13, backgroundColor: alpha(C.blue, 0.14), alignItems: 'center', justifyContent: 'center' }}><Spinner color={C.blue} /></View>
           ) : <IconWell icon={ready ? 'cloud_download' : d.tone === 'error' ? 'cloud_off' : 'check_circle'} color={ready ? C.blue : d.tone === 'error' ? C.red : C.green} size={40} fill={!ready} />}
-          <View style={{ flex: 1, gap: 2 }}>
+          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
             <T v="headline">{d.title}</T>
             <T v="footnote" color={C.stone}>{progress ?? d.sub}</T>
           </View>
@@ -106,11 +106,11 @@ function AppUpdateCard() {
   return (
     <Card tint={u.state === 'ready' ? C.amber : undefined} style={{ padding: SP[4], gap: SP[3] }}>
       <T v="eyebrow" color={C.stone2}>This app</T>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3] }} accessibilityLiveRegion="polite">
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: SP[3] }} accessibilityLiveRegion="polite">
         <View style={{ width: 40, height: 40, borderRadius: 13, backgroundColor: alpha(fg, 0.14), alignItems: 'center', justifyContent: 'center' }}>
           {u.state === 'checking' ? <Spinner color={C.bone} /> : <Icon name={u.state === 'ready' ? 'cloud_download' : u.state === 'current' ? 'check_circle' : u.state === 'unreachable' ? 'cloud_off' : 'cloud'} size={21} color={fg} fill={u.state === 'current' || u.state === 'ready'} />}
         </View>
-        <View style={{ flex: 1, gap: 2 }}>
+        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
           <T v="headline">{d.title}</T>
           <T v="footnote" color={u.state === 'unreachable' ? C.redText : C.stone}>{d.sub}</T>
         </View>
@@ -143,7 +143,7 @@ export function SoftwareUpdate({ hub }: { hub: HubUpdate | null | undefined }) {
     <View style={{ gap: SP[2] }}>
       <T v="overline" color={C.stone2} style={{ paddingHorizontal: 4 }}>Software update</T>
       {hub ? <HubUpdateCard u={hub} /> : (
-        <Card style={{ padding: SP[4], flexDirection: 'row', gap: SP[3], alignItems: 'center' }}>
+        <Card style={{ padding: SP[4], flexDirection: 'row', gap: SP[3], alignItems: 'flex-start' }}>
           <IconWell icon="cloud_off" color={C.stone} size={40} />
           <View style={{ flex: 1, gap: 2 }}>
             <T v="headline">Kova on your hub</T>

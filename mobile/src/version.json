@@ -2,8 +2,12 @@
   "//": "The Kova app's version (docs/VERSIONING.md). store: the X.Y.0 a store binary on this train carries (app.json version). version: what runs, store or over the air (X.Y.Z, PATCH only). train: the native runtime (app.json runtimeVersion). history: newest first; an over-the-air release adds an entry.",
   "train": "kova-mobile-0.2",
   "store": "0.2.0",
-  "version": "0.2.26",
+  "version": "0.2.27",
   "history": [
+    {
+      "version": "0.2.27",
+      "title": "A design pass: alerts on Now as clear cards with Open, Not now and That’s expected as buttons; a calmer Security page with the home’s status first; nothing cut off or spilling out on small phones or with larger text"
+    },
     {
       "version": "0.2.26",
       "title": "Alerts: “That’s expected” hides one for as long as it stays like that"

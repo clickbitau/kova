@@ -1,4 +1,5 @@
-import { View } from 'react-native';
+import { useState } from 'react';
+import { View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, R, SP, alpha } from '../theme';
 import { useHub, useSnap } from '../state/hub';
@@ -6,9 +7,10 @@ import { useSheet } from '../state/sheet';
 import { useNav } from '../navigation';
 import { devs, favourites, isLight, plural, toggleCommand, type Dev } from '../logic/devices';
 import { dayBands } from '../logic/day';
-import { glanceCards, insightColor } from '../logic/glance';
+import { alertActions, glanceCards, glanceColumns, insightColor, shownAlerts, type AlertAction } from '../logic/glance';
+import type { Insight } from '../api/types';
 import { Icon } from '../ui/Icon';
-import { Avatar, Button, Card, Empty, HScroll, IconWell, Mark, Press, Section, Skeleton } from '../ui/kit';
+import { Avatar, Button, Card, Empty, HScroll, IconWell, Mark, Notice, NoticeAction, Press, Section, Skeleton } from '../ui/kit';
 import { Screen } from '../ui/Screen';
 import { T } from '../ui/Text';
 import { Appear } from '../ui/motion';
@@ -35,6 +37,12 @@ export function NowScreen() {
   const bands = dayBands(s);
   const cards = glanceCards(s.glance);
   const alerts = s.insights ?? [];
+  const [allAlerts, setAllAlerts] = useState(false);
+  const { shown, more } = shownAlerts(alerts, allAlerts);
+  const { width, fontScale } = useWindowDimensions();
+  const cols = glanceColumns(width, fontScale, cards.length);
+  const cardW = Math.floor((width - SP.gutter * 2 - SP[2] * (cols - 1)) / cols) - 1;
+  const anyLights = s.devices.some(d => isLight(d) && !d.hidden && !d.archived);
 
   return (
     <Screen glow={M?.color} head={
@@ -64,12 +72,12 @@ export function NowScreen() {
               <View style={{ width: 1, height: 14, backgroundColor: C.amberLine }} />
               <T v="labelSm" color={C.amber}>Turn off</T>
             </Press>
-          ) : (
+          ) : anyLights ? (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2], height: 36, paddingHorizontal: 12, borderRadius: R.full, backgroundColor: C.card, borderWidth: 1, borderColor: C.edge }}>
               <Icon name="light_off" size={17} color={C.stone} />
               <T v="labelSm" color={C.stone}>All lights off</T>
             </View>
-          )}
+          ) : null}
           {ov ? (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2], height: 36, paddingLeft: 10, paddingRight: 4, borderRadius: R.full, backgroundColor: C.card, borderWidth: 1, borderColor: C.edgeTop }}>
               <Icon name={ov.icon} size={17} color={C.amber} fill />
@@ -82,36 +90,36 @@ export function NowScreen() {
         </View>
       </View>
 
+      {alerts.length ? (
+        <View style={{ gap: SP[2] + 2 }}>
+          {shown.map((i, n) => <AlertCard key={i.id} i={i} index={n} />)}
+          {more || allAlerts ? (
+            <Press onPress={() => setAllAlerts(!allAlerts)} haptic="select" label={allAlerts ? 'Show fewer alerts' : `Show ${plural(more, 'more alert')}`}
+              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SP[1], minHeight: 40, borderRadius: R.md, borderWidth: 1, borderColor: C.edge, backgroundColor: C.card }}>
+              <T v="labelSm" color={C.bone2}>{allAlerts ? 'Show fewer' : `${plural(more, 'more alert')}`}</T>
+              <Icon name={allAlerts ? 'expand_less' : 'expand_more'} size={18} color={C.stone} />
+            </Press>
+          ) : null}
+        </View>
+      ) : null}
+
       {cards.length ? (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SP[2] }}>
           {cards.map(c => (
-            <Press key={c.key} onPress={c.device ? () => sheet.open(c.device!) : undefined} label={`${c.label}: ${c.value}. ${c.sub}`} style={{ flexGrow: 1, flexBasis: cards.length > 2 ? '30%' : '45%' }}>
-              <Card style={{ gap: 2, minHeight: 96 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[1] }}><Icon name={c.icon} size={18} color={c.color} fill /><T v="micro" color={C.stone}>{c.label}</T></View>
-                <T v="headline" numberOfLines={1}>{c.value}</T>
-                {c.sub ? <T v="micro" color={C.stone} numberOfLines={3}>{c.sub}</T> : null}
+            <Press key={c.key} give="soft" onPress={c.device ? () => sheet.open(c.device!) : undefined} label={`${c.label}: ${c.value}, ${c.caption}. ${c.sub}`} style={{ flexGrow: 1, flexBasis: cardW, minWidth: 0 }}>
+              <Card pad={SP[3]} style={{ flex: 1, gap: 2 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 2 }}>
+                  <Icon name={c.icon} size={16} color={c.color} fill />
+                  <T v="eyebrow" color={C.stone2} numberOfLines={1} style={{ flexShrink: 1 }}>{c.label}</T>
+                </View>
+                <T v="heading" tabular numberOfLines={1}>{c.value}</T>
+                <T v="footnote" weight={600} color={C.bone2} numberOfLines={1}>{c.caption}</T>
+                {c.sub ? <T v="footnote" color={C.stone} numberOfLines={2}>{c.sub}</T> : null}
               </Card>
             </Press>
           ))}
         </View>
       ) : null}
-      {alerts.map((i, n) => (
-        <Appear key={i.id} index={n}>
-          <Card tint={insightColor(i.level)} style={{ flexDirection: 'row', gap: SP[3], alignItems: 'flex-start', backgroundColor: alpha(insightColor(i.level), i.level === 'info' ? 0.04 : 0.08) }}>
-            <Icon name={i.icon} size={22} color={insightColor(i.level)} />
-            <View style={{ flex: 1, gap: 2 }}>
-              <T v="headline">{i.title}</T>
-              {i.detail ? <T v="footnote" color={C.stone}>{i.detail}</T> : null}
-              <View style={{ flexDirection: 'row', gap: SP[4], marginTop: SP[1] }}>
-                {i.device ? <Press onPress={() => sheet.open(i.device!)} label={`Open ${i.title}`}><T v="labelSm">Open</T></Press> : null}
-                <Press onPress={() => void act('POST', `/api/insights/${encodeURIComponent(i.id)}/snooze`, { hours: 24 }, 'Hidden for a day')} label="Not now"><T v="labelSm" color={C.stone}>Not now</T></Press>
-                {/* Hidden for as long as it stays exactly so; a change, or its coming back later, shows again. */}
-                <Press onPress={() => void act('POST', `/api/insights/${encodeURIComponent(i.id)}/snooze`, { untilItChanges: true }, 'Hidden while it stays like this')} label="That’s expected"><T v="labelSm" color={C.stone}>That’s expected</T></Press>
-              </View>
-            </View>
-          </Card>
-        </Appear>
-      ))}
 
       <Card style={{ padding: SP[4], gap: SP[2] }}>
         <View style={{ height: 40, borderRadius: R.sm, overflow: 'hidden', flexDirection: 'row' }} accessibilityLabel={`Today: ${bands.map(b => `${b.name} from ${b.from}`).join(', ')}`}>
@@ -155,7 +163,8 @@ export function NowScreen() {
 
       <Section title="Favourites" action={favs.length ? 'All devices' : undefined} onAction={() => nav.navigate('Tabs', { screen: 'Devices' } as never)}>
         {favs.length ? <TileGrid items={favs} onToggle={tap} onOpen={d => sheet.open(d.id)} />
-          : <Empty compact icon="star" tone={C.amber} title="No favourites yet" text="Star a device in its panel to keep it here." />}
+          : s.devices.length ? <Empty compact icon="star" tone={C.amber} title="No favourites yet" text="Star a device in its panel to keep it here." />
+          : <Empty compact icon="devices" tone={C.amber} title="No devices yet" text="Connect your lights, speakers and cameras, and keep the ones you use most here." action="Add an integration" onAction={() => nav.navigate('IntegrationAdd')} />}
       </Section>
 
       {s.overlays.length ? (
@@ -194,7 +203,7 @@ export function NowScreen() {
         </Press>
       ) : null}
 
-      <Section title="Just happened" action="See all" onAction={() => nav.navigate('Activity')} gap={SP[1]}>
+      <Section title="Just happened" action={happened.length ? 'See all' : undefined} onAction={() => nav.navigate('Activity')} gap={SP[1]}>
         {happened.length ? happened.map((h, i) => (
           <Appear key={h.id} index={i} style={{ flexDirection: 'row', gap: SP[3], paddingVertical: SP[3], borderTopWidth: i ? 1 : 0, borderTopColor: C.hairline }}>
             <T mono size={12} color={C.stone2} style={{ width: 40, paddingTop: 2 }}>{h.t}</T>
@@ -206,6 +215,32 @@ export function NowScreen() {
         )) : <Empty compact icon="history" title="Quiet so far" text="What your modes and people do shows up here." />}
       </Section>
     </Screen>
+  );
+}
+
+const LEVEL: Record<Insight['level'], string> = { alert: 'Needs you now', warning: 'Worth a look', info: 'Good to know' };
+const ACTION: Record<AlertAction, string> = { open: 'Open', later: 'Not now', expected: 'That’s expected' };
+
+/**
+ * One alert, as a Notice: how urgent it is, what's wrong and the detail, then Open (in the alert's colour), Not now
+ * and That's expected. On a narrow phone or with large text the buttons wrap and share the width.
+ */
+function AlertCard({ i, index }: { i: Insight; index: number }) {
+  const { act } = useHub();
+  const sheet = useSheet();
+  const col = insightColor(i.level);
+  const run = (a: AlertAction) => {
+    if (a === 'open') sheet.open(i.device!);
+    else if (a === 'later') void act('POST', `/api/insights/${encodeURIComponent(i.id)}/snooze`, { hours: 24 }, 'Hidden for a day');
+    // Hidden for as long as it stays exactly so; a change, or its coming back later, shows again.
+    else void act('POST', `/api/insights/${encodeURIComponent(i.id)}/snooze`, { untilItChanges: true }, 'Hidden while it stays like this');
+  };
+  return (
+    <Appear index={index}>
+      <Notice icon={i.icon} color={col} eyebrow={LEVEL[i.level]} title={i.title} text={i.detail}>
+        {alertActions(i).map(a => <NoticeAction key={a} label={ACTION[a]} main={a === 'open'} color={col} a11y={a === 'open' ? `Open ${i.title}` : undefined} onPress={() => run(a)} />)}
+      </Notice>
+    </Appear>
   );
 }
 

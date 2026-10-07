@@ -32,7 +32,7 @@ export function MoreScreen() {
         <View style={{ flex: 1, gap: 2 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2] }}>
             <PulseDot color={tone} size={7} />
-            <T v="headline">{words.title}</T>
+            <T v="headline" style={{ flexShrink: 1 }}>{words.title}</T>
           </View>
           <T v="footnote" color={C.stone} numberOfLines={1}>{live && route ? `${KIND_LABEL[route.kind]} · ${display(route.url)}` : display(cfg?.url)}</T>
         </View>

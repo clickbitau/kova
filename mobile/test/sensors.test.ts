@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { alertRows, decisionText, groupSensors, isSensor, quietText, roomLine, sensorCard, sensorFlags, sparkPath, timelineRows } from '../src/logic/sensors.ts';
+import { alertRows, decisionText, groupSensors, isSensor, quietText, roomAlertLine, roomLine, securityStatus, sensorCard, sensorFlags, sparkPath, timelineRows } from '../src/logic/sensors.ts';
 import { devs, groupDevices, stateOf, toggleCommand } from '../src/logic/devices.ts';
 import { ctxOf, matchFields, matchWords, newCondition, newTrigger, canSet } from '../src/logic/automations.ts';
 import { routeFor, NATIVE_PAGES } from '../src/logic/links.ts';
@@ -86,4 +86,26 @@ test('automations on the phone: room triggers and conditions, sensor states; not
   assert.equal(matchWords({ motion: true }), 'detecting motion');
   assert.equal(matchWords({ open: false }), 'closed');
   assert.equal(NATIVE_PAGES[routeFor('/phone.html?page=sensors').page!], 'Sensors');
+});
+
+test('security status: what’s wrong first, movement while nobody’s home, else all well', () => {
+  const rooms = [{ id: 'k', name: 'Kitchen', icon: 'x' }, { id: 'g', name: 'Garage', icon: 'x' }];
+  const people = [{ name: 'Ann', home: true }, { name: 'Bo', home: false }];
+  const cams = [{ online: true }, { online: true }];
+  const occ = { k: { occupied: true, outdoor: false } } as never;
+  assert.deepEqual(securityStatus({ people, cams, rooms, netDown: false, quietNow: false }), { title: 'All well', sub: 'Ann home · 2 of 2 cameras live', color: '#7fd4a0', icon: 'shield' });
+  assert.equal(securityStatus({ people, cams, rooms, netDown: true, quietNow: false }).title, 'The internet is down');
+  assert.equal(securityStatus({ people, cams: [{ online: false }, { online: true }], rooms, netDown: false, quietNow: true }).title, 'A camera is offline');
+  assert.equal(securityStatus({ people, cams: [{ online: false }, { online: true }], rooms, netDown: false, quietNow: true }).sub, 'Ann home · 1 of 2 cameras live · quiet hours');
+  const away = people.map(p => ({ ...p, home: false }));
+  assert.deepEqual(securityStatus({ people: away, cams, rooms, roomStatus: occ, netDown: false, quietNow: false }), { title: 'Movement in the Kitchen', sub: 'While nobody’s home · 2 of 2 cameras live', color: '#f2b14c', icon: 'directions_walk' });
+  assert.equal(securityStatus({ people: away, cams: [], rooms, netDown: false, quietNow: false }).title, 'All quiet');
+  assert.equal(securityStatus({ people: away, cams: [], rooms, netDown: false, quietNow: false }).sub, 'Nobody home');
+  assert.equal(securityStatus({ people: people.map(p => ({ ...p, home: true })), cams: [], rooms, netDown: false, quietNow: false }).sub, 'Everyone home');
+});
+
+test('a room’s alert settings in one line', () => {
+  assert.equal(roomAlertLine({ rooms: { k: { person: 'always', motion: 'never' } } }, 'k'), 'People: always · Motion: off');
+  assert.equal(roomAlertLine({ rooms: {} }, 'k'), 'People: default · Motion: default');
+  assert.equal(roomAlertLine(undefined, 'k'), 'People: default · Motion: default');
 });

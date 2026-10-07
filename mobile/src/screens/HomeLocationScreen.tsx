@@ -10,7 +10,7 @@ import { hubUrl } from '../logic/connect';
 import { injectFor, mapPageHtml, readMapMessage, RADIUS_MAX, RADIUS_MIN, type ToMap } from '../logic/map-page';
 import { coordsText, DEFAULT_RADIUS_M, hasPoint, isGoogle, pinFromFound, pinFromPaste, pinMoved, saveBody, sourceLabel, staticMapPath, type Found, type Located, type Pin } from '../logic/location';
 import { canPaste, paste } from '../native/clipboard';
-import { Button, Group, Row, Sheet, Slider, Spinner } from '../ui/kit';
+import { Button, Card, Group, Row, Sheet, Slider, Spinner } from '../ui/kit';
 import { FieldWithButton } from './DeviceSheet';
 import { Screen } from '../ui/Screen';
 import { T } from '../ui/Text';
@@ -140,7 +140,7 @@ export function HomeLocationScreen() {
   return (
     <Screen title="Where the home is" over="Settings" onBack={() => nav.goBack()}>
       <View style={{ gap: SP[2] }}>
-        <T v="label" color={C.stone}>Address</T>
+        <T v="overline" color={C.stone2} style={{ paddingHorizontal: 4 }}>Address</T>
         <FieldWithButton value={addr ?? s.home.address ?? ''} onChange={onAddr} placeholder="Street, suburb, city" button={finding ? 'Searching…' : 'Search'} label="Address" show onSubmit={findAddress} />
         {finding ? <View style={{ alignItems: 'center', padding: SP[2] }}><Spinner /></View> : null}
         {found && found.length ? (
@@ -152,11 +152,11 @@ export function HomeLocationScreen() {
       </View>
 
       <View style={{ gap: SP[2] }}>
-        <T v="label" color={C.stone}>Paste from Google Maps</T>
+        <T v="overline" color={C.stone2} style={{ paddingHorizontal: 4 }}>Paste from Google Maps</T>
         <View style={{ flexDirection: 'row', gap: SP[2], alignItems: 'center' }}>
           <TextInput value={pasteText} onChangeText={setPasteText} placeholder="A Google Maps link or coordinates" placeholderTextColor={C.stone2} autoCorrect={false} autoCapitalize="none" returnKeyType="go"
             onSubmitEditing={() => void find(pasteText)} accessibilityLabel="Paste a Google Maps link or coordinates"
-            style={{ flex: 1, height: 48, paddingHorizontal: SP[3] + 2, borderRadius: R.md, borderWidth: 1, borderColor: C.line, backgroundColor: C.card, color: C.bone, fontFamily: F[500], fontSize: 15 }} />
+            style={{ flex: 1, minWidth: 0, height: 48, paddingHorizontal: SP[3] + 2, borderRadius: R.md, borderWidth: 1, borderColor: C.line, backgroundColor: C.card, color: C.bone, fontFamily: F[500], fontSize: 15 }} />
           {pasteText.trim()
             ? <Button label={pasting ? 'Finding…' : 'Find'} busy={pasting} onPress={() => find(pasteText)} />
             : canPaste ? <Button kind="secondary" icon="content_paste" label="Paste" busy={pasting} onPress={pasteAndFind} /> : null}
@@ -181,18 +181,18 @@ export function HomeLocationScreen() {
         ) : <MapView pin={shown} radiusM={rad} onMoved={p => setPin(pinMoved(pin ?? shown, p))} onRadius={setRadius} url={base?.url ?? null} />}
 
         <View style={{ gap: SP[2] }}>
-          <T v="label" color={C.stone}>Arriving and leaving circle</T>
+          <T v="overline" color={C.stone2} style={{ paddingHorizontal: 4 }}>Arriving and leaving circle</T>
           <Slider value={rad} min={RADIUS_MIN} max={RADIUS_MAX} suffix=" m" label="Arriving and leaving circle" onChange={v => setRadius(Math.round(v / 10) * 10)} onRelease={v => setRadius(Math.round(v / 10) * 10)} />
         </View>
 
-        <View style={{ padding: SP[3], borderRadius: R.lg, backgroundColor: C.card, gap: 2 }}>
-          <T v="body">{title}</T>
+        <Card pad={SP[4]} style={{ gap: 2 }}>
+          <T v="headline">{title}</T>
           <T v="footnote" color={C.stone} tabular>{shown ? coordsText(shown, rad) : 'Paste a link, search the address, or tap the map'}</T>
           <T v="footnote" color={dirty ? C.amber : C.stone}>{note}</T>
-        </View>
+        </Card>
 
-        <View style={{ flexDirection: 'row', gap: SP[2], flexWrap: 'wrap' }}>
-          <Button kind="secondary" icon="person_pin_circle" label="Use this phone’s location" busy={locating} onPress={here} />
+        <View style={{ flexDirection: 'row', gap: SP[2] }}>
+          <View style={{ flex: 1, minWidth: 0 }}><Button full kind="secondary" icon="person_pin_circle" label="Use this phone’s location" busy={locating} onPress={here} /></View>
           {dirty ? <Button kind="ghost" label="Discard" onPress={discard} /> : null}
         </View>
         <Button full label="Save location" busy={saving} kind={dirty ? 'primary' : 'secondary'} onPress={save} />

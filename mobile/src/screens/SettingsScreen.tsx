@@ -68,7 +68,7 @@ export function SettingsScreen() {
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2], paddingHorizontal: SP[3], borderRadius: R.md, backgroundColor: C.inset }}>
           <Icon name="search" size={20} color={C.stone2} />
           <TextInput value={q} onChangeText={setQ} placeholder="Search, e.g. Sydney" placeholderTextColor={C.stone3} autoCorrect={false} accessibilityLabel="Search timezones"
-            style={{ flex: 1, color: C.bone, fontFamily: F[500], fontSize: 15, paddingVertical: SP[3] }} />
+            style={{ flex: 1, minWidth: 0, color: C.bone, fontFamily: F[500], fontSize: 15, paddingVertical: SP[3] }} />
         </View>
         <Group>
           {zones.slice(0, 60).map((z, i) => (

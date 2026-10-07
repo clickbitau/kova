@@ -39,3 +39,26 @@ test('the dial’s arc: empty at the lower left, over the top when more than two
   assert.match(arcPath(100, 100, 90, 1), / 0 1 1 163\.64 163\.64$/, 'full is the lower right, the long way round');
   assert.equal(arcPath(100, 100, 90, 2), arcPath(100, 100, 90, 1));
 });
+
+test('every icon the app names is in its icon font (a missing one draws as a question mark)', async () => {
+  const { readdirSync, readFileSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const { ICON_CODES } = await import('../src/ui/icon-codes.ts');
+  const root = join(import.meta.dirname, '../src');
+  const files = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap(e => e.isDirectory() ? files(join(dir, e.name)) : /\.tsx?$/.test(e.name) ? [join(dir, e.name)] : []);
+  const missing = new Set<string>();
+  for (const f of files(root)) {
+    if (f.endsWith('icon-codes.ts')) continue;
+    const src = readFileSync(f, 'utf8');
+    for (const m of src.matchAll(/(?:\bicon|Icon name)=["']([a-z0-9_]+)["']|\bicon: '([a-z0-9_]+)'/g)) {
+      const n = m[1] ?? m[2];
+      if (!(n in ICON_CODES)) missing.add(`${n} (${f.slice(root.length + 1)})`);
+    }
+  }
+  assert.deepEqual([...missing], []);
+});
+
+test('the alerts the hub raises have their icons', async () => {
+  const { ICON_CODES } = await import('../src/ui/icon-codes.ts');
+  for (const n of ['power_off', 'battery_alert', 'sensor_door', 'cloud_off', 'wifi_off', 'extension_off', 'device_thermostat', 'thermostat', 'ac_unit', 'rainy', 'wb_sunny', 'filter_alt', 'air']) assert.ok(n in ICON_CODES, n);
+});

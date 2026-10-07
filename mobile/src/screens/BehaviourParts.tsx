@@ -65,7 +65,7 @@ function TimeSheet({ open, value, title, onPick, onClose }: { open: boolean; val
   return (
     <Sheet open={open} onClose={onClose} label={title}>
       <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
-        <T size={18} weight={700}>{title}</T>
+        <T v="heading">{title}</T>
         <T mono size={28} color={C.amber} accessibilityLiveRegion="polite">{clockOf(h, m)}</T>
       </View>
       <T v="overline" color={C.stone2}>Hour</T>
@@ -93,7 +93,8 @@ export function RhythmEditor({ value, onChange, title }: { value: Rhythm; onChan
       ) : (
         <HScroll>{OFFSETS.map(m => <Pill key={m} label={offsetWords(m)} on={(value.offsetMin ?? 0) === m} onPress={() => onChange(withOffset(value, m))} />)}</HScroll>
       )}
-      <T v="footnote" color={C.stone}>{rhythmWords(value)}</T>
+      {/* A clock time already shows on its button; sun and prayer times say when they'll be today. */}
+      {value.kind !== 'time' ? <T v="footnote" color={C.stone}>{rhythmWords(value)}</T> : null}
       <TimeSheet open={clock} value={value.kind === 'time' ? value.at : '21:00'} title={title} onClose={() => setClock(false)}
         onPick={at => onChange({ kind: 'time', at })} />
     </View>
@@ -109,11 +110,11 @@ export function DevicePicker({ open, title, exclude = [], onPick, onClose }: { o
   const sections = deviceSections(list, s.rooms, q);
   return (
     <Sheet open={open} onClose={onClose} label={title}>
-      <T size={18} weight={700}>{title}</T>
+      <T v="heading">{title}</T>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 12, paddingRight: 6, borderRadius: 14, backgroundColor: C.card, borderWidth: 1, borderColor: C.line }}>
         <Icon name="search" size={20} color={C.stone2} />
         <TextInput value={q} onChangeText={setQ} placeholder="Search devices or rooms" placeholderTextColor={C.stone3} autoCorrect={false} autoCapitalize="none" accessibilityLabel="Search devices"
-          style={{ flex: 1, color: C.bone, fontFamily: F[400], fontSize: 16, paddingVertical: 11 }} />
+          style={{ flex: 1, minWidth: 0, color: C.bone, fontFamily: F[400], fontSize: 16, paddingVertical: 11 }} />
         {q ? <Press onPress={() => setQ('')} label="Clear search" style={{ padding: 6 }}><Icon name="close" size={19} color={C.stone2} /></Press> : null}
       </View>
       {sections.map(sec => (
@@ -122,13 +123,13 @@ export function DevicePicker({ open, title, exclude = [], onPick, onClose }: { o
           {sec.items.map(o => (
             <Press key={o.v} haptic="select" label={`${sec.room} ${o.label}`} onPress={() => { onPick(o.v); onClose(); }}
               style={{ minHeight: 46, flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11, paddingHorizontal: 12, borderRadius: 12 }}>
-              <T size={15} weight={500} color={C.bone} style={{ flex: 1 }}>{o.label}</T>
+              <T v="body" color={C.bone} style={{ flex: 1, minWidth: 0 }}>{o.label}</T>
               <Icon name="chevron_right" size={18} color={C.stone2} />
             </Press>
           ))}
         </View>
       ))}
-      {!sections.length ? <T size={13} color={C.stone}>{q ? `Nothing called “${q}”.` : 'No devices to add.'}</T> : null}
+      {!sections.length ? <T v="footnote" color={C.stone}>{q ? `Nothing called “${q}”.` : 'No devices to add.'}</T> : null}
     </Sheet>
   );
 }
@@ -141,14 +142,14 @@ function CommandSheet({ device, cur, onPick, onClose }: { device: string | null;
   const now = cur ? commandKey(cur) : '';
   return (
     <Sheet open={!!device} onClose={onClose} label="Set it to">
-      <T size={18} weight={700}>{d ? `${d.name}: set it to` : 'Set it to'}</T>
+      <T v="heading">{d ? `${d.name}: set it to` : 'Set it to'}</T>
       <View style={{ gap: 4 }}>
         {opts.map(o => {
           const on = o.v === now;
           return (
             <Press key={o.v} haptic="select" label={o.label} onPress={() => { onPick(commandFromKey(o.v)); onClose(); }}
               style={{ minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 14, borderRadius: 12, backgroundColor: on ? C.amberTint : 'transparent' }}>
-              <T size={15} weight={on ? 700 : 500} color={on ? C.amber : C.bone} style={{ flex: 1 }}>{o.label}</T>
+              <T v="body" weight={on ? 700 : 500} color={on ? C.amber : C.bone} style={{ flex: 1, minWidth: 0 }}>{o.label}</T>
               {on ? <Icon name="check" size={20} color={C.amber} /> : null}
             </Press>
           );
@@ -200,8 +201,8 @@ export function ConfirmSheet({ open, title, text, yes, onYes, onClose }: { open:
   return (
     <Sheet open={open} onClose={onClose} label={title}>
       <View style={{ gap: 6 }}>
-        <T size={19} weight={700}>{title}</T>
-        {text ? <T size={13.5} color={C.stone} lineHeight={1.45}>{text}</T> : null}
+        <T v="heading">{title}</T>
+        {text ? <T v="callout" color={C.stone}>{text}</T> : null}
       </View>
       <Button full kind="danger" icon="delete" label={yes} onPress={onYes} />
       <Button full kind="secondary" label="Cancel" onPress={onClose} />

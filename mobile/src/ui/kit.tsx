@@ -508,13 +508,14 @@ export function ToastHost({ toast, onUndo, bottom }: { toast: Toast | null; onUn
 export function Empty({ icon, title, text, action, onAction, compact, tone = C.stone }: { icon: string; title: string; text?: string; action?: string; onAction?: () => void; compact?: boolean; tone?: string }) {
   if (compact) {
     return (
-      <Appear style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3], paddingVertical: SP[4], paddingHorizontal: SP[4], borderRadius: R.lg, borderWidth: 1, borderStyle: 'dashed', borderColor: 'rgba(255,255,255,0.1)' }}>
+      <Appear style={{ flexDirection: 'row', alignItems: action ? 'flex-start' : 'center', gap: SP[3], paddingVertical: SP[4], paddingHorizontal: SP[4], borderRadius: R.lg, borderWidth: 1, borderStyle: 'dashed', borderColor: 'rgba(255,255,255,0.1)' }}>
         <IconWell icon={icon} color={tone} size={36} />
-        <View style={{ flex: 1, gap: 2 }}>
+        {/* The action sits under the words, so they keep the width on a small phone. */}
+        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
           <T v="headline" size={14}>{title}</T>
           {text ? <T v="footnote" color={C.stone}>{text}</T> : null}
+          {action ? <View style={{ marginTop: SP[2] }}><Button size="sm" kind="secondary" label={action} onPress={onAction} /></View> : null}
         </View>
-        {action ? <Button size="sm" kind="secondary" label={action} onPress={onAction} /> : null}
       </Appear>
     );
   }
@@ -582,7 +583,7 @@ export function Stat({ label, value, color = C.bone, icon }: { label: string; va
         {icon ? <Icon name={icon} size={15} color={C.stone2} /> : null}
         <T v="eyebrow" color={C.stone2}>{label}</T>
       </View>
-      <T v="title" size={20} color={color} tabular>{value}</T>
+      <T v="title" size={20} color={color} tabular maxFontSizeMultiplier={1.2}>{value}</T>
     </Card>
   );
 }
@@ -628,11 +629,11 @@ export function Button({ label, icon, onPress, kind = 'primary', busy, size = 'm
   };
   const glyph = state === 'busy' ? <Spinner size={size === 'sm' ? 15 : 18} color={fg} /> : state === 'done' ? <Icon name="check" size={size === 'sm' ? 17 : 19} color={fg} /> : icon ? <Icon name={icon} size={size === 'sm' ? 17 : 19} color={fg} /> : null;
   return (
-    <Animated.View style={{ transform: [{ translateX: x }], alignSelf: full ? 'stretch' : size === 'sm' ? 'flex-start' : undefined }}>
+    <Animated.View style={{ transform: [{ translateX: x }], alignSelf: full ? 'stretch' : size === 'sm' ? 'flex-start' : undefined, maxWidth: '100%' }}>
       <Press onPress={go} label={label} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SP[2] - 1, minHeight: h, paddingVertical: size === 'sm' ? 7 : 12, paddingHorizontal: size === 'sm' ? 14 : 20, borderRadius: size === 'sm' ? R.sm + 1 : R.md, backgroundColor: bg,
         borderWidth: kind === 'secondary' ? 1 : 0, borderColor: C.edge, opacity: state === 'busy' ? 0.85 : 1 }}>
         {glyph}
-        <T v="label" size={size === 'sm' ? 13 : size === 'lg' ? 16 : 15} color={fg}>{state === 'done' && doneLabel ? doneLabel : label}</T>
+        <T v="label" size={size === 'sm' ? 13 : size === 'lg' ? 16 : 15} color={fg} center style={{ flexShrink: 1 }}>{state === 'done' && doneLabel ? doneLabel : label}</T>
       </Press>
     </Animated.View>
   );
@@ -643,6 +644,83 @@ export function Tag({ text, color = C.stone, solid }: { text: string; color?: st
   return (
     <View style={{ paddingVertical: 3, paddingHorizontal: 8, borderRadius: R.full, backgroundColor: solid ? color : alpha(color, 0.14), alignSelf: 'flex-start' }}>
       <T v="micro" color={solid ? C.coal : color}>{text}</T>
+    </View>
+  );
+}
+
+/**
+ * Something to know or act on (an alert, a warning, a problem with a device): a card washed in its colour, a
+ * tinted well with its icon, an optional eyebrow (how urgent), the title, a line or two of detail, and its actions
+ * underneath (`NoticeAction`s). The one way the app raises something: Now's alerts, Sensors, a device's panel.
+ */
+export function Notice({ icon, color, eyebrow, title, text, children, compact }: { icon: string; color: string; eyebrow?: string; title: string; text?: string; children?: ReactNode; compact?: boolean }) {
+  return (
+    <Card tint={color} pad={compact ? SP[3] : SP[4]} style={{ gap: SP[3], backgroundColor: alpha(color, 0.08) }}>
+      <View style={{ flexDirection: 'row', gap: SP[3], alignItems: compact && !text ? 'center' : 'flex-start' }}>
+        <IconWell icon={icon} color={color} bg={alpha(color, 0.16)} size={compact ? 32 : 38} fill />
+        <View style={{ flex: 1, minWidth: 0, gap: 2, paddingTop: compact && !text ? 0 : 1 }}>
+          {eyebrow ? <T v="eyebrow" color={color}>{eyebrow}</T> : null}
+          <T v={compact ? 'callout' : 'headline'} weight={compact ? 600 : undefined}>{title}</T>
+          {text ? <T v="footnote" color={C.stone} numberOfLines={3}>{text}</T> : null}
+        </View>
+      </View>
+      {children ? <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SP[2] }}>{children}</View> : null}
+    </Card>
+  );
+}
+
+/** One of a Notice's actions: `main` in the notice's colour, the others quieter. They share the row and wrap when narrow. */
+export function NoticeAction({ label, onPress, main, color = C.amber, a11y }: { label: string; onPress: () => void; main?: boolean; color?: string; a11y?: string }) {
+  return (
+    <Press onPress={onPress} label={a11y ?? label} hitSlop={{ top: 4, bottom: 4 }}
+      style={{ flexGrow: 1, minHeight: 36, paddingHorizontal: SP[3], alignItems: 'center', justifyContent: 'center', borderRadius: R.sm + 1, borderWidth: 1,
+        backgroundColor: main ? alpha(color, 0.18) : C.control2, borderColor: main ? alpha(color, 0.4) : C.edge }}>
+      <T v="labelSm" color={main ? color : C.bone2} numberOfLines={1}>{label}</T>
+    </Press>
+  );
+}
+
+/**
+ * A row in a grouped list that opens in place to show its choices (a room's alerts, an event kind's alerts): the
+ * title, what's chosen now underneath, a chevron; tapped, the choices appear below it. Keeps long settings lists
+ * short until you want one.
+ */
+export function ExpandRow({ icon, iconFg = C.bone, title, sub, open, onToggle, first, children }: { icon?: string; iconFg?: string; title: string; sub?: string; open: boolean; onToggle: () => void; first?: boolean; children: ReactNode }) {
+  return (
+    <View style={{ borderTopWidth: first ? 0 : 1, borderTopColor: C.hairline }}>
+      <Press onPress={onToggle} give="soft" haptic="select" label={sub ? `${title}, ${sub}` : title} selected={open}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3], minHeight: 58, paddingVertical: SP[3], paddingHorizontal: SP[4] }}>
+        {icon ? <IconWell icon={icon} color={iconFg} bg={iconFg === C.bone ? C.selected : undefined} size={36} /> : null}
+        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+          <T v="headline" numberOfLines={1}>{title}</T>
+          {sub ? <T v="footnote" color={C.stone}>{sub}</T> : null}
+        </View>
+        <Icon name={open ? 'expand_less' : 'expand_more'} size={20} color={C.stone2} />
+      </Press>
+      {open ? <View style={{ gap: SP[3], paddingHorizontal: SP[4], paddingBottom: SP[4] }}>{children}</View> : null}
+    </View>
+  );
+}
+
+/**
+ * Choices laid out as a grid of chips (`columns` to a row), for more options than a Segmented control can fit on a
+ * small phone (an air conditioner's six fan speeds). The chosen one is lit in `color`.
+ */
+export function Chips({ options, value, onChange, color = C.bone, label, columns = 3 }: { options: SegOption[]; value: string | null; onChange: (id: string) => void; color?: string; label?: string; columns?: number }) {
+  return (
+    <View accessibilityRole="radiogroup" accessibilityLabel={label} style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SP[2] }}>
+      {options.map(o => {
+        const on = o.id === value;
+        const c = o.color ?? color;
+        return (
+          <Press key={o.id} role="radio" selected={on} label={o.label} haptic="select" onPress={() => { if (!on) onChange(o.id); }}
+            style={{ flexBasis: `${Math.floor(100 / columns) - 4}%`, flexGrow: 1, minHeight: 42, flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center', paddingHorizontal: SP[2], borderRadius: R.sm + 2, borderWidth: 1,
+              backgroundColor: on ? (c === C.bone ? C.selected : alpha(c, 0.18)) : C.inset, borderColor: on ? (c === C.bone ? C.edgeTop : alpha(c, 0.45)) : C.edge }}>
+            {o.icon ? <Icon name={o.icon} size={17} color={on ? c : C.stone} fill={on} /> : null}
+            <T v="labelSm" color={on ? C.bone : C.stone} numberOfLines={1}>{o.label}</T>
+          </Press>
+        );
+      })}
     </View>
   );
 }

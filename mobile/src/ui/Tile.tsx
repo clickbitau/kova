@@ -69,7 +69,7 @@ export function Tile({ d, onToggle, onOpen }: { d: Dev; onToggle: () => void; on
           </Press>
         </View>
         <View style={{ gap: 2 }}>
-          <T v="headline" numberOfLines={1}>{d.name}</T>
+          <T v="headline" numberOfLines={2}>{d.name}</T>
           <T v="footnote" weight={600} color={dead ? C.red : fg} numberOfLines={1}>{st}</T>
         </View>
         {level != null ? (

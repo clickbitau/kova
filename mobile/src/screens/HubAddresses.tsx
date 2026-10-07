@@ -55,7 +55,7 @@ export function HubAddresses() {
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2], padding: SP[3], borderTopWidth: 1, borderTopColor: C.hairline }}>
           <TextInput value={text} onChangeText={setText} placeholder="192.168.1.20 or https://…" placeholderTextColor={C.stone2} autoCapitalize="none" autoCorrect={false} keyboardType="url" autoFocus
             onSubmitEditing={() => void add()} accessibilityLabel="New address"
-            style={{ flex: 1, height: 44, paddingHorizontal: SP[3], borderRadius: R.sm + 2, borderWidth: 1, borderColor: C.line, backgroundColor: C.page, color: C.bone, fontFamily: F[500], fontSize: 15 }} />
+            style={{ flex: 1, minWidth: 0, height: 44, paddingHorizontal: SP[3], borderRadius: R.sm + 2, borderWidth: 1, borderColor: C.line, backgroundColor: C.page, color: C.bone, fontFamily: F[500], fontSize: 15 }} />
           {busy ? <Spinner /> : <IconButton icon="check" label="Add" tone="amber" size={40} onPress={() => void add()} />}
         </View>
       ) : (
