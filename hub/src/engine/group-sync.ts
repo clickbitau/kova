@@ -296,6 +296,8 @@ interface Session {
   readings: Map<string, number[]>;
   /** The main part's song as last seen; the song a change is being (or was) watched into; a change under way. */
   refIndex?: number; watched?: number; watching?: boolean; changing?: boolean;
+  /** Drift checks in a row that found the main part no longer playing the group's music. */
+  gone?: number;
 }
 interface SyncTest { snaps: Map<string, PlaybackSnap>; players: string[]; until: number; timer: NodeJS.Timeout | null; cause: Cause }
 
@@ -486,7 +488,9 @@ export class GroupSync extends EventEmitter<{ changed: [] }> {
 
   /** One drift check: every part's place against the reference's, and a correction where one is due. */
   async check(s: Session): Promise<void> {
-    if (s.checking || s.ended || s.live || s.changing) return;
+    if (s.checking || s.ended || s.live) return;
+    // Checked even around a song change: a main part that was taken over may never get to the next song.
+    if (this.takenOver(s) || s.changing) return;
     s.checking = true;
     try {
       const pos = await Promise.all(s.parts.map(p => this.position(p)));
@@ -652,6 +656,29 @@ export class GroupSync extends EventEmitter<{ changed: [] }> {
       this.log(groupId, `${s.parts[i]!.name} moved to ${signed(offs[k] ?? 0)}`);
       await this.seek(s, s.parts[i]!, ref, pos[i]!, offs[k] ?? 0, false);
     }
+  }
+
+  /**
+   * The main part stopped playing the group's music for two checks in a row (another app cast to one of its speakers,
+   * which ends a Cast group, or it was stopped at the speaker): the group's music is over, so the speakers still
+   * playing it stop too, rather than carrying on with the old song on their own.
+   */
+  private takenOver(s: Session): boolean {
+    const ref = s.parts[0];
+    const ds = (ref?.players ?? []).map(id => this.reg.get(id)).filter((d): d is Device => !!d);
+    if (!ds.length || ds.some(d => d.state.on && d.state.media === s.media)) { s.gone = 0; return false; }
+    if ((s.gone = (s.gone ?? 0) + 1) < 2) return false;
+    const rest = s.parts.slice(1).flatMap(p => p.players).map(id => this.reg.get(id))
+      .filter((d): d is Device => !!d && !!d.state.on && d.state.media === s.media);
+    const g = this.group(s.group);
+    this.end(s.group);
+    if (rest.length) {
+      this.log(s.group, `${ref!.name} stopped playing ${s.media} (something else plays there, or it was stopped): stopped ${rest.map(d => d.name).join(', ')} too`);
+      const cause: Cause = { kind: 'system', label: g?.name ?? 'Speaker group', detail: `its music stopped on ${ref!.name}` };
+      for (const d of rest) void this.reg.command(d.id, { on: false }, cause).catch(() => {});
+    }
+    this.emit('changed');
+    return true;
   }
 
   /** Is the group playing as Kova started it (a session with drift checks)? */

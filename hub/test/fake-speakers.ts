@@ -74,6 +74,11 @@ export class FakeSpeakers implements Adapter {
 
   private streamOf(id: string): Stream | undefined { return [...this.streams.values()].find(s => s.ids.includes(id)); }
 
+  /** Another app takes these speakers: their streams stop (a Cast group ends with any member taken), and they say so. */
+  takeOver(ids: string[], media: string | null = null): void {
+    for (const [k, s] of this.streams) if (s.ids.some(x => ids.includes(x))) { this.streams.delete(k); for (const id of s.ids) this.ctx!.report(id, { on: ids.includes(id) && !!media, media: ids.includes(id) ? media : null }); }
+  }
+
   /** Make the stream that plays this speaker run `ms` ahead (+) or behind (−) from now on. */
   drift(id: string, ms: number): void { const s = this.streamOf(id); if (s) s.bias += ms; }
 

@@ -103,6 +103,8 @@ async function fakeHelix(n = 60, o: { modern?: boolean; profile?: string; locked
       if (name.includes('bangla')) return send(200, { kind: 'playlist', id: 'pl1', title: 'Bangla Collection' });
       if (name.includes('loved')) return send(200, { kind: 'loved' });
       if (name.includes('coke studio')) return send(200, { kind: 'artist', id: 'helix:a1', title: 'Coke Studio' });
+      // A misspelt title Helix still finds ("approx").
+      if (name.includes('jannaetein')) return send(200, { kind: 'track', id: lib[2]!.id, title: lib[2]!.title, artist: lib[2]!.artist, approx: true });
       if (name === 'music') return send(200, { kind: 'default' });
       return send(200, { kind: 'none' });
     }
@@ -166,6 +168,11 @@ test('Helix music: four choices on the page, playlists by name, as songs a speak
     const st = (await music.queueFor('Station: Coke Studio'))!;
     assert.ok(st.tracks.some(t => t.artist === 'Arnob') && st.tracks.some(t => t.artist === 'Coke Studio'));
     assert.equal(st.shuffle, true);
+    // It starts with one of the artist's own songs; a station from a song starts with that song, then the mix.
+    assert.equal(st.tracks[0]!.artist, 'Coke Studio');
+    const fromSong = (await music.queueFor('Station: Jannaetein kahan'))!;
+    assert.equal(fromSong.tracks[0]!.title, h.lib[2]!.title);
+    assert.ok(fromSong.tracks.length > 1 && fromSong.tracks.slice(1).every(t => t.title !== h.lib[2]!.title));
     // Not paired with Helix: no music.
     assert.deepEqual(await new HelixMusic(() => undefined).catalog(), []);
   } finally {

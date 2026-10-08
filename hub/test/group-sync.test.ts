@@ -277,6 +277,34 @@ test('drift: a small slip is lined up at the next song (on the shared time); a b
   } finally { await h.close(); }
 });
 
+test('another app casts to one of the Cast group’s speakers: the group’s music is over, so Ray stops too', async () => {
+  const h = await home();
+  try {
+    await h.hub.reg.command('group_whole', { on: true, media: 'Loved' }, { kind: 'user', label: 'You' });
+    await sleep(300);
+    assert.equal(h.hub.reg.get('ray')!.state.media, 'Loved');
+    // A phone app casts something else to the kitchen speaker: the Cast group ends; Ray carries on alone for now.
+    h.fc.takeOver(['kitchen'], 'Something else');
+    assert.equal(h.hub.reg.get('ray')!.state.on, true);
+    await sleep(400);
+    assert.equal(h.hub.reg.get('ray')!.state.on, false, 'Ray stopped');
+    assert.equal(h.hub.reg.get('kitchen')!.state.media, 'Something else', 'what the other app plays is left alone');
+    assert.equal(h.hub.groupSync.session('whole'), undefined);
+    assert.match(h.hub.groupSync.view('whole')!.log.map(l => l.text).join('\n'), /Home speakers stopped playing Loved .*: stopped Ray too/);
+  } finally { await h.close(); }
+});
+
+test('the group’s music carries on while it plays, and paused isn’t stopped', async () => {
+  const h = await home();
+  try {
+    await h.hub.reg.command('group_whole', { on: true, media: 'Loved' }, { kind: 'user', label: 'You' });
+    await h.hub.reg.command('group_whole', { paused: true }, { kind: 'user', label: 'You' });
+    await sleep(600);
+    assert.equal(h.hub.reg.get('ray')!.state.on, true);
+    assert.ok(h.hub.groupSync.session('whole'));
+  } finally { await h.close(); }
+});
+
 test('drift: a speaker that seeks in whole seconds (Sonos) is asked at the moment its second lands right', async () => {
   const h = await home({ seekStepMs: 1000 });
   try {

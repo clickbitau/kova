@@ -325,14 +325,22 @@ export class HelixMusic {
         return this.queue(media, tracks, false, opts.shuffle);
       }
       case 'station': {
-        // Helix's mix leaves out the seed artist; a station is better with some of theirs mixed in.
-        const mix = (await this.get<{ tracks?: HelixTrack[] }>(`/v1/music/mix?kind=${spec.seedKind}&seed=${encodeURIComponent(spec.id)}&limit=100`)).tracks ?? [];
-        const own = spec.seedKind === 'artist'
-          ? (await this.get<{ tracks?: HelixTrack[] }>(`/v1/music/tracks?artist=${encodeURIComponent(spec.id)}&limit=200`).catch(() => ({ tracks: [] }))).tracks ?? []
-          : [];
-        tracks = [...mix, ...shuffled(own, this.o.random).slice(0, Math.ceil(mix.length / 3))];
-        shuffle = true;
-        break;
+        // Helix's mix leaves out the seed artist; a station is better with some of theirs mixed in. It starts with
+        // what it's from: the song itself, or one of the artist's own (a station "from Jannatein Kahan" that opened
+        // with someone else's song sounded like the wrong song).
+        const [mixed, own, seed] = await Promise.all([
+          this.get<{ tracks?: HelixTrack[] }>(`/v1/music/mix?kind=${spec.seedKind}&seed=${encodeURIComponent(spec.id)}&limit=100`).then(r => r.tracks ?? []),
+          spec.seedKind === 'artist'
+            ? this.get<{ tracks?: HelixTrack[] }>(`/v1/music/tracks?artist=${encodeURIComponent(spec.id)}&limit=200`).then(r => r.tracks ?? [], () => [])
+            : Promise.resolve([] as HelixTrack[]),
+          spec.seedKind === 'track'
+            ? this.get<{ tracks?: HelixTrack[] }>(`/v1/music/tracks?ids=${encodeURIComponent(spec.id)}`).then(r => r.tracks ?? [], () => [])
+            : Promise.resolve([] as HelixTrack[]),
+        ]);
+        const theirs = shuffled(own.filter(t => t.hasFile || t.streamable), this.o.random).slice(0, Math.ceil(mixed.length / 3) + 1);
+        const first = seed.length ? seed : theirs.slice(0, 1);
+        const rest = shuffled([...mixed, ...theirs.slice(first === seed ? 0 : 1)], this.o.random);
+        return this.queue(media, [...first, ...rest], false, true);
       }
     }
     return this.queue(media, tracks, shuffle);
