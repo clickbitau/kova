@@ -216,6 +216,9 @@ class StStub {
   async setTvInput(tv: { model?: string }, input: string) { if (this.fail) throw new Error('SmartThings is down'); this.asked.push({ model: tv.model, input }); if (this.ignore > 0) this.ignore--; else this.input = input; return true; }
   power: boolean[] = [];
   async setTvPower(_tv: { model?: string }, on: boolean) { if (this.fail) throw new Error('SmartThings is down'); this.power.push(on); return true; }
+  /** What SmartThings says of the TV's power (undefined: can't say). */
+  on: boolean | undefined = undefined;
+  async tvPower() { return this.on; }
 }
 
 test('Samsung TV: switched off and on through SmartThings when its network remote refuses Kova', { timeout: 15_000 }, async () => {
@@ -260,7 +263,7 @@ test('Samsung TV: a paired TV is switched off by its remote (quicker); SmartThin
     await until('KEY_POWER', () => f.tv.keys.includes('KEY_POWER'));
     assert.deepEqual(st.power, []);
     // The TV later refuses Kova (its access list was reset): SmartThings takes over.
-    f.tv.power = 'on'; await a.poll();
+    f.tv.power = 'on'; await a.poll(); await a.poll();
     for (const c of [...((a as any).tvs.values())]) { c.ws?.close(); c.ws = undefined; }
     f.tv.refuse = true;
     await reg.command('lounge_tv', { on: false }, you);
@@ -314,6 +317,33 @@ test('Samsung TV: a source change the TV took but didn’t act on is checked and
     assert.equal(st.asked.length, 2);
     await until('KEY_HDMI3', () => f.tv.keys.length === 1);
     assert.deepEqual(f.tv.keys, ['KEY_HDMI3']);
+  } finally { await reg.stop(); f.close(); }
+});
+
+test('Samsung TV: a TV in standby that says "on" for a moment by itself is believed only when SmartThings agrees, or on a second reading', { timeout: 15_000 }, async () => {
+  const f = await fakeTv();
+  const reg = new Registry(new Store(':memory:'));
+  const st = new StStub();
+  await reg.addAdapter(st as never);
+  const a = new SamsungTvAdapter(opts(f, mkdtempSync(join(tmpdir(), 'tv-'))));
+  try {
+    f.tv.power = 'standby';
+    await reg.addAdapter(a);
+    assert.equal(reg.get('lounge_tv')!.state.on, false);
+    // Its network wakes in standby and it says "on"; SmartThings says it's off: still off, however long.
+    st.on = false; f.tv.power = 'on';
+    await a.poll(); await a.poll();
+    assert.equal(reg.get('lounge_tv')!.state.on, false);
+    // Back to standby, then really on (SmartThings agrees): on at once.
+    f.tv.power = 'standby'; await a.poll();
+    st.on = true; f.tv.power = 'on'; await a.poll();
+    assert.equal(reg.get('lounge_tv')!.state.on, true);
+    // SmartThings can't say: on from the second reading.
+    f.tv.power = 'standby'; await a.poll();
+    st.on = undefined; f.tv.power = 'on'; await a.poll();
+    assert.equal(reg.get('lounge_tv')!.state.on, false, 'one reading');
+    await a.poll();
+    assert.equal(reg.get('lounge_tv')!.state.on, true, 'two');
   } finally { await reg.stop(); f.close(); }
 });
 

@@ -119,6 +119,11 @@ interface Tv {
   dlna?: string | null;
   /** Woken until then: an input asked for meanwhile waits for the TV to answer. */
   wakingUntil?: number;
+  /** It said "on" by itself (not woken by Kova) while it looked off: when that was, until a second reading or
+   *  SmartThings agrees. A TV in standby wakes its network now and then and says "on" for a few seconds. */
+  claimedOnAt?: number;
+  /** Read at least once since Kova started (the first reading is taken as it is). */
+  read?: boolean;
   /** What the TV calls itself, to find it on SmartThings. */
   name?: string;
   model?: string;
@@ -133,6 +138,8 @@ interface SourceVia {
   tvInput(tv: { name?: string; model?: string }): Promise<string | null | undefined>;
   setTvInput(tv: { name?: string; model?: string }, input: string): Promise<boolean>;
   setTvPower?(tv: { name?: string; model?: string }, on: boolean): Promise<boolean>;
+  /** Whether SmartThings says the TV is on (undefined when it doesn't know it). */
+  tvPower?(tv: { name?: string; model?: string }): Promise<boolean | undefined>;
 }
 
 export class SamsungTvAdapter implements Adapter {
@@ -240,10 +247,21 @@ export class SamsungTvAdapter implements Adapter {
       this.ctx?.report(tv.id, { on: false, online: false });
       return;
     }
-    tv.on = info.on; tv.online = true;
     tv.name = info.name ?? tv.name; tv.model = info.model ?? tv.model;
-    const st: DeviceState = { on: info.on, online: true };
-    if (info.on) {
+    let on = info.on;
+    if (!on) tv.claimedOnAt = undefined;
+    else if (tv.read && !tv.on && !((tv.wakingUntil ?? 0) > Date.now())) {
+      // Off a moment ago and nobody here woke it: believe it once SmartThings agrees, or it says so twice.
+      const said = await this.via(tv)?.tvPower?.(tv).catch(() => undefined);
+      if (said === false) on = false;
+      else if (said === undefined) {
+        if (tv.claimedOnAt == null) { tv.claimedOnAt = Date.now(); on = false; }
+      }
+    }
+    if (on) tv.claimedOnAt = undefined;
+    tv.on = on; tv.online = true; tv.read = true;
+    const st: DeviceState = { on, online: true };
+    if (on) {
       const v = await this.getVolume(tv).catch(() => null);
       if (v != null) { tv.vol = v; st.vol = v; }
       // The source, when SmartThings knows the TV (the network remote can't say).

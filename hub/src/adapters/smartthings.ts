@@ -555,6 +555,15 @@ export class SmartThingsAdapter implements Adapter {
     return t ? (await this.tvStatus(t)).input : undefined;
   }
 
+  /** Whether SmartThings says the TV is on; undefined when it doesn't know this TV or can't say. */
+  async tvPower(tv: { name?: string; model?: string }): Promise<boolean | undefined> {
+    const t = this.tvFor(tv);
+    if (!t) return undefined;
+    const st = await this.api<{ components?: Record<string, Status> }>('GET', `/devices/${encodeURIComponent(t.st)}/status`);
+    const v = st.components?.main?.switch?.switch?.value;
+    return v === 'on' ? true : v === 'off' ? false : undefined;
+  }
+
   /** Switch the TV to a source directly. False when SmartThings doesn't know this TV. */
   async setTvInput(tv: { name?: string; model?: string }, input: string): Promise<boolean> {
     const t = this.tvFor(tv);
