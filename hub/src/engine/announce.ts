@@ -173,6 +173,9 @@ export class Announcer {
     return { list: [...list.values()], out, failed };
   }
 
+  /** Whether this speaker is in an announcement now (an adhan, a doorbell chime). */
+  announcing(id: string): boolean { return this.busy.has(id); }
+
   async run(a: AnnounceAction, run: AnnounceRun): Promise<AnnounceResult> {
     const media = mediaFor(a, run.trigger);
     const name = (id: string) => this.reg.get(id)?.name ?? id;

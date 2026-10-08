@@ -223,6 +223,8 @@ export class HelixLink {
       if (e.patch.on === true && e.prev.on !== true) this.onAt.set(id, now);
       if (e.patch.on === false || e.patch.online === false) { this.onAt.delete(id); this.inputAt.delete(id); }
       if (e.patch.input !== undefined) this.inputAt.set(id, now + 1);
+      if (typeof e.patch.media === 'string' && e.patch.media && e.patch.media !== e.prev.media) this.castBy.set(id, e.cause?.kind ?? 'device');
+      else if (e.patch.media === null || e.patch.on === false) this.castBy.delete(id);
     });
   }
 
@@ -461,6 +463,17 @@ export class HelixLink {
    * A field Kova doesn't know is left out, never guessed; a TV that doesn't answer is off. It comes from what Kova
    * already knows (no device is asked), so it's quick: Helix allows 3 s, its devices view 2 s.
    */
+  /** Who started what each speaker plays: the kind of cause of its last new media. */
+  private castBy = new Map<string, Cause['kind']>();
+
+  /** Whether what Kova plays on this soundbar keeps it from the box: an announcement, or something a person started. */
+  private castingHolds(id: string, casting: Device): boolean {
+    const parts = [id, ...(this.hub.config.get().combined ?? []).filter(c => c.members.includes(id) || `combined_${c.id}` === id).flatMap(c => [`combined_${c.id}`, ...c.members])];
+    if (parts.some(x => this.hub.announcer?.announcing(x))) return true;
+    const by = this.castBy.get(casting.id);
+    return by === 'user' || by === 'assistant';
+  }
+
   /** The part of a soundbar playing something of Kova's over Wi-Fi (an announcement, music through a speaker group), if one is: its other parts, combined with it. */
   private casting(id: string): Device | undefined {
     const parts = (this.hub.config.get().combined ?? []).filter(c => c.members.includes(id) || `combined_${c.id}` === id)
@@ -497,7 +510,13 @@ export class HelixLink {
           // other parts (its Cast side, combined with it) say so. Helix leaves the input alone while it does.
           const casting = this.casting(id);
           state.casting = !!casting;
-          if (casting) state.castingMedia = casting.state.media;
+          if (casting) {
+            state.castingMedia = casting.state.media;
+            // The owner's rule: something a person plays on the box gets the soundbar, except an announcement (the
+            // adhan) or music a person started on Kova. What Kova started by itself (a mode, an automation's music)
+            // gives way: Helix may switch the soundbar to the box then.
+            state.castingYields = !this.castingHolds(id, casting);
+          }
         }
         if (change && Number.isFinite(change.at)) { state.inputChangedAt = Math.round(change.at); state.inputChangedBy = change.by; }
         return [{ id, name: d.name, type: bar ? 'soundbar' : d.type, state }];

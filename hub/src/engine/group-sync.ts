@@ -333,7 +333,7 @@ export class GroupSync extends EventEmitter<{ changed: [] }> {
     this.book = new LatencyBook(store);
     this.now = o.now ?? Date.now;
     reg.setMaxListeners(Math.max(reg.getMaxListeners(), 30));
-    reg.on('change', e => { if (e.patch.on === false || e.patch.online === false) this.offAt.set(e.device.id, this.now()); });
+    reg.on('change', e => { if (e.patch.on === false || e.patch.online === false || typeof e.patch.input === 'string') this.offAt.set(e.device.id, this.now()); });
     // The click track as a one-song queue, so it plays exactly as music does (start delays, offsets, drift checks).
     reg.ownQueues.set(SYNC_TEST_MEDIA, async () => {
       const host = [...this.tests.values()].flatMap(t => t.players).map(id => hostOf(this.reg.get(id)?.address)).find(Boolean);
@@ -696,7 +696,8 @@ export class GroupSync extends EventEmitter<{ changed: [] }> {
 
   /**
    * The group's members that were just turned off or dropped off the network: offline themselves, or another part of
-   * the same combined device (a soundbar's own power, beside its Cast speaker) turned off, in the last minute.
+   * the same combined device (a soundbar's own power, beside its Cast speaker) turned off or switched to another input
+   * than Wi-Fi, in the last minute.
    */
   private dropped(g: SpeakerGroup): string[] {
     const recent = (id: string) => (this.now() - (this.offAt.get(id) ?? -Infinity)) < DROPPED_MS;
@@ -706,7 +707,8 @@ export class GroupSync extends EventEmitter<{ changed: [] }> {
       const d = this.reg.get(player);
       if (d && d.state.online === false && recent(player)) return true;
       const c = combined.find(x => `combined_${x.id}` === m || x.members.includes(player));
-      return !!c && c.members.some(id => id !== player && recent(id) && this.reg.get(id)?.state.on === false);
+      // Its other part turned off, or switched to another input (the box taking the soundbar): it left the group.
+      return !!c && c.members.some(id => { const x = this.reg.get(id); return id !== player && recent(id) && (x?.state.on === false || (typeof x?.state.input === 'string' && x.state.input !== 'wifi')); });
     });
   }
 

@@ -213,6 +213,18 @@ test('Helix link: after pairing Kova tells Helix where it is, a token and which 
     const sb = await bar0();
     assert.ok(sb, 'the soundbar is still told (combined or not)');
     assert.deepEqual([sb.state.casting, sb.state.castingMedia], [true, 'Adhan']);
+    // Something Kova didn't start for a person gives way to the box; music a person started, or an announcement, doesn't.
+    assert.equal(sb.state.castingYields, true);
+    tvs.ctx.report('lounge_bar_cast', { on: false, media: null });
+    await t.hub.reg.command('lounge_bar_cast', { on: true, media: 'Loved' }, { kind: 'user', label: 'You' });
+    assert.equal((await bar0()).state.castingYields, false, 'a person started it');
+    tvs.ctx.report('lounge_bar_cast', { on: false, media: null });
+    await t.hub.reg.command('lounge_bar_cast', { on: true, media: 'Evening music' }, { kind: 'mode', label: 'Evening' });
+    assert.equal((await bar0()).state.castingYields, true, 'a mode started it');
+    (t.hub.announcer as unknown as { busy: Set<string> }).busy.add('lounge_bar_cast');
+    assert.equal((await bar0()).state.castingYields, false, 'an announcement');
+    (t.hub.announcer as unknown as { busy: Set<string> }).busy.delete('lounge_bar_cast');
+    tvs.got.splice(-2);
     tvs.ctx.report('lounge_bar_cast', { on: false, media: null });
     assert.equal((await bar0()).state.casting, false);
     t.hub.config.update(c => { c.combined = (c.combined ?? []).filter(x => x.id !== 'lounge_bar_all'); });
