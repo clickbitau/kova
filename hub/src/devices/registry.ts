@@ -216,12 +216,27 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
   get(id: string): Device | undefined { return this.devices.get(id); }
   list(): Device[] { return [...this.devices.values()]; }
 
+  /**
+   * Whether a device's input was read (or set) since it last came on. A TV wakes on its own input, and an eARC
+   * soundbar follows the TV: the input kept from before it was off is stale, so asking for that same input again
+   * after it came on is still sent (it was skipped as "already there", leaving the TV on the wrong input).
+   */
+  private inputFresh(id: string): boolean { return (this.inputAt.get(id) ?? 0) >= (this.onAt.get(id) ?? 0); }
+  private onAt = new Map<string, number>();
+  private inputAt = new Map<string, number>();
+  private seq = 0;
+  private noteState(d: Device, patch: DeviceState): void {
+    if (patch.on === true && d.state.on !== true) this.onAt.set(d.id, ++this.seq);
+    if (typeof patch.input === 'string' && patch.input) this.inputAt.set(d.id, ++this.seq);
+  }
+
   /** Only the fields of `patch` that would change the device. */
   diff(d: Device, patch: Command): Command {
     const out: Command = {};
     for (const [k, v] of Object.entries(patch)) {
       // A skip or volume step is momentary: always sent, never kept as state.
-      if (k === 'skip' || k === 'volStep' || k === 'zoneSet' || !same((d.state as Record<string, unknown>)[k], v)) (out as Record<string, unknown>)[k] = v;
+      if (k === 'skip' || k === 'volStep' || k === 'zoneSet' || !same((d.state as Record<string, unknown>)[k], v)
+        || (k === 'input' && !this.inputFresh(d.id))) (out as Record<string, unknown>)[k] = v;
     }
     return out;
   }
@@ -252,6 +267,7 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
     }
     // Who changed the input, even where the device can't say which input it's on (a TV's remote API).
     if (typeof patch.input === 'string' && patch.input) this.recordInput(d.id, patch.input, cause, before);
+    this.noteState(d, { ...patch, ...(did ?? {}) } as DeviceState);
     // zoneSet is a change to some zones: what's kept is the zones as the adapter reports them after it.
     const { skip: _skip, volStep: _step, zoneSet: _zones, ...kept } = did ? { ...patch, ...did } : patch;
     // A skip changes the song (which the speaker reports), a step the volume: log it, keep no state for it.
@@ -337,6 +353,7 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
     if (!d) return;
     // It spoke, even if nothing changed (a sensor's "last reported").
     this.emit('seen', d);
+    this.noteState(d, state);
     const patch = this.diff(d, state);
     if (!Object.keys(patch).length) return;
     if (typeof patch.input === 'string' && patch.input) this.inputReadBack(d, patch.input);

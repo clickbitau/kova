@@ -54,6 +54,8 @@ export interface HelixLinkConfig {
 }
 
 export interface Input { id: string; name: string }
+/** A box's screen as Kova follows it (Hub.screens). */
+interface FollowScreen { player: string; tv: string; input?: string; soundbar?: string; soundbarInputs?: string[] }
 export interface HelixScreen {
   playerId: string; tvDeviceId: string; tvName: string; helixInput?: string;
   /** The inputs Helix may switch the TV to. */
@@ -201,6 +203,8 @@ export class HelixLink {
     watchMs?: number;
     /** Interfaces, for tests. */
     nets?: () => ReturnType<typeof os.networkInterfaces>;
+    /** Following the boxes: how long after start their events are only Kova's first look (30 s), and when the soundbar is looked at again (15 s). */
+    settleMs?: number; recheckMs?: number;
   }) {
     const file = join(o.dataDir, 'helix-link.json');
     let t = '';
@@ -222,7 +226,72 @@ export class HelixLink {
   private onAt = new Map<string, number>();
   private inputAt = new Map<string, number>();
 
+  // ------------------------------------------------------------ the TV and soundbar follow the box --
+  //
+  // Kova alone switches each box's TV and soundbar by itself (the owner's choice: Helix doing it too collided with
+  // Kova's music and announcements on the soundbar). From the box's own events on Helix's feed:
+  //  - it starts or carries on playing, or a person wakes it: the TV on and to the box's input; once the TV is up,
+  //    the soundbar on and to the TV's sound (eARC), looked at again a little later (an eARC soundbar can wander);
+  //  - it goes to sleep or shuts down: the TV off if it still shows the box, the soundbar off if it's on the TV's
+  //    sound or the box's adapter.
+  // The soundbar is never touched while Kova plays something on it (casting()), and nothing is switched back later:
+  // an input a person chose stays. A screen set to `follow: false` is left alone.
+
+  /** When follow() started listening: events from Kova's first look at the boxes aren't changes anyone made. */
+  private followFrom = Infinity;
+  private following = new Map<string, NodeJS.Timeout>();
+  private static CAUSE: Cause = { kind: 'system', label: 'Helix box', detail: 'switching for what the box does' };
+
+  private follow(e: { device: Device; type: string; data: Record<string, unknown> }): void {
+    if (e.device.adapter !== 'helix' || Date.now() < this.followFrom) return;
+    const on = /-started$|^resumed$/.test(e.type) || (e.type === 'screen-awake' && !['idle', 'suspend', 'play'].includes(String(e.data.by ?? '')));
+    const off = e.type === 'screen-asleep' || e.type === 'screen-shutdown';
+    if (!on && !off) return;
+    const sc = this.hub.screens?.().find(x => x.player === e.device.id);
+    if (!sc || this.o.helix()?.screens && Object.values(this.o.helix()!.screens!).some(v => v.follow === false && v.tv === sc.tv)) return;
+    const t = this.following.get(e.device.id);
+    if (t) { clearTimeout(t); this.following.delete(e.device.id); }
+    void (on ? this.screenOn(e.device.id, sc) : this.screenOff(sc)).catch(err => console.warn(`[helix-link] ${e.device.name}: ${(err as Error).message}`));
+  }
+
+  private send(id: string, cmd: Command): Promise<void> { return this.hub.reg.command(id, cmd, HelixLink.CAUSE).then(() => {}); }
+
+  private async screenOn(box: string, sc: FollowScreen): Promise<void> {
+    const tv = this.hub.reg.get(sc.tv);
+    if (!tv) return;
+    // An input is only trusted when read since the device came on (it wakes on its own input; the last one is stale).
+    const fresh = (id: string, want: string) => this.hub.reg.get(id)?.state.input === want && (this.inputAt.get(id) ?? 0) > (this.onAt.get(id) ?? Infinity);
+    const tvWasOn = tv.state.on === true;
+    if (!tvWasOn) await this.send(sc.tv, { on: true });
+    if (sc.input && !(tvWasOn && fresh(sc.tv, sc.input))) await this.send(sc.tv, { input: sc.input });
+    if (!sc.soundbar) return;
+    const bar = sc.soundbar, want = sc.soundbarInputs?.[0] ?? 'tv';
+    const soundbar = async () => {
+      const d = this.hub.reg.get(bar);
+      if (!d || this.casting(bar)) return;
+      const wasOn = d.state.on === true;
+      if (!wasOn) await this.send(bar, { on: true });
+      if (!(wasOn && fresh(bar, want))) await this.send(bar, { input: want });
+    };
+    await soundbar();
+    // Once more after the TV has settled (an eARC soundbar follows the TV around as it wakes).
+    const t = setTimeout(() => { this.following.delete(box); void soundbar().catch(() => {}); }, this.o.recheckMs ?? 15_000);
+    t.unref?.();
+    this.following.set(box, t);
+  }
+
+  private async screenOff(sc: FollowScreen): Promise<void> {
+    const tv = this.hub.reg.get(sc.tv);
+    const jobs: Promise<void>[] = [];
+    if (tv?.state.on === true && (!sc.input || !tv.state.input || tv.state.input === sc.input)) jobs.push(this.send(sc.tv, { on: false }));
+    const bar = sc.soundbar ? this.hub.reg.get(sc.soundbar) : undefined;
+    if (bar && bar.state.on === true && !this.casting(bar.id) && (!bar.state.input || (sc.soundbarInputs ?? ['tv', 'hdmi1']).includes(bar.state.input))) jobs.push(this.send(bar.id, { on: false }));
+    await Promise.all(jobs);
+  }
+
   start(): void {
+    this.followFrom = Date.now() + (this.o.settleMs ?? 30_000);
+    this.hub.reg.on('event', e => this.follow(e));
     const soon = () => {
       if (this.timer) clearTimeout(this.timer);
       this.timer = setTimeout(() => { this.timer = null; void this.sync(); }, this.o.debounceMs ?? 2000);
@@ -361,9 +430,18 @@ export class HelixLink {
    * A field Kova doesn't know is left out, never guessed; a TV that doesn't answer is off. It comes from what Kova
    * already knows (no device is asked), so it's quick: Helix allows 3 s, its devices view 2 s.
    */
-  state(): { devices: { id: string; name: string; type: string; state: Record<string, unknown> }[] } {
+  /** The part of a soundbar playing something of Kova's over Wi-Fi (an announcement, music through a speaker group), if one is: its other parts, combined with it. */
+  private casting(id: string): Device | undefined {
+    const parts = (this.hub.config.get().combined ?? []).filter(c => c.members.includes(id) || `combined_${c.id}` === id)
+      .flatMap(c => [`combined_${c.id}`, ...c.members]).filter(x => x !== id);
+    return parts.map(x => this.hub.reg.get(x)).find((x): x is Device => !!x && x.capabilities.includes('media') && !!x.state.on && typeof x.state.media === 'string' && !!x.state.media && !x.state.paused && x.adapter !== 'combined');
+  }
+
+  state(): { screenControl: 'kova'; devices: { id: string; name: string; type: string; state: Record<string, unknown> }[] } {
     const ids = [...new Set(this.screens().flatMap(s => [s.tvDeviceId, ...(s.soundbarDeviceId ? [s.soundbarDeviceId] : [])]))];
     return {
+      // Kova switches each box's TV and soundbar itself (follow()): Helix leaves them alone, but for a person's own buttons.
+      screenControl: 'kova',
       devices: ids.flatMap(id => {
         const d = this.hub.reg.devices.get(id);
         if (!d) return [];
@@ -386,10 +464,7 @@ export class HelixLink {
           if (typeof st.night === 'boolean') state.nightMode = st.night;
           // Playing something of Kova's over Wi-Fi (an announcement, music through a speaker group): this soundbar's
           // other parts (its Cast side, combined with it) say so. Helix leaves the input alone while it does.
-          const cfg = this.hub.config.get();
-          const parts = (cfg.combined ?? []).filter(c => c.members.includes(id) || `combined_${c.id}` === id)
-            .flatMap(c => [`combined_${c.id}`, ...c.members]).filter(x => x !== id);
-          const casting = parts.map(x => this.hub.reg.get(x)).find(x => !!x && x.capabilities.includes('media') && x.state.on && typeof x.state.media === 'string' && x.state.media && !x.state.paused && x.adapter !== 'combined');
+          const casting = this.casting(id);
           state.casting = !!casting;
           if (casting) state.castingMedia = casting.state.media;
         }

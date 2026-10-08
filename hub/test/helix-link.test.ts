@@ -187,7 +187,7 @@ test('Helix link: after pairing Kova tells Helix where it is, a token and which 
     assert.ok(Number.isInteger(at('lounge_tv').inputChangedAt) && Math.abs(at('lounge_tv').inputChangedAt - Date.now()) < 5000, 'Unix ms');
     assert.equal(at('lounge_bar').inputChangedBy, 'Helix remote');
     for (const d of st.devices) delete d.state.inputChangedAt;
-    assert.deepEqual(st, { devices: [
+    assert.deepEqual(st, { screenControl: 'kova', devices: [
       { id: 'lounge_tv', name: 'Lounge TV', type: 'tv', state: { on: true, online: true, inputChangedBy: 'helix-auto' } },
       { id: 'lounge_bar', name: 'Soundbar', type: 'soundbar', state: { on: true, online: true, input: 'hdmi1', volume: 20, muted: true, mode: 'surround', nightMode: true, casting: false, inputChangedBy: 'Helix remote' } },
     ] });
@@ -572,4 +572,65 @@ test('Helix link: a TV-off automation Kova made before gets today’s conditions
     link.stop();
     await t.hub.stop();
   }
+});
+
+test('Helix link: Kova switches the TV and soundbar for what the box does; never the soundbar while Kova plays on it, never a TV showing something else', async () => {
+  const { t, tvs, box, settle, cfg } = await boxOnTv();
+  const link = new HelixLink(t.hub, { helix: () => cfg as never, dataDir: mkdtempSync(join(tmpdir(), 'kova-helix-follow-')), port: () => 8140, debounceMs: 60_000, watchMs: 0, settleMs: 0, recheckMs: 60 });
+  link.start();
+  const ev = (type: string, data: Record<string, unknown> = {}) => box.ctx.event('helix_lounge_box', type, data);
+  const got = () => tvs.got.map(g => `${g.id} ${JSON.stringify(g.cmd)}`);
+  try {
+    // Helix is told Kova does the switching.
+    assert.equal(link.state().screenControl, 'kova');
+    tvs.ctx.report('lounge_tv', { on: false, input: 'tv' });
+    tvs.ctx.report('lounge_bar', { on: false, input: 'hdmi1' });
+    tvs.got.length = 0;
+    // A film starts on the box: the TV on and to the box's input, then the soundbar on and to the TV's sound.
+    ev('video-started', { title: 'Jannat 2' });
+    await settle();
+    assert.deepEqual(got(), ['lounge_tv {"on":true}', 'lounge_tv {"input":"hdmi4"}', 'lounge_bar {"on":true}', 'lounge_bar {"input":"tv"}']);
+    // Looked at again a little later: the soundbar wandered to Wi-Fi meanwhile, so back to the TV's sound.
+    tvs.ctx.report('lounge_tv', { on: true, input: 'hdmi4' });
+    tvs.ctx.report('lounge_bar', { on: true, input: 'wifi' });
+    tvs.got.length = 0;
+    await new Promise(r => setTimeout(r, 120));
+    assert.deepEqual(got(), ['lounge_bar {"input":"tv"}']);
+    tvs.ctx.report('lounge_bar', { input: 'tv' });
+    // The idle timer waking it, or Helix waking it to play, is not a person: nothing (the play itself says).
+    tvs.got.length = 0;
+    ev('screen-awake', { by: 'idle' });
+    await settle();
+    assert.deepEqual(got(), []);
+    // Asleep: both off, while they still show the box.
+    ev('screen-asleep', { by: 'idle', reason: 'sleep' });
+    await settle();
+    assert.deepEqual(got().sort(), ['lounge_bar {"on":false}', 'lounge_tv {"on":false}']);
+    // Kova playing music on the soundbar (its Cast side): the TV still follows the box, the soundbar is left alone.
+    t.hub.config.update(c => { c.combined = [...(c.combined ?? []), { id: 'bar_all', name: 'Soundbar', members: ['lounge_bar', 'lounge_bar_cast'] }]; });
+    tvs.ctx.report('lounge_bar_cast', { on: true, media: 'Station: Jannat 2' });
+    tvs.ctx.report('lounge_tv', { on: false });
+    tvs.got.length = 0;
+    ev('screen-awake', { by: 'remote' });
+    await new Promise(r => setTimeout(r, 120));
+    assert.deepEqual(got(), ['lounge_tv {"on":true}', 'lounge_tv {"input":"hdmi4"}']);
+    tvs.ctx.report('lounge_tv', { on: true, input: 'hdmi4' });
+    tvs.got.length = 0;
+    ev('screen-shutdown', { by: 'remote', reason: 'shutdown' });
+    await settle();
+    assert.deepEqual(got(), ['lounge_tv {"on":false}']);
+    // Someone watching another input on the TV when the box sleeps: the TV is left on.
+    tvs.ctx.report('lounge_bar_cast', { on: false, media: null });
+    tvs.ctx.report('lounge_tv', { on: true, input: 'hdmi2' });
+    tvs.ctx.report('lounge_bar', { on: true, input: 'bluetooth' });
+    tvs.got.length = 0;
+    ev('screen-asleep', { by: 'idle', reason: 'sleep' });
+    await settle();
+    assert.deepEqual(got(), []);
+    // A screen set not to follow: nothing at all.
+    (cfg.screens as Record<string, { follow?: boolean }>)['Lounge box']!.follow = false;
+    ev('video-started', { title: 'Another film' });
+    await settle();
+    assert.deepEqual(got(), []);
+  } finally { link.stop(); await t.hub.stop(); }
 });

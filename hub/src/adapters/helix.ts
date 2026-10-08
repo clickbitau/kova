@@ -58,7 +58,11 @@ export interface HelixOptions {
 }
 
 /** Which TV (and soundbar) a box is on, set by the owner (services/helix-link.ts). */
-export interface HelixScreenSetting { tv?: string; input?: string; soundbar?: string; soundbarInput?: string }
+export interface HelixScreenSetting {
+  tv?: string; input?: string; soundbar?: string; soundbarInput?: string;
+  /** Whether Kova switches this TV and soundbar for what the box does (default true). */
+  follow?: boolean;
+}
 
 /** One entry of Helix's `GET /v1/players`. Only `id` is kept as the box's id. */
 export interface HelixPlayer {
