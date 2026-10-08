@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { lockKind, lockOn, setLockOn, unlock } from '../native/applock';
 import { Platform, View } from 'react-native';
 import * as Device from 'expo-device';
 import { C, R, SP } from '../theme';
@@ -30,6 +31,16 @@ export function ThisPhoneScreen() {
   const [lock, setLock] = useState(liveActivityRunning());
   const canLock = Platform.OS === 'ios';
   const [busy, setBusy] = useState<string | null>(null);
+  // Lock with Face ID (or the fingerprint): what this phone unlocks with, null when it can't.
+  const [appLock, setAppLock] = useState(false);
+  const [lockWith, setLockWith] = useState<string | null>(null);
+  useEffect(() => { void lockOn().then(setAppLock); void lockKind().then(setLockWith); }, []);
+  const toggleAppLock = async (on: boolean) => {
+    // Turning it on or off asks first, so someone holding an unlocked phone can't change it.
+    if (!(await unlock(on ? `Use ${lockWith ?? 'your passcode'} to open Kova` : 'Turn off the app lock'))) return;
+    await setLockOn(on);
+    setAppLock(on);
+  };
   const [confirm, setConfirm] = useState(false);
   // Signed in as one of the home's people (household accounts): this phone is theirs, and that's not a choice here.
   const account = meOf(s);
@@ -157,6 +168,7 @@ export function ThisPhoneScreen() {
       <Group>
         <SwitchRow first icon="notifications" title="Notifications" sub="On this phone" on={push} busy={busy === 'push'} onChange={v => void togglePush(v)} />
         <Row icon="tune" iconFg={C.amber} title="What you’re told about" sub="Each kind, and how often: every time, now and then, or never" onPress={() => nav.navigate('NotifyPrefs')} />
+        {lockWith ? <SwitchRow icon="lock" title={`Lock with ${lockWith.replace(/^your /, '').replace(/^./, c => c.toUpperCase())}`} sub={`Kova asks for ${lockWith} when it opens, and after a minute away`} on={appLock} onChange={v => void toggleAppLock(v)} /> : null}
         {canLock ? <SwitchRow icon="lock" title="Home on the lock screen" sub="The mode, lights on and what’s next, on the lock screen and in the Dynamic Island" on={lock} onChange={v => void toggleLock(v)} /> : null}
       </Group>
 

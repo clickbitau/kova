@@ -2,8 +2,8 @@
   "expo": {
     "name": "Kova",
     "slug": "kova",
-    "version": "0.3.0",
-    "runtimeVersion": "kova-mobile-0.3",
+    "version": "0.4.0",
+    "runtimeVersion": "kova-mobile-0.4",
     "updates": {
       "enabled": true,
       "url": "https://updates.invalid/api/app/manifest",
@@ -71,6 +71,12 @@
     "plugins": [
       "expo-font",
       "expo-secure-store",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Kova uses Face ID only to unlock the app, when you turn on Lock with Face ID."
+        }
+      ],
       [
         "expo-camera",
         {

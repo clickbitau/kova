@@ -49,6 +49,7 @@ import { PrayerTimesScreen } from './src/screens/PrayerTimesScreen';
 import { DeviceSheet } from './src/screens/DeviceSheet';
 import { Button, Empty, Mark, ToastHost } from './src/ui/kit';
 import { NowSkeleton } from './src/screens/NowScreen';
+import { AppLock } from './src/ui/AppLock';
 
 const Stack = createNativeStackNavigator<StackParams>();
 const theme = { ...DarkTheme, colors: { ...DarkTheme.colors, background: C.page, card: C.nav, primary: C.amber, text: C.bone, border: C.hairline } };
@@ -168,7 +169,7 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: C.page }}>
       <SafeAreaProvider>
         <StatusBar style="light" />
-        {fonts ? <HubRoot><Home /></HubRoot> : <View style={{ flex: 1, backgroundColor: C.page }} />}
+        {fonts ? <AppLock><HubRoot><Home /></HubRoot></AppLock> : <View style={{ flex: 1, backgroundColor: C.page }} />}
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

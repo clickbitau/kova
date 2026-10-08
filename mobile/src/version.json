@@ -1,9 +1,13 @@
 {
   "//": "The Kova app's version (docs/VERSIONING.md). store: the X.Y.0 a store binary on this train carries (app.json version). version: what runs, store or over the air (X.Y.Z, PATCH only). train: the native runtime (app.json runtimeVersion). history: newest first; an over-the-air release adds an entry.",
-  "train": "kova-mobile-0.3",
-  "store": "0.3.0",
-  "version": "0.3.1",
+  "train": "kova-mobile-0.4",
+  "store": "0.4.0",
+  "version": "0.4.0",
   "history": [
+    {
+      "version": "0.4.0",
+      "title": "Lock the app with Face ID or fingerprint"
+    },
     {
       "version": "0.3.1",
       "title": "Sign in with a username and password"

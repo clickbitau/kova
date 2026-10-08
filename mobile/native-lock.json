@@ -1,6 +1,6 @@
 {
-  "runtimeVersion": "kova-mobile-0.3",
-  "fingerprint": "864052c91260083fb7a11306e70862bb98a8a84b59e9ce2ae9594de6295606e1",
+  "runtimeVersion": "kova-mobile-0.4",
+  "fingerprint": "45a38aa38829fd53f714087853e29e4c3f6430a2baa42194d5fdf5a9aa2b2511",
   "inputs": {
     "dependency expo": "9b788954798e4a2638457d014c6d74cd64b6acd9108f06a02ee332807fcc92d3",
     "dependency expo-build-properties": "251a9c39f0d96c642bd40a6a7e679207e3da9a1cb3c16b3598d1bafb508e619e",
@@ -11,6 +11,7 @@
     "dependency expo-haptics": "75657e2694c518a3c15388ea3480ac7f8d448c433b59372c22a9de32d8acb6b5",
     "dependency expo-image": "2e7e79d1e5b2bdbcc47ba373878eadedfb26b69b88c3f547d4247aabfc100e1e",
     "dependency expo-linear-gradient": "90505fa78f96c51a74c5aa1308cb1d81c3fbb36a1b99c7bee2c8bd8a0d7d5d20",
+    "dependency expo-local-authentication": "e7ddd64d5dcb2bc2a6d3aac4d40647f79b0f44f7e71c7d2bdfc7d1a304fd9b50",
     "dependency expo-location": "88edfedbb54e09e51d8d259f5e1263af610f564bfdf597a79099da38888a3102",
     "dependency expo-network": "93ea1b39224f938d61d2f1a7bf6d3a7835f56dda139d7cc17e00d36280ac4382",
     "dependency expo-notifications": "1361071af4844b05da5bca65ec3b15be89a9e87a0bcb281ba85f3450df193cc2",
@@ -31,7 +32,7 @@
     "dependency react-native-screens": "6c38f9fa813b59f87363a713f08a7a7a9b51b469c3481f74e8c43f95e260f56a",
     "dependency react-native-svg": "9825fce45f8c0e5b5b761fa00912517d852ee0e114e146311c27363efedb3e36",
     "dependency react-native-webview": "f893ae767276ba6adc6471d60706bccc61e8f7333b2fbfc12b3ad4428322fafe",
-    "app.json native config": "3b9e4d2935d2fc16c54b202627cb6e4bf414508bd9f239ccf6a76ad3150a5fb7",
+    "app.json native config": "16c4dcd2de632ac0baa7f71d626ffcdf80c1e75761107e196ee4d0e384787588",
     "mobile/assets/images/adaptive-icon.png": "e7582e22fd30ae9995069e7cf86c51d0cc0cd35a288430d93e547032ddedff33",
     "mobile/assets/images/icon.png": "26b63da7d28469b92b88b10b9925597012f56e9b2168894e0716ff95ed1d10c5",
     "mobile/assets/images/notification-icon.png": "914bfd0a59ce9ec22cddc608bb8a54b497473427684d0e64fa780b1fbda2239b",
