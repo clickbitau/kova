@@ -787,8 +787,8 @@ document.write('<script src="/api/boot.js'+(t?"?token="+encodeURIComponent(t):""
 </sc-for>
 <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px"><sc-for list="{{ asks }}" as="q" hint-placeholder-count="4"><div onClick="{{ q.ask }}" style="padding:8px 13px;border-radius:999px;background:var(--k-card);border:1px solid rgba(var(--k-fg-rgb),0.08);font-size:13px;font-weight:600;cursor:pointer" style-hover="border-color:rgba(242,177,76,0.5)">{{ q.text }}</div></sc-for></div>
 <div style="display:flex;gap:8px;align-items:center;padding:6px 6px 6px 16px;border-radius:16px;background:var(--k-card);border:1px solid rgba(var(--k-fg-rgb),0.1)">
-<input value="{{ draft }}" onChange="{{ setDraft }}" onKeyDown="{{ draftKey }}" placeholder="Ask or tell Kova anything" style="flex:1;background:transparent;border:none;outline:none;color:var(--k-text);font-family:Manrope,sans-serif;font-size:14px;padding:8px 0">
-<div style="width:40px;height:40px;border-radius:12px;background:rgba(var(--k-fg-rgb),0.06);display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:20px">mic</span></div>
+<input value="{{ draft }}" onChange="{{ setDraft }}" onKeyDown="{{ draftKey }}" placeholder="{{ askPlaceholder }}" style="flex:1;background:transparent;border:none;outline:none;color:var(--k-text);font-family:Manrope,sans-serif;font-size:14px;padding:8px 0">
+<div onClick="{{ voiceLangToggle }}" role="button" title="{{ voiceLangTitle }}" aria-label="{{ voiceLangTitle }}" style="height:40px;padding:0 10px;border-radius:12px;background:rgba(var(--k-fg-rgb),0.06);display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:700;color:var(--k-mute);cursor:pointer;white-space:nowrap">{{ voiceLangLabel }}</div><div onClick="{{ listen }}" role="button" aria-label="{{ micLabel }}" aria-pressed="{{ micOn }}" title="{{ micLabel }}" style="width:40px;height:40px;border-radius:12px;background:{{ micBg }};color:{{ micFg }};display:flex;align-items:center;justify-content:center;cursor:pointer;animation:{{ micAnim }}"><span style="font-family:'Material Symbols Rounded';font-size:20px;font-variation-settings:'FILL' 1">mic</span></div>
 <div onClick="{{ sendDraft }}" style="width:40px;height:40px;border-radius:12px;background:var(--k-amber);color:var(--k-on-amber);display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px">arrow_upward</span></div>
 </div>
 </div>
@@ -1780,7 +1780,24 @@ class Component extends DCLogic {
     if(r.job){this.followAsk(r.job);return}
     this.landAsk(r);
   }
+  // Talking to Ask Kova (the browser's own speech recognition: Chrome, Edge, Safari). English or Bangla, kept per
+  // browser; what's heard fills the box as it's said and goes when you stop; the answer to a spoken question is read out.
+  voiceLang(){try{return localStorage.getItem('kova_voice_lang')||((navigator.language||'').toLowerCase().startsWith('bn')?'bn-BD':'en-AU')}catch(e){return 'en-AU'}}
+  setVoiceLang(l){try{localStorage.setItem('kova_voice_lang',l)}catch(e){}this.setState({voiceLang:l});this.toast(l.startsWith('bn')?'Listening in Bangla':'Listening in English')}
+  listen(){
+    const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+    if(this._rec){this._rec.stop();return}
+    if(!SR){this.toast('This browser can’t listen. Chrome, Edge and Safari can, or type instead.');return}
+    const rec=new SR();rec.lang=this.voiceLang();rec.interimResults=true;rec.continuous=false;rec.maxAlternatives=1;
+    let heard='';this._rec=rec;this.setState({listening:true,draft:''});
+    rec.onresult=e=>{let t='';for(let i=0;i<e.results.length;i++)t+=e.results[i][0].transcript;heard=t;this.setState({draft:t})};
+    rec.onerror=e=>{if(e.error==='not-allowed'||e.error==='service-not-allowed')this.toast('Allow the microphone for this page to talk to Kova');else if(e.error==='no-speech')this.toast('Didn’t hear anything');else if(e.error!=='aborted')this.toast('Couldn’t listen: '+e.error)};
+    rec.onend=()=>{this._rec=null;this.setState({listening:false});const q=heard.trim();if(q){this._speak=rec.lang;this.reply(q)}};
+    try{rec.start()}catch(e){this._rec=null;this.setState({listening:false})}
+  }
+  say(text,lang){try{if(!window.speechSynthesis||!text)return;window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(String(text).replace(/https?:\/\/\S+/g,''));u.lang=/[\u0980-\u09FF]/.test(text)?'bn-BD':lang.startsWith('bn')?'en-AU':lang;window.speechSynthesis.speak(u)}catch(e){}}
   landAsk(r,jobId){
+    if(this._speak){const l=this._speak;this._speak=null;this.say(r.text,l)}
     const acts=(r.actions||[]).map(a=>({label:a.label,run:async()=>{
       if(a.action.type==='screen'){this.setState({screen:a.action.screen});return}
       if(a.action.type==='tune'){this.openGroup(a.action.group);return}
@@ -2244,7 +2261,7 @@ class Component extends DCLogic {
       actFilters,activity,inbox,inboxEmpty:!inbox.length,inboxTitle:inbox.length?`Needs you · ${inbox.length}`:'Needs you',
       askEngine:eng.text,askEngineIcon:eng.icon,askEngineFg:eng.fg,
       askSub:`Knows your ${list.filter(d=>!isSens(d)).length} devices, ${(H.sensors||[]).length} sensors, ${H.rooms.length} rooms and ${H.modes.length} modes`,
-      chat,asks:ASKS.map(text=>({text,ask:()=>this.reply(text)})),draft:s.draft,setDraft:e=>this.setState({draft:e.target.value}),draftKey:e=>{if(e.key==='Enter'&&s.draft.trim())this.reply(s.draft.trim())},sendDraft:()=>{if(s.draft.trim())this.reply(s.draft.trim())},
+      chat,asks:ASKS.map(text=>({text,ask:()=>this.reply(text)})),draft:s.draft,setDraft:e=>this.setState({draft:e.target.value}),askPlaceholder:s.listening?'Listening…':'Ask or tell Kova anything',listen:()=>this.listen(),micOn:String(!!s.listening),micLabel:s.listening?'Stop listening':'Talk to Kova',micBg:s.listening?'var(--k-red)':'rgba(var(--k-fg-rgb),0.06)',micFg:s.listening?'#fff':'var(--k-text)',micAnim:s.listening?'kovaPulse 1.2s ease-in-out infinite':'none',voiceLangLabel:(s.voiceLang||this.voiceLang()).startsWith('bn')?'বাং':'EN',voiceLangTitle:(s.voiceLang||this.voiceLang()).startsWith('bn')?'Listening in Bangla: tap for English':'Listening in English: tap for Bangla',voiceLangToggle:()=>this.setVoiceLang((s.voiceLang||this.voiceLang()).startsWith('bn')?'en-AU':'bn-BD'),draftKey:e=>{if(e.key==='Enter'&&s.draft.trim())this.reply(s.draft.trim())},sendDraft:()=>{if(s.draft.trim())this.reply(s.draft.trim())},
       iq:s.iq,setIq:e=>this.setState({iq:e.target.value}),integFilters:IF.map(f=>({label:f,pick:()=>this.setState({intF:f}),bg:s.intF===f?'var(--k-text)':'var(--k-card)',fg:s.intF===f?'var(--k-side)':'var(--k-text2)'})),integrations,integCount:`${INTEG.length} connected`,goIntegrations:go('integrations'),...this.igVals(s,H)};
   }
 

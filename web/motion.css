@@ -67,3 +67,7 @@ main > [style*="radial-gradient"] { animation: k-fade 0.4s var(--k-out); }
 /* Work under way with no known end (Settings → Software update while Kova updates). */
 @keyframes kovaSlide { 0% { left: -35%; } 100% { left: 100%; } }
 @media (prefers-reduced-motion: reduce) { .kova-indeterminate { animation: none !important; left: 0 !important; width: 100% !important; opacity: 0.6; } }
+
+/* The microphone while Ask Kova listens. */
+@keyframes kovaPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 107, 94, 0.45); } 50% { box-shadow: 0 0 0 8px rgba(255, 107, 94, 0); } }
+@media (prefers-reduced-motion: reduce) { [aria-pressed="true"] { animation: none !important; } }
