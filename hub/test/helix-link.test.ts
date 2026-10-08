@@ -187,7 +187,7 @@ test('Helix link: after pairing Kova tells Helix where it is, a token and which 
     assert.ok(Number.isInteger(at('lounge_tv').inputChangedAt) && Math.abs(at('lounge_tv').inputChangedAt - Date.now()) < 5000, 'Unix ms');
     assert.equal(at('lounge_bar').inputChangedBy, 'Helix remote');
     for (const d of st.devices) delete d.state.inputChangedAt;
-    assert.deepEqual(st, { screenControl: 'kova', devices: [
+    assert.deepEqual(st, { devices: [
       { id: 'lounge_tv', name: 'Lounge TV', type: 'tv', state: { on: true, online: true, inputChangedBy: 'helix-auto' } },
       { id: 'lounge_bar', name: 'Soundbar', type: 'soundbar', state: { on: true, online: true, input: 'hdmi1', volume: 20, muted: true, mode: 'surround', nightMode: true, casting: false, inputChangedBy: 'Helix remote' } },
     ] });
@@ -574,8 +574,17 @@ test('Helix link: a TV-off automation Kova made before gets today’s conditions
   }
 });
 
-test('Helix link: Kova switches the TV and soundbar for what the box does; never the soundbar while Kova plays on it, never a TV showing something else', async () => {
+test('Helix link: Helix switches the TV and soundbar by default; set to Kova, Kova switches them for what the box does; never the soundbar while Kova plays on it, never a TV showing something else', async () => {
   const { t, tvs, box, settle, cfg } = await boxOnTv();
+  // Helix does the switching unless the owner chose Kova.
+  const helixOwns = new HelixLink(t.hub, { helix: () => cfg as never, dataDir: mkdtempSync(join(tmpdir(), 'kova-helix-own-')), port: () => 8140, debounceMs: 60_000, watchMs: 0, settleMs: 0 });
+  helixOwns.start();
+  assert.equal(helixOwns.state().screenControl, undefined);
+  box.ctx.event('helix_lounge_box', 'video-started', { title: 'Jannat 2' });
+  await settle();
+  assert.deepEqual(tvs.got, [], 'Kova leaves the TV and soundbar to Helix');
+  helixOwns.stop();
+  cfg.kovaSwitches = true;
   const link = new HelixLink(t.hub, { helix: () => cfg as never, dataDir: mkdtempSync(join(tmpdir(), 'kova-helix-follow-')), port: () => 8140, debounceMs: 60_000, watchMs: 0, settleMs: 0, recheckMs: 60 });
   link.start();
   const ev = (type: string, data: Record<string, unknown> = {}) => box.ctx.event('helix_lounge_box', type, data);

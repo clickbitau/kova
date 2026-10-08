@@ -51,6 +51,8 @@ export interface HelixLinkConfig {
    * read once, when that rule is carried over (engine/automation-ideas.ts carryOverTvOff): "off" means it isn't.
    */
   tvOffWithBox?: boolean | 'on' | 'off';
+  /** Kova, not Helix, switches the boxes' TVs and soundbars for what they do (default false: Helix does). */
+  kovaSwitches?: boolean;
 }
 
 export interface Input { id: string; name: string }
@@ -230,8 +232,9 @@ export class HelixLink {
 
   // ------------------------------------------------------------ the TV and soundbar follow the box --
   //
-  // Kova alone switches each box's TV and soundbar by itself (the owner's choice: Helix doing it too collided with
-  // Kova's music and announcements on the soundbar). From the box's own events on Helix's feed:
+  // Helix switches each box's TV and soundbar (the owner's choice), leaving the soundbar alone while Kova plays on it
+  // (state().casting). Only with `kovaSwitches: true` in the Helix settings does Kova do it instead, and tell Helix so
+  // (screenControl): never both. Then, from the box's own events on Helix's feed:
   //  - it starts or carries on playing, or a person wakes it: the TV on and to the box's input; once the TV is up,
   //    the soundbar on and to the TV's sound (eARC), looked at again a little later (an eARC soundbar can wander);
   //  - it goes to sleep or shuts down: the TV off if it still shows the box, the soundbar off if it's on the TV's
@@ -242,10 +245,11 @@ export class HelixLink {
   /** When follow() started listening: events from Kova's first look at the boxes aren't changes anyone made. */
   private followFrom = Infinity;
   private following = new Map<string, NodeJS.Timeout>();
+  private onEvent = (e: { device: Device; type: string; data: Record<string, unknown> }) => this.follow(e);
   private static CAUSE: Cause = { kind: 'system', label: 'Helix box', detail: 'switching for what the box does' };
 
   private follow(e: { device: Device; type: string; data: Record<string, unknown> }): void {
-    if (e.device.adapter !== 'helix' || Date.now() < this.followFrom) return;
+    if (e.device.adapter !== 'helix' || Date.now() < this.followFrom || this.o.helix()?.kovaSwitches !== true) return;
     const on = /-started$|^resumed$/.test(e.type) || (e.type === 'screen-awake' && !['idle', 'suspend', 'play'].includes(String(e.data.by ?? '')));
     const off = e.type === 'screen-asleep' || e.type === 'screen-shutdown';
     if (!on && !off) return;
@@ -293,7 +297,7 @@ export class HelixLink {
 
   start(): void {
     this.followFrom = Date.now() + (this.o.settleMs ?? 30_000);
-    this.hub.reg.on('event', e => this.follow(e));
+    this.hub.reg.on('event', this.onEvent);
     const soon = () => {
       if (this.timer) clearTimeout(this.timer);
       this.timer = setTimeout(() => { this.timer = null; void this.sync(); }, this.o.debounceMs ?? 2000);
@@ -308,6 +312,9 @@ export class HelixLink {
   }
 
   stop(): void {
+    this.hub.reg.off('event', this.onEvent);
+    for (const t of this.following.values()) clearTimeout(t);
+    this.following.clear();
     if (this.timer) clearTimeout(this.timer);
     if (this.watch) clearInterval(this.watch);
     this.timer = null;
@@ -441,11 +448,11 @@ export class HelixLink {
     return parts.map(x => this.hub.reg.get(x)).find((x): x is Device => !!x && x.capabilities.includes('media') && !!x.state.on && typeof x.state.media === 'string' && !!x.state.media && !x.state.paused && x.adapter !== 'combined');
   }
 
-  state(): { screenControl: 'kova'; devices: { id: string; name: string; type: string; state: Record<string, unknown> }[] } {
+  state(): { screenControl?: 'kova'; devices: { id: string; name: string; type: string; state: Record<string, unknown> }[] } {
     const ids = [...new Set(this.screens().flatMap(s => [s.tvDeviceId, ...(s.soundbarDeviceId ? [s.soundbarDeviceId] : [])]))];
     return {
-      // Kova switches each box's TV and soundbar itself (follow()): Helix leaves them alone, but for a person's own buttons.
-      screenControl: 'kova',
+      // Only when Kova switches each box's TV and soundbar itself (follow()): Helix then leaves them alone, but for a person's own buttons.
+      ...(this.o.helix()?.kovaSwitches === true ? { screenControl: 'kova' as const } : {}),
       devices: ids.flatMap(id => {
         const d = this.hub.reg.devices.get(id);
         if (!d) return [];
