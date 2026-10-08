@@ -194,8 +194,16 @@ export class HelixMusic {
    * end mixed into its start), signed for a speaker. A Helix that can't loop gives the song itself (the speaker
    * repeats it, with a seam). A first render may answer 202 {retryAfterMs}: waited for, a few times.
    */
-  async loopUrl(id: string): Promise<string> {
-    const hit = this.loops.get(id);
+  /** Whether Helix makes seamless loops itself (play-url `loop`): it then makes them from the original file. */
+  private loopFlag = false;
+  offersLoops(): boolean { return this.loopFlag; }
+
+  /** The song itself, signed for a speaker (what Kova makes its own seamless loop from). */
+  songUrl(id: string): Promise<string> { return this.loopUrl(id, false); }
+
+  async loopUrl(id: string, helixLoop = true): Promise<string> {
+    const ck = `${helixLoop ? 'loop' : 'song'}:${id}`;
+    const hit = this.loops.get(ck);
     if (hit && hit.until > this.now) return hit.url;
     const h = this.linked();
     if (!h) throw new Error('Pair Kova with Helix first');
@@ -213,9 +221,9 @@ export class HelixMusic {
       throw new Error('Helix is still preparing the sound. Try again in a moment.');
     };
     let got: { url: string; until: number };
-    try { got = await ask(true); }
-    catch (e) { if (e instanceof LanHttpError && e.status === 400) got = await ask(false); else throw e; }
-    this.loops.set(id, got);
+    try { got = await ask(helixLoop); }
+    catch (e) { if (helixLoop && e instanceof LanHttpError && e.status === 400) got = await ask(false); else throw e; }
+    this.loops.set(ck, got);
     return got.url;
   }
 
@@ -238,6 +246,8 @@ export class HelixMusic {
     if (force || this.now - this.listedAt > 5 * 60_000) {
       const f = await helixFeatures(h.url, h.token, h.profile);
       this.musicOn = f && typeof f.music === 'boolean' ? f.music : null;
+      // Helix's flag for play-url `loop` (until it names it: off, and Kova makes the loops).
+      this.loopFlag = !!(f as { playUrlLoop?: boolean; playUrl?: { loop?: boolean } } | null)?.playUrl?.loop || !!(f as { playUrlLoop?: boolean } | null)?.playUrlLoop;
       try {
         this.playlists = ((await this.get<{ playlists?: Playlist[] }>('/v1/playlists?kind=music')).playlists ?? []).filter(p => !p.kind || p.kind === 'music');
         this.listedAt = this.now;

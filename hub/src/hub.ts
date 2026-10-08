@@ -12,7 +12,7 @@ import type { Adapter } from './adapters/sdk.ts';
 import { SpeakerGroupsAdapter } from './adapters/groups.ts';
 import { GroupSync, type GroupSyncOptions } from './engine/group-sync.ts';
 import { CombinedAdapter } from './adapters/combined.ts';
-import type { HomeConfig } from './model/types.ts';
+import type { HomeConfig, MediaSource } from './model/types.ts';
 import type { Weather } from './services/weather.ts';
 import { Energy } from './services/energy.ts';
 import { PlayCounter, type HelixMusic } from './services/helix-music.ts';
@@ -22,6 +22,7 @@ import { suggestZoneRooms } from './util/zones.ts';
 import { Maps, type MapsOptions } from './services/maps.ts';
 import { RoomClimate, outsideFrom } from './engine/room-climate.ts';
 import { join } from 'node:path';
+import { Loops } from './services/loops.ts';
 import { Clips } from './services/clips.ts';
 import { Adhans, builtinAdhan } from './services/adhans.ts';
 import { Announcer, CHIME_MEDIA } from './engine/announce.ts';
@@ -97,6 +98,8 @@ export class Hub extends EventEmitter<{ changed: [] }> {
   updates: Updates | null = null;
   /** Audio clips kept on the hub for announcements (services/clips.ts). */
   readonly clips: Clips;
+  /** Seamless loops of sounds that repeat (services/loops.ts). */
+  readonly loops: Loops;
   /** The call-to-prayer recordings from Wikimedia Commons, downloaded on first use (services/adhans.ts). */
   readonly adhans: Adhans;
   /** Announcements over the speakers (engine/announce.ts). */
@@ -138,12 +141,13 @@ export class Hub extends EventEmitter<{ changed: [] }> {
     migratePrayer(this.config);
     this.reg = new Registry(this.store, name => {
       const s = this.config.get().sources.find(x => x.name === name);
-      // A Helix song as the sound: from the hub, which fetches Helix's looping version (api/sound).
-      if (s?.helix) { const base = this.lanBase(); return base ? `${base}/api/sound/${encodeURIComponent(s.name)}.aac` : undefined; }
+      // A sound that repeats (or a Helix song): from the hub, which serves it as a seamless loop (api/sound).
+      if (s && this.viaHub(s)) { const base = this.lanBase(); return base ? `${base}/api/sound/${encodeURIComponent(s.name)}.m4a` : s.url; }
       return s?.url;
     }, () => this.config.get().devices ?? {});
     this.reg.sourceLoops = name => { const s = this.config.get().sources.find(x => x.name === name); return !!(s?.loop || s?.helix); };
     this.config.on('changed', () => this.reg.reapplySettings());
+    this.config.on('changed', () => this.prepareLoops());
     this.groups = new SpeakerGroupsAdapter(this.reg, () => this.config.get().speakerGroups ?? []);
     this.config.on('changed', () => this.groups.sync());
     this.groupSync = new GroupSync(this.reg, this.config, this.store, { base: host => this.lanBase(host), ...opts.groupSync });
@@ -155,6 +159,7 @@ export class Hub extends EventEmitter<{ changed: [] }> {
     this.engine = new Engine(this.store, this.reg, this.config, opts.now);
     const clipDir = opts.dataDir ? join(opts.dataDir, 'clips') : null;
     this.clips = new Clips(clipDir);
+    this.loops = new Loops(opts.dataDir ? join(opts.dataDir, 'loops') : null);
     this.adhans = new Adhans(clipDir, { fetch: opts.fetch });
     this.announcer = new Announcer(this.reg, this.config, { clips: this.clips, adhans: this.adhans, base: host => this.lanBase(host), now: () => this.engine.now() });
     this.engine.automations.announcer = this.announcer;
@@ -229,12 +234,46 @@ export class Hub extends EventEmitter<{ changed: [] }> {
     })));
   }
 
+  /** Whether speakers get this sound from the hub: a Helix song, or a recording that repeats when the hub makes loops. */
+  viaHub(s: MediaSource): boolean { return !!s.helix || (!!s.loop && !!s.url && !!this.loops?.available()); }
+
+  /**
+   * Make the seamless loop of every sound that repeats, one at a time, ahead of when it plays (an hour of it takes a
+   * minute or two); drop loops no sound uses any more.
+   */
+  private loopsTimer: NodeJS.Timeout | null = null;
+  prepareLoops(): void {
+    // (Config can change while the hub is still being put together.)
+    if (!this.loops?.available()) return;
+    if (this.loopsTimer) clearTimeout(this.loopsTimer);
+    this.loopsTimer = setTimeout(() => {
+      this.loopsTimer = null;
+      void (async () => {
+        const keep = new Set<string>();
+        for (const s of this.config.get().sources) {
+          if (!this.viaHub(s)) continue;
+          const stable = s.helix?.id ?? s.url!;
+          const key = this.loops.key(stable);
+          keep.add(key);
+          if (this.loops.ready(key) || this.loops.problem(key)) continue;
+          try {
+            const input = s.helix ? await this.music?.songUrl(s.helix.id) : s.url;
+            if (input) await this.loops.make(input, stable);
+          } catch (e) { console.warn(`[loops] ${s.name}: ${(e as Error).message}`); }
+        }
+        this.loops.prune(keep);
+      })();
+    }, 5000);
+    this.loopsTimer.unref?.();
+  }
+
   async start(): Promise<void> {
     for (const a of this.opts.adapters) await this.reg.addAdapter(a);
     // Speaker groups come after the speakers they group.
     await this.reg.addAdapter(this.groups);
     // Combined devices too: they're made of devices other integrations announce.
     await this.reg.addAdapter(this.combined);
+    this.prepareLoops();
     this.engine.start(this.opts.tickMs ?? 1000);
     this.security.start();
     this.energy.start(this.opts.energyMs ?? (this.opts.tickMs === 0 ? 0 : 60_000));

@@ -6,6 +6,9 @@ ENV NODE_ENV=production \
     KOVA_DATA=/data \
     KOVA_PORT=8140
 
+# ffmpeg: seamless loops of sounds that repeat (hub/src/services/loops.ts).
+RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY hub/package.json hub/

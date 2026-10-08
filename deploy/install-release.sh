@@ -55,6 +55,12 @@ else
   (cd "$stage" && npm ci --omit=dev -w hub --include-workspace-root --no-audit --no-fund)
 fi
 chown -R root:root "$stage"
+# ffmpeg makes seamless loops of sounds that repeat (hub/src/services/loops.ts): added once, where the box has apt.
+# Without it Kova still works; sounds repeat as they are.
+if ! command -v ffmpeg >/dev/null && command -v apt-get >/dev/null; then
+  log "Adding ffmpeg (for seamless sound loops)"
+  (DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends ffmpeg >/dev/null 2>&1 || { apt-get update -qq >/dev/null 2>&1 && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends ffmpeg >/dev/null 2>&1; }) || echo "Couldn't add ffmpeg; sounds repeat without a crossfade." >&2
+fi
 if [[ "$prev" == "releases/$version" ]]; then die "Kova $version is the one running"; fi
 rm -rf "$dest"; mv "$stage" "$dest"
 

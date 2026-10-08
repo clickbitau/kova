@@ -92,6 +92,8 @@ fi
 log "Installing base packages"
 run apt-get update -qq
 run env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ca-certificates curl gnupg git build-essential python3
+# ffmpeg: seamless loops of sounds that repeat (hub/src/services/loops.ts).
+run env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends ffmpeg
 
 # -------------------------------------------------------------------- node --
 # Kova needs Node 22.13 or later on the 22 line (node:sqlite).

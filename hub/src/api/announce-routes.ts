@@ -1,6 +1,7 @@
+import { createReadStream, statSync } from 'node:fs';
 import http from 'node:http';
 import https from 'node:https';
-import type { FastifyInstance, FastifyReply } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Readable } from 'node:stream';
 import type { Hub } from '../hub.ts';
 import { ClipError, Clips, MAX_CLIP_BYTES } from '../services/clips.ts';
@@ -79,27 +80,23 @@ export function registerAnnounceRoutes(app: FastifyInstance, hub: Hub, port: () 
   });
 
   // What speakers fetch: no token (they can't send one). A clip's random id is its key; the recordings and the chime are public.
-  // A Helix song as a sound (Media → Sounds), for speakers (no key: they can't send one): Helix's looping version,
-  // fetched for them, ranges and all. Only sounds the home has set up this way.
+  // A sound that repeats, for speakers (no key: they can't send one): its seamless loop (services/loops.ts), or
+  // Helix's when Helix makes them; until the loop is made, the sound itself (the speaker repeats it). Only sounds the
+  // home has set up this way.
   app.get<{ Params: { file: string } }>('/api/sound/:file', async (req, reply) => {
-    const name = decodeURIComponent(req.params.file).replace(/\.aac$/, '');
-    const src = hub.config.get().sources.find(x => x.name === name && x.helix);
-    if (!src?.helix || !hub.music) return reply.code(404).send({ error: 'No such sound' });
-    let url: string;
-    try { url = await hub.music.loopUrl(src.helix.id); } catch (e) { return reply.code(502).send({ error: (e as Error).message }); }
-    const u = new URL(url);
+    const name = decodeURIComponent(req.params.file).replace(/\.(m4a|aac)$/, '');
+    const src = hub.config.get().sources.find(x => x.name === name && hub.viaHub(x));
+    if (!src) return reply.code(404).send({ error: 'No such sound' });
     const range = typeof req.headers.range === 'string' ? req.headers.range : undefined;
-    return new Promise<void>(done => {
-      const up = (u.protocol === 'https:' ? https : http).get(u, { headers: range ? { range } : {} }, res => {
-        const pass: Record<string, string> = {};
-        for (const h of ['content-type', 'content-length', 'content-range', 'accept-ranges', 'last-modified', 'etag']) { const v = res.headers[h]; if (typeof v === 'string') pass[h] = v; }
-        reply.code(res.statusCode ?? 502).headers({ ...pass, 'cache-control': 'no-store' });
-        void reply.send(res);
-        res.on('end', () => done()).on('error', () => done());
-      });
-      up.on('error', e => { if (!reply.sent) void reply.code(502).send({ error: e.message }); done(); });
-      req.raw.on('close', () => up.destroy());
-    });
+    try {
+      if (src.helix && hub.music?.offersLoops()) return await proxy(await hub.music.loopUrl(src.helix.id), range, req, reply);
+      const stable = src.helix?.id ?? src.url!;
+      const made = hub.loops.ready(hub.loops.key(stable));
+      if (made) return await sendFile(made, 'audio/mp4', range, reply);
+      const input = src.helix ? await hub.music!.songUrl(src.helix.id) : src.url!;
+      if (hub.loops.available() && !hub.loops.problem(hub.loops.key(stable))) void hub.loops.make(input, stable).catch(e => console.warn(`[loops] ${src.name}: ${(e as Error).message}`));
+      return await proxy(input, range, req, reply);
+    } catch (e) { if (!reply.sent) return reply.code(502).send({ error: (e as Error).message }); }
   });
 
   app.get<{ Params: { file: string } }>('/api/clip/:file', async (req, reply) => {
@@ -146,4 +143,37 @@ export function registerAnnounceRoutes(app: FastifyInstance, hub: Hub, port: () 
   });
   // The recordings Kova offers, with their credits, whether downloaded yet.
   app.get('/api/adhans', async () => ({ adhans: BUILTIN_ADHANS.map(a => ({ ...a, ready: hub.adhans.ready(a) })) }));
+}
+
+/** Fetch a URL for a speaker, its range and the headers that matter passed along. */
+function proxy(url: string, range: string | undefined, req: FastifyRequest, reply: FastifyReply): Promise<void> {
+  const u = new URL(url);
+  return new Promise<void>(done => {
+    const up = (u.protocol === 'https:' ? https : http).get(u, { headers: range ? { range } : {} }, res => {
+      // A redirect (a stream host's CDN): followed once.
+      if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) { res.resume(); void proxy(new URL(res.headers.location, u).toString(), range, req, reply).then(done); return; }
+      const pass: Record<string, string> = {};
+      for (const h of ['content-type', 'content-length', 'content-range', 'accept-ranges', 'last-modified', 'etag']) { const v = res.headers[h]; if (typeof v === 'string') pass[h] = v; }
+      reply.code(res.statusCode ?? 502).headers({ ...pass, 'cache-control': 'no-store' });
+      void reply.send(res);
+      res.on('end', () => done()).on('error', () => done());
+    });
+    up.on('error', e => { if (!reply.sent) void reply.code(502).send({ error: e.message }); done(); });
+    req.raw.on('close', () => up.destroy());
+  });
+}
+
+/** A file on the hub, with ranges (speakers ask for them). */
+async function sendFile(path: string, type: string, range: string | undefined, reply: FastifyReply): Promise<void> {
+  const size = statSync(path).size;
+  reply.header('accept-ranges', 'bytes').header('cache-control', 'no-store').type(type);
+  const m = /^bytes=(\d*)-(\d*)$/.exec(range ?? '');
+  if (m && (m[1] || m[2])) {
+    const start = m[1] ? Number(m[1]) : Math.max(0, size - Number(m[2]));
+    const end = Math.min(m[1] && m[2] ? Number(m[2]) : size - 1, size - 1);
+    if (start > end || start >= size) { await reply.code(416).header('content-range', `bytes */${size}`).send(); return; }
+    await reply.code(206).header('content-range', `bytes ${start}-${end}/${size}`).header('content-length', String(end - start + 1)).send(createReadStream(path, { start, end }));
+    return;
+  }
+  await reply.header('content-length', String(size)).send(createReadStream(path));
 }
