@@ -201,11 +201,12 @@ export class HelixMusic {
   private loopFlag = false;
   offersLoops(): boolean { return this.loopFlag; }
 
-  /** The song itself, signed for a speaker (what Kova makes its own seamless loop from). */
+  /** The song's original file, signed (what Kova makes its own seamless loop from: lossless where Helix has it). */
   songUrl(id: string): Promise<string> { return this.loopUrl(id, false); }
 
   async loopUrl(id: string, helixLoop = true): Promise<string> {
     const ck = `${helixLoop ? 'loop' : 'song'}:${id}`;
+    const format = helixLoop ? 'aac' : 'flac';
     const hit = this.loops.get(ck);
     if (hit && hit.until > this.now) return hit.url;
     const h = this.linked();
@@ -214,7 +215,7 @@ export class HelixMusic {
       for (let i = 0; i < 4; i++) {
         const r = await lanJson<{ url?: string; path?: string; expiresAt?: number; retryAfterMs?: number; loop?: unknown }>(`${h.url}/v1/items/${encodeURIComponent(id.replace(/^helix:/, ''))}/play-url`, {
           method: 'POST', token: h.token, headers: helixHeaders(h.profile), timeoutMs: 20_000,
-          body: { format: 'aac', ttl: SIGNED_TTL_S, profile: h.profile, ...(loop ? { loop: { crossfadeMs: LOOP_CROSSFADE_MS, minutes: 60 } } : {}) },
+          body: { format: loop ? format : 'flac', ttl: SIGNED_TTL_S, profile: h.profile, ...(loop ? { loop: { crossfadeMs: LOOP_CROSSFADE_MS, minutes: 60 } } : {}) },
         });
         if (r.status === 202 || (!r.json?.url && !r.json?.path && r.json?.retryAfterMs)) { await new Promise(res => setTimeout(res, Math.min(10_000, Math.max(500, r.json?.retryAfterMs ?? 2000)))); continue; }
         const url = r.json?.url ?? (r.json?.path ? `${h.url}${r.json.path}` : undefined);
