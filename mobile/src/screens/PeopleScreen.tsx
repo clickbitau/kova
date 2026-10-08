@@ -15,7 +15,7 @@ import { T } from '../ui/Text';
 import { SheetHead, TextField } from './SpeakerGroupSheet';
 
 interface SessionView { id: string; name: string; created: number; lastSeen: number; current?: boolean; personId?: string }
-interface MemberView { personId: string; name: string; role: Role; roleLabel: string; rooms?: string[]; devices?: string[]; until?: number; room?: string; expired: boolean; lastSeen: number | null; sessions: SessionView[] }
+interface MemberView { personId: string; name: string; role: Role; roleLabel: string; rooms?: string[]; devices?: string[]; until?: number; room?: string; expired: boolean; lastSeen: number | null; sessions: SessionView[]; user?: string | null }
 interface InviteView { id: string; role: Role; roleLabel: string; personId?: string; name?: string; rooms?: string[]; until?: number; created: number; expires: number; expired: boolean }
 interface Members { members: MemberView[]; others: { personId: string; name: string }[]; invites: InviteView[]; ownerKeys: SessionView[] }
 interface Made { invite: InviteView; code: string; link: string; appLink: string; qrSvg: string }
@@ -169,6 +169,12 @@ function MemberSheet({ m, onClose, onChanged, self }: { m: MemberView | null; on
         <T v="footnote" color={C.stone2}>What “my room” means when they ask Kova.</T>
       </Section>
       <Button full kind={changed ? 'primary' : 'secondary'} icon="check" label="Save" onPress={changed ? save : undefined} />
+      {self ? null : (
+        <Section title="Sign-in" caption gap={SP[2]}>
+          <T v="footnote" color={C.stone}>{m.user ? `${m.name} signs in as ${m.user}. Set a new password to reset it.` : `Give ${m.name} a username and password to sign in on any phone or browser.`}</T>
+          <LoginFields user={m.user ?? null} personId={m.personId} name={m.name} onDone={onChanged} />
+        </Section>
+      )}
       <Section title={`Their devices · ${m.sessions.length}`} caption gap={SP[2]}>
         {m.sessions.length ? (
           <Group>
@@ -185,6 +191,37 @@ function MemberSheet({ m, onClose, onChanged, self }: { m: MemberView | null; on
         </View>
       )}
     </Sheet>
+  );
+}
+
+/**
+ * A username and password, to sign in on any phone or browser. `personId`: the owner setting someone else's (no
+ * current password needed); without it, your own.
+ */
+function LoginFields({ user, personId, name, onDone }: { user: string | null; personId?: string; name?: string; onDone: () => void }) {
+  const { api, say } = useHub();
+  const [u, setU] = useState(user ?? '');
+  const [pw, setPw] = useState('');
+  const [cur, setCur] = useState('');
+  useEffect(() => { setU(user ?? ''); setPw(''); setCur(''); }, [user, personId]);
+  const own = !personId;
+  const changing = !!user && !!pw && own;
+  const ready = u.trim().length >= 3 && (pw.length >= 8 || (!!user && !pw && u.trim().toLowerCase() !== user)) && (!changing || !!cur);
+  const save = async () => {
+    try {
+      const body = { user: u.trim(), ...(pw ? { password: pw } : {}), ...(changing ? { current: cur } : {}) };
+      const r = await api<{ user: string }>('PUT', own ? '/api/me/login' : `/api/members/${encodeURIComponent(personId!)}/login`, body);
+      say(own ? `Saved. Sign in anywhere as ${r.user}` : `${name ?? 'They'} can sign in as ${r.user}`);
+      setPw(''); setCur(''); onDone(); return true;
+    } catch (e) { say((e as Error).message, { error: true }); return false; }
+  };
+  return (
+    <View style={{ gap: SP[2] }}>
+      <TextField label="Username" placeholder="Username" value={u} onChange={setU} account="username" />
+      {changing ? <TextField label="Current password" placeholder="Current password" value={cur} onChange={setCur} account="password" /> : null}
+      <TextField label={user ? 'New password' : 'Password'} placeholder={user ? 'New password' : 'Password, 8 characters or more'} value={pw} onChange={setPw} account="newPassword" onSubmit={ready ? () => void save() : undefined} />
+      <Button full kind={ready ? 'primary' : 'secondary'} icon="key" label={user ? 'Save' : 'Set username and password'} onPress={ready ? save : undefined} />
+    </View>
   );
 }
 
@@ -262,6 +299,12 @@ export function PeopleScreen() {
   return (
     <Screen title={manage ? 'People and access' : 'Your account'} over={s.home.name} onBack={() => nav.goBack()} onRefresh={() => void load()} gap={SP[6]}>
       {unlinked ? <ThisIsMe onDone={() => void load()} /> : you}
+      {me.personId ? (
+        <Section title="Your sign-in" caption gap={SP[2]}>
+          <T v="footnote" color={C.stone}>{me.user ? `You sign in as ${me.user} on any phone or browser.` : 'Set a username and password to sign in on any phone or browser, without a code.'}</T>
+          <LoginFields user={me.user ?? null} onDone={() => void load()} />
+        </Section>
+      ) : null}
       {err ? <Empty compact icon="cloud_off" title="Couldn’t load them" text={err} action="Try again" onAction={() => void load()} /> : null}
 
       {manage ? (

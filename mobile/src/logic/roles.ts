@@ -15,6 +15,8 @@ export interface Me {
   devices: string[] | null;
   until: number | null;
   room: string | null;
+  /** Their username for signing in, if set. */
+  user?: string | null;
   via: 'master' | 'session' | 'open';
   can: Record<Perm, boolean>;
 }

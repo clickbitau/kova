@@ -11,6 +11,7 @@ import { Glow } from '../ui/Screen';
 import { Appear, haptic } from '../ui/motion';
 import { T } from '../ui/Text';
 import { ConnectScreen } from './ConnectScreen';
+import { PasswordSignIn } from './PasswordSignIn';
 
 /**
  * The hub answers, but no longer takes this phone's key (it was changed, or this phone was signed out). Not
@@ -75,8 +76,15 @@ export function SignInAgainScreen() {
           </Appear>
         ) : null}
 
+        {!code && base ? (
+          <Card style={{ padding: SP[5], gap: SP[3] }}>
+            <T v="headline">Your username and password</T>
+            <PasswordSignIn base={base} onSignedIn={r => signIn(r.token)} />
+          </Card>
+        ) : null}
+
         <View style={{ gap: SP[3] }}>
-          {!code ? <Button size="lg" label="Get a sign-in code" icon="password" busy={busy} onPress={() => void getCode()} /> : null}
+          {!code ? <Button size="lg" kind="secondary" label="Get a sign-in code instead" icon="password" busy={busy} onPress={() => void getCode()} /> : null}
           <Button size="lg" kind="secondary" label="Scan the code instead" icon="qr_code_scanner" onPress={() => { waiting.current++; setCode(null); setBusy(false); setScan(true); }} />
           <Button kind="ghost" label="Try again" onPress={() => { haptic.light(); void refresh(); }} />
           <Button kind="ghost" label="Connect to a different hub" onPress={() => { waiting.current++; void forget(); }} />

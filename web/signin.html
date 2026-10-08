@@ -37,16 +37,25 @@
 <main>
   <div style="display:flex;align-items:center;gap:10px"><svg width="28" height="28" viewBox="0 0 48 48"><path d="M8 26L24 11L40 26" fill="none" stroke="#f1efea" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 32L24 24.5L32 32" fill="none" stroke="#f1efea" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="24" cy="38.5" r="3.5" fill="#f2b14c"/></svg><h1>Sign in to Kova</h1></div>
   <p id="why">This browser isn’t signed in to your home yet.</p>
-  <div class="card">
-    <div class="code" id="code" aria-live="polite">····-····</div>
-    <div class="row" id="state"><span class="dot"></span><span>Waiting for you to approve it…</span></div>
-  </div>
-  <ol>
-    <li>Open the <b>Kova app</b> on your phone.</li>
-    <li>Go to <b>More → Sign in a browser</b>.</li>
-    <li>Type the code above. This browser signs in by itself.</li>
-  </ol>
-  <p>Or, on a computer that’s already signed in: the menu → <b>Signed-in browsers</b>.</p>
+  <form class="card" id="pwForm" autocomplete="on">
+    <div><label for="user" class="row" style="color:var(--bone);font-weight:700">Username</label><input id="user" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required></div>
+    <div><label for="pw" class="row" style="color:var(--bone);font-weight:700">Password</label><input id="pw" name="password" type="password" autocomplete="current-password" required></div>
+    <button id="pwBtn">Sign in</button>
+    <p id="pwErr" class="err" role="alert"></p>
+  </form>
+  <p>No username yet? Set one in the Kova app under <b>More → People and access</b>, or ask the home’s owner.</p>
+  <details>
+    <summary>Sign in with a code from the app instead</summary>
+    <div class="card" style="margin-top:10px">
+      <div class="code" id="code" aria-live="polite">····-····</div>
+      <div class="row" id="state"><span class="dot"></span><span>Waiting for you to approve it…</span></div>
+    </div>
+    <ol style="margin-top:10px">
+      <li>Open the <b>Kova app</b> on your phone.</li>
+      <li>Go to <b>More → Sign in a browser</b>.</li>
+      <li>Type the code above. This browser signs in by itself.</li>
+    </ol>
+  </details>
   <p>Invited to this home? Open the link from your invite, or <a href="./join.html" style="color:var(--amber);font-weight:700">type its code</a>.</p>
   <details>
     <summary>Use an access key instead</summary>
@@ -88,6 +97,16 @@
       }).catch(function () { poll(id); });
     }, 2000);
   }
+  document.getElementById('pwForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var u = document.getElementById('user').value.trim(), pw = document.getElementById('pw').value, btn = document.getElementById('pwBtn'), err = document.getElementById('pwErr');
+    if (!u || !pw) return;
+    btn.disabled = true; err.textContent = '';
+    fetch('/api/login/password', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ user: u, password: pw }) })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (r.ok && j.token) return done(j.token); err.textContent = j.error || ('The hub answered HTTP ' + r.status + '.'); }); })
+      .catch(function () { err.textContent = 'Can’t reach your hub.'; })
+      .finally(function () { btn.disabled = false; });
+  });
   document.getElementById('keyForm').addEventListener('submit', function (e) {
     e.preventDefault();
     var k = document.getElementById('key').value.trim(), btn = document.getElementById('keyBtn'), err = document.getElementById('keyErr');
@@ -98,7 +117,9 @@
       err.textContent = r.status === 401 ? 'That key isn’t right.' : 'The hub answered HTTP ' + r.status + '.';
     }).catch(function () { err.textContent = 'Can’t reach your hub.'; }).finally(function () { btn.disabled = false; });
   });
-  start();
+  // The code is only asked for once someone opens that way in.
+  var codeWay = document.querySelector('details');
+  codeWay.addEventListener('toggle', function () { if (codeWay.open && !pollTimer) start(); });
 })();
 </script>
 </body>

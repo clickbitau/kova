@@ -51,7 +51,7 @@ export function registerAccountRoutes(app: FastifyInstance, hub: Hub, o: Account
     const p = people().find(x => x.id === m.personId);
     const devices = sessions.list(undefined, s => s.personId === m.personId);
     return {
-      ...m, name: p?.name ?? m.personId, roleLabel: ROLE_LABEL[m.role], expired: accounts.expired(m),
+      ...m, name: p?.name ?? m.personId, roleLabel: ROLE_LABEL[m.role], expired: accounts.expired(m), user: accounts.loginOf(m.personId),
       lastSeen: devices.reduce<number | null>((t, s) => (t == null || s.lastSeen > t ? s.lastSeen : t), null),
       sessions: devices,
     };
@@ -142,6 +142,39 @@ export function registerAccountRoutes(app: FastifyInstance, hub: Hub, o: Account
   app.delete<{ Params: { id: string } }>('/api/invites/:id', async (req, reply) => (accounts.cancel(req.params.id) ? { ok: true } : reply.code(404).send({ error: 'No such invite' })));
 
   // ---- on the invited device (no key yet): what the invite is for, then accepting it. Wrong codes are rate-limited.
+  // ------------------------------------------------------------- sign in --
+  // A username and password: this device gets the person's own key (like accepting an invite).
+  app.post<{ Body: { user?: string; password?: string; device?: string } }>('/api/login/password', async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    try {
+      const b = req.body ?? {};
+      const r = accounts.login({ ...b, device: b.device || deviceName(req.headers['user-agent']) }, req.ip);
+      hub.store.append({ kind: 'system', device: null, feed: 'people', what: `${r.name} signed in on ${r.session.name}`, data: { person: r.personId, device: r.session.name }, cause: { kind: 'system', label: 'Sign in', by: { id: r.personId, name: r.name } } });
+      hub.emit('changed');
+      return { ok: true, token: r.token, personId: r.personId, name: r.name, role: r.role, roleLabel: ROLE_LABEL[r.role], hubId: hello() };
+    } catch (e) { return fail(reply, e); }
+  });
+
+  // Their own username and password (a change needs the current password).
+  app.put<{ Body: { user?: string; password?: string; current?: string } }>('/api/me/login', async (req, reply) => {
+    const a = currentActor();
+    if (!a?.personId) return reply.code(400).send({ error: 'Say which of the home’s people you are first' });
+    try { const r = accounts.setLogin(a.personId, req.body ?? {}); hub.emit('changed'); return { ok: true, ...r }; } catch (e) { return fail(reply, e); }
+  });
+  app.delete('/api/me/login', async (_req, reply) => {
+    const a = currentActor();
+    if (!a?.personId) return reply.code(400).send({ error: 'This device isn’t signed in as one of the home’s people' });
+    accounts.removeLogin(a.personId); hub.emit('changed'); return { ok: true };
+  });
+
+  // The owner sets (or resets) someone's username and password, or removes it.
+  app.put<{ Params: { id: string }; Body: { user?: string; password?: string } }>('/api/members/:id/login', async (req, reply) => {
+    try { const r = accounts.setLogin(req.params.id, req.body ?? {}, true); hub.emit('changed'); return { ok: true, ...r }; } catch (e) { return fail(reply, e); }
+  });
+  app.delete<{ Params: { id: string } }>('/api/members/:id/login', async (req) => {
+    accounts.removeLogin(req.params.id); hub.emit('changed'); return { ok: true };
+  });
+
   app.post<{ Body: { code?: string } }>('/api/invite/peek', async (req, reply) => {
     reply.header('cache-control', 'no-store');
     try { return accounts.peek(req.body?.code, req.ip); } catch (e) { return fail(reply, e); }

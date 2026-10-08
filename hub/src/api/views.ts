@@ -18,6 +18,8 @@ export interface Me {
   /** Guest: when their access ends. */
   until: number | null;
   room: string | null;
+  /** Their username for signing in, if they've set one. */
+  user: string | null;
   /** How they got in: the hub's master key, a device's own key, or a hub with no key at all. */
   via: Actor['via'];
   can: Record<Perm, boolean>;
@@ -29,7 +31,7 @@ export function meOf(a: Actor | undefined, accounts?: Accounts): Me {
   return {
     role: who.role, roleLabel: ROLE_LABEL[who.role], personId: who.personId ?? null, name: who.name,
     rooms: scoped(who) ? who.rooms ?? [] : null, devices: who.role === 'guest' ? who.devices ?? [] : null,
-    until: m?.until ?? null, room: who.room ?? null, via: who.via,
+    until: m?.until ?? null, room: who.room ?? null, user: accounts?.loginOf(who.personId) ?? null, via: who.via,
     can: Object.fromEntries((PERMS.owner as Perm[]).map(p => [p, allows(who, p)])) as Record<Perm, boolean>,
   };
 }

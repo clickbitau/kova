@@ -406,3 +406,46 @@ test('a member reports only their own presence with their key; the owner anyoneâ
     assert.equal((await h.call(null, 'POST', `/api/people/methel/presence?key=${encodeURIComponent(key)}&home=1`)).statusCode, 200);
   } finally { await h.close(); }
 });
+
+test('a username and password: set by the person or the owner, sign in on any device, wrong tries limited, kept as a hash', async () => {
+  const h = await home();
+  try {
+    const b = await h.join({ role: 'adult' }, { personId: 'brishti' });
+    // Their own username and password, from a signed-in device.
+    let r = await h.call(b.token, 'PUT', '/api/me/login', { user: 'Brishti', password: 'short' });
+    assert.equal(r.statusCode, 400);
+    r = await h.call(b.token, 'PUT', '/api/me/login', { user: 'Brishti', password: 'correct horse' });
+    assert.equal(r.statusCode, 200, r.body);
+    assert.equal(r.json().user, 'brishti');
+    assert.equal((await h.call(b.token, 'GET', '/api/me')).json().me.user, 'brishti');
+    // Signing in on a new phone: its own key, as them.
+    r = await h.call(null, 'POST', '/api/login/password', { user: ' BRISHTI ', password: 'correct horse', device: 'New phone' });
+    assert.equal(r.statusCode, 200, r.body);
+    const key = r.json().token;
+    assert.equal(r.json().personId, 'brishti');
+    assert.equal((await h.call(key, 'GET', '/api/me')).json().me.name, 'Brishti');
+    // Wrong password or username: the same answer.
+    const bad1 = await h.call(null, 'POST', '/api/login/password', { user: 'brishti', password: 'wrong one!' }, '10.0.0.7');
+    const bad2 = await h.call(null, 'POST', '/api/login/password', { user: 'nobody', password: 'correct horse' }, '10.0.0.7');
+    assert.deepEqual([bad1.statusCode, bad2.statusCode], [401, 401]);
+    assert.equal(bad1.json().error, bad2.json().error);
+    // A change needs the current password; the owner can reset it without.
+    assert.equal((await h.call(b.token, 'PUT', '/api/me/login', { password: 'another pass', current: 'nope' })).statusCode, 403);
+    assert.equal((await h.call(b.token, 'PUT', '/api/me/login', { password: 'another pass', current: 'correct horse' })).statusCode, 200);
+    assert.equal((await h.call(MASTER, 'PUT', '/api/members/brishti/login', { password: 'reset by owner' })).statusCode, 200);
+    assert.equal((await h.call(null, 'POST', '/api/login/password', { user: 'brishti', password: 'reset by owner' })).statusCode, 200);
+    // Only the owner sets someone else's; usernames are unique.
+    const sam = await h.join({ role: 'adult', name: 'Sam' }, {});
+    assert.equal((await h.call(sam.token, 'PUT', '/api/members/brishti/login', { password: 'taken over!' })).statusCode, 403);
+    assert.equal((await h.call(sam.token, 'PUT', '/api/me/login', { user: 'brishti', password: 'sams password' })).statusCode, 409);
+    // The owners' list shows the username; only a hash is kept.
+    assert.equal((await h.call(MASTER, 'GET', '/api/members')).json().members.find((m: { personId: string }) => m.personId === 'brishti').user, 'brishti');
+    assert.ok(!JSON.stringify(h.hub.store.get('household')).includes('reset by owner'));
+    // Too many wrong tries from one address: blocked for a while, even with the right password.
+    for (let i = 0; i < 10; i++) await h.call(null, 'POST', '/api/login/password', { user: 'brishti', password: `guess ${i}xx` }, '10.0.0.9');
+    assert.equal((await h.call(null, 'POST', '/api/login/password', { user: 'brishti', password: 'reset by owner' }, '10.0.0.9')).statusCode, 429);
+    // Removed from the home: the username stops working.
+    await h.call(MASTER, 'DELETE', '/api/members/brishti');
+    assert.equal((await h.call(null, 'POST', '/api/login/password', { user: 'brishti', password: 'reset by owner' }, '10.0.0.3')).statusCode, 401);
+  } finally { await h.close(); }
+});

@@ -26,6 +26,7 @@ export const ROUTES: Record<string, Rule> = {
   'GET /api/clip/:file': r('public'),
   'POST /api/login/start': r('public'),
   'GET /api/login/poll/:id': r('public'),
+  'POST /api/login/password': r('public'),
   'POST /api/invite/peek': r('public'),
   'POST /api/invite/accept': r('public'),
 
@@ -157,11 +158,15 @@ export const ROUTES: Record<string, Rule> = {
   'GET /api/assistant/memory': r('home'),
   'DELETE /api/assistant/memory/:i': r('home'),
   'PATCH /api/me': r('home'),
+  'PUT /api/me/login': r('view'),
+  'DELETE /api/me/login': r('view'),
 
   // ---- the owner: people and accounts, integrations, updates, backups, the hub's keys and location
   'GET /api/members': r('owner'),
   'PUT /api/members/:id': r('owner'),
   'DELETE /api/members/:id': r('owner'),
+  'PUT /api/members/:id/login': r('owner'),
+  'DELETE /api/members/:id/login': r('owner'),
   'POST /api/invites': r('owner'),
   'POST /api/invites/:id/resend': r('owner'),
   'DELETE /api/invites/:id': r('owner'),

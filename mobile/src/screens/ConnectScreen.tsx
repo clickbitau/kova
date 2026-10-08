@@ -16,6 +16,8 @@ import { Glow } from '../ui/Screen';
 import { Appear, haptic } from '../ui/motion';
 import { T } from '../ui/Text';
 import { JoinScreen } from './JoinScreen';
+import { TextField } from './SpeakerGroupSheet';
+import { appName } from '../logic/signin';
 
 type Step = 'start' | 'scan' | 'type';
 
@@ -32,6 +34,10 @@ export function ConnectScreen({ again }: { again?: { onCancel(): void } } = {}) 
   const back = () => { setErr(null); if (again) again.onCancel(); else setStep('start'); };
   const [addr, setAddr] = useState('');
   const [token, setToken] = useState('');
+  const [user, setUser] = useState('');
+  const [pw, setPw] = useState('');
+  // Signing in with a username and password (the usual way), or the hub's own key.
+  const [useKey, setUseKey] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [perm, askPerm] = useCameraPermissions();
@@ -60,7 +66,8 @@ export function ConnectScreen({ again }: { again?: { onCancel(): void } } = {}) 
     } catch (e) {
       haptic.error();
       if (e instanceof HubError && e.problem === 'signedOut') {
-        setErr(given.token ? 'The hub didn’t accept that token. Scan the code in Kova on your computer, or check the token.' : 'This hub needs its token. Scan the code in Kova on your computer, or enter the token.');
+        setErr(given.token ? 'The hub didn’t accept that key. Sign in with your username and password instead.' : 'Sign in with your username and password.');
+        setUseKey(false);
         setAddr(given.url); setStep('type');
       } else setErr((e as Error).message);
     } finally {
@@ -82,11 +89,28 @@ export function ConnectScreen({ again }: { again?: { onCancel(): void } } = {}) 
     }
   };
 
+  /** A username and password at a typed address: the address that answers as a hub, then this phone gets that person's key. */
+  const signInAt = async (url: string) => {
+    setErr(null);
+    setBusy('Connecting…');
+    try {
+      const r = await chooseAddress([{ url, kind: kindFor(url), manual: true }], { hello, localTimeoutMs: 4000, remoteTimeoutMs: 8000 });
+      if (!r) throw new Error(`No Kova hub answered at ${display(url)}. Is this phone on the home Wi-Fi?`);
+      const s = await call<{ token: string; personId: string; hubId?: string | null }>({ url: r.url }, 'POST', '/api/login/password', { user: user.trim(), password: pw, device: appName(Platform.OS) });
+      haptic.success();
+      setPw('');
+      const hubId = r.hubId ?? s.hubId ?? undefined;
+      await connect({ url: r.url, addresses: [{ url: r.url, kind: kindFor(r.url), manual: true }], token: s.token, personId: s.personId, ...(hubId ? { hubId } : {}) });
+    } catch (e) { haptic.error(); setErr((e as Error).message); }
+    finally { setBusy(null); }
+  };
+
   const typed = () => {
     const inv = parseInviteLink(addr);
     if (inv) { setErr(null); setInvite(inv); return; }
     const url = normalizeHubUrl(addr);
     if (!url) { setErr('Type the hub’s address, e.g. 192.168.1.20'); return; }
+    if (!useKey && user.trim()) { if (!pw) { setErr('Type your password'); return; } void signInAt(url); return; }
     // Typed by the owner, so it may be plain http even when remote.
     void tryHub({ url, addresses: [{ url, kind: kindFor(url), manual: true }], ...(token.trim() ? { token: token.trim() } : {}) });
   };
@@ -165,7 +189,7 @@ export function ConnectScreen({ again }: { again?: { onCancel(): void } } = {}) 
           <View style={{ gap: SP[3] }}>
             <Button size="lg" label="Scan the code" icon="qr_code_scanner" onPress={() => { setErr(null); setStep('scan'); }} />
             <Button size="lg" kind="secondary" label={busy === 'Looking on this Wi-Fi…' ? 'Looking on this Wi-Fi…' : 'Find my hub on this Wi-Fi'} icon="search" busy={busy === 'Looking on this Wi-Fi…'} onPress={() => void find()} />
-            <Button kind="ghost" label="Type the address instead" onPress={() => { setErr(null); setStep('type'); }} />
+            <Button kind="ghost" label="Sign in with a username, or type the address" onPress={() => { setErr(null); setStep('type'); }} />
             <Card style={{ padding: SP[4], gap: SP[2], marginTop: SP[2] }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2] }}>
                 <Icon name="qr_code_2" size={18} color={C.green} />
@@ -187,8 +211,21 @@ export function ConnectScreen({ again }: { again?: { onCancel(): void } } = {}) 
         ) : (
           <View style={{ gap: SP[4] }}>
             {field(addr, setAddr, { label: 'Hub address', placeholder: '192.168.1.20', url: true, hint: 'Or paste the invite link someone sent you.' })}
-            {field(token, setToken, { label: 'Token', placeholder: 'Only if your hub has one', secure: true, hint: 'Kova on your computer shows it next to the code.' })}
-            <Button size="lg" label="Connect" busy={busy === 'Connecting…'} onPress={typed} />
+            {useKey ? field(token, setToken, { label: 'Hub key', placeholder: 'The hub’s access key', secure: true, hint: 'Kova on your computer shows it next to the code.' }) : (
+              <>
+                <View style={{ gap: SP[2] }}>
+                  <T v="footnote" weight={700} color={C.bone2}>Username</T>
+                  <TextField label="Username" placeholder="Your Kova username" value={user} onChange={setUser} account="username" />
+                </View>
+                <View style={{ gap: SP[2] }}>
+                  <T v="footnote" weight={700} color={C.bone2}>Password</T>
+                  <TextField label="Password" placeholder="Password" value={pw} onChange={setPw} account="password" onSubmit={typed} />
+                  <T v="footnote" color={C.stone2}>No username yet? The home’s owner can set one for you, or send you an invite.</T>
+                </View>
+              </>
+            )}
+            <Button size="lg" label={useKey || !user.trim() ? 'Connect' : 'Sign in'} busy={busy === 'Connecting…'} onPress={typed} />
+            <Button kind="ghost" label={useKey ? 'Use a username and password instead' : 'Use the hub’s key instead'} onPress={() => { setErr(null); setUseKey(k => !k); }} />
             <Button kind="ghost" label="Back" onPress={back} />
           </View>
         )}

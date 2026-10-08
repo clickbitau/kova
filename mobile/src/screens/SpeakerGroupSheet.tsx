@@ -14,12 +14,16 @@ import { T } from '../ui/Text';
 const TONE = { muted: C.stone, green: C.green, amber: C.amber, blue: C.blue } as const;
 
 /** A text box the way the app draws them: card surface, hairline edge, amber edge while typing. */
-export function TextField({ value, onChange, placeholder, label, onSubmit, autoFocus, keyboard }: { value: string; onChange: (v: string) => void; placeholder?: string; label: string; onSubmit?: () => void; autoFocus?: boolean; keyboard?: 'default' | 'number-pad' | 'url' }) {
+/** `account`: a username, the password, or a new password (hidden, and filled by the phone's password manager). */
+export function TextField({ value, onChange, placeholder, label, onSubmit, autoFocus, keyboard, account }: { value: string; onChange: (v: string) => void; placeholder?: string; label: string; onSubmit?: () => void; autoFocus?: boolean; keyboard?: 'default' | 'number-pad' | 'url'; account?: 'username' | 'password' | 'newPassword' }) {
   const [focus, setFocus] = useState(false);
+  const plain = keyboard === 'url' || !!account;
   return (
     <TextInput value={value} onChangeText={onChange} placeholder={placeholder} placeholderTextColor={C.stone2} accessibilityLabel={label} autoFocus={autoFocus}
       onFocus={() => setFocus(true)} onBlur={() => setFocus(false)} onSubmitEditing={onSubmit} returnKeyType={onSubmit ? 'done' : 'default'}
-      keyboardType={keyboard === 'url' ? 'url' : keyboard ?? 'default'} autoCapitalize={keyboard === 'url' ? 'none' : 'sentences'} autoCorrect={keyboard !== 'url'}
+      keyboardType={keyboard === 'url' ? 'url' : keyboard ?? 'default'} autoCapitalize={plain ? 'none' : 'sentences'} autoCorrect={!plain}
+      secureTextEntry={account === 'password' || account === 'newPassword'}
+      {...(account ? { autoComplete: account === 'username' ? 'username' as const : account === 'password' ? 'current-password' as const : 'new-password' as const, textContentType: account === 'username' ? 'username' as const : account === 'password' ? 'password' as const : 'newPassword' as const } : {})}
       style={{ height: 48, paddingHorizontal: SP[3] + 2, borderRadius: R.md, borderWidth: 1, borderColor: focus ? C.amberLine : C.line, backgroundColor: C.card, color: C.bone, fontFamily: F[500], fontSize: 16 }} />
   );
 }

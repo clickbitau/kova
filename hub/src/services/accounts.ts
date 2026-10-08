@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import type { Store } from '../store/db.ts';
 import type { ConfigStore } from '../engine/config.ts';
 import type { Sessions, Session } from './sessions.ts';
@@ -42,8 +42,22 @@ export interface Invite {
 /** What the owner sees of an invite (never its code once made). */
 export interface InviteView { id: string; role: Role; roleLabel: string; personId?: string; name?: string; rooms?: string[]; devices?: string[]; until?: number; created: number; expires: number; expired: boolean; by: string }
 
+/**
+ * A person's username and password, to sign in on any phone or browser without an invite or a code. The password
+ * is kept only as a scrypt hash with its own salt.
+ */
+export interface Login { personId: string; user: string; salt: string; hash: string; set: number }
+
 const KEY = 'household';
-interface Saved { members: Member[]; invites: Invite[] }
+interface Saved { members: Member[]; invites: Invite[]; logins?: Login[] }
+
+/** Usernames: 3–40 of a–z, 0–9 and . _ - @, kept in lower case. */
+export const normUser = (u: unknown) => String(u ?? '').trim().toLowerCase();
+const USER_RE = /^[a-z0-9._@-]{3,40}$/;
+const PASSWORD_MIN = 8;
+const scrypt = (password: string, salt: string) => scryptSync(password.normalize('NFKC'), Buffer.from(salt, 'hex'), 32, { N: 16384, r: 8, p: 1 }).toString('hex');
+/** Checked against when there's no such user, so a wrong username takes as long as a wrong password. */
+const DUMMY_SALT = randomBytes(16).toString('hex');
 
 export const INVITE_MS = 24 * 3600_000;
 /** No 0/O, 1/I/L: a code someone may read off one screen and type on another. 10 of 31 letters: ~49 bits. */
@@ -88,7 +102,7 @@ export class Accounts {
     this.attempts = new Attempts({ perIp: 10, total: 40, windowMs: 15 * 60_000 }, now);
   }
 
-  private load(): Saved { const s = this.store.get<Saved>(KEY); return { members: s?.members ?? [], invites: s?.invites ?? [] }; }
+  private load(): Saved { const s = this.store.get<Saved>(KEY); return { members: s?.members ?? [], invites: s?.invites ?? [], logins: s?.logins ?? [] }; }
   private save(s: Saved): void { this.store.set(KEY, s); }
 
   private person(id: string | undefined) { return id ? this.config.get().people.find(p => p.id === id) : undefined; }
@@ -163,7 +177,7 @@ export class Accounts {
   remove(personId: string): { signedOut: number } {
     const s = this.load();
     if (!s.members.some(m => m.personId === personId)) throw new AccountError('They aren’t a member of this home', 404);
-    this.save({ members: s.members.filter(m => m.personId !== personId), invites: s.invites.filter(i => i.personId !== personId || !!i.used) });
+    this.save({ members: s.members.filter(m => m.personId !== personId), invites: s.invites.filter(i => i.personId !== personId || !!i.used), logins: (s.logins ?? []).filter(l => l.personId !== personId) });
     const signedOut = this.sessions.removePerson(personId);
     this.onRevoke(personId);
     return { signedOut };
@@ -294,8 +308,64 @@ export class Accounts {
     // The code is used up, and they're a member, in one write.
     const s = this.load();
     const m: Member = { personId, added: this.now(), ...rules };
-    this.save({ members: [...s.members.filter(x => x.personId !== personId), m], invites: s.invites.map(x => (x.id === i.id ? { ...x, used: { at: this.now(), personId: personId! } } : x)) });
+    this.save({ ...s, members: [...s.members.filter(x => x.personId !== personId), m], invites: s.invites.map(x => (x.id === i.id ? { ...x, used: { at: this.now(), personId: personId! } } : x)) });
     const { token, session } = this.sessions.issue(b.device, { personId });
     return { token, personId, name: this.person(personId)?.name ?? personId, role: m.role, session };
+  }
+
+  // -------------------------------------------------------------- logins --
+
+  /** A person's username, if they have one. */
+  loginOf(personId: string | undefined): string | null {
+    return personId ? this.load().logins?.find(l => l.personId === personId)?.user ?? null : null;
+  }
+
+  /**
+   * Set (or change) a member's username and password. A change of an existing password needs the current one,
+   * unless the owner sets it for them (`byOwner`).
+   */
+  setLogin(personId: string, b: { user?: unknown; password?: unknown; current?: unknown }, byOwner = false): { user: string } {
+    const m = this.member(personId);
+    if (!m || !this.person(personId)) throw new AccountError('They aren’t a member of this home', 404);
+    const s = this.load();
+    const was = s.logins!.find(l => l.personId === personId);
+    const user = b.user === undefined && was ? was.user : normUser(b.user);
+    if (!USER_RE.test(user)) throw new AccountError('Choose a username of 3 to 40 letters, numbers, dots, dashes or @');
+    if (s.logins!.some(l => l.user === user && l.personId !== personId)) throw new AccountError('That username is taken. Choose another.', 409);
+    const password = typeof b.password === 'string' ? b.password : '';
+    if (!password && !was) throw new AccountError('Choose a password');
+    if (password && password.length < PASSWORD_MIN) throw new AccountError(`Use a password of at least ${PASSWORD_MIN} characters`);
+    if (password && password.length > 200) throw new AccountError('That password is too long');
+    if (was && password && !byOwner && !(typeof b.current === 'string' && eq(scrypt(b.current, was.salt), was.hash))) throw new AccountError('Your current password isn’t right', 403);
+    const salt = password ? randomBytes(16).toString('hex') : was!.salt;
+    const l: Login = { personId, user, salt, hash: password ? scrypt(password, salt) : was!.hash, set: password ? this.now() : was!.set };
+    this.save({ ...s, logins: [...s.logins!.filter(x => x.personId !== personId), l] });
+    return { user };
+  }
+
+  /** Remove a member's username and password (their signed-in devices stay signed in). */
+  removeLogin(personId: string): boolean {
+    const s = this.load();
+    if (!s.logins!.some(l => l.personId === personId)) return false;
+    this.save({ ...s, logins: s.logins!.filter(l => l.personId !== personId) });
+    return true;
+  }
+
+  /**
+   * Sign in with a username and password: this device gets the person's own key. Wrong tries count against the
+   * address (and the hub as a whole), like invite codes; a removed member, or a guest whose time is up, can't.
+   */
+  login(b: { user?: unknown; password?: unknown; device?: unknown }, ip: string): { token: string; personId: string; name: string; role: Role; session: Session } {
+    if (this.attempts.blocked(ip)) throw new AccountError('Too many tries. Wait a few minutes, then try again.', 429);
+    const user = normUser(b.user), password = typeof b.password === 'string' ? b.password : '';
+    const l = this.load().logins!.find(x => x.user === user);
+    const ok = eq(scrypt(password, l?.salt ?? DUMMY_SALT), l?.hash ?? '0'.repeat(64)) && !!l;
+    const m = ok ? this.member(l!.personId) : undefined;
+    if (!ok || !m || this.expired(m)) {
+      this.attempts.fail(ip);
+      throw new AccountError(ok ? 'This account can’t sign in any more. Ask the home’s owner.' : 'That username or password isn’t right.', ok ? 403 : 401);
+    }
+    const { token, session } = this.sessions.issue(b.device, { personId: l!.personId });
+    return { token, personId: l!.personId, name: this.person(l!.personId)?.name ?? l!.personId, role: m.role, session };
   }
 }
