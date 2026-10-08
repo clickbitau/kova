@@ -1,4 +1,4 @@
-import { cloneElement, type ReactElement } from 'react';
+import { cloneElement, useState, type ReactElement } from 'react';
 import { View } from 'react-native';
 import { C, SP } from '../theme';
 import { useHub, useSnap } from '../state/hub';
@@ -34,6 +34,20 @@ export function MoreScreen() {
   const who = meOf(s);
   const can = features(who);
   const { demo, leaveDemo } = useDemo();
+  const { api, forget, say } = useHub();
+  // Sign out: this phone's key stops working on the hub, and the app goes back to signing in (any username, any hub).
+  const [sure, setSure] = useState(false);
+  const signOut = async () => {
+    if (!sure) { setSure(true); setTimeout(() => setSure(false), 4000); return true; }
+    try {
+      const r = await api<{ sessions?: { id: string; current?: boolean }[] }>('GET', '/api/sessions');
+      const mine = r.sessions?.find(x => x.current);
+      if (mine) await api('DELETE', `/api/sessions/${encodeURIComponent(mine.id)}`);
+    } catch { /* signed out here even if the hub can't be told */ }
+    await forget();
+    say('Signed out');
+    return true;
+  };
   return (
     <Screen title="More" over={s.home.name} gap={SP[6]}>
       {demo ? (
@@ -80,6 +94,7 @@ export function MoreScreen() {
       <Group title="This phone">
         <Row first icon="phone_iphone" iconFg={C.green} title={me ? `${me.name}’s phone` : 'This phone'} sub="Arriving and leaving, notifications, the hub it talks to" onPress={() => nav.navigate('ThisPhone')} />
         <Row icon="computer" iconFg={C.blue} title="Sign in a browser" sub="Type the code your Kova address shows on a computer" onPress={() => nav.navigate('Browsers')} />
+        {demo ? null : <Row icon="link_off" iconFg={C.red} title={sure ? 'Tap again to sign out' : 'Sign out'} sub="Sign in again as someone else, or to another hub" onPress={() => void signOut()} />}
       </Group>
 
       <Group title="About">

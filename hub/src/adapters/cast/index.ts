@@ -81,6 +81,8 @@ class Receiver {
   stream: { url: string; title: string; loop: boolean } | null = null;
   /** An announcement clip playing (playClip()): when it finishes, the speaker is idle again. */
   clip: string | null = null;
+  /** When a looping sound was last started again after the speaker dropped it (the last hour's). */
+  private restarts: number[] = [];
 
   constructor(readonly ep: CastEndpoint, o: CastOptions) {
     this.ch = new CastChannel({ host: ep.host, port: ep.port, insecure: o.insecure, timeoutMs: o.timeoutMs });
@@ -171,6 +173,20 @@ class Receiver {
       this.clip = null;
       this.media = null;
       this.onTrack?.();
+      return;
+    }
+    // A sound set to loop (Thunderstorm) that the speaker dropped by itself (a fetch that failed, the file ended
+    // without repeating): started again, at most a few times an hour. One stopped by a person (CANCELLED) or replaced
+    // by another app (INTERRUPTED) is left alone.
+    const sm = this.stream;
+    if (sm?.loop && st?.playerState === 'IDLE' && (st.idleReason === 'ERROR' || st.idleReason === 'FINISHED')) {
+      const now = Date.now();
+      this.restarts = this.restarts.filter(t => now - t < 3600_000);
+      console.warn(`[cast] ${this.ep.name}: ${sm.title} stopped by itself (${st.idleReason})${this.restarts.length < LOOP_RESTARTS ? ', starting it again' : ''}`);
+      if (this.restarts.length < LOOP_RESTARTS) {
+        this.restarts.push(now);
+        setTimeout(() => { if (this.stream === sm) void this.play(sm.url, sm.title, true).catch(e => console.warn(`[cast] ${this.ep.name}: ${(e as Error).message}`)); }, 2000).unref?.();
+      }
       return;
     }
     const qu = this.queue;
@@ -325,6 +341,9 @@ class Receiver {
     return devs.map(d => d.deviceId.replace(/-/g, '').toLowerCase());
   }
 }
+
+/** How many times an hour a looping sound the speaker dropped is started again. */
+const LOOP_RESTARTS = 6;
 
 export class CastAdapter implements Adapter {
   id = 'cast';

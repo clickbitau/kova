@@ -12,7 +12,11 @@ import { encodeMessage, decodeMessage, NS } from '../src/adapters/cast/channel.t
 function fakeCast(name: string, members: string[] = []) {
   const log: { ns: string; type: string; data: Record<string, unknown> }[] = [];
   const st = { app: null as null | { appId: string; sessionId: string; transportId: string }, level: 0.3, muted: false, url: '', paused: false, time: 0, deaf: false };
+  const socks: net.Socket[] = [];
+  /** The speaker says its media stopped by itself (a fetch that failed: ERROR), unasked. */
+  const idle = (idleReason: string) => { for (const k of socks) k.write(encodeMessage({ source: 'web-1', destination: 'sender-0', namespace: NS.media, data: { type: 'MEDIA_STATUS', requestId: 0, status: [{ mediaSessionId: 7, playerState: 'IDLE', idleReason }] } })); };
   const server = net.createServer(sock => {
+    socks.push(sock);
     let buf = Buffer.alloc(0);
     const reply = (m: { source: string; namespace: string; data: Record<string, unknown> }) =>
       sock.write(encodeMessage({ source: m.source, destination: 'sender-0', namespace: m.namespace, data: m.data }));
@@ -46,7 +50,7 @@ function fakeCast(name: string, members: string[] = []) {
       }
     });
   });
-  return { server, log, st, name, loads: () => log.filter(l => l.type === 'LOAD').length };
+  return { server, log, st, name, idle, loads: () => log.filter(l => l.type === 'LOAD').length };
 }
 
 async function listen(f: ReturnType<typeof fakeCast>) {
@@ -281,6 +285,13 @@ test('Cast: a recording set to repeat loops on the speaker; a stream plays once'
     assert.equal(q.data.repeatMode, 'REPEAT_SINGLE', 'plays again from the start, until stopped');
     assert.equal((q.data.items as { media: { streamType: string } }[])[0].media.streamType, 'BUFFERED');
     assert.equal(a.st.url, urls.Rain);
+    // The speaker drops it by itself (the recording couldn't be fetched again): started again; stopped by a person: not.
+    a.idle('ERROR');
+    await new Promise(r => setTimeout(r, 2600));
+    assert.equal(a.log.filter(l => l.type === 'QUEUE_LOAD').length, 2, 'started again');
+    a.idle('CANCELLED');
+    await new Promise(r => setTimeout(r, 2600));
+    assert.equal(a.log.filter(l => l.type === 'QUEUE_LOAD').length, 2, 'a person’s stop stays stopped');
     await reg.command(id, { on: true, media: 'Radio' }, { kind: 'user', label: 'You' });
     assert.equal(a.log.filter(l => l.type === 'LOAD').length, 1, 'a stream is a plain LOAD');
     assert.equal(a.st.url, urls.Radio);
