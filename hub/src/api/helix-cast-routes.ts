@@ -57,7 +57,7 @@ export function registerHelixCastRoutes(app: FastifyInstance, hub: Hub): void {
   };
   const song = (t: { id: string; title?: string; artist?: string; album?: string; art?: string; durationMs?: number }, art = true) => ({
     id: t.id, title: t.title ?? '', ...(t.artist ? { artist: t.artist } : {}), ...(t.album ? { album: t.album } : {}),
-    ...(art && t.art ? { art: t.art } : {}), ...(t.durationMs ? { durationMs: t.durationMs } : {}),
+    ...(art && t.art ? { art: t.art } : {}), ...(t.durationMs ? { durationMs: Math.round(t.durationMs) } : {}),
   });
 
   // ---------------------------------------------------------------- speakers --
@@ -84,7 +84,7 @@ export function registerHelixCastRoutes(app: FastifyInstance, hub: Hub): void {
       const g = isGroup(d) ? groupOf(d) : undefined;
       return {
         id: d.id, name: d.name, room: roomName(d.room), kind: g ? 'group' : 'speaker', ...(g ? { members: g.members } : {}),
-        online: s.online !== false, volume: typeof s.vol === 'number' ? s.vol : null, muted: mutedAt.has(d.id) || !!s.muted,
+        online: s.online !== false, volume: typeof s.vol === 'number' ? Math.round(s.vol) : null, muted: mutedAt.has(d.id) || !!s.muted,
         capabilities: caps, playing,
       };
     }));
