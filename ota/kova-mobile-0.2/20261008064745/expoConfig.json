@@ -1,7 +1,7 @@
 {
   "name": "Kova",
   "slug": "kova",
-  "version": "0.2.38",
+  "version": "0.2.40",
   "runtimeVersion": "kova-mobile-0.2",
   "updates": {
     "enabled": true,
@@ -37,7 +37,9 @@
         "remote-notification"
       ],
       "ITSAppUsesNonExemptEncryption": false,
-      "NSSupportsLiveActivities": true
+      "NSSupportsLiveActivities": true,
+      "NSSpeechRecognitionUsageDescription": "Kova turns what you say to Ask Kova into words, on this phone where it can.",
+      "NSMicrophoneUsageDescription": "Kova listens only while the microphone in Ask Kova is on, to hear what you ask it."
     },
     "entitlements": {
       "com.apple.security.application-groups": [
@@ -63,7 +65,8 @@
       "android.permission.ACCESS_FINE_LOCATION",
       "android.permission.ACCESS_BACKGROUND_LOCATION",
       "android.permission.FOREGROUND_SERVICE",
-      "android.permission.FOREGROUND_SERVICE_LOCATION"
+      "android.permission.FOREGROUND_SERVICE_LOCATION",
+      "android.permission.RECORD_AUDIO"
     ]
   },
   "web": {
@@ -138,6 +141,17 @@
           }
         ]
       }
+    ],
+    [
+      "expo-speech-recognition",
+      {
+        "microphonePermission": "Kova listens only while the microphone in Ask Kova is on, to hear what you ask it.",
+        "speechRecognitionPermission": "Kova turns what you say to Ask Kova into words, on this phone where it can.",
+        "androidSpeechServicePackages": [
+          "com.google.android.googlequicksearchbox",
+          "com.google.android.as"
+        ]
+      }
     ]
   ],
   "owner": "dkathel",
@@ -164,6 +178,14 @@
     },
     "kovaHistory": [
       {
+        "version": "0.2.40",
+        "title": "Try the demo, privacy policy, location asked first; talk to Ask Kova (with the new app build)"
+      },
+      {
+        "version": "0.2.39",
+        "title": "Speaker groups: volume balance and tuning with music; choose what you’re told about and how often; update progress"
+      },
+      {
         "version": "0.2.38",
         "title": "Speaker groups: a speaker played alongside now waits for the main group to start, then joins it in time"
       },
@@ -174,14 +196,6 @@
       {
         "version": "0.2.36",
         "title": "Kova learns from what you do: automations that run late, values you always correct, steps you repeat"
-      },
-      {
-        "version": "0.2.35",
-        "title": "Household accounts: invite people with a link or QR, roles for adults, children and guests, and each person’s own phone and notifications"
-      },
-      {
-        "version": "0.2.34",
-        "title": "Kova learns from what you do: an automation you start early, a value you always change, one you undo, or two things you do one after the other become suggestions with the days they’re based on, on Modes and the automation’s own screen; Not now, Don’t suggest again, Why?, and Settings → What Kova has learned"
       }
     ]
   },
