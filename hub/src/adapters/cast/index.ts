@@ -591,7 +591,12 @@ export class CastAdapter implements Adapter {
             groupsDone.add(gid);
             const ps = stops.filter(x => members.includes(this.speakerId(x.device)));
             jobs.push(run(ps, async () => {
-              await this.receivers.get(gid)!.stop();
+              // A group that doesn't answer (a member dropped out and it's stuck resyncing): stop each speaker itself.
+              try { await this.receivers.get(gid)!.stop(); }
+              catch (e) {
+                const each = await Promise.allSettled(members.map(m => this.receivers.get(m)!.stop()));
+                if (each.every(x => x.status === 'rejected')) throw e;
+              }
               for (const s of members) { this.viaGroup.delete(s); this.receivers.get(s)!.media = null; }
               // Speakers taken out earlier come back to full volume for next time.
               for (const [s, g] of [...this.silenced]) if (g === gid) { this.silenced.delete(s); await this.receivers.get(s)?.volume(0, false).catch(() => {}); }

@@ -11,7 +11,7 @@ import { encodeMessage, decodeMessage, NS } from '../src/adapters/cast/channel.t
 /** A fake Cast receiver: enough of receiver, media and multizone to drive the adapter. */
 function fakeCast(name: string, members: string[] = []) {
   const log: { ns: string; type: string; data: Record<string, unknown> }[] = [];
-  const st = { app: null as null | { appId: string; sessionId: string; transportId: string }, level: 0.3, muted: false, url: '', paused: false, time: 0 };
+  const st = { app: null as null | { appId: string; sessionId: string; transportId: string }, level: 0.3, muted: false, url: '', paused: false, time: 0, deaf: false };
   const server = net.createServer(sock => {
     let buf = Buffer.alloc(0);
     const reply = (m: { source: string; namespace: string; data: Record<string, unknown> }) =>
@@ -24,6 +24,8 @@ function fakeCast(name: string, members: string[] = []) {
         buf = buf.subarray(4 + buf.readUInt32BE(0));
         const type = String(m.data.type);
         log.push({ ns: m.namespace, type, data: m.data });
+        // A receiver that stopped answering (stuck): heartbeats aside, nothing comes back.
+        if (st.deaf && m.namespace !== NS.heartbeat) continue;
         const rid = m.data.requestId;
         if (m.namespace === NS.receiver) {
           if (type === 'LAUNCH') st.app = { appId: String(m.data.appId), sessionId: 'sess-1', transportId: 'web-1' };
@@ -97,6 +99,32 @@ test('Cast: several speakers playing the same thing use their Cast group (perfec
   } finally {
     await reg.stop();
     for (const f of [a, b, c, g]) f.server.close();
+  }
+});
+
+test('Cast: a group that stopped answering is stopped speaker by speaker', async () => {
+  const a = fakeCast('Music Room Speaker'), b = fakeCast('Baby Room speaker');
+  const g = fakeCast('Home Speaker Group', ['aaaa0000-0000-0000-0000-000000000001', 'bbbb0000-0000-0000-0000-000000000002']);
+  const ep = async (f: ReturnType<typeof fakeCast>, id: string, model: string) => ({ id, name: f.name, model, host: '127.0.0.1', port: await listen(f) });
+  const reg = new Registry(new Store(':memory:'), n => (n === 'Tarateel' ? 'https://stream.example/tarateel.mp3' : undefined));
+  const cast = new CastAdapter({
+    discover: false, insecure: true, pollMs: 0, batchMs: 20,
+    endpoints: [await ep(a, 'aaaa0000000000000000000000000001', 'Nest Audio'), await ep(b, 'bbbb0000000000000000000000000002', 'Nest Audio'), await ep(g, 'dddd0000000000000000000000000004', 'Google Cast Group')],
+  });
+  await reg.addAdapter(cast);
+  try {
+    await reg.applyTargets({ cast_aaaa0000000000000000000000000001: { on: true, media: 'Tarateel' }, cast_bbbb0000000000000000000000000002: { on: true, media: 'Tarateel' } }, { kind: 'user', label: 'You' });
+    assert.equal(g.loads(), 1);
+    a.st.app = { appId: 'CC1AD845', sessionId: 's', transportId: 'web-1' };
+    b.st.app = { appId: 'CC1AD845', sessionId: 's', transportId: 'web-1' };
+    g.st.deaf = true;
+    await reg.applyTargets({ cast_aaaa0000000000000000000000000001: { on: false, media: null }, cast_bbbb0000000000000000000000000002: { on: false, media: null } }, { kind: 'user', label: 'You' });
+    assert.ok(a.log.some(l => l.type === 'STOP') && b.log.some(l => l.type === 'STOP'), 'each speaker told to stop');
+    assert.equal(a.st.app, null);
+    assert.equal(b.st.app, null);
+  } finally {
+    await reg.stop();
+    for (const f of [a, b, g]) f.server.close();
   }
 });
 

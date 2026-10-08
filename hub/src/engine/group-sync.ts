@@ -51,8 +51,9 @@ const SEEK_GUESS_MS = 400;
 const LATENCY_MAX_MS = 15_000;
 /** Further out than this, a reading is of something else (a speaker that stopped, or started over), not drift. */
 const DRIFT_SANE_MS = 30_000;
-/** How often the main part is read while waiting for it to start. */
-const START_POLL_MS = 150;
+/** How often the main part is read while waiting for it to start or change songs (a Cast group's leader also keeps
+ *  the whole group in sync: asked too often, it stalls). */
+const START_POLL_MS = 400;
 /** A part waiting for the next song stops this long before its own song ends (a speaker takes a moment to). */
 const HOLD_EARLY_MS = 150;
 /** At a start, a part closer than this is left be; further, it's moved (a move a second into a song isn't heard). */
@@ -572,7 +573,7 @@ export class GroupSync extends EventEmitter<{ changed: [] }> {
         const far = x && x.index === from && x.playing && x.durationMs && x.durationMs - posAt(x, this.now()) > (this.o.nearEndMs ?? 2000);
         // Near the change, drift checks wait for it (a part waiting at its end isn't drifting).
         if (!far) s.changing = true;
-        await this.sleep(s, far ? 400 : START_POLL_MS);
+        await this.sleep(s, far ? 1000 : START_POLL_MS);
       }
       for (const t of holdTimers) { clearTimeout(t); s.timers.delete(t); }
       if (s.ended) return;
