@@ -4,7 +4,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { C, MOTION, R, SHADOW, SP, alpha } from '../theme';
-import type { Toast } from '../state/hub';
+import { useHub, type Toast } from '../state/hub';
+import { Image } from 'expo-image';
 import { Icon } from './Icon';
 import { Appear, haptic, shake, spring, tween, useLoop, useReducedMotion, useStateValue, type HapticKind } from './motion';
 import { T } from './Text';
@@ -589,11 +590,16 @@ export function Stat({ label, value, color = C.bone, icon }: { label: string; va
 }
 
 /** A person's initial in a circle; a green ring and dot when they're home. */
-export function Avatar({ name, home, size = 34, ring = C.page }: { name: string; home?: boolean; size?: number; ring?: string }) {
+/** A person: their photo when they have one (`photo`, the hub's address for it), else their initial. */
+export function Avatar({ name, home, size = 34, ring = C.page, photo }: { name: string; home?: boolean; size?: number; ring?: string; photo?: string | null }) {
+  const { route, cfg } = useHub();
+  const base = route?.url ?? cfg?.url;
+  const uri = photo ? (/^https?:/.test(photo) ? photo : base ? `${base}${photo}` : null) : null;
   return (
     <View accessibilityLabel={`${name}, ${home ? 'home' : 'out'}`} style={{ width: size, height: size }}>
-      <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: home ? alpha(C.green, 0.16) : C.control, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: ring }}>
-        <T weight={800} size={Math.round(size * 0.38)} color={home ? C.green : C.stone}>{name[0]?.toUpperCase() ?? '?'}</T>
+      <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: home ? alpha(C.green, 0.16) : C.control, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: ring, overflow: 'hidden' }}>
+        {uri ? <Image source={{ uri }} style={{ width: '100%', height: '100%' }} contentFit="cover" accessible={false} />
+          : <T weight={800} size={Math.round(size * 0.38)} color={home ? C.green : C.stone}>{name[0]?.toUpperCase() ?? '?'}</T>}
       </View>
       {home ? <View style={{ position: 'absolute', right: -1, bottom: -1, width: size * 0.32, height: size * 0.32, borderRadius: size, backgroundColor: C.green, borderWidth: 2, borderColor: ring }} /> : null}
     </View>

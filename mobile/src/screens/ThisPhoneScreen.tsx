@@ -114,7 +114,7 @@ export function ThisPhoneScreen() {
       <Section title="Whose phone is this?" caption>
         {signedInAs && me ? (
           <Card style={{ padding: SP[4], flexDirection: 'row', alignItems: 'center', gap: SP[3] }}>
-            <Avatar name={me.name} home={me.home} size={40} ring={C.card} />
+            <Avatar name={me.name} home={me.home} photo={me.photo} size={40} ring={C.card} />
             <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
               <T v="headline" numberOfLines={2}>{`${me.name}’s phone`}</T>
               <T v="footnote" color={C.stone}>{`Signed in as ${me.name} (${account.roleLabel.toLowerCase()}). Their notifications and arriving and leaving come here.`}</T>
@@ -127,7 +127,7 @@ export function ThisPhoneScreen() {
               return (
                 <Press key={p.id} selected={on} haptic="select" label={p.name} onPress={() => void setPerson(on ? undefined : p.id)}
                   style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2] + 2, height: 52, paddingLeft: 8, paddingRight: 16, borderRadius: R.lg, backgroundColor: on ? C.amberTint : C.card, borderWidth: 1, borderColor: on ? C.amberLine : C.edge }}>
-                  <Avatar name={p.name} home={p.home} size={36} ring={on ? '#2a2318' : C.card} />
+                  <Avatar name={p.name} home={p.home} photo={p.photo} size={36} ring={on ? '#2a2318' : C.card} />
                   <T v="label" color={on ? C.bone : C.bone2}>{p.name}</T>
                   {on ? <Icon name="check" size={18} color={C.amber} /> : null}
                 </Press>

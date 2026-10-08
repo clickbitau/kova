@@ -115,6 +115,8 @@ export interface PresenceEvidence {
 }
 export interface Person {
   id: string; name: string; detail: string; home: boolean; since: number | null; sinceLabel: string;
+  /** Their photo: the hub's address for it (shown instead of their initial). */
+  photo?: string;
   /** Confidence in the current home/away state, 0–1 (null on older hubs/state). */
   confidence?: number | null;
   confidenceLabel?: string;

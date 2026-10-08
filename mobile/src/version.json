@@ -2,8 +2,12 @@
   "//": "The Kova app's version (docs/VERSIONING.md). store: the X.Y.0 a store binary on this train carries (app.json version). version: what runs, store or over the air (X.Y.Z, PATCH only). train: the native runtime (app.json runtimeVersion). history: newest first; an over-the-air release adds an entry.",
   "train": "kova-mobile-0.4",
   "store": "0.4.0",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "history": [
+    {
+      "version": "0.4.3",
+      "title": "Photos for people"
+    },
     {
       "version": "0.4.2",
       "title": "Sounds can be a Helix song, looped seamlessly"

@@ -128,7 +128,7 @@ export function SecurityScreen() {
               const basis = p.evidence?.[0]?.source;
               return (
                 <View key={p.id} style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3], paddingVertical: SP[3], paddingHorizontal: SP[4], borderTopWidth: i ? 1 : 0, borderTopColor: C.hairline }}>
-                  <Avatar name={p.name} home={p.home} size={38} ring={C.card} />
+                  <Avatar name={p.name} home={p.home} photo={p.photo} size={38} ring={C.card} />
                   <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2] }}>
                       <T v="headline" numberOfLines={1} style={{ flexShrink: 1 }}>{p.name}</T>

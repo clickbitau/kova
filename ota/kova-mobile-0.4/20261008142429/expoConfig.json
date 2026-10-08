@@ -1,7 +1,7 @@
 {
   "name": "Kova",
   "slug": "kova",
-  "version": "0.4.1",
+  "version": "0.4.3",
   "runtimeVersion": "kova-mobile-0.4",
   "updates": {
     "enabled": true,
@@ -187,6 +187,14 @@
     },
     "kovaHistory": [
       {
+        "version": "0.4.3",
+        "title": "Photos for people"
+      },
+      {
+        "version": "0.4.2",
+        "title": "Sounds can be a Helix song, looped seamlessly"
+      },
+      {
         "version": "0.4.1",
         "title": "Sign out from More"
       },
@@ -197,14 +205,6 @@
       {
         "version": "0.3.1",
         "title": "Sign in with a username and password"
-      },
-      {
-        "version": "0.3.0",
-        "title": "Talk to Ask Kova: in your phone's language or Bangla, and hear the answer"
-      },
-      {
-        "version": "0.2.40",
-        "title": "Try the demo, privacy policy, location asked first; talk to Ask Kova (with the new app build)"
       }
     ]
   },

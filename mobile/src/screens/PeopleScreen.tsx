@@ -152,7 +152,7 @@ function MemberSheet({ m, onClose, onChanged, self }: { m: MemberView | null; on
   return (
     <Sheet open onClose={onClose} label={m.name}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3] }}>
-        <Avatar name={m.name} size={48} ring={C.sheet} />
+        <Avatar name={m.name} size={48} ring={C.sheet} photo={s.people.find(p => p.id === m.personId)?.photo} />
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
           <T v="eyebrow" color={m.expired ? C.red : C.stone2}>{m.expired ? 'Access ended' : `${m.roleLabel} · seen ${seenWords(m.lastSeen)}`}</T>
           <T v="title" numberOfLines={2}>{m.name}</T>
@@ -287,7 +287,7 @@ export function PeopleScreen() {
 
   const you = (
     <Card pad={SP[4]} style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3] }}>
-      <Avatar name={me.name} size={48} ring={C.card} />
+      <Avatar name={me.name} size={48} ring={C.card} photo={s.people.find(p => p.id === me.personId)?.photo} />
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
         <T v="eyebrow" color={C.stone2}>Signed in as</T>
         <T v="title" numberOfLines={2}>{me.name}</T>
@@ -317,7 +317,7 @@ export function PeopleScreen() {
                   {data.members.map((m, i) => (
                     <Press key={m.personId} onPress={() => setMember(m.personId)} give="soft" label={`${m.name}, ${m.roleLabel}`}
                       style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3], paddingHorizontal: SP[4], paddingVertical: SP[3], borderTopWidth: i ? 1 : 0, borderTopColor: C.hairline }}>
-                      <Avatar name={m.name} size={36} ring={C.card} home={s.people.find(p => p.id === m.personId)?.home} />
+                      <Avatar name={m.name} size={36} ring={C.card} home={s.people.find(p => p.id === m.personId)?.home} photo={s.people.find(p => p.id === m.personId)?.photo} />
                       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
                         <T v="headline" numberOfLines={2}>{m.personId === me.personId ? `${m.name} (you)` : m.name}</T>
                         <T v="footnote" color={m.expired ? C.red : C.stone} numberOfLines={2}>{m.expired ? 'Access ended' : `${roleLine({ roleLabel: m.roleLabel, rooms: roomsMatter(m.role) ? m.rooms ?? [] : null, until: m.until ?? null }, roomName)} · ${m.sessions.length ? `seen ${seenWords(m.lastSeen)}` : 'no devices'}`}</T>

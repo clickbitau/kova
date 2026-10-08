@@ -215,6 +215,8 @@ export interface Person {
   name: string;
   /** Which device reports presence, shown in the UI ("iPhone Air"). */
   detail: string;
+  /** Their photo, shown instead of their initial: the hub's address for it (api/photo-routes.ts). */
+  photo?: string;
 }
 
 /** `camera`: an indoor camera saw someone moving (a weak hint that someone's in, never who). */

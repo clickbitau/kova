@@ -142,7 +142,7 @@ function PersonSheet({ person, onClose }: { person: Person | null; onClose: () =
   return (
     <Sheet open onClose={onClose} label={P.name}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3] }}>
-        <Avatar name={cleanName(name) || P.name} home={P.home} size={48} ring={C.sheet} />
+        <Avatar name={cleanName(name) || P.name} home={P.home} photo={P.photo} size={48} ring={C.sheet} />
         <View style={{ flex: 1, gap: 2 }}>
           <T v="eyebrow" color={C.stone2}>{P.home ? 'Home' : 'Out'}</T>
           <T v="title" numberOfLines={1}>{cleanName(name) || P.name}</T>
@@ -329,7 +329,7 @@ export function CustomiseScreen() {
             {s.people.map((p, i) => (
               <Press key={p.id} onPress={() => setPerson(p.id)} give="soft" label={`${p.name}, ${p.detail}`}
                 style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3], minHeight: 62, paddingVertical: SP[3], paddingHorizontal: SP[4], borderTopWidth: i ? 1 : 0, borderTopColor: C.hairline }}>
-                <Avatar name={p.name} home={p.home} size={36} ring={C.card} />
+                <Avatar name={p.name} home={p.home} photo={p.photo} size={36} ring={C.card} />
                 <View style={{ flex: 1, gap: 2 }}>
                   <T v="headline">{p.name}</T>
                   <T v="footnote" color={C.stone}>{`${p.detail}${p.sinceLabel ? ` · ${p.home ? 'home' : 'left'} since ${p.sinceLabel}` : ''}`}</T>

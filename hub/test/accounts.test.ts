@@ -449,3 +449,35 @@ test('a username and password: set by the person or the owner, sign in on any de
     assert.equal((await h.call(null, 'POST', '/api/login/password', { user: 'brishti', password: 'reset by owner' }, '10.0.0.3')).statusCode, 401);
   } finally { await h.close(); }
 });
+
+test('a person’s photo: set by them or an owner, served at an address that can’t be guessed, replaced and removed', async () => {
+  const h = await home();
+  h.hub.dataDir = mkdtempSync(join(tmpdir(), 'kova-photos-'));
+  try {
+    const b = await h.join({ role: 'adult' }, { personId: 'brishti' });
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4, 0xff, 0xd9]);
+    const put = (key: string, id: string, body = jpeg, type = 'image/jpeg') => h.app.inject({ method: 'PUT', url: `/api/people/${id}/photo`, headers: { authorization: `Bearer ${key}`, 'content-type': type }, payload: body });
+    let r = await put(b.token, 'brishti');
+    assert.equal(r.statusCode, 200, r.body);
+    const photo = r.json().photo as string;
+    assert.match(photo, /^\/api\/photo\/brishti-[0-9a-f]{16}\.jpg$/);
+    assert.equal(h.hub.config.get().people.find(p => p.id === 'brishti')!.photo, photo);
+    // Anyone's device (an <img>) loads it without a key; a guessed address doesn't.
+    r = await h.app.inject({ method: 'GET', url: photo });
+    assert.equal(r.statusCode, 200);
+    assert.equal(r.headers['content-type'], 'image/jpeg');
+    assert.deepEqual(r.rawPayload, jpeg);
+    assert.equal((await h.app.inject({ method: 'GET', url: '/api/photo/brishti-0000000000000000.jpg' })).statusCode, 404);
+    // Not someone else's (unless an owner); not a file that isn't a photo.
+    const sam = await h.join({ role: 'adult', name: 'Sam' }, {});
+    assert.equal((await put(sam.token, 'brishti')).statusCode, 403);
+    assert.equal((await put(b.token, 'brishti', Buffer.from('hello'), 'text/plain')).statusCode, 400);
+    // The owner replaces it: a new address, the old one gone.
+    r = await put(MASTER, 'brishti');
+    assert.notEqual(r.json().photo, photo);
+    assert.equal((await h.app.inject({ method: 'GET', url: photo })).statusCode, 404);
+    // Removed: back to the initial.
+    assert.equal((await h.call(b.token, 'DELETE', '/api/people/brishti/photo')).statusCode, 200);
+    assert.equal(h.hub.config.get().people.find(p => p.id === 'brishti')!.photo, undefined);
+  } finally { await h.close(); }
+});

@@ -66,7 +66,7 @@ export function NowScreen() {
           <T v="label" color={C.bone2}>{s.home.name}</T>
         </View>
         <Press onPress={can.security ? () => nav.navigate('Tabs', { screen: 'Security' } as never) : undefined} label={`${plural(s.people.filter(p => p.home).length, 'person', 'people')} home`} style={{ flexDirection: 'row' }}>
-          {s.people.slice(0, 4).map((p, i) => <View key={p.id} style={{ marginLeft: i ? -8 : 0 }}><Avatar name={p.name} home={p.home} size={32} /></View>)}
+          {s.people.slice(0, 4).map((p, i) => <View key={p.id} style={{ marginLeft: i ? -8 : 0 }}><Avatar name={p.name} home={p.home} photo={p.photo} size={32} /></View>)}
         </Press>
       </View>
     }>

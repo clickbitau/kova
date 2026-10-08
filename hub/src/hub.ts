@@ -98,6 +98,8 @@ export class Hub extends EventEmitter<{ changed: [] }> {
   updates: Updates | null = null;
   /** Audio clips kept on the hub for announcements (services/clips.ts). */
   readonly clips: Clips;
+  /** Where the hub keeps its files (null in tests that keep nothing). */
+  dataDir: string | null;
   /** Seamless loops of sounds that repeat (services/loops.ts). */
   readonly loops: Loops;
   /** The call-to-prayer recordings from Wikimedia Commons, downloaded on first use (services/adhans.ts). */
@@ -157,6 +159,7 @@ export class Hub extends EventEmitter<{ changed: [] }> {
     this.config.on('changed', () => this.combined.sync());
     this.config.on('changed', () => this.linkNamedZones());
     this.engine = new Engine(this.store, this.reg, this.config, opts.now);
+    this.dataDir = opts.dataDir ?? null;
     const clipDir = opts.dataDir ? join(opts.dataDir, 'clips') : null;
     this.clips = new Clips(clipDir);
     this.loops = new Loops(opts.dataDir ? join(opts.dataDir, 'loops') : null);

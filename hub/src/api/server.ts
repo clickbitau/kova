@@ -44,6 +44,7 @@ import { registerImportRoutes } from './import-routes.ts';
 import { registerHomeRoutes } from './home-routes.ts';
 import { registerHelixCastRoutes } from './helix-cast-routes.ts';
 import { registerAnnounceRoutes } from './announce-routes.ts';
+import { registerPhotoRoutes } from './photo-routes.ts';
 import { registerSecurityRoutes } from './security-routes.ts';
 import { registerLanAppRoutes } from './lan-apps-routes.ts';
 import { registerAppLinkRoutes } from './app-link.ts';
@@ -641,6 +642,7 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
   registerImportRoutes(app, opts.haImport, hub);
   registerHomeRoutes(app, hub);
   registerHelixCastRoutes(app, hub);
+  registerPhotoRoutes(app, hub);
   registerAnnounceRoutes(app, hub, () => { const a = app.server.address(); return typeof a === 'object' && a ? a.port : Number(process.env.KOVA_PORT ?? 8140); });
   registerSecurityRoutes(app, hub);
   registerLanAppRoutes(app, { integrations: opts.integrations, helixLink: opts.helixLink, ...opts.lanApps });

@@ -25,6 +25,7 @@ export const ROUTES: Record<string, Rule> = {
   // Announcement audio for the speakers, which can't send a key: the clip's random id is its key (announce-routes.ts).
   'GET /api/clip/:file': r('public'),
   'GET /api/sound/:file': r('public'),
+  'GET /api/photo/:file': r('public'),
   'POST /api/login/start': r('public'),
   'GET /api/login/poll/:id': r('public'),
   'POST /api/login/password': r('public'),
@@ -160,6 +161,8 @@ export const ROUTES: Record<string, Rule> = {
   'DELETE /api/assistant/memory/:i': r('home'),
   'PATCH /api/me': r('home'),
   'PUT /api/me/login': r('view'),
+  'PUT /api/people/:id/photo': r('view'),
+  'DELETE /api/people/:id/photo': r('view'),
   'DELETE /api/me/login': r('view'),
 
   // ---- the owner: people and accounts, integrations, updates, backups, the hub's keys and location
