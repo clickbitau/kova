@@ -22,12 +22,18 @@ import { playerOf } from '../engine/group-sync.ts';
 interface Session { media: string; targets: string[] }
 
 const QUEUE_MAX = 500;
+/** The volume a speaker found at 0 plays at when Kova never heard it louder. */
+const QUIET = 20;
 const CAUSE: Cause = { kind: 'device', label: 'Helix', detail: 'from a Helix app' };
 
 export function registerHelixCastRoutes(app: FastifyInstance, hub: Hub): void {
   const sessions = new Map<string, Session>();
   /** Volume before Helix muted a speaker (Kova's speakers mute by volume). */
   const mutedAt = new Map<string, number>();
+  /** Each speaker's last volume that wasn't 0, to play at when it's found turned all the way down. */
+  const lastHeard = new Map<string, number>();
+  hub.reg.on('change', e => { const v = e.patch.vol; if (typeof v === 'number' && v > 0) lastHeard.set(e.device.id, v); });
+  for (const d of hub.reg.list()) if (typeof d.state.vol === 'number' && d.state.vol > 0) lastHeard.set(d.id, d.state.vol);
   const bad = (reply: { code: (n: number) => { send: (b: unknown) => unknown } }, status: number, error: string) => reply.code(status).send({ error });
 
   const isGroup = (d: Device) => d.adapter === 'groups';
@@ -150,7 +156,11 @@ export function registerHelixCastRoutes(app: FastifyInstance, hub: Hub): void {
     leave(ids);
     hub.music.castQueue(media, label, songs, profile);
     sessions.set(session, { media, targets: ids });
-    const r = await Promise.allSettled(t.ok.map(d => hub.reg.command(d.id, { on: true, media }, CAUSE)));
+    // A speaker turned all the way down (at the speaker, or another app) would play in silence: the volume asked for,
+    // else its last level that wasn't 0, else a quiet one. One Helix muted keeps its mute.
+    const given = typeof b.volume === 'number' && b.volume >= 0 && b.volume <= 100 ? Math.round(b.volume) : undefined;
+    const volFor = (d: Device): number | undefined => given ?? (d.state.vol === 0 && !mutedAt.has(d.id) ? lastHeard.get(d.id) ?? QUIET : undefined);
+    const r = await Promise.allSettled(t.ok.map(d => { const v = volFor(d); return hub.reg.command(d.id, { on: true, media, ...(v != null ? { vol: v } : {}) }, CAUSE); }));
     const failed = r.map((x, i) => x.status === 'rejected' ? `${t.ok[i]!.name}: ${(x.reason as Error)?.message}` : null).filter(Boolean);
     if (failed.length === r.length) { leave(ids); return bad(reply, 502, `The speakers didn’t play it. ${failed.join('; ')}`); }
     if (index || positionMs) await Promise.allSettled(t.ok.map(d => moveTo(d, index, positionMs)));

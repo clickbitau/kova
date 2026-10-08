@@ -113,7 +113,11 @@ test('Helix casting: Helix’s token lists the speakers and groups, plays its qu
 test('Helix casting: control acts on the whole session (pause, seek, jump, stop); volume and mute on the one named; songs added; errors in words', async () => {
   const h = await home();
   try {
+    // A speaker turned all the way down at the speaker: brought back to its last level, so the cast is heard.
+    await h.hub.reg.command('office', { vol: 35 }, { kind: 'user', label: 'You' });
+    (h.fc as unknown as { ctx: { report(id: string, s: object): void } }).ctx.report('office', { vol: 0 });
     await h.helixCall('POST', '/api/helix/play', { targets: ['kitchen', 'office'], session: 'hx-1', tracks: [song(1), song(2), song(3)] });
+    assert.equal(h.hub.reg.get('office')!.state.vol, 35, 'not left at 0');
     await sleep(200);
     const ctl = (b: object) => h.helixCall('POST', '/api/helix/control', b);
     assert.equal((await ctl({ targets: ['kitchen'], action: 'pause' })).statusCode, 200);
