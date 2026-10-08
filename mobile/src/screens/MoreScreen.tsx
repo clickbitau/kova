@@ -3,15 +3,18 @@ import { View } from 'react-native';
 import { C, SP } from '../theme';
 import { useHub, useSnap } from '../state/hub';
 import { useNav } from '../navigation';
-import { useAppUpdate } from '../native/updates';
+import { running, useAppUpdate } from '../native/updates';
 import { updateNotice } from '../logic/updates';
-import { Card, Group, IconWell, Mark, PulseDot, Row } from '../ui/kit';
+import { Button, Card, Group, IconWell, Mark, PulseDot, Row } from '../ui/kit';
+import { Icon } from '../ui/Icon';
 import { Screen } from '../ui/Screen';
 import { T } from '../ui/Text';
 import { display, KIND_LABEL } from '../logic/addresses';
 import { linkWords } from '../logic/link';
 import { automationsOf } from '../logic/automations';
 import { features, meOf } from '../logic/roles';
+import { useDemo } from '../state/demo';
+import { openPrivacyPolicy } from '../ui/PrivacyLink';
 
 export function MoreScreen() {
   const s = useSnap();
@@ -30,9 +33,21 @@ export function MoreScreen() {
   // What this person's role can use (logic/roles.ts); the hub refuses the rest anyway.
   const who = meOf(s);
   const can = features(who);
+  const { demo, leaveDemo } = useDemo();
   return (
     <Screen title="More" over={s.home.name} gap={SP[6]}>
-      <Card style={{ padding: SP[4], flexDirection: 'row', alignItems: 'center', gap: SP[3] }}>
+      {demo ? (
+        <Card tint={C.amber} style={{ padding: SP[4], gap: SP[3] }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3] }}>
+            <IconWell icon="science" color={C.amber} size={40} fill />
+            <View style={{ flex: 1, gap: 2 }}>
+              <T v="headline">You’re in the demo home</T>
+              <T v="footnote" color={C.stone}>It runs on this phone only. Nothing here is real, and nothing is sent anywhere.</T>
+            </View>
+          </View>
+          <Button icon="link" label="Connect your own hub" onPress={() => leaveDemo()} />
+        </Card>
+      ) : <Card style={{ padding: SP[4], flexDirection: 'row', alignItems: 'center', gap: SP[3] }}>
         <IconWell icon="router" color={tone} size={40} />
         <View style={{ flex: 1, gap: 2 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2] }}>
@@ -41,7 +56,7 @@ export function MoreScreen() {
           </View>
           <T v="footnote" color={C.stone} numberOfLines={1}>{live && route ? `${KIND_LABEL[route.kind]} · ${display(route.url)}` : display(cfg?.url)}</T>
         </View>
-      </Card>
+      </Card>}
 
 
       <Group title="Your home">
@@ -67,6 +82,10 @@ export function MoreScreen() {
         <Row icon="computer" iconFg={C.blue} title="Sign in a browser" sub="Type the code your Kova address shows on a computer" onPress={() => nav.navigate('Browsers')} />
       </Group>
 
+      <Group title="About">
+        <Row first icon="lock" iconFg={C.green} title="Privacy policy" sub="What Kova collects, where it goes, and your choices" onPress={openPrivacyPolicy} right={<Icon name="arrow_outward" size={18} color={C.stone2} />} />
+        <Row icon="info" title={`Kova ${running.version}`} sub="Made by ClickBIT" />
+      </Group>
 
       <View style={{ alignItems: 'center', gap: SP[2], paddingTop: SP[2] }}>
         <Mark size={22} ink={C.stone2} />

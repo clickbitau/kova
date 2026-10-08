@@ -13,6 +13,7 @@ import { SoftwareUpdate } from './SoftwareUpdate';
 import { Screen } from '../ui/Screen';
 import { T } from '../ui/Text';
 import { Icon } from '../ui/Icon';
+import { openPrivacyPolicy } from '../ui/PrivacyLink';
 
 /** More → Settings: the home's name, where it is (its own screen: the map, the address, the circle), its timezone and prayer method, behaviours, and Software update. */
 export function SettingsScreen() {
@@ -75,6 +76,9 @@ export function SettingsScreen() {
         <Row icon="send" iconFg={C.stone} title="Notification channels" sub="Push and ntfy, off for everyone, send a test" onPress={() => nav.navigate('Integration', { id: 'notify' })} />
         <Row icon="computer" iconFg={C.blue} title="Sign in a browser" sub="Your home on a computer, and signed-in browsers" onPress={() => nav.navigate('Browsers')} />
         <Row icon="hub" title="Integrations" sub="What’s connected, and adding more" onPress={() => nav.navigate('Integrations')} />
+      </Group>
+      <Group title="About">
+        <Row first icon="lock" iconFg={C.green} title="Privacy policy" sub="What Kova collects, where it goes, and your choices" onPress={openPrivacyPolicy} right={<Icon name="arrow_outward" size={18} color={C.stone2} />} />
       </Group>
 
       <SoftwareUpdate hub={s.update} />

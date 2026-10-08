@@ -3,6 +3,7 @@ import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import { hello } from '../api/client';
 import { chooseAddress, type HubAddress } from '../logic/addresses';
+import { askLocation, type LocationAsk } from '../logic/location-consent';
 import { GEOFENCE_TASK, HOME_RADIUS_M, homeMoved, presenceFor, type LatLon } from '../logic/geo';
 import { getJson, setJson } from './storage';
 
@@ -48,14 +49,25 @@ if (Platform.OS !== 'web') {
   });
 }
 
-export type StartResult = { ok: true } | { ok: false; why: string };
+export type StartResult = { ok: true } | { ok: false; why: string; /** Not now on Kova's disclosure: nothing was asked. */ declined?: boolean };
 
-export async function startArriveLeave(c: ArriveLeave): Promise<StartResult> {
+/** expo-location's permission calls, for logic/location-consent.ts. Each system prompt only after `disclose` says Continue. */
+export const locationAsk = (disclose: LocationAsk['disclose']): LocationAsk => ({
+  getForeground: () => Location.getForegroundPermissionsAsync(),
+  getBackground: () => Location.getBackgroundPermissionsAsync(),
+  requestForeground: () => Location.requestForegroundPermissionsAsync(),
+  requestBackground: () => Location.requestBackgroundPermissionsAsync(),
+  disclose,
+});
+
+/**
+ * Turn arriving and leaving on. `disclose` shows Kova's own full-screen disclosure (screens/LocationDisclosure.tsx)
+ * before each system location prompt (Google Play's prominent disclosure); Not now there asks nothing.
+ */
+export async function startArriveLeave(c: ArriveLeave, disclose: LocationAsk['disclose']): Promise<StartResult> {
   if (Platform.OS === 'web') return { ok: false, why: 'Arriving and leaving needs the phone app.' };
-  const fg = await Location.requestForegroundPermissionsAsync();
-  if (!fg.granted) return { ok: false, why: 'Kova needs your location to know when you arrive and leave.' };
-  const bg = await Location.requestBackgroundPermissionsAsync();
-  if (!bg.granted) return { ok: false, why: 'Choose “Always” for Location in Settings, so Kova notices when the app is closed.' };
+  const r = await askLocation('background', locationAsk(disclose));
+  if (!r.ok) return { ok: false, why: r.why, ...(r.reason === 'declined' ? { declined: true } : {}) };
   await setJson(KEY, c);
   if (await Location.hasStartedGeofencingAsync(GEOFENCE_TASK).catch(() => false)) await Location.stopGeofencingAsync(GEOFENCE_TASK);
   await Location.startGeofencingAsync(GEOFENCE_TASK, [{ identifier: 'home', latitude: c.home.latitude, longitude: c.home.longitude, radius: c.home.radiusM ?? HOME_RADIUS_M, notifyOnEnter: true, notifyOnExit: true }]);

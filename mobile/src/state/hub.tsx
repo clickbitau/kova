@@ -23,7 +23,7 @@ export interface Toast { id: number; text: string; undo?: string; error?: boolea
 /** A device command on its way: `busy` until the hub answers, `failed` for a moment when it refused. */
 export type Pending = Record<string, 'busy' | 'failed'>;
 
-interface HubCtx {
+export interface HubCtx {
   cfg: HubConfig | null;
   /** Still reading the saved hub from the keychain. */
   loading: boolean;
@@ -57,7 +57,7 @@ interface HubCtx {
   signIn(token: string): Promise<void>;
 }
 
-const Ctx = createContext<HubCtx | null>(null);
+export const Ctx = createContext<HubCtx | null>(null);
 const KEY = 'kova.hub';
 /** While on the remote address with a home-network one to go back to, look again this often. */
 const AWAY_CHECK_MS = 60_000;

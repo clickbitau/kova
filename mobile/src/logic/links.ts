@@ -25,3 +25,6 @@ export const NATIVE_PAGES: Record<string, 'Modes' | 'Activity' | 'Automations' |
   // Hub update notifications open Settings, where Software update is.
   settings: 'Settings',
 };
+
+/** Kova's privacy policy (the text is docs/privacy-policy.md). The one place the app keeps its address. */
+export const PRIVACY_POLICY_URL = 'https://clickbit.com.au/privacy/kova';

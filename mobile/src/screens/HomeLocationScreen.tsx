@@ -15,6 +15,10 @@ import { FieldWithButton } from './DeviceSheet';
 import { Screen } from '../ui/Screen';
 import { T } from '../ui/Text';
 import { Icon } from '../ui/Icon';
+import { askLocation } from '../logic/location-consent';
+import { locationAsk } from '../native/arrive-leave';
+import { useDemo } from '../state/demo';
+import { useLocationDisclosure } from './LocationDisclosure';
 
 const MAP_H = 300;
 
@@ -104,13 +108,15 @@ export function HomeLocationScreen() {
   const pasteAndFind = async () => { const t = await paste(); if (!t.trim()) { say('Nothing to paste: copy a link in Google Maps first', { error: true }); return; } setPasteText(t); await find(t); };
 
   // ---------------------------------------------------------- this phone --
-  // On branch app/play-readiness this goes through Kova's location disclosure first (logic/location-consent.ts);
-  // that isn't on this branch, so it asks as Settings always has.
+  // Kova's own disclosure first, then the system prompt (logic/location-consent.ts). The demo home never asks.
+  const { demo } = useDemo();
+  const { disclose, view: disclosure } = useLocationDisclosure();
   const here = async () => {
+    if (demo) { if (await disclose('once')) say('In the demo home Kova doesn’t use your location.'); return; }
     setLocating(true);
     try {
-      const p = await Location.requestForegroundPermissionsAsync();
-      if (!p.granted) { say('Kova needs your location once to set where the home is', { error: true }); return; }
+      const p = await askLocation('once', locationAsk(disclose));
+      if (!p.ok) { if (p.reason !== 'declined') say(p.why, { error: true }); return; }
       const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
       setPin({ latitude: Math.round(pos.coords.latitude * 1e6) / 1e6, longitude: Math.round(pos.coords.longitude * 1e6) / 1e6, source: 'phone', address: null, label: 'This phone’s location' });
       const acc = pos.coords.accuracy ?? 0;
@@ -216,6 +222,7 @@ export function HomeLocationScreen() {
         {mk?.from === 'hub' ? <Button kind="ghost" label="Remove the key" onPress={() => saveKey(null)} /> : null}
         <T v="footnote" color={C.stone}>In Google Cloud, enable Places API (New), Geocoding API and Maps Static API for the key, and restrict it to those APIs.</T>
       </Sheet>
+      {disclosure}
     </Screen>
   );
 }

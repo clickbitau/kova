@@ -24,7 +24,7 @@ export function CameraStill({ uri, off, label }: { uri: string | null; off?: boo
   const [failed, setFailed] = useState(false);
   return (
     <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: C.inset, alignItems: 'center', justifyContent: 'center' }}>
-      {!loaded && !failed && !off ? <Skeleton h={400} r={0} style={{ position: 'absolute', left: 0, right: 0, top: 0 }} /> : null}
+      {uri && !loaded && !failed && !off ? <Skeleton h={400} r={0} style={{ position: 'absolute', left: 0, right: 0, top: 0 }} /> : null}
       <Icon name={off ? 'videocam_off' : 'videocam'} size={28} color={off || failed ? C.stone2 : C.stone3} />
       {failed && !off ? <T v="micro" color={C.stone2} style={{ marginTop: 6 }}>No picture yet</T> : null}
       {uri && !off ? <Image source={{ uri }} onLoad={() => { setLoaded(true); setFailed(false); }} onError={() => setFailed(true)} accessibilityLabel={label} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} contentFit="cover" transition={250} /> : null}
