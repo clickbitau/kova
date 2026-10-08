@@ -1,7 +1,7 @@
 {
   "name": "Kova",
   "slug": "kova",
-  "version": "0.2.37",
+  "version": "0.2.39",
   "runtimeVersion": "kova-mobile-0.2",
   "updates": {
     "enabled": true,
@@ -164,6 +164,14 @@
     },
     "kovaHistory": [
       {
+        "version": "0.2.39",
+        "title": "Speaker groups: volume balance and tuning with music; choose what you’re told about and how often; update progress"
+      },
+      {
+        "version": "0.2.38",
+        "title": "Speaker groups: a speaker played alongside now waits for the main group to start, then joins it in time"
+      },
+      {
         "version": "0.2.37",
         "title": "Speaker groups across brands: a Cast group and a Sonos (or any speaker) play together, with a timing slider per speaker, a sync test you tune by ear, and each speaker’s measured start delay"
       },
@@ -174,14 +182,6 @@
       {
         "version": "0.2.35",
         "title": "Household accounts: invite people with a link or QR, roles for adults, children and guests, and each person’s own phone and notifications"
-      },
-      {
-        "version": "0.2.34",
-        "title": "Kova learns from what you do: an automation you start early, a value you always change, one you undo, or two things you do one after the other become suggestions with the days they’re based on, on Modes and the automation’s own screen; Not now, Don’t suggest again, Why?, and Settings → What Kova has learned"
-      },
-      {
-        "version": "0.2.33",
-        "title": "Announcements that play over what speakers are doing and then put them back, speaker loudness so one level sounds the same in every room, and prayer times as an opt-in integration with the waqt on Now"
       }
     ]
   },
