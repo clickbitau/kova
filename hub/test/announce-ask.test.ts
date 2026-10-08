@@ -240,17 +240,17 @@ test('Ask: “I added Fajr adhan in Helix” → looked up with find_music, and 
     calls(['find_music', { name: 'Fajr adhan' }]),
     (body: any) => {
       const found = lastResults(body)[0];
-      assert.deepEqual(found, { ok: true, media: 'Song: Fajr Adhan (Mishary)', kind: 'track' });
+      assert.deepEqual(found, { ok: true, media: 'Album: Fajr Adhan (feat. Abdul Waheed Meerkar)', kind: 'album', announce: 'Song: Fajr Adhan (feat. Abdul Waheed Meerkar)' });
       return calls(['create_automation', {
         name: 'Fajr adhan', when: [{ kind: 'time', at: { kind: 'prayer', prayer: 'fajr' } }],
-        then: [{ kind: 'announce', media: found.media, vol: 10, targets: { group_whole_home: {} }, restore: true }],
+        then: [{ kind: 'announce', media: found.announce, vol: 10, targets: { group_whole_home: {} }, restore: true }],
       }]);
     },
     say('Done: “Fajr adhan” plays your Fajr Adhan from Helix on Whole home at 10% at Fajr.'),
   ]);
   const h = await askHome({ tweak: c => { c.prayer = { on: true }; c.speakerGroups = [{ id: 'whole_home', name: 'Whole home', members: ['living_display', 'master_speaker'] }]; } });
   (h.hub as unknown as { music: unknown }).music = {
-    find: async (w: string) => { looked.push(w); return { media: 'Song: Fajr Adhan (Mishary)', kind: 'track' }; },
+    find: async (w: string) => { looked.push(w); return { media: 'Album: Fajr Adhan (feat. Abdul Waheed Meerkar)', kind: 'album' }; },
     cached: () => [], isMusic: (m: string) => /^song: /i.test(m),
   };
   await h.useModel(model.url);
@@ -258,7 +258,7 @@ test('Ask: “I added Fajr adhan in Helix” → looked up with find_music, and 
   assert.deepEqual(looked, ['Fajr adhan']);
   const a = (h.hub.config.get().automations ?? []).find(x => x.name === 'Fajr adhan');
   assert.ok(a, 'made');
-  assert.equal((a!.actions[0] as AnnounceAction).media, 'Song: Fajr Adhan (Mishary)');
+  assert.equal((a!.actions[0] as AnnounceAction).media, 'Song: Fajr Adhan (feat. Abdul Waheed Meerkar)');
   assert.ok(toolDefs({ prayer: true }).some(t => t.name === 'find_music'));
   await h.close?.();
   await model.close?.();
