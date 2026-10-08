@@ -85,6 +85,8 @@ export interface Adapter {
   playbackPosition?(device: Device): Promise<PlaybackPosition | null>;
   /** Optional: move whatever plays this speaker to a place in its queue (a song, ms into it), to line it up with others. */
   syncTo?(device: Device, to: { index: number; positionMs: number }): Promise<void>;
+  /** Stop where it is for a moment, without it counting as paused (a speaker waiting at a song's end for the others); syncTo plays it again. */
+  hold?(device: Device): Promise<void>;
 }
 
 /** Speakers an adapter can play as one stream (see Adapter.nativeGroups). */

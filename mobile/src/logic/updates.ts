@@ -19,6 +19,31 @@ export function hubProgress(u: Pick<HubUpdate, 'state' | 'available'>): string |
   }
 }
 
+export interface StepRow { label: string; state: 'done' | 'now' | 'next' }
+
+/**
+ * The update's steps for the progress bar: each done, now or next, the share done (0–1), and the line under it. While
+ * the hub restarts it can't answer, so `away` (the app lost it mid-update) keeps the restart step showing, with words
+ * for it. Null when nothing is being installed.
+ */
+export function updateSteps(u: Pick<HubUpdate, 'state' | 'progress' | 'available'>, o: { away?: boolean; now?: number } = {}): { rows: StepRow[]; share: number; line: string; bad: boolean } | null {
+  if (u.state !== 'updating' && u.state !== 'requested') return null;
+  const p = u.progress;
+  const steps = p?.steps?.length ? p.steps : ['Downloading', 'Unpacking and checking', 'Backing up your home', 'Restarting Kova', 'Making sure it started properly'];
+  // Asked, not started: nothing done yet. Away mid-update: at least at the restart.
+  let step = u.state === 'requested' ? -1 : Math.min(p?.step ?? 0, steps.length - 1);
+  if (o.away && u.state === 'updating') step = Math.max(step, steps.length - 2);
+  const rows = steps.map((label, i): StepRow => ({ label, state: i < step ? 'done' : i === step ? 'now' : 'next' }));
+  const share = Math.max(0.04, (step + 0.5) / steps.length);
+  const mins = p?.startedAt && o.now ? Math.max(0, Math.round((o.now - p.startedAt) / 60_000)) : null;
+  const took = mins != null && mins >= 1 ? ` · ${mins} min so far` : '';
+  const line = u.state === 'requested' ? 'Asked the hub. It starts in a moment.'
+    : p?.rollingBack ? `${p.label}. Your home keeps working.`
+    : o.away ? `Kova is restarting, so this app can’t reach it for a minute or so. It reconnects by itself${took}.`
+    : `${p?.label ?? steps[Math.max(0, step)]}…${took}`;
+  return { rows, share, line, bad: !!p?.rollingBack };
+}
+
 export interface HistoryRow { key: string; icon: string; tone: 'ok' | 'warn' | 'error'; title: string; sub: string }
 
 /** The hub's update history, newest first: what happened, when. Falls back to the last result on older hubs. */

@@ -71,7 +71,7 @@ class Receiver {
   readonly ch: CastChannel;
   media: string | null = null;
   /** A play queue (Helix music): the songs in order, where it is, and what the speaker holds. */
-  queue: { q: Queue; index: number; from: number; to: number; session?: number; position: number; topping?: boolean } | null = null;
+  queue: { q: Queue; index: number; from: number; to: number; session?: number; position: number; topping?: boolean; items?: Map<number, number>; asking?: number } | null = null;
   private transport: string | null = null;
   /** Playback is paused (on hold, not stopped), as the speaker last said. */
   paused = false;
@@ -177,9 +177,21 @@ class Receiver {
     if (!st || !qu) return;
     if (st.mediaSessionId) qu.session = st.mediaSessionId;
     if (st.currentTime != null) qu.position = st.currentTime;
-    const item = st.items?.find(i => i.itemId === st.currentItemId);
-    const at = st.media?.customData?.kova ?? item?.customData?.kova ?? item?.media?.customData?.kova;
+    // Which song: the receiver's queue items carry their place in Kova's queue. A status doesn't always say (a Cast
+    // group's often names only the item id), so the ids seen are kept, and one never seen is asked for.
+    const items = (qu.items ??= new Map());
+    for (const i of st.items ?? []) { const k = i.customData?.kova ?? i.media?.customData?.kova; if (typeof k === 'number') items.set(i.itemId, k); }
+    const fromMedia = st.media?.customData?.kova;
+    if (typeof fromMedia === 'number' && st.currentItemId != null) items.set(st.currentItemId, fromMedia);
+    const at = fromMedia ?? (st.currentItemId != null ? items.get(st.currentItemId) : undefined);
     if (typeof at === 'number' && at !== qu.index && at >= 0 && at < qu.q.tracks.length) { qu.index = at; this.onTrack?.(); }
+    if (at === undefined && st.currentItemId != null && qu.asking !== st.currentItemId && this.transport && qu.session != null) {
+      qu.asking = st.currentItemId;
+      const id = st.currentItemId;
+      void this.ch.request(NS.media, this.transport, { type: 'QUEUE_GET_ITEMS', mediaSessionId: qu.session, itemIds: [id] })
+        .then(m => this.onStatus({ ...st, items: (m.data.items as MediaStatus['items']) ?? [] }))
+        .catch(() => { if (qu.asking === id) qu.asking = undefined; });
+    }
     if (st.playerState === 'IDLE' && st.idleReason === 'FINISHED' && qu.index >= qu.q.tracks.length - 1) {
       this.queue = null;
       this.media = null;

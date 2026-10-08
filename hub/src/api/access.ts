@@ -46,6 +46,8 @@ export const ROUTES: Record<string, Rule> = {
   'POST /api/push/unsubscribe': r('view'),
   'POST /api/push/app': r('view'),
   'DELETE /api/push/app': r('view'),
+  'GET /api/notify/prefs': r('view'),
+  'PUT /api/notify/prefs': r('view'),
   'POST /api/people/:id/presence': r('view', { self: 'id' }),
   'POST /api/ask': r('view'),
   'POST /api/ask/parse': r('view'),
@@ -122,6 +124,7 @@ export const ROUTES: Record<string, Rule> = {
   // A group's timing: adults (and the owner) tune it; children and guests don't.
   'GET /api/speaker-groups/:id/sync': r('home'),
   'PUT /api/speaker-groups/:id/offsets': r('home'),
+  'PUT /api/speaker-groups/:id/balance': r('home'),
   'POST /api/speaker-groups/:id/sync-test': r('home'),
   'DELETE /api/speaker-groups/:id/sync-test': r('home'),
   'POST /api/combined': r('home'),

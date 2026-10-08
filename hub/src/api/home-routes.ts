@@ -397,6 +397,12 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
         // Timing for speakers that left the group goes with them.
         const kept = pruneOffsets(c.groupOffsets?.[g.id], g.members);
         if (Object.keys(kept).length) (c.groupOffsets ??= {})[g.id] = kept; else if (c.groupOffsets) delete c.groupOffsets[g.id];
+        // So does its place in the balance; a speaker that joins starts at its level now.
+        if (g.balance) {
+          const b = Object.fromEntries(Object.entries(g.balance).filter(([k]) => g.members.includes(k)));
+          for (const m of g.members) if (b[m] == null && typeof hub.reg.get(m)?.state.vol === 'number') b[m] = hub.reg.get(m)!.state.vol!;
+          g.balance = b;
+        }
       }
       if (req.body?.room !== undefined) { if (req.body.room) g.room = req.body.room; else delete g.room; }
     });
@@ -415,7 +421,7 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
     const v = hub.groupSync.view(req.params.id);
     return v ?? bad(reply, 'Unknown group', 404);
   });
-  // Offsets: { offsets: { "<part key>": ms } }, −1000…+1000 in 10 ms steps (+ plays earlier); 0 clears one.
+  // Offsets: { offsets: { "<part key>": ms } }, −1000…+1000 in 5 ms steps (+ plays earlier); 0 clears one.
   app.put<{ Params: { id: string }; Body: { offsets?: unknown } }>('/api/speaker-groups/:id/offsets', async (req, reply) => {
     const g = groupOf(req.params.id);
     if (!g) return bad(reply, 'Unknown group', 404);
@@ -425,6 +431,29 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
     // Heard at once while music or the sync test plays.
     void hub.groupSync.retune(g.id, Object.keys(req.body?.offsets as object)).catch(() => {});
     return { ...r, offsets: next };
+  });
+  // The volume balance: { levels: { "<member>": 0–100 } } sets those speakers now, and keeps every member's level as
+  // the group's balance (the group's volume then moves them all together, keeping it: adapters/groups.ts).
+  // { reset: true } forgets it (the group's volume then keeps whatever levels they have).
+  app.put<{ Params: { id: string }; Body: { levels?: unknown; reset?: boolean } }>('/api/speaker-groups/:id/balance', async (req, reply) => {
+    const g = groupOf(req.params.id);
+    if (!g) return bad(reply, 'Unknown group', 404);
+    if (req.body?.reset) return { ...edit(c => { const x = (c.speakerGroups ?? []).find(y => y.id === g.id); if (x) delete x.balance; }), balance: null };
+    const lv = req.body?.levels;
+    if (!lv || typeof lv !== 'object' || Array.isArray(lv)) return bad(reply, 'Send the levels as { "<speaker>": 0–100 }');
+    const set: Record<string, number> = {};
+    for (const [k, v] of Object.entries(lv as Record<string, unknown>)) {
+      if (!g.members.includes(k)) return bad(reply, `“${k}” isn’t in ${g.name}`);
+      if (typeof v !== 'number' || !(v >= 0 && v <= 100)) return bad(reply, 'A level is 0–100');
+      set[k] = Math.round(v);
+    }
+    const via = { kind: 'user' as const, label: 'You', detail: `${g.name}’s balance` };
+    const res = await Promise.allSettled(Object.entries(set).map(([id, vol]) => hub.reg.command(id, { vol }, via)));
+    const failed = res.findIndex(r => r.status === 'rejected');
+    if (failed >= 0 && res.every(r => r.status === 'rejected')) return bad(reply, String(((res[failed] as PromiseRejectedResult).reason as Error)?.message ?? 'The speaker didn’t answer'));
+    const balance: Record<string, number> = {};
+    for (const m of g.members) { const v = set[m] ?? g.balance?.[m] ?? hub.reg.get(m)?.state.vol; if (typeof v === 'number') balance[m] = v; }
+    return { ...edit(c => { const x = (c.speakerGroups ?? []).find(y => y.id === g.id); if (x) x.balance = balance; }), balance };
   });
   // The sync test: Kova's click track on every speaker of the group, low, then each put back as it was.
   app.post<{ Params: { id: string }; Body: { level?: number } }>('/api/speaker-groups/:id/sync-test', async (req, reply) => {

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { testHub, at } from './helpers.ts';
 import { buildServer } from '../src/api/server.ts';
-import { Updates } from '../src/services/updates.ts';
+import { Updates, UPDATE_STEPS, progressOf } from '../src/services/updates.ts';
 import { KOVA_VERSION } from '../src/version.ts';
 import { TEST_PUBKEY, mintKey } from './licence-helpers.ts';
 
@@ -157,4 +157,30 @@ test('Hub updates: the licence key is activated with ClickBit from the hub, neve
     await app.close();
     await t.hub.stop();
   }
+});
+
+test('progress while it updates: the step from the updater’s log, the restart behind it once the new version answers, going back said', async () => {
+  const release = '==> Downloading Kova 0.9.1\n{"sha256":"ab","size":1}\n==> Unpacking kova-0.9.1.tar.gz\n';
+  assert.deepEqual(progressOf(release), { step: 1, steps: UPDATE_STEPS, label: 'Unpacking and checking', startedAt: null, rollingBack: false });
+  assert.equal(progressOf(release + '==> Backing up /var/lib/kova\n(node) ExperimentalWarning\n').label, 'Backing up your home');
+  const switching = release + '==> Backing up /var/lib/kova\n==> Switching from Kova 0.9.0 to 0.9.1\n';
+  assert.equal(progressOf(switching, { running: '0.9.0', to: '0.9.1' }).step, 3, 'the old version, about to restart');
+  assert.equal(progressOf(switching, { running: '0.9.1', to: '0.9.1' }).label, 'Making sure it started properly', 'the new one answering');
+  const back = progressOf(switching + '==> Kova 0.9.1 didn\'t come up: going back to 0.9.0\n==> Restoring /x.tar.gz\n', { running: '0.9.0', to: '0.9.1' });
+  assert.equal(back.rollingBack, true);
+  assert.equal(back.label, 'Putting your data back as it was');
+  // git updates (deploy/update.sh): coloured "==>" lines.
+  assert.equal(progressOf('\x1b[1m==>\x1b[0m Backing up /d\n\x1b[1m==>\x1b[0m Pulling (currently a)\n\x1b[1m==>\x1b[0m Restarting kova\n').step, 3);
+
+  const t = await testHub();
+  const dataDir = mkdtempSync(join(tmpdir(), 'kova-upd-'));
+  const u = new Updates(t.hub, { dataDir, everyMs: 0 });
+  try {
+    writeStatus(dataDir, { updater: 1, state: 'updating', startedAt: 1000, current: { version: KOVA_VERSION, commit: 'a' }, available: { version: '99.0.0', commit: 'b', behind: 1, changes: [] } });
+    assert.equal(u.status().progress?.step, 0, 'started, no log yet');
+    writeFileSync(join(dataDir, 'update', 'last-update.log'), '==> Downloading Kova 99.0.0\n==> Unpacking k\n==> Backing up /d\n');
+    assert.deepEqual([u.status().progress?.step, u.status().progress?.startedAt], [2, 1000]);
+    writeStatus(dataDir, { updater: 1, state: 'idle', current: { version: KOVA_VERSION, commit: 'a' }, available: null });
+    assert.equal(u.status().progress, null);
+  } finally { u.stop(); await t.hub.stop(); }
 });

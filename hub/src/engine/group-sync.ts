@@ -27,9 +27,15 @@ import { SYNC_TEST_FILE, SYNC_TEST_MS } from '../services/clips.ts';
 // mid-song. Radio is never corrected. What Kova did is kept in a short log per group, for the tuning screen.
 
 export const OFFSET_LIMIT_MS = 1000;
-export const OFFSET_STEP_MS = 10;
-/** Out by more than this (after the offset), a part is lined up again at the next song. */
-export const DRIFT_CORRECT_MS = 120;
+export const OFFSET_STEP_MS = 5;
+/**
+ * Out by more than this (after the offset, on the middle of its last few readings), a part is lined up again at the
+ * start of the next song, where a jump isn't heard. Small: what's left after a start stays for the whole song, and
+ * the owner's tuning would have to chase it from song to song.
+ */
+export const DRIFT_CORRECT_MS = 40;
+/** How many readings a part's drift is the middle of (one reading is ±30 ms or so). */
+const DRIFT_READINGS = 3;
 /** Out by more than this, it's moved at once, mid-song. */
 export const DRIFT_SEEK_MS = 400;
 /** At most one mid-song move per part in this long (a speaker that can't hold its place isn't chased). */
@@ -47,6 +53,8 @@ const LATENCY_MAX_MS = 15_000;
 const DRIFT_SANE_MS = 30_000;
 /** How often the main part is read while waiting for it to start. */
 const START_POLL_MS = 150;
+/** A part waiting for the next song stops this long before its own song ends (a speaker takes a moment to). */
+const HOLD_EARLY_MS = 150;
 /** At a start, a part closer than this is left be; further, it's moved (a move a second into a song isn't heard). */
 const JOIN_TOLERANCE_MS = 50;
 
@@ -141,7 +149,7 @@ export function planParts(members: string[], device: (id: string) => Device | un
 
 // ----------------------------------------------------------------- offsets --
 
-/** An offset as kept: a whole number of 10 ms steps, −1000…+1000. Throws on anything else. */
+/** An offset as kept: a whole number of 5 ms steps, −1000…+1000. Throws on anything else. */
 export function cleanOffset(v: unknown): number {
   const n = typeof v === 'string' && /^\s*[+-]?\d+(\.\d+)?\s*$/.test(v) ? Number(v) : v;
   if (typeof n !== 'number' || !Number.isFinite(n)) throw new Error('A delay is a number of milliseconds');
@@ -203,6 +211,9 @@ export function schedule(parts: { key: string; latencyMs?: number }[], offsets: 
 }
 
 // ------------------------------------------------------------------- drift --
+
+/** The middle value (the mean of the middle two for an even count). */
+export const middle = (xs: number[]) => { const v = [...xs].sort((a, b) => a - b), m = v.length >> 1; return v.length % 2 ? v[m]! : Math.round((v[m - 1]! + v[m]!) / 2); };
 
 /** Where a speaker is at time t, from a reading. */
 export const posAt = (p: PlaybackPosition, t: number) => p.positionMs + (p.playing ? t - p.at : 0);
@@ -275,11 +286,15 @@ export interface GroupSyncView {
   log: SyncLogLine[];
 }
 
-interface Pending { refIndex: number; scheduled?: boolean }
+interface Pending { refIndex: number }
 interface Session {
   group: string; media: string; live: boolean; startAt: number; parts: PlanPart[]; cause: Cause;
   timer: NodeJS.Timeout | null; timers: Set<NodeJS.Timeout>; checking: boolean; ended: boolean; misses: number;
   pending: Map<string, Pending>; lastSeek: Map<string, number>; seeked: Set<string>; drift: Map<string, number | null>;
+  /** Each part's last few drift readings, since it was last moved. */
+  readings: Map<string, number[]>;
+  /** The main part's song as last seen; the song a change is being (or was) watched into; a change under way. */
+  refIndex?: number; watched?: number; watching?: boolean; changing?: boolean;
 }
 interface SyncTest { snaps: Map<string, PlaybackSnap>; players: string[]; until: number; timer: NodeJS.Timeout | null; cause: Cause }
 
@@ -287,6 +302,8 @@ export interface GroupSyncOptions {
   checkMs?: number; marginMs?: number; testMs?: number;
   /** How long to watch for a part to start, to learn its start delay. */
   measureMs?: number;
+  /** How near a song's end drift checks wait for the change (default 2 s). */
+  nearEndMs?: number;
   /** Real time in ms (Date.now): positions and schedules are in it. */
   now?: () => number;
   /** The hub's address as a speaker at this IP reaches it, for the sync test's click track. */
@@ -393,7 +410,7 @@ export class GroupSync extends EventEmitter<{ changed: [] }> {
     const sch = schedule(parts.map(p => ({ key: p.key, latencyMs: live ? undefined : this.book.get(this.latencyKey(p)) })), offs, now, live, this.o.marginMs ?? 150);
     const s: Session = {
       group: g.id, media, live, startAt: sch.startAt, parts, cause, timer: null, timers: new Set(), checking: false, ended: false, misses: 0,
-      pending: new Map(), lastSeek: new Map(), seeked: new Set(), drift: new Map(),
+      pending: new Map(), lastSeek: new Map(), seeked: new Set(), drift: new Map(), readings: new Map(),
     };
     this.sessions.set(g.id, s);
     if (parts.length > 1) {
@@ -466,27 +483,38 @@ export class GroupSync extends EventEmitter<{ changed: [] }> {
 
   /** One drift check: every part's place against the reference's, and a correction where one is due. */
   async check(s: Session): Promise<void> {
-    if (s.checking || s.ended || s.live) return;
+    if (s.checking || s.ended || s.live || s.changing) return;
     s.checking = true;
     try {
       const pos = await Promise.all(s.parts.map(p => this.position(p)));
       const ref = pos[0];
       if (!ref) { if (++s.misses >= 3) this.end(s.group); return; }
       s.misses = 0;
-      if (!ref.playing) return;
+      if (!ref.playing || s.changing) return;
+      // The main part moved on to a song without Kova watching it get there (a skip, or a length it didn't know):
+      // line the others up with it now.
+      if (s.refIndex != null && ref.index !== s.refIndex && s.watched !== ref.index) {
+        void this.songChange(s, ref.index > s.refIndex ? s.refIndex : ref.index - 1, pos);
+        return;
+      }
+      s.refIndex = ref.index;
       const offs = this.offsets(s.group, s.parts);
       for (let k = 1; k < s.parts.length; k++) {
         const part = s.parts[k]!, at = pos[k];
         if (!at || !at.playing || s.ended) { s.drift.set(part.key, null); continue; }
         const off = offs[part.key] ?? 0;
         const d0 = driftOf(ref, at, off);
-        const d = d0 != null && Math.abs(d0) > DRIFT_SANE_MS ? null : d0;
-        s.drift.set(part.key, d);
+        const one = d0 != null && Math.abs(d0) > DRIFT_SANE_MS ? null : d0;
         // How far the last move landed from where it was meant to: the seek delay to use next time.
-        if (s.seeked.has(part.key) && d != null) {
+        if (s.seeked.has(part.key) && one != null) {
           s.seeked.delete(part.key);
-          this.book.record(`seek:${part.key}`, Math.max(0, Math.min(5000, this.seekDelay(part) - d)));
+          this.book.record(`seek:${part.key}`, Math.max(0, Math.min(5000, this.seekDelay(part) - one)));
         }
+        // The middle of the last few readings: one reading can be out by a few tens of ms.
+        const rs = s.readings.get(part.key) ?? [];
+        if (one != null) { rs.push(one); if (rs.length > DRIFT_READINGS) rs.shift(); s.readings.set(part.key, rs); }
+        const d = rs.length ? middle(rs) : null;
+        s.drift.set(part.key, d);
         const act = driftAction({ live: s.live, driftMs: d, sinceSeekMs: this.now() - (s.lastSeek.get(part.key) ?? -Infinity) });
         if (act === 'none') { s.pending.delete(part.key); continue; }
         const how = `${part.name} is ${Math.abs(d!)} ms ${d! > 0 ? 'ahead' : 'behind'}${off ? ` (after its ${signed(off)})` : ''}`;
@@ -496,20 +524,84 @@ export class GroupSync extends EventEmitter<{ changed: [] }> {
           await this.seek(s, part, ref, at, off);
           continue;
         }
-        let pend = s.pending.get(part.key);
-        if (!pend) { pend = { refIndex: ref.index }; s.pending.set(part.key, pend); this.log(s.group, `${how}: lining it up at the start of the next song`); }
-        const now = this.now(), left = ref.durationMs ? ref.durationMs - posAt(ref, now) : undefined;
-        if (left != null && left <= (this.o.checkMs ?? CHECK_MS) + 1500 && !pend.scheduled) {
-          pend.scheduled = true;
-          void this.atBoundary(s, part, ref, off, now + left);
-        } else if (left == null && ref.index !== pend.refIndex && posAt(ref, now) < 4000) {
-          // The song's length isn't known: line it up just after the song changed.
-          s.pending.delete(part.key);
-          this.log(s.group, `${part.name} lined up just after the song changed`);
-          await this.seek(s, part, ref, at, off, false);
-        }
+        // Every part is lined up again at each song change anyway: just say it once.
+        if (!s.pending.has(part.key)) { s.pending.set(part.key, { refIndex: ref.index }); this.log(s.group, `${how}: lining it up at the start of the next song`); }
       }
+      // The song is ending: watch the change, and line everyone up with the main part's next song.
+      const left = ref.durationMs ? ref.durationMs - posAt(ref, this.now()) : null;
+      if (left != null && left <= (this.o.checkMs ?? CHECK_MS) + 2500 && s.watched !== ref.index + 1) void this.songChange(s, ref.index, pos);
     } finally { s.checking = false; this.emit('changed'); }
+  }
+
+  /**
+   * A song change, done like a start. A part that reaches the end of its song before the main part starts the next
+   * waits there (if it can: hold()); once the main part really plays the next song, every part is moved to its place,
+   * plus its offset. The main part's gap between songs (a Cast group fetches and buffers each one, for a different
+   * time every song) is never guessed, so it can't build up.
+   */
+  private async songChange(s: Session, from: number, pos: (PlaybackPosition | null)[]): Promise<void> {
+    if (s.watching || s.ended) return;
+    s.watching = true;
+    s.watched = from + 1;
+    const t0 = this.now();
+    const held = new Map<string, number>();
+    const holdTimers: NodeJS.Timeout[] = [];
+    try {
+      for (let k = 1; k < s.parts.length; k++) {
+        const p = s.parts[k]!, at = pos[k];
+        const { a, d } = this.adapterOf(p.players[0]!);
+        if (!a?.hold || !d || !at?.playing || at.index !== from || !at.durationMs) continue;
+        const end = at.durationMs - posAt(at, t0);
+        const timer = setTimeout(() => {
+          s.timers.delete(timer);
+          if (s.ended || !s.watching || (s.refIndex ?? from) > from) return;
+          s.changing = true;
+          held.set(p.key, this.now());
+          void a.hold!(d).catch(() => held.delete(p.key));
+        }, Math.max(0, end - HOLD_EARLY_MS));
+        s.timers.add(timer);
+        holdTimers.push(timer);
+      }
+      const ref = s.parts[0]!, r0 = pos[0];
+      const until = t0 + (r0?.durationMs ? Math.max(0, r0.durationMs - posAt(r0, t0)) : 0) + 15_000;
+      let r: PlaybackPosition | null = null;
+      while (!s.ended && this.now() < until) {
+        const x = await this.position(ref);
+        if (x && x.index > from && x.playing && x.positionMs > 0) { r = x; break; }
+        // Far from the end yet: look less often.
+        const far = x && x.index === from && x.playing && x.durationMs && x.durationMs - posAt(x, this.now()) > (this.o.nearEndMs ?? 2000);
+        // Near the change, drift checks wait for it (a part waiting at its end isn't drifting).
+        if (!far) s.changing = true;
+        await this.sleep(s, far ? 400 : START_POLL_MS);
+      }
+      for (const t of holdTimers) { clearTimeout(t); s.timers.delete(t); }
+      if (s.ended) return;
+      if (!r) {
+        // The main part didn't start another song (the queue ended, or it stopped): let anyone waiting carry on.
+        for (const k of held.keys()) { const p = s.parts.find(x => x.key === k)!; const at = await this.position(p); if (at) await this.syncPart(p, { index: at.index, positionMs: at.positionMs }); }
+        return;
+      }
+      s.refIndex = r.index;
+      s.pending.clear();
+      const offs = this.offsets(s.group, s.parts);
+      const said: string[] = [];
+      await Promise.all(s.parts.slice(1).map(async p => {
+        const off = offs[p.key] ?? 0;
+        const at = await this.position(p);
+        const d = at?.playing ? driftOf(r!, at, off) : null;
+        const h = held.get(p.key);
+        if (h == null && d != null && Math.abs(d) <= JOIN_TOLERANCE_MS) return;
+        await this.seek(s, p, r!, at ?? { index: r!.index, positionMs: 0, at: this.now(), playing: false }, off, false);
+        said.push(h != null ? `${p.name} waited ${sec(Math.max(0, this.now() - h))} for ${ref.name}, then joined` : `${p.name} lined up with ${ref.name}${d != null ? ` (it was ${Math.abs(d)} ms ${d > 0 ? 'ahead' : 'behind'})` : ''}`);
+      }));
+      if (said.length) this.log(s.group, `Next song: ${said.join('; ')}`);
+    } finally { s.changing = false; s.watching = false; this.emit('changed'); }
+  }
+
+  /** Straight to a place, no timing (letting a waiting part carry on). */
+  private async syncPart(p: PlanPart, to: { index: number; positionMs: number }): Promise<void> {
+    const { a, d } = this.adapterOf(p.players[0]!);
+    if (a?.syncTo && d) await a.syncTo(d, to).catch(() => {});
   }
 
   private seekDelay(p: PlanPart): number { return this.book.get(`seek:${p.key}`) ?? SEEK_GUESS_MS; }
@@ -521,10 +613,17 @@ export class GroupSync extends EventEmitter<{ changed: [] }> {
     const L = this.seekDelay(p), now = this.now();
     let index = ref.index, target = posAt(ref, now + L) + off;
     if (ref.durationMs && target >= ref.durationMs) { index++; target -= ref.durationMs; }
-    target = Math.max(0, target);
-    const step = at.seekStepMs ?? 1;
+    // Never a jump to another song altogether: a part a song or more away from the main part (a reading taken
+    // mid-change, or a queue that isn't the same) is left as it is, and said.
+    if (at.playing && Math.abs(index - at.index) > 1) {
+      this.log(s.group, `${p.name} wasn’t moved: it’s on song ${at.index + 1} and ${s.parts[0]?.name ?? 'the main part'} on song ${ref.index + 1}`);
+      return;
+    }
+    // Due before the song's start (played later than the main part, just after a start): wait for it, from the start.
     let wait = 0;
-    if (step > 1) { const S = Math.ceil(target / step) * step; wait = S - target; target = S; }
+    if (target < 0) { wait = -target; target = 0; }
+    const step = at.seekStepMs ?? 1;
+    if (step > 1) { const S = Math.ceil(target / step) * step; wait += S - target; target = S; }
     await this.sleep(s, wait);
     if (s.ended) return;
     try {
@@ -532,21 +631,8 @@ export class GroupSync extends EventEmitter<{ changed: [] }> {
       // Only a move mid-song counts against chasing it again soon (a line-up at a song change isn't heard).
       if (midSong) s.lastSeek.set(p.key, this.now());
       s.seeked.add(p.key);
+      s.readings.delete(p.key);
     } catch (e) { this.log(s.group, `${p.name} couldn’t be moved: ${(e as Error).message}`); }
-  }
-
-  /** At the reference's next song: start that song on the part at the shared moment (less its offset). */
-  private async atBoundary(s: Session, p: PlanPart, ref: PlaybackPosition, off: number, endAt: number): Promise<void> {
-    const { a, d } = this.adapterOf(p.players[0]!);
-    if (!a?.syncTo || !d) return;
-    await this.sleep(s, endAt - off - this.seekDelay(p) - this.now());
-    if (s.ended) return;
-    try {
-      await a.syncTo(d, { index: ref.index + 1, positionMs: 0 });
-      s.seeked.add(p.key);
-      s.pending.delete(p.key);
-      this.log(s.group, `${p.name} started the next song with the others`);
-    } catch (e) { this.log(s.group, `${p.name} couldn’t be lined up: ${(e as Error).message}`); }
   }
 
   /** The owner moved a part's offset: while a queue plays, move that part now, so the change is heard. */

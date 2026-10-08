@@ -6,13 +6,13 @@ import { useHub, useSnap } from '../state/hub';
 import { useNav } from '../navigation';
 import type { GroupPart, SpeakerGroup } from '../api/types';
 import { meOf } from '../logic/roles';
-import { delayWords, driftWords, EXPECT, msWords, NUDGES, offsetWords, partSub, partTitle, snapOffset, testLeft, testSteps } from '../logic/group-sync';
-import { Button, Card, Empty, ExpandRow, IconWell, Row, Section, Slider, Tag } from '../ui/kit';
+import { delayWords, driftWords, EXPECT, msWords, musicSteps, NUDGES, nudgeLabel, offsetWords, partSub, partTitle, snapOffset, testLeft, testSteps, tuneState } from '../logic/group-sync';
+import { Button, Card, Empty, ExpandRow, IconWell, Pill, Row, Section, Slider, Tag } from '../ui/kit';
 import { Screen } from '../ui/Screen';
 import { T } from '../ui/Text';
 import { SpeakerGroupSheet } from './SpeakerGroupSheet';
 
-interface SyncView { parts: GroupPart[]; log: { at: number; text: string }[]; test: { until: number } | null }
+interface SyncView { parts: GroupPart[]; log: { at: number; text: string }[]; test: { until: number } | null; playing: { media: string; live: boolean; startAt: number } | null }
 
 /** One part of the group: how it plays; for one played alongside, its timing (slider and nudges) and start delay. */
 function PartRow({ g, p, first, canTune, live }: { g: SpeakerGroup; p: GroupPart; first: boolean; canTune: boolean; live?: GroupPart }) {
@@ -50,8 +50,8 @@ function PartRow({ g, p, first, canTune, live }: { g: SpeakerGroup; p: GroupPart
           <T v="label" color={C.bone2} tabular>{offsetWords(off)}</T>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SP[2] }}>
             {NUDGES.map(n => (
-              <View key={n} style={{ flexGrow: 1, flexBasis: '40%' }}>
-                <Button size="sm" kind="secondary" full label={`${n > 0 ? '+' : '−'}${Math.abs(n)}`} onPress={() => save(off + n)} />
+              <View key={n} style={{ flexGrow: 1, flexBasis: '30%' }}>
+                <Button size="sm" kind="secondary" full label={nudgeLabel(n)} onPress={() => save(off + n)} />
               </View>
             ))}
           </View>
@@ -64,6 +64,54 @@ function PartRow({ g, p, first, canTune, live }: { g: SpeakerGroup; p: GroupPart
 }
 
 /**
+ * The group's volume, and each speaker's level against the others: set them where they sound alike, and the group's
+ * volume moves them all together, keeping it (the hub's adapters/groups.ts).
+ */
+function VolumeCard({ g, canTune }: { g: SpeakerGroup; canTune: boolean }) {
+  const { api, send, say } = useHub();
+  const s = useSnap();
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<Record<string, number>>({});
+  const dev = (id: string) => s.devices.find(d => d.id === id);
+  const G = dev(`group_${g.id}`);
+  const members = g.members.map(dev).filter((d): d is NonNullable<typeof d> => !!d);
+  const level = (id: string) => draft[id] ?? dev(id)?.state.vol ?? 0;
+  const setOne = async (id: string, v: number) => {
+    setDraft(x => ({ ...x, [id]: v }));
+    try { await api('PUT', `/api/speaker-groups/${encodeURIComponent(g.id)}/balance`, { levels: { [id]: v } }); return true; }
+    catch (e) { say((e as Error).message); return false; }
+    finally { setTimeout(() => setDraft(x => { const n = { ...x }; delete n[id]; return n; }), 1500); }
+  };
+  return (
+    <Section title="Volume" caption gap={SP[2]}>
+      <Card style={{ overflow: 'hidden' }}>
+        <View style={{ padding: SP[4], gap: SP[3] }}>
+          <Slider value={draft[G?.id ?? ''] ?? G?.state.vol ?? 0} min={0} max={100} suffix="%" color={C.amber} onColor={C.onAmber} icon="volume_up" label={`${g.name} volume`}
+            onChange={v => setDraft(x => ({ ...x, [G?.id ?? '']: v }))}
+            onRelease={v => void send(G?.id ?? `group_${g.id}`, { vol: v }).finally(() => setTimeout(() => setDraft(x => { const n = { ...x }; delete n[G?.id ?? '']; return n; }), 1500))} />
+          <T v="footnote" color={C.stone}>{g.balance ? 'Moves every speaker together, keeping the balance below.' : 'Moves every speaker together, keeping how loud each is now against the others.'}</T>
+        </View>
+        {canTune ? (
+          <ExpandRow icon="tune" iconFg={C.amber} title="Balance" sub={g.balance ? 'Set: the group keeps it' : 'Make the speakers sound alike'} open={open} onToggle={() => setOpen(x => !x)}>
+            <View style={{ gap: SP[3], paddingBottom: SP[3] }}>
+              <T v="callout" color={C.bone2}>While something plays, set each speaker so they all sound about as loud where you listen. Kova keeps that balance: the group’s volume then moves them all together.</T>
+              {members.map(d => (
+                <View key={d.id} style={{ gap: SP[1] }}>
+                  <T v="label" color={C.bone2} numberOfLines={2}>{d.name}</T>
+                  <Slider value={level(d.id)} min={0} max={100} suffix="%" color={C.blue} onColor={C.onBlue} icon="speaker" label={d.name}
+                    onChange={v => setDraft(x => ({ ...x, [d.id]: v }))} onRelease={v => void setOne(d.id, v)} />
+                </View>
+              ))}
+              {g.balance ? <Button size="sm" kind="ghost" icon="restart_alt" label="Forget the balance" onPress={() => api('PUT', `/api/speaker-groups/${encodeURIComponent(g.id)}/balance`, { reset: true }).then(() => { say('Balance forgotten: the group keeps the speakers’ levels as they are'); return true; }).catch(e => { say((e as Error).message); return false; })} /> : null}
+            </View>
+          </ExpandRow>
+        ) : null}
+      </Card>
+    </Section>
+  );
+}
+
+/**
  * A speaker group's timing: its native groups (in perfect sync) and the speakers played alongside, each with a timing
  * slider and its measured start delay; the sync test (a tick every second on every speaker, quietly); and what Kova
  * did to keep it in time. An adult or the owner can tune it.
@@ -71,7 +119,7 @@ function PartRow({ g, p, first, canTune, live }: { g: SpeakerGroup; p: GroupPart
 export function GroupSyncScreen() {
   const s = useSnap();
   const nav = useNav();
-  const { api } = useHub();
+  const { api, send } = useHub();
   const { id } = (useRoute().params ?? {}) as { id?: string };
   const g = s.speakerGroups.find(x => x.id === id);
   const canTune = meOf(s).can.home;
@@ -92,11 +140,17 @@ export function GroupSyncScreen() {
   const along = parts.filter(p => !p.reference);
   const left = testLeft(view?.test?.until ?? g.testUntil);
   const steps = testSteps(view?.parts ?? parts);
+  const how = musicSteps(g.name, view?.parts ?? parts);
+  const now = tuneState(view?.playing);
+  const [ticks, setTicks] = useState(false);
+  const gid = `group_${g.id}`;
+  const play = (media: string) => send(gid, { on: true, media }, `Playing ${media} on ${g.name}`).then(ok => { setTimeout(load, 1500); return ok; });
+  const stop = () => send(gid, { on: false, media: null }, `${g.name} stopped`).then(ok => { setTimeout(load, 800); return ok; });
   const test = async (on: boolean) => {
     setNote(null);
     try {
       await api(on ? 'POST' : 'DELETE', `/api/speaker-groups/${encodeURIComponent(g.id)}/sync-test`, on ? {} : undefined, 30_000);
-      setNote({ text: on ? 'Playing for 3 minutes. Stop it any time: every speaker goes back to what it was doing.' : 'Stopped. The speakers are back as they were.', error: false });
+      setNote({ text: on ? 'Ticking for up to 3 minutes. Stop any time: every speaker goes back to what it was doing.' : 'Stopped. The speakers are back as they were.', error: false });
       load();
       return true;
     } catch (e) { setNote({ text: (e as Error).message, error: true }); return false; }
@@ -110,16 +164,32 @@ export function GroupSyncScreen() {
         </Card>
         {along.length && !canTune ? <T v="footnote" color={C.stone2} style={{ paddingHorizontal: 4 }}>An adult in the home can tune the timing.</T> : null}
       </Section>
-      {along.length && canTune && steps ? (
-        <Section title="Sync test" caption gap={SP[2]}>
-          <Card pad={SP[4]} tint={C.amber} style={{ gap: SP[3] }}>
+      <VolumeCard g={g} canTune={canTune} />
+      {along.length && canTune && how ? (
+        <Section title="Tune by ear" caption gap={SP[2]}>
+          <Card pad={SP[4]} tint={C.blue} style={{ gap: SP[3] }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3] }}>
-              <IconWell icon="surround_sound" color={C.amber} size={38} />
-              <T v="headline" style={{ flex: 1, minWidth: 0 }}>{left ? `Playing · ${left}` : 'Line them up by ear'}</T>
+              <IconWell icon="music_note" color={C.blue} size={38} />
+              <T v="headline" style={{ flex: 1, minWidth: 0 }}>{now.kind === 'music' ? `Playing ${view!.playing!.media}` : 'Tune with music'}</T>
             </View>
-            <T v="callout" color={C.bone2}>{steps}</T>
-            <Button full kind={left ? 'secondary' : 'primary'} icon={left ? 'stop' : 'play_arrow'} label={left ? 'Stop the test' : 'Start the sync test'} onPress={() => test(!left)} />
-            {note ? <T v="footnote" color={note.error ? C.redText : C.green}>{note.text}</T> : null}
+            <T v="callout" color={C.bone2}>{now.kind === 'music' ? now.text : how}</T>
+            {now.kind === 'radio' ? <T v="footnote" color={C.amber}>{now.text}</T> : null}
+            {now.kind === 'music' ? (
+              <Button full kind="secondary" icon="stop" label={`Stop ${g.name}`} onPress={stop} />
+            ) : s.music?.length ? (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SP[2] }}>
+                {s.music.slice(0, 4).map(m => <Pill key={m.name} icon={m.icon} label={m.name} onPress={() => void play(m.name)} />)}
+              </View>
+            ) : <T v="footnote" color={C.stone}>{`Play a song or playlist on ${g.name} from Media (not the radio: a live stream can’t be lined up exactly), then come back here.`}</T>}
+          </Card>
+          <Card style={{ overflow: 'hidden' }}>
+            <ExpandRow first icon="surround_sound" iconFg={C.amber} title={left ? `Tick test · ${left}` : 'Tick test'} sub="Optional: easier to hear small gaps" open={ticks || !!left} onToggle={() => setTicks(x => !x)}>
+              <View style={{ gap: SP[3], paddingBottom: SP[3] }}>
+                <T v="callout" color={C.bone2}>{steps}</T>
+                <Button full kind={left ? 'secondary' : 'primary'} icon={left ? 'stop' : 'play_arrow'} label={left ? 'Stop the ticks' : 'Play ticks'} onPress={() => test(!left)} />
+                {note ? <T v="footnote" color={note.error ? C.redText : C.green}>{note.text}</T> : null}
+              </View>
+            </ExpandRow>
           </Card>
         </Section>
       ) : null}

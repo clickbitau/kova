@@ -43,6 +43,7 @@ import { EnergyScreen } from './src/screens/EnergyScreen';
 import { MediaScreen } from './src/screens/MediaScreen';
 import { SpeakerLoudnessScreen } from './src/screens/SpeakerLoudnessScreen';
 import { GroupSyncScreen } from './src/screens/GroupSyncScreen';
+import { NotifyPrefsScreen } from './src/screens/NotifyPrefsScreen';
 import { PrayerTimesScreen } from './src/screens/PrayerTimesScreen';
 import { DeviceSheet } from './src/screens/DeviceSheet';
 import { Button, Empty, Mark, ToastHost } from './src/ui/kit';
@@ -143,6 +144,7 @@ function Home() {
           <Stack.Screen name="Media" component={MediaScreen} />
           <Stack.Screen name="SpeakerLoudness" component={SpeakerLoudnessScreen} />
           <Stack.Screen name="GroupSync" component={GroupSyncScreen} />
+          <Stack.Screen name="NotifyPrefs" component={NotifyPrefsScreen} />
           <Stack.Screen name="PrayerTimes" component={PrayerTimesScreen} />
         </Stack.Navigator>
         <DeviceSheet />

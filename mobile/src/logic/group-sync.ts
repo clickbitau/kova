@@ -5,10 +5,13 @@ import type { Device, GroupPart, NativeGroup, SpeakerGroup } from '../api/types'
 
 export const OFFSET_MIN = -1000;
 export const OFFSET_MAX = 1000;
-export const NUDGES = [-50, -10, 10, 50];
+export const NUDGES = [-50, -10, -5, 5, 10, 50];
 
-/** An offset as the hub keeps it: 10 ms steps, −1000…+1000. */
-export const snapOffset = (v: number) => Math.max(OFFSET_MIN, Math.min(OFFSET_MAX, Math.round(v / 10) * 10)) || 0;
+/** A nudge button's words: "50 later", "10 earlier". */
+export const nudgeLabel = (n: number) => `${Math.abs(n)} ${n > 0 ? 'earlier' : 'later'}`;
+
+/** An offset as the hub keeps it: 5 ms steps, −1000…+1000. */
+export const snapOffset = (v: number) => Math.max(OFFSET_MIN, Math.min(OFFSET_MAX, Math.round(v / 5) * 5)) || 0;
 
 /** "+120 ms", "−40 ms", "0 ms". */
 export const msWords = (ms: number) => `${ms > 0 ? '+' : ms < 0 ? '−' : ''}${Math.abs(ms)} ms`;
@@ -40,18 +43,33 @@ export function delayWords(p: Pick<GroupPart, 'latencyMs' | 'latencyN'>): string
 export function driftWords(ms: number | null | undefined): string | null {
   if (ms == null) return null;
   if (Math.abs(ms) <= 20) return 'Right now: in time';
-  return `Right now: ${Math.abs(ms)} ms ${ms > 0 ? 'ahead' : 'behind'}${Math.abs(ms) > 120 ? ' (being lined up)' : ''}`;
+  return `Right now: ${Math.abs(ms)} ms ${ms > 0 ? 'ahead' : 'behind'}${Math.abs(ms) > 40 ? ' (lined up at the next song)' : ''}`;
 }
 
-/** The sync test's instructions, for the first part played alongside. */
-export function testSteps(parts: Pick<GroupPart, 'reference' | 'name' | 'listenWith'>[]): string | null {
+/** How to tune by ear while music plays, for the first part played alongside. */
+export function musicSteps(group: string, parts: Pick<GroupPart, 'reference' | 'name' | 'listenWith'>[]): string | null {
   const p = parts.find(x => !x.reference);
   if (!p) return null;
   const near = p.listenWith ?? 'one of the main speakers';
-  return `Kova plays a short tick every second, with a lower tone on each minute, on every speaker at once, quietly; afterwards each goes back to what it was doing. Stand between ${near} and ${p.name}, where you hear both about as loud. If ${p.name}’s tick comes after the other, move ${p.name} towards Earlier; if before, towards Later. Use ±50 until they’re close, then ±10, until you hear one tick.`;
+  return `Play a song on ${group}, then stand between ${near} and ${p.name}, where you hear both about as loud. If ${p.name} sounds behind, like an echo after the others, tap Earlier. If it’s ahead of them, tap Later. Each tap moves ${p.name} straight away, so you hear the change. Use 50 until it’s close, then 10, then 5.`;
 }
 
-export const EXPECT = 'Speakers in a native group (a Google Home group, Sonos speakers together) are sample-locked. Speakers played alongside wait for the main group to start, then join it at its place (you may hear one settle in the first second or two), and Kova lines them up again at the next song when they drift more than 120 ms (at once, mid-song, past 400 ms). Live radio gets the timing only: each speaker buffers it by itself, so it can sit up to a second or so apart.';
+/** What the tuning card says about what the group plays now. */
+export function tuneState(playing: { media: string; live: boolean } | null | undefined, testMedia = 'Kova sync test'): { kind: 'none' | 'music' | 'radio' | 'ticks'; text: string } {
+  if (!playing) return { kind: 'none', text: '' };
+  if (playing.media === testMedia) return { kind: 'ticks', text: 'The tick test is playing.' };
+  if (playing.live) return { kind: 'radio', text: `${playing.media} is a live stream: each speaker buffers it by itself, so it can’t be lined up exactly. Pick a song or playlist to tune with.` };
+  return { kind: 'music', text: `Playing ${playing.media}. Listen, and nudge below until it sounds like one speaker.` };
+}
+
+/** The tick test, in plain words: what it plays, and what to listen for. */
+export function testSteps(parts: Pick<GroupPart, 'reference' | 'name' | 'listenWith'>[]): string | null {
+  const p = parts.find(x => !x.reference);
+  if (!p) return null;
+  return `If music is hard to judge, Kova can play a quiet tick once a second on every speaker, for up to 3 minutes. In time, you hear one clean tick. Out of time, you hear a double “tick-tick”: if ${p.name}’s tick comes second, tap Earlier; if first, Later. Afterwards every speaker goes back to what it was playing.`;
+}
+
+export const EXPECT = 'Speakers in a native group (a Google Home group, Sonos speakers together) are sample-locked. Speakers played alongside wait for the main group to start, then join it at its place (you may hear one settle in the first second or two), and at every song change Kova lines them up again: one that finishes its song first waits for the others (more than 400 ms out mid-song, it’s moved at once). Live radio gets the timing only: each speaker buffers it by itself, so it can sit up to a second or so apart.';
 
 /** "3:05 left" for a running sync test; null when none runs. */
 export function testLeft(until: number | null | undefined, now = Date.now()): string | null {
@@ -116,7 +134,7 @@ export function draftSyncNote(picked: Pick<Device, 'id' | 'adapter' | 'name' | '
   if (parts.length === 1 && nat.length) return { icon: 'graphic_eq', tone: 'green', title: 'Perfect sync', text: `${natW(nat[0]!)}: Kova plays through it, so they stay locked together.` };
   const names = solo.map(p => { const d = byPlayer.get(p.ids[0]!)!; return `${d.name} (${viaName(d.adapter)})`; });
   const list = names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
-  if (nat.length) return { icon: 'sync', tone: 'blue', title: 'Native sync, plus speakers alongside', text: `${nat.map(natW).join(' and ')} play${nat.length === 1 ? 's' : ''} in perfect sync. ${list} ${solo.length === 1 ? 'plays' : 'play'} alongside: started at the same moment and kept in time by Kova, close but not sample-locked. Tune ${solo.length === 1 ? 'its' : 'their'} timing with the sync test once it’s saved.` };
+  if (nat.length) return { icon: 'sync', tone: 'blue', title: 'Native sync, plus speakers alongside', text: `${nat.map(natW).join(' and ')} play${nat.length === 1 ? 's' : ''} in perfect sync. ${list} ${solo.length === 1 ? 'plays' : 'play'} alongside: started at the same moment and kept in time by Kova, close but not sample-locked. Tune ${solo.length === 1 ? 'its' : 'their'} timing by ear, with music, once it’s saved.` };
   if (picked.every(d => d.adapter === 'cast')) return { icon: 'sync', tone: 'amber', title: 'Started together, kept in time', text: 'Each speaker plays its own stream; Kova starts them together and lines them up again if they drift. For perfect sync, make a group with exactly these speakers in the Google Home app: Kova finds it and uses it.' };
-  return { icon: 'sync', tone: 'amber', title: 'Started together, kept in time', text: 'Each speaker plays its own stream (different brands can’t share one clock): Kova starts them together and lines them up again if they drift. Tune the timing with the sync test once it’s saved.' };
+  return { icon: 'sync', tone: 'amber', title: 'Started together, kept in time', text: 'Each speaker plays its own stream (different brands can’t share one clock): Kova starts them together and lines them up again if they drift. Tune the timing by ear, with music, once it’s saved.' };
 }

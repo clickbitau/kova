@@ -13,6 +13,18 @@ import type { GroupSync } from '../engine/group-sync.ts';
 
 export const groupDeviceId = (g: SpeakerGroup) => `group_${g.id}`;
 
+/**
+ * Each member's level for a group volume: the loudest of the balance plays at `vol`, the others at their share of it
+ * (Ray at 40 and the kitchen at 20 in the balance: the group at 60 → 60 and 30). Without a balance, the members' levels
+ * now are the balance. Never above 100; one at 0 in the balance stays at 0.
+ */
+export function balancedVols(vol: number, members: { id: string; vol?: number }[], balance?: Record<string, number>): Record<string, number> {
+  const base = members.map(m => ({ id: m.id, b: balance?.[m.id] ?? m.vol ?? 30 }));
+  const top = Math.max(0, ...base.map(x => x.b));
+  const v = Math.max(0, Math.min(100, vol));
+  return Object.fromEntries(base.map(x => [x.id, top > 0 ? Math.max(0, Math.min(100, Math.round(v * x.b / top))) : Math.round(v)]));
+}
+
 export class SpeakerGroupsAdapter implements Adapter {
   id = 'groups';
   name = 'Speaker groups';
@@ -61,7 +73,7 @@ export class SpeakerGroupsAdapter implements Adapter {
   private members(g: SpeakerGroup): Device[] { return g.members.map(id => this.reg.get(id)).filter((d): d is Device => !!d); }
   private commonRoom(g: SpeakerGroup): string | undefined { const rooms = new Set(this.members(g).map(d => d.room)); return rooms.size === 1 ? [...rooms][0] : undefined; }
 
-  /** The group's state from its members: on if any plays, what they share, their average volume. */
+  /** The group's state from its members: on if any plays, what they share, its volume (the loudest member's). */
   private derived(g: SpeakerGroup): DeviceState {
     const ms = this.members(g);
     const playing = ms.filter(d => d.state.on);
@@ -76,7 +88,7 @@ export class SpeakerGroupsAdapter implements Adapter {
       shuffle: !!withTrack?.state.shuffle,
       // Paused when every speaker that's on is paused (pausing the group pauses them all).
       paused: playing.length > 0 && playing.every(d => d.state.paused),
-      vol: vols.length ? Math.round(vols.reduce((a, b) => a + b, 0) / vols.length) : 30,
+      vol: vols.length ? Math.max(...vols) : 30,
       online: ms.some(d => d.state.online !== false) && ms.length > 0,
     };
   }
@@ -92,6 +104,19 @@ export class SpeakerGroupsAdapter implements Adapter {
     const ms = this.members(g);
     if (!ms.length) throw new Error(`${g.name} has no speakers`);
     const via: Cause = { ...(cause ?? { kind: 'user', label: 'You' }), detail: `through ${g.name}` };
+    // The volume: every member at its share, keeping the balance (and before anything plays, so it starts at it).
+    if (typeof cmd.vol === 'number') {
+      const levels = balancedVols(cmd.vol, ms.map(d => ({ id: d.id, vol: d.state.vol ?? undefined })), g.balance);
+      const rv = await Promise.allSettled(ms.map(d => this.reg.command(d.id, { vol: levels[d.id]! }, via)));
+      const rest: Command = { ...cmd };
+      delete rest.vol;
+      if (!Object.keys(rest).length) {
+        this.refresh();
+        if (rv.every(r => r.status === 'rejected')) throw (rv[0] as PromiseRejectedResult).reason;
+        return;
+      }
+      cmd = rest;
+    }
     // Something to play: each part at its moment, kept in time while it plays.
     if (typeof cmd.media === 'string' && cmd.media && this.timing) {
       const r = await this.timing.play(g, cmd, via);

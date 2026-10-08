@@ -169,7 +169,7 @@ export function MediaScreen() {
             {!members.length ? <View style={{ padding: SP[4] }}><T v="callout" color={C.stone}>None of its speakers are here right now.</T></View> : null}
           </Card>
           <Card style={{ overflow: 'hidden' }}>
-            <Row first icon="graphic_eq" iconFg={C.blue} title="Timing and sync test" sub={groupHow(G)} onPress={() => nav.navigate('GroupSync', { id: G.id })} />
+            <Row first icon="graphic_eq" iconFg={C.blue} title="Timing" sub={groupHow(G)} onPress={() => nav.navigate('GroupSync', { id: G.id })} />
           </Card>
           <T v="footnote" color={C.stone2} style={{ paddingHorizontal: 4 }}>{G.sync === 'perfect' ? `In perfect sync through “${G.castGroup ?? G.parts?.[0]?.name ?? 'its native group'}”. Each speaker keeps its own volume.` : 'Each speaker keeps its own volume.'}</T>
         </Section>

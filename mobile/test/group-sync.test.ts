@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { delayWords, draftSyncNote, driftWords, groupHow, groupParts, msWords, offsetWords, partSub, partTitle, snapOffset, testLeft, testSteps } from '../src/logic/group-sync.ts';
+import { delayWords, draftSyncNote, driftWords, groupHow, groupParts, msWords, offsetWords, partSub, partTitle, snapOffset, testLeft, testSteps, musicSteps, tuneState, nudgeLabel } from '../src/logic/group-sync.ts';
 import type { GroupPart, NativeGroup } from '../src/api/types';
 
 const cast = (id: string, members: string[]): NativeGroup => ({ via: 'cast', id, name: 'Home speakers', members });
@@ -28,10 +28,11 @@ test('parts: the fewest streams from the native groups, as the hub does it', () 
   assert.deepEqual(groupParts(['k', 'ray'], [cast('home', ['k', 'x'])]).map(p => p.ids), [['k'], ['ray']]);
 });
 
-test('timing in words: 10 ms steps within ±1000, earlier and later, the start delay, drift, the test', () => {
-  assert.equal(snapOffset(123), 120);
+test('timing in words: 5 ms steps within ±1000, earlier and later, the start delay, drift, the test', () => {
+  assert.equal(snapOffset(123), 125);
+  assert.equal(snapOffset(477), 475);
   assert.equal(snapOffset(-2000), -1000);
-  assert.equal(snapOffset(-4), 0);
+  assert.equal(snapOffset(-2), 0);
   assert.equal(msWords(-40), '−40 ms');
   assert.equal(offsetWords(120), '+120 ms · earlier');
   assert.equal(offsetWords(-50), '−50 ms · later');
@@ -39,12 +40,19 @@ test('timing in words: 10 ms steps within ±1000, earlier and later, the start d
   assert.equal(delayWords({ latencyMs: 1234, latencyN: 1 }), 'Measured start delay: 1.23 s (from 1 play)');
   assert.match(delayWords({ latencyMs: null, latencyN: 0 }), /not yet/);
   assert.equal(driftWords(15), 'Right now: in time');
-  assert.equal(driftWords(-180), 'Right now: 180 ms behind (being lined up)');
+  assert.equal(driftWords(-180), 'Right now: 180 ms behind (lined up at the next song)');
   assert.equal(driftWords(null), null);
   const parts = [{ reference: true, name: 'Home speakers', listenWith: null }, { reference: false, name: 'Ray', listenWith: 'Kitchen speaker' }];
-  assert.match(testSteps(parts)!, /Stand between Kitchen speaker and Ray/);
-  assert.match(testSteps(parts)!, /Ray’s tick comes after the other, move Ray towards Earlier/);
+  assert.match(musicSteps('Whole home', parts)!, /^Play a song on Whole home, then stand between Kitchen speaker and Ray/);
+  assert.match(musicSteps('Whole home', parts)!, /If Ray sounds behind, like an echo after the others, tap Earlier/);
+  assert.equal(musicSteps('Whole home', [parts[0]!]), null);
+  assert.match(testSteps(parts)!, /one clean tick.*double “tick-tick”: if Ray’s tick comes second, tap Earlier/);
   assert.equal(testSteps([parts[0]!]), null);
+  assert.deepEqual([-50, 10].map(nudgeLabel), ['50 later', '10 earlier']);
+  assert.equal(tuneState(null).kind, 'none');
+  assert.equal(tuneState({ media: 'Kova sync test', live: false }).kind, 'ticks');
+  assert.match(tuneState({ media: 'Radio', live: true }).text, /can’t be lined up exactly/);
+  assert.equal(tuneState({ media: 'Loved', live: false }).text, 'Playing Loved. Listen, and nudge below until it sounds like one speaker.');
   assert.equal(testLeft(10_000 + 185_000, 10_000), '3:05 left');
   assert.equal(testLeft(5, 10), null);
 });

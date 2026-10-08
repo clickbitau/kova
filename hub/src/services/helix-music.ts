@@ -64,7 +64,7 @@ type Spec =
 
 const PREFIX: Record<string, 'station' | 'artist' | 'album' | 'track'> = { station: 'station', artist: 'artist', album: 'album', song: 'track' };
 const LIBRARY_MAX = 4000;
-const SAME_ORDER_MS = 10_000;
+const SAME_ORDER_MS = 60_000;
 /** How long a signed song URL lasts (Helix takes 60–86400 s), and how long before the end Kova asks for a new one. */
 export const SIGNED_TTL_S = 21_600;
 const RESIGN_BEFORE_MS = 10 * 60_000;

@@ -386,6 +386,8 @@ export interface HubUpdate {
   last: { result: 'updated' | 'rolled-back' | 'failed'; from: string; to: string; at: number } | null;
   /** Every update the hub has seen, newest first (older hubs leave it out). */
   history?: { result: 'updated' | 'rolled-back' | 'failed'; from: string; to: string; at: number }[];
+  /** While it updates: the step it's on, from the updater's log (older hubs leave it out). */
+  progress?: { step: number; steps: string[]; label: string; startedAt: number | null; rollingBack: boolean } | null;
   auto: { on: boolean; hour: number };
 }
 

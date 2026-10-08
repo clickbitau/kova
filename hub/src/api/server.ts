@@ -6,6 +6,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { Sessions, type Session } from '../services/sessions.ts';
 import { Accounts } from '../services/accounts.ts';
 import { AccessDenied, actors, actorKey, canDevice, currentActor, type Actor } from '../services/actor.ts';
+import { HOUSEHOLD, NOTIFY_CHOICES, NOTIFY_KINDS } from '../services/notify-prefs.ts';
 import { check, ruleFor } from './access.ts';
 import { registerAccountRoutes } from './account-routes.ts';
 import { viewFor } from './views.ts';
@@ -702,6 +703,27 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
   app.delete<{ Body: { token?: string } }>('/api/push/app', async (req, reply) => {
     if (!opts.notifier) return reply.code(404).send({ error: 'notifications are not running' });
     return { ok: opts.notifier.unregisterApp(String(req.body?.token ?? '')) };
+  });
+  // What I hear about, and how often (services/notify-prefs.ts); the owner also sets the household's (phones of no one
+  // in particular, ntfy, and anyone who hasn't chosen).
+  const prefsView = () => {
+    const a = currentActor(), n = opts.notifier!;
+    const owner = !a || a.role === 'owner';
+    const who = a?.personId;
+    return {
+      who: who ?? null, name: who ? hub.config.get().people.find(p => p.id === who)?.name ?? who : 'This home',
+      kinds: NOTIFY_KINDS, choices: NOTIFY_CHOICES, prefs: n.prefs.of(who), offForAll: n.householdOff(),
+      ...(owner && who ? { household: n.prefs.of(HOUSEHOLD) } : {}), canHousehold: owner,
+    };
+  };
+  app.get('/api/notify/prefs', async (_req, reply) => opts.notifier ? prefsView() : reply.code(404).send({ error: 'notifications are not running' }));
+  app.put<{ Body: { kind?: string; value?: unknown; household?: boolean } }>('/api/notify/prefs', async (req, reply) => {
+    if (!opts.notifier) return reply.code(404).send({ error: 'notifications are not running' });
+    const a = currentActor();
+    const house = !!req.body?.household || !a?.personId;
+    if (house && a && a.role !== 'owner') return fail(reply, new AccessDenied('Only the owner chooses for the whole home'));
+    try { opts.notifier.prefs.set(house ? HOUSEHOLD : a!.personId, String(req.body?.kind ?? ''), req.body?.value); } catch (e) { return fail(reply, e); }
+    return prefsView();
   });
   app.post('/api/push/test', async (_req, reply) => {
     if (!opts.notifier) return reply.code(404).send({ error: 'notifications are not running' });

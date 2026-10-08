@@ -71,7 +71,8 @@ export function SettingsScreen() {
       ) : null}
       <Group title="Presence, alerts and access">
         <Row first icon="router" iconFg={C.blue} title="How Kova knows who’s home" sub="Warden or your router, phones, network checks" onPress={() => nav.navigate('Integration', { id: 'presence' })} />
-        <Row icon="notifications" iconFg={C.amber} title="Notifications" sub="Which alerts, push and ntfy, send a test" onPress={() => nav.navigate('Integration', { id: 'notify' })} />
+        <Row icon="notifications" iconFg={C.amber} title="What you’re told about" sub="Each kind of notification, and how often" onPress={() => nav.navigate('NotifyPrefs')} />
+        <Row icon="send" iconFg={C.stone} title="Notification channels" sub="Push and ntfy, off for everyone, send a test" onPress={() => nav.navigate('Integration', { id: 'notify' })} />
         <Row icon="computer" iconFg={C.blue} title="Sign in a browser" sub="Your home on a computer, and signed-in browsers" onPress={() => nav.navigate('Browsers')} />
         <Row icon="hub" title="Integrations" sub="What’s connected, and adding more" onPress={() => nav.navigate('Integrations')} />
       </Group>

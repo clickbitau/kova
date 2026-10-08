@@ -326,7 +326,7 @@ export function DeviceSheet() {
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
                 {group.members.map(m => <Tag key={m} text={snap.devices.find(x => x.id === m)?.name ?? m} color={C.blue} />)}
               </View>
-              <Button kind="secondary" icon="graphic_eq" label="Timing and sync test" onPress={() => { close(); nav.navigate('GroupSync', { id: group.id }); }} />
+              <Button kind="secondary" icon="graphic_eq" label="Timing" onPress={() => { close(); nav.navigate('GroupSync', { id: group.id }); }} />
             </Card>
           ) : null}
         </View>

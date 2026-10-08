@@ -113,15 +113,16 @@ test('drift: a part against the reference, after its offset, across a song chang
 
 // -------------------------------------------------------------- validation --
 
-test('offsets: 10 ms steps within ±1000, only for parts played alongside; pruned with the members', () => {
-  assert.equal(cleanOffset(123), 120);
-  assert.equal(cleanOffset('-46'), -50);
+test('offsets: 5 ms steps within ±1000, only for parts played alongside; pruned with the members', () => {
+  assert.equal(cleanOffset(123), 125);
+  assert.equal(cleanOffset(477), 475);
+  assert.equal(cleanOffset('-48'), -50);
   assert.equal(cleanOffset(-1000), -1000);
   assert.throws(() => cleanOffset(1001), /at most 1000 ms/);
   assert.throws(() => cleanOffset('soon'), /number of milliseconds/);
   assert.throws(() => cleanOffset(NaN), /number/);
   const parts = [{ key: 'cast:home', reference: true, name: 'Home speakers' }, { key: 'ray', reference: false, name: 'Ray' }] as PlanPart[];
-  assert.deepEqual(mergeOffsets({ old: 30 }, { ray: 504 }, parts), { old: 30, ray: 500 });
+  assert.deepEqual(mergeOffsets({ old: 30 }, { ray: 502 }, parts), { old: 30, ray: 500 });
   assert.deepEqual(mergeOffsets({ ray: 500 }, { ray: 0 }, parts), {}, '0 clears it');
   assert.throws(() => mergeOffsets({}, { 'cast:home': 100 }, parts), /what the other speakers follow/);
   assert.throws(() => mergeOffsets({}, { nobody: 100 }, parts), /isn’t a part/);
@@ -147,17 +148,17 @@ test('the sync test’s click track: a tick every second, a tone on the minute, 
 // ------------------------------------------------------- with fake speakers --
 
 /** A hub with Cast-like speakers (three in a native group, one outside it) and a Sonos-like one; drift checks fast. */
-async function home(o: { castLatency?: Record<string, number>; sonosLatency?: Record<string, number>; seekStepMs?: number; checkMs?: number } = {}) {
+async function home(o: { castLatency?: Record<string, number>; sonosLatency?: Record<string, number>; seekStepMs?: number; checkMs?: number; castGap?: (i: number) => number; hold?: boolean } = {}) {
   const fc = new FakeSpeakers('cast', 'Google Cast', [
     { id: 'kitchen', name: 'Kitchen speaker', room: 'kitchen' }, { id: 'dining', name: 'Dining speaker', room: 'kitchen' },
     { id: 'bed', name: 'Bedroom speaker', room: 'master' }, { id: 'office', name: 'Office speaker', room: 'office' },
-  ], { groups: [{ id: 'home', name: 'Home speakers', members: ['kitchen', 'dining', 'bed'] }], latency: o.castLatency ?? {}, seekLatency: 30 });
-  const fs = new FakeSpeakers('sonos', 'Sonos', [{ id: 'ray', name: 'Ray', room: 'lounge' }], { dynamic: true, latency: o.sonosLatency ?? {}, seekLatency: 30, seekStepMs: o.seekStepMs ?? 1 });
+  ], { groups: [{ id: 'home', name: 'Home speakers', members: ['kitchen', 'dining', 'bed'] }], latency: o.castLatency ?? {}, seekLatency: 30, ...(o.castGap ? { gapMs: { home: o.castGap } } : {}) });
+  const fs = new FakeSpeakers('sonos', 'Sonos', [{ id: 'ray', name: 'Ray', room: 'lounge' }], { dynamic: true, latency: o.sonosLatency ?? {}, seekLatency: 30, seekStepMs: o.seekStepMs ?? 1, canHold: o.hold });
   const hub = new Hub({
     dbPath: ':memory:', tickMs: 0,
     initialConfig: () => { const c: HomeConfig = demoConfig(); c.speakerGroups = [{ id: 'whole', name: 'Whole home', members: ['kitchen', 'dining', 'bed', 'ray'] }]; return c; },
     adapters: [new VirtualAdapter(demoDevices()), fc, fs],
-    groupSync: { checkMs: o.checkMs ?? 100, marginMs: 50, testMs: 4000, measureMs: 3000 },
+    groupSync: { checkMs: o.checkMs ?? 100, marginMs: 50, testMs: 4000, measureMs: 3000, nearEndMs: 400 },
   });
   hub.lanBase = () => 'http://10.0.0.2:8140';
   await hub.start();
@@ -224,6 +225,30 @@ test('a part asked to play later (−) is asked that much after the main part st
   } finally { await h.close(); }
 });
 
+test('song changes: the Cast group’s gap between songs (different every song) never builds up: Ray waits for it, then joins', async () => {
+  // Gaps of 250, 600, 400… ms between songs; Ray (Sonos) goes straight on by itself, and can wait.
+  const gaps = [250, 600, 400, 700, 300];
+  const h = await home({ castGap: i => gaps[i % gaps.length]!, hold: true, checkMs: 200 });
+  try {
+    h.hub.groupSync.book.record('seek:ray', 30);
+    h.hub.config.update(c => { c.groupOffsets = { whole: { ray: 40 } }; });
+    await h.hub.reg.command('group_whole', { on: true, media: 'Loved' }, { kind: 'user', label: 'You' });
+    const gapsSeen: number[] = [];
+    // Through four song changes, a look at each song's middle: Ray is where the Cast group is, plus its 40 ms.
+    let t = Date.now();
+    for (let n = 0; n < 4; n++) {
+      await sleep(1900);
+      const c = h.fc.where('kitchen')!, r = h.fs.where('ray')!;
+      if (c.playing && r.playing && c.index === r.index) gapsSeen.push(Math.round(r.positionMs - c.positionMs));
+    }
+    assert.ok(gapsSeen.length >= 3, `looked ${gapsSeen.length} times`);
+    for (const g of gapsSeen) assert.ok(Math.abs(g - 40) < 60, `Ray ${g} ms ahead (meant 40): ${gapsSeen.join(', ')}\n${h.hub.groupSync.view('whole')!.log.map(l => l.text).join('\n')}`);
+    assert.ok(h.fs.holds.length >= 2, `Ray waited at song ends: ${h.fs.holds.length}`);
+    assert.match(h.hub.groupSync.view('whole')!.log.map(l => l.text).join('\n'), /Next song: Ray waited [\d.]+ s for Home speakers, then joined/);
+    void t;
+  } finally { await h.close(); }
+});
+
 test('drift: a small slip is lined up at the next song (on the shared time); a big one is moved at once, and said', async () => {
   const h = await home();
   try {
@@ -232,13 +257,13 @@ test('drift: a small slip is lined up at the next song (on the shared time); a b
     await sleep(200);
     const n0 = h.fs.seeks.length;
     h.fs.drift('ray', 200);
-    // Within the next song change (1.5 s songs): no move mid-song, then a start of the next song at the shared time.
+    // Within the next song change (1.5 s songs): no move mid-song, then lined up with the next song once it plays.
     await sleep(1800);
     const log = () => h.hub.groupSync.view('whole')!.log.map(l => l.text).join('\n');
-    assert.match(log(), /Ray is (1|2)\d\d ms ahead: lining it up at the start of the next song/);
+    assert.match(log(), /Next song: Ray lined up with Home speakers \(it was (1|2)\d\d ms ahead\)/);
     assert.ok(h.fs.seeks.length > n0, 'lined up');
-    assert.equal(h.fs.seeks[n0]!.positionMs, 0, 'at the start of a song');
-    assert.ok(h.fs.seeks[n0]!.index >= 1);
+    assert.ok(h.fs.seeks[n0]!.index >= 1, 'in the next song');
+    assert.ok(h.fs.seeks[n0]!.positionMs < 500, 'near its start');
     let t = Date.now();
     assert.ok(Math.abs(h.fs.where('ray', t)!.positionMs - h.fc.where('kitchen', t)!.positionMs) < 60, 'back in time');
     // A big slip: moved now, mid-song, and the log says so.
@@ -339,7 +364,7 @@ test('API: offsets are checked, saved per group and member, undoable, and pruned
     assert.equal((await app.inject({ method: 'PUT', url: '/api/speaker-groups/nope/offsets', payload: { offsets: {} } })).statusCode, 404);
     const ok = await put({ ray: -333 });
     assert.equal(ok.statusCode, 200);
-    assert.deepEqual(h.hub.config.get().groupOffsets, { whole: { ray: -330 } });
+    assert.deepEqual(h.hub.config.get().groupOffsets, { whole: { ray: -335 } });
     await app.inject({ method: 'POST', url: `/api/undo/${ok.json().undo}` });
     assert.equal(h.hub.config.get().groupOffsets?.whole, undefined);
     await put({ ray: 200 });
@@ -381,5 +406,38 @@ test('Ask Kova: “Ray is about half a second behind” → +500 ms, said back f
     // Not about timing: left alone.
     assert.notEqual(a.parse('turn off the speakers')?.kind, 'groupSync');
     assert.notEqual(a.parse('play Loved in the kitchen')?.kind, 'groupSync');
+  } finally { await h.close(); }
+});
+
+test('volume: the group’s volume keeps the balance between speakers; the balance is set from the speakers’ own levels', async () => {
+  const { balancedVols } = await import('../src/adapters/groups.ts');
+  assert.deepEqual(balancedVols(60, [{ id: 'ray', vol: 40 }, { id: 'k', vol: 20 }]), { ray: 60, k: 30 }, 'no balance: their levels now');
+  assert.deepEqual(balancedVols(60, [{ id: 'ray', vol: 10 }, { id: 'k', vol: 10 }], { ray: 40, k: 20 }), { ray: 60, k: 30 }, 'a balance kept: from it');
+  assert.deepEqual(balancedVols(100, [{ id: 'a', vol: 50 }, { id: 'b', vol: 0 }]), { a: 100, b: 0 });
+  assert.deepEqual(balancedVols(30, [{ id: 'a', vol: 0 }, { id: 'b', vol: 0 }]), { a: 30, b: 30 }, 'all at 0: all to the level');
+  const h = await home();
+  try {
+    const app = await buildServer(h.hub, { webRoot });
+    const put = (payload: object) => app.inject({ method: 'PUT', url: '/api/speaker-groups/whole/balance', payload });
+    assert.match((await put({ levels: { lamp: 10 } })).json().error, /isn’t in Whole home/);
+    assert.match((await put({ levels: { ray: 120 } })).json().error, /0–100/);
+    // Sounding alike where the owner sits: the Cast speakers at 60, Ray at 30.
+    const r = await put({ levels: { kitchen: 60, dining: 60, bed: 60, ray: 30 } });
+    assert.equal(r.statusCode, 200);
+    assert.deepEqual(h.hub.config.get().speakerGroups![0]!.balance, { kitchen: 60, dining: 60, bed: 60, ray: 30 });
+    assert.equal(h.hub.reg.get('ray')!.state.vol, 30);
+    assert.equal(h.hub.reg.get('group_whole')!.state.vol, 60, 'the group’s volume is its loudest');
+    // The group's volume: all of them, balance kept.
+    await h.hub.reg.command('group_whole', { vol: 40 }, { kind: 'user', label: 'You' });
+    assert.deepEqual(['kitchen', 'dining', 'bed', 'ray'].map(id => h.hub.reg.get(id)!.state.vol), [40, 40, 40, 20]);
+    // Played with a volume: the same.
+    await h.hub.reg.command('group_whole', { on: true, media: 'Loved', vol: 80 }, { kind: 'user', label: 'You' });
+    assert.deepEqual(['kitchen', 'ray'].map(id => h.hub.reg.get(id)!.state.vol), [80, 40]);
+    // A speaker leaving takes its place in the balance with it.
+    await app.inject({ method: 'PUT', url: '/api/speaker-groups/whole', payload: { members: ['kitchen', 'dining', 'bed'] } });
+    assert.deepEqual(h.hub.config.get().speakerGroups![0]!.balance, { kitchen: 60, dining: 60, bed: 60 });
+    assert.equal((await put({ reset: true })).statusCode, 200);
+    assert.equal(h.hub.config.get().speakerGroups![0]!.balance, undefined);
+    await app.close();
   } finally { await h.close(); }
 });

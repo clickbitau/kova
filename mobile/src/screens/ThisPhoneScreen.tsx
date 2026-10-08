@@ -8,7 +8,7 @@ import { arriveLeaveOn, startArriveLeave, stopArriveLeave } from '../native/arri
 import { forgetPushToken, pushToken, savedPushToken } from '../native/push';
 import { endHomeActivity, liveActivityRunning, liveActivitySupported, startHomeActivity } from '../native/extensions';
 import { Icon } from '../ui/Icon';
-import { Avatar, Button, Card, Empty, Group, IconWell, Press, Section, SwitchRow } from '../ui/kit';
+import { Avatar, Button, Card, Empty, Group, IconWell, Press, Row, Section, SwitchRow } from '../ui/kit';
 import { animateLayout } from '../ui/motion';
 import { locationPlan } from '../logic/presence';
 import { meOf, presenceKeyFrom } from '../logic/roles';
@@ -147,7 +147,8 @@ export function ThisPhoneScreen() {
       )}
 
       <Group>
-        <SwitchRow first icon="notifications" title="Notifications" sub="The doorbell, everyone out with lights on, the internet dropping" on={push} busy={busy === 'push'} onChange={v => void togglePush(v)} />
+        <SwitchRow first icon="notifications" title="Notifications" sub="On this phone" on={push} busy={busy === 'push'} onChange={v => void togglePush(v)} />
+        <Row icon="tune" iconFg={C.amber} title="What you’re told about" sub="Each kind, and how often: every time, now and then, or never" onPress={() => nav.navigate('NotifyPrefs')} />
         {canLock ? <SwitchRow icon="lock" title="Home on the lock screen" sub="The mode, lights on and what’s next, on the lock screen and in the Dynamic Island" on={lock} onChange={v => void toggleLock(v)} /> : null}
       </Group>
 

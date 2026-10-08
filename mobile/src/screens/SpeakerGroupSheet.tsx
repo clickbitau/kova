@@ -111,7 +111,7 @@ export function SpeakerGroupSheet({ id, onClose }: { id: string | null; onClose:
           <T v="footnote" color={C.stone}>{note.text}</T>
         </View>
       </Card>
-      {tunable ? <Button full kind="secondary" icon="graphic_eq" label="Timing and sync test" onPress={() => { onClose(); nav.navigate('GroupSync', { id: G!.id }); }} /> : null}
+      {tunable ? <Button full kind="secondary" icon="graphic_eq" label="Timing" onPress={() => { onClose(); nav.navigate('GroupSync', { id: G!.id }); }} /> : null}
       <View style={{ gap: SP[2] }}>
         <Button full kind={err ? 'secondary' : 'primary'} icon={err ? undefined : G ? 'check' : 'add'} label={err ?? (G ? 'Save' : 'Make the group')} onPress={err ? undefined : save} />
         {G ? <Button full kind="danger" icon="delete" label="Delete group" onPress={remove} /> : null}

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { archivedList, cleanName, combineChoices, devicesIn, favouriteList, groupBody, groupDraftError, groupSyncNote, moveStep, roomDelete, roomGroupError, roomGroups, roomRows, speakerChoices } from '../src/logic/customise.ts';
-import { historyRows, hubProgress, updateNotice } from '../src/logic/updates.ts';
+import { historyRows, hubProgress, updateNotice, updateSteps } from '../src/logic/updates.ts';
 import { energyView, kw, kwh, parseWatts, wattsNote } from '../src/logic/energy.ts';
 import { groupMembers, loopDone, memberToggle, musicCommand, nowPlaying, pickPlayer, playersOf, playPause, sourceCommand, sourceSub, stationCommand, streamUrlError } from '../src/logic/media.ts';
 import { NATIVE_PAGES } from '../src/logic/links.ts';
@@ -233,4 +233,26 @@ test('notification links open the app’s own screens for these pages', () => {
   assert.equal(NATIVE_PAGES.customise, 'Customise');
   assert.equal(NATIVE_PAGES.settings, 'Settings', 'hub update notifications open Settings, where Software update is');
   assert.equal(NATIVE_PAGES.integrations, 'Integrations');
+});
+
+test('update progress: each step done, now or next; the restart shown while the app can’t reach the hub; going back said', () => {
+  const steps = ['Downloading', 'Unpacking and checking', 'Backing up your home', 'Restarting Kova', 'Making sure it started properly'];
+  const now = 10 * 60_000;
+  assert.equal(updateSteps({ state: 'idle', progress: null, available: null }), null);
+  const asked = updateSteps({ state: 'requested', progress: null, available: null })!;
+  assert.deepEqual(asked.rows.map(r => r.state), ['next', 'next', 'next', 'next', 'next']);
+  assert.match(asked.line, /starts in a moment/);
+  const p = { step: 2, steps, label: 'Backing up your home', startedAt: now - 3 * 60_000, rollingBack: false };
+  const s = updateSteps({ state: 'updating', progress: p, available: null }, { now })!;
+  assert.deepEqual(s.rows.map(r => r.state), ['done', 'done', 'now', 'next', 'next']);
+  assert.equal(s.line, 'Backing up your home… · 3 min so far');
+  assert.ok(s.share > 0.4 && s.share < 0.6);
+  const away = updateSteps({ state: 'updating', progress: p, available: null }, { away: true, now })!;
+  assert.equal(away.rows[3]!.state, 'now', 'lost the hub mid-update: it is restarting');
+  assert.match(away.line, /restarting.*reconnects by itself/);
+  const back = updateSteps({ state: 'updating', progress: { ...p, step: 3, rollingBack: true, label: 'Putting your data back as it was' }, available: null })!;
+  assert.equal(back.bad, true);
+  assert.match(back.line, /^Putting your data back as it was\. Your home keeps working\.$/);
+  // An older hub (no progress): the first step, still a bar.
+  assert.equal(updateSteps({ state: 'updating', available: null })!.rows[0]!.state, 'now');
 });

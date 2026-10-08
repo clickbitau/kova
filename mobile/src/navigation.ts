@@ -37,6 +37,8 @@ export type Stack = {
   GroupSync: { id: string };
   /** Integrations → Prayer times: on or off, how they're worked out, the call to prayer. */
   PrayerTimes: undefined;
+  /** What I'm told about, and how often (and, for the owner, everyone else's). */
+  NotifyPrefs: undefined;
   /** More → Integrations: what's connected, and adding one. */
   Integrations: undefined;
   /** Add integration: the catalog, minus what's set up. */

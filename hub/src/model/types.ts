@@ -603,7 +603,14 @@ export interface SecuritySettings {
   rooms?: Record<string, AlertPrefs>;
 }
 
-export interface SpeakerGroup { id: string; name: string; room?: string; members: string[] }
+export interface SpeakerGroup {
+  id: string; name: string; room?: string; members: string[];
+  /**
+   * How loud each member is against the others (member id → its level when the group is at that level's top), set
+   * where they sound alike. The group's volume moves them all together, keeping it. None: their levels as they are.
+   */
+  balance?: Record<string, number>;
+}
 
 /**
  * One physical device that Kova reaches through more than one integration (a soundbar through Google Cast for music

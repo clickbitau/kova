@@ -298,3 +298,90 @@ test('Notify API: VAPID key and subscribe', async () => {
     assert.equal(notifier.subscriptions().length, 0);
   } finally { await app.close(); await done(); }
 });
+
+test('Notify choices: per kind, every time / at most every N hours / never; held ones counted and said; Warden’s attacks every 6 h by default', async () => {
+  const { hub, clock, ntfy, notifier, done } = await setup(12);
+  const threat = () => notifier.notify({ title: 'Password guessing on rdp-host is being blocked', body: '143 tries in 10 minutes.', tag: 'warden-threat' });
+  try {
+    // Out of the box: the first goes, the next ones within 6 hours are held.
+    await threat(); clock.t += 10 * 60_000; await threat(); clock.t += 10 * 60_000; const held = await threat();
+    assert.equal(ntfy.got.length, 1);
+    assert.equal(held.held, 1);
+    assert.equal(hub.store.feed(50).filter(e => e.what.startsWith('Notified: Password')).length, 1, 'held ones aren’t in Activity');
+    // Six hours on: it goes, saying how many there were.
+    clock.t += 6 * 3_600_000;
+    await threat();
+    assert.equal(ntfy.got.length, 2);
+    assert.equal(ntfy.got[1]!.json.message, '143 tries in 10 minutes. And 2 more like this in the last 6 hours.');
+    // Never: none; a test always goes.
+    notifier.prefs.set(undefined, 'threats', 'off');
+    clock.t += 7 * 3_600_000; await threat();
+    assert.equal(ntfy.got.length, 2);
+    await notifier.notify({ title: 'Kova notifications work', body: '', tag: 'test' });
+    assert.equal(ntfy.got.length, 3);
+    // The doorbell (every time by default) isn't touched by any of that.
+    await notifier.notify({ title: 'Ring', body: '', tag: 'ring-doorbell' }); await notifier.notify({ title: 'Ring', body: '', tag: 'ring-doorbell' });
+    assert.equal(ntfy.got.length, 5);
+  } finally { await done(); }
+});
+
+test('Notify choices: each person their own (falling back to the household’s), forgotten with them; the API', async () => {
+  const { NotifyPrefs, kindOf, cleanPref } = await import('../src/services/notify-prefs.ts');
+  const t = await testHub(12);
+  try {
+    const p = new NotifyPrefs(t.hub.store);
+    assert.deepEqual(['ring-front', 'security-hall-person', 'everyone-out', 'offline-x', 'link-adapter:helix', 'internet', 'warden-new-device', 'warden-threat', 'power-router', 'automation-a1', 'kova-update', 'insight-filter', 'test', undefined].map(kindOf),
+      ['doorbell', 'camera', 'everyoneOut', 'offline', 'links', 'internet', 'newDevice', 'threats', 'power', 'automations', 'updates', 'home', null, null]);
+    assert.equal(cleanPref('6'), 6);
+    assert.throws(() => cleanPref(3), /every 6 hours/);
+    assert.throws(() => p.set('sam', 'nope', 'on'), /isn’t a kind/);
+    p.set(undefined, 'doorbell', 'off');
+    assert.equal(p.of('sam').doorbell, 'off', 'no choice of their own: the household’s');
+    p.set('sam', 'doorbell', 'on');
+    assert.equal(p.of('sam').doorbell, 'on');
+    assert.equal(p.of(undefined).doorbell, 'off');
+    assert.equal(p.of('sam').threats, 6, 'the default');
+    // Held per person: Sam's gate doesn't hold back the household's.
+    p.set('sam', 'home', 1); p.set(undefined, 'home', 1);
+    assert.equal(p.gate('sam', 'home', 0).send, true);
+    assert.equal(p.gate('sam', 'home', 1000).send, false);
+    assert.equal(p.gate('*', 'home', 1000).send, true);
+    assert.deepEqual(p.gate('sam', 'home', 3_600_000 + 1), { send: true, more: { n: 1, hours: 1 } });
+    p.forget('sam');
+    assert.equal(p.of('sam').doorbell, 'off');
+  } finally { await t.hub.stop(); }
+
+  const { hub, notifier, done } = await setup(12, { ntfy: undefined, rules: { network: false } });
+  const app = await buildServer(hub, { webRoot, notifier, token: 'master' });
+  try {
+    const auth = { authorization: 'Bearer master' };
+    const v = (await app.inject({ url: '/api/notify/prefs', headers: auth })).json();
+    assert.equal(v.who, null);
+    assert.equal(v.canHousehold, true);
+    assert.equal(v.prefs.threats, 6);
+    assert.ok(v.kinds.some((k: { id: string }) => k.id === 'doorbell'));
+    assert.deepEqual(v.offForAll, ['internet', 'newDevice', 'threats', 'power'], 'Warden’s alerts switched off for the home');
+    const r = await app.inject({ method: 'PUT', url: '/api/notify/prefs', headers: auth, payload: { kind: 'offline', value: 24 } });
+    assert.equal(r.json().prefs.offline, 24);
+    assert.equal((await app.inject({ method: 'PUT', url: '/api/notify/prefs', headers: auth, payload: { kind: 'offline', value: 5 } })).statusCode, 400);
+  } finally { await app.close(); await done(); }
+});
+
+test('Notify: a removed (hidden) device going offline is never said; one said already isn’t said again after a restart', async () => {
+  const { hub, clock, virtual, ntfy, notifier, dataDir, done } = await setup(12);
+  try {
+    hub.config.update(c => { c.devices = { ...(c.devices ?? {}), kitchen_ceiling: { ...(c.devices?.kitchen_ceiling ?? {}), hidden: true } }; });
+    hub.reg.reapplySettings();
+    virtual.physical('kitchen_ceiling', { online: false });
+    virtual.physical('lounge_main', { online: false });
+    notifier.checkDevices();
+    clock.t += 11 * 60_000; notifier.checkDevices();
+    await notifier.idle();
+    assert.deepEqual(ntfy.got.map(g => g.json.title), [`${hub.reg.get('lounge_main')!.name} isn’t responding`]);
+    // Kova restarts (an update): the lamp, still offline, isn't news again.
+    const again = new Notifier(hub, { ntfy: { url: ntfy.url, topic: 'kova-home' }, checkSec: 0 }, { dataDir });
+    again.checkDevices(); clock.t += 11 * 60_000; again.checkDevices();
+    await again.idle();
+    assert.equal(ntfy.got.length, 1);
+  } finally { await done(); }
+});

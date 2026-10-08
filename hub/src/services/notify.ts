@@ -7,6 +7,7 @@ import type { Hub } from '../hub.ts';
 import type { DeviceEvent } from '../devices/registry.ts';
 import { isLight } from '../util/describe.ts';
 import { powerTrouble } from '../util/hardware.ts';
+import { HOUSEHOLD, kindOf, moreWords, NotifyPrefs, type NotifyKind } from './notify-prefs.ts';
 
 /** Push notifications. Lives under `notify` in integrations.json; Web Push to the Kova phone app works with no config. */
 export interface NotifyOptions {
@@ -64,6 +65,8 @@ export const LIGHTS_OFF_URL = '/phone.html?do=lights-off';
  */
 export class Notifier {
   readonly vapid: Vapid;
+  /** What each person hears about, and how often (services/notify-prefs.ts). */
+  readonly prefs: NotifyPrefs;
   private subject: string;
   private offlineSince = new Map<string, number>();
   private offlineNotified = new Set<string>();
@@ -84,6 +87,7 @@ export class Notifier {
 
   constructor(private hub: Hub, private opts: NotifyOptions = {}, private env: { dataDir: string; pushAgent?: https.Agent }) {
     this.vapid = loadVapid(join(env.dataDir, 'push'));
+    this.prefs = new NotifyPrefs(hub.store);
     this.subject = opts.push?.subject ?? 'https://github.com/clickbitau/kova';
     this.anyoneHome = hub.engine.anyoneHome();
   }
@@ -91,6 +95,12 @@ export class Notifier {
   private get now(): number { return this.hub.engine.now(); }
   /** On unless switched off (false, or "off" from the settings form). */
   private rule(name: keyof NonNullable<NotifyOptions['rules']>): boolean { const v = this.opts.rules?.[name] as unknown; return v !== false && v !== 'off'; }
+
+  /** Kinds the household switched off for everyone (Integrations → Notifications). */
+  householdOff(): NotifyKind[] {
+    const by: Record<string, NotifyKind[]> = { doorbell: ['doorbell'], everyoneOut: ['everyoneOut'], offline: ['offline'], links: ['links'], network: ['internet', 'newDevice', 'threats', 'power'], home: ['home'] };
+    return Object.entries(by).flatMap(([r, ks]) => this.rule(r as keyof NonNullable<NotifyOptions['rules']>) ? [] : ks);
+  }
 
   start(): void {
     const onEvent = (e: DeviceEvent) => {
@@ -214,16 +224,25 @@ export class Notifier {
     if (!this.rule('offline')) return;
     const t = this.now;
     const limit = (this.opts.offlineAfterMin ?? 10) * 60_000;
+    // Told already, kept across restarts (an update restarts Kova; a switch still offline isn't news again).
+    const told = new Set(this.hub.store.get<string[]>('offlineTold') ?? []);
+    const before = told.size;
+    let changed = false;
     for (const d of this.hub.reg.list()) {
-      if (d.state.online !== false || d.archived) {
+      // Removed (hidden) or archived devices aren't the owner's concern any more: never about them.
+      if (d.state.online !== false || d.archived || d.hidden) {
         this.offlineSince.delete(d.id);
         this.offlineNotified.delete(d.id);
+        // Back online: next time it goes, that's news. (Hidden or archived ones stay told, so unhiding isn't a burst.)
+        if (d.state.online !== false && told.delete(d.id)) changed = true;
         continue;
       }
       const since = this.offlineSince.get(d.id) ?? t;
       this.offlineSince.set(d.id, since);
+      if (told.has(d.id)) this.offlineNotified.add(d.id);
       if (t - since >= limit && !this.offlineNotified.has(d.id)) {
         this.offlineNotified.add(d.id);
+        told.add(d.id);
         const room = this.hub.config.get().rooms.find(r => r.id === d.room)?.name;
         this.track(this.notify({
           title: `${d.name} isn’t responding`,
@@ -232,6 +251,7 @@ export class Notifier {
         }));
       }
     }
+    if (changed || told.size !== before) this.hub.store.set('offlineTold', [...told]);
   }
 
   /**
@@ -312,25 +332,45 @@ export class Notifier {
     const keepSubs = subs.filter(s => s.personId !== personId), keepApps = apps.filter(a => a.personId !== personId);
     if (keepSubs.length !== subs.length) this.saveSubs(keepSubs);
     if (keepApps.length !== apps.length) this.saveApps(keepApps);
+    this.prefs.forget(personId);
     return subs.length - keepSubs.length + apps.length - keepApps.length;
   }
 
   /** Whether any channel could deliver right now. */
   hasChannels(): boolean { return !!this.opts.ntfy || this.subscriptions().length > 0 || this.appPhones().length > 0; }
 
-  /** Send to every channel. Returns how many deliveries succeeded. */
-  async notify(n: Notification): Promise<{ push: number; ntfy: boolean; removed: number; app: number }> {
-    const out = { push: 0, ntfy: false, removed: 0, app: 0 };
+  /**
+   * Send to every channel. Each person's phones get it only when their choices for its kind let it go now (ntfy and
+   * phones of no one in particular follow the household's); one that goes after some were held says how many.
+   * Returns how many deliveries succeeded.
+   */
+  async notify(n: Notification): Promise<{ push: number; ntfy: boolean; removed: number; app: number; held?: number }> {
+    const out: { push: number; ntfy: boolean; removed: number; app: number; held?: number } = { push: 0, ntfy: false, removed: 0, app: 0 };
     if (!this.hasChannels()) return out;
     const subs = this.subscriptions().filter(s => (!n.people?.length || !s.personId || n.people.includes(s.personId)) && this.audience(s.personId, n));
-    const payload = JSON.stringify({ title: n.title, body: n.body, url: n.url ?? '/phone.html', tag: n.tag, actions: n.actions ?? [] });
+    const apps = this.appPhones().filter(a => (!n.people?.length || !a.personId || n.people.includes(a.personId)) && this.audience(a.personId, n));
+    // Who'd get it, and what each gets now (null: held back, or never for them).
+    const kind = kindOf(n.tag), at = this.now;
+    const whos = new Set<string>([...subs.map(s => s.personId ?? HOUSEHOLD), ...apps.map(a => a.personId ?? HOUSEHOLD), ...(this.opts.ntfy ? [HOUSEHOLD] : [])]);
+    const forWho = new Map<string, Notification | null>();
+    for (const w of whos) {
+      const g = this.prefs.gate(w, kind, at);
+      forWho.set(w, !g.send ? null : g.more ? { ...n, body: [n.body, moreWords(g.more)].filter(Boolean).join(' ') } : n);
+      if (!g.send) out.held = (out.held ?? 0) + 1;
+    }
+    const msg = (personId?: string) => forWho.get(personId ?? HOUSEHOLD) ?? null;
+    // Held back for everyone: nothing to send, and nothing for Activity (a chatty kind would fill it).
+    if (![...forWho.values()].some(Boolean)) return out;
     const dead: string[] = [];
     const errors: string[] = [];
     await Promise.all(subs.map(async s => {
+      const m = msg(s.personId);
+      if (!m) return;
+      const payload = JSON.stringify({ title: m.title, body: m.body, url: m.url ?? '/phone.html', tag: m.tag, actions: m.actions ?? [] });
       try {
         await webpush.sendNotification(s.subscription, payload, {
           vapidDetails: { subject: this.subject, publicKey: this.vapid.publicKey, privateKey: this.vapid.privateKey },
-          TTL: 3600, urgency: 'high', topic: n.tag?.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32) || undefined,
+          TTL: 3600, urgency: 'high', topic: m.tag?.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32) || undefined,
           ...(this.env.pushAgent ? { agent: this.env.pushAgent } : {}),
         });
         out.push++;
@@ -345,17 +385,20 @@ export class Notifier {
       this.saveSubs(this.subscriptions().filter(s => !dead.includes(s.subscription.endpoint)));
       out.removed = dead.length;
     }
-    const apps = this.appPhones().filter(a => (!n.people?.length || !a.personId || n.people.includes(a.personId)) && this.audience(a.personId, n));
-    if (apps.length) {
+    // The app: one request per message (most often one: everyone gets the same words).
+    const byMsg = new Map<Notification, AppPhone[]>();
+    for (const a of apps) { const m = msg(a.personId); if (m) byMsg.set(m, [...(byMsg.get(m) ?? []), a]); }
+    for (const [m, to] of byMsg) {
       try {
-        const r = await this.sendExpo(n, apps);
-        out.app = r.sent;
+        const r = await this.sendExpo(m, to);
+        out.app += r.sent;
         if (r.gone.length) { this.saveApps(this.appPhones().filter(a => !r.gone.includes(a.token))); out.removed += r.gone.length; }
         errors.push(...r.errors);
       } catch (err) { errors.push(`app: ${String((err as Error).message ?? err)}`); }
     }
-    if (this.opts.ntfy) {
-      try { await this.sendNtfy(n); out.ntfy = true; } catch (err) { errors.push(`ntfy: ${(err as Error).constructor?.name} ${String((err as Error).message ?? err)} ${(err as {code?:string}).code ?? ''}`); }
+    const house = msg(undefined);
+    if (this.opts.ntfy && house) {
+      try { await this.sendNtfy(house); out.ntfy = true; } catch (err) { errors.push(`ntfy: ${(err as Error).constructor?.name} ${String((err as Error).message ?? err)} ${(err as {code?:string}).code ?? ''}`); }
     }
     const phones = out.push + out.app;
     const channels = [phones ? `${phones} phone${phones === 1 ? '' : 's'}` : null, out.ntfy ? 'ntfy' : null].filter(Boolean);

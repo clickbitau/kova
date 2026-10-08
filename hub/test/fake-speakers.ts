@@ -7,7 +7,7 @@ import { partition } from '../src/engine/group-sync.ts';
 // play command; its place is (now − when it started) plus a bias a test sets (drift), read with the time it was true.
 
 export interface FakeSpeaker { id: string; name: string; room: string }
-interface Stream { key: string; ids: string[]; media: string; live: boolean; startedAt: number; bias: number; durations: number[]; paused: boolean }
+interface Stream { key: string; ids: string[]; media: string; live: boolean; startedAt: number; bias: number; durations: number[]; paused: boolean; heldAt?: number }
 
 export class FakeSpeakers implements Adapter {
   kind = 'Local' as const;
@@ -25,7 +25,15 @@ export class FakeSpeakers implements Adapter {
     groups?: { id: string; name: string; members: string[] }[]; dynamic?: boolean;
     /** Start delay per stream key (a group id, or a speaker id); default 0. */
     latency?: Record<string, number>; seekLatency?: number; seekStepMs?: number; batchMs?: number;
-  } = {}) {}
+    /** A gap between songs (a Cast group fetching the next), per stream key: ms, or a function of the song it ends. */
+    gapMs?: Record<string, number | ((index: number) => number)>;
+    /** Can wait at a song's end (hold). */
+    canHold?: boolean;
+  } = {}) {
+    if (o.canHold) this.hold = async (d: Device) => { const st = this.streamOf(d.id); if (st) { this.holds.push({ id: d.id, at: Date.now() }); st.heldAt ??= Date.now(); } };
+  }
+  readonly holds: { id: string; at: number }[] = [];
+  hold?: (d: Device) => Promise<void>;
 
   async start(ctx: AdapterContext): Promise<void> {
     this.ctx = ctx;
@@ -69,14 +77,23 @@ export class FakeSpeakers implements Adapter {
   /** Make the stream that plays this speaker run `ms` ahead (+) or behind (−) from now on. */
   drift(id: string, ms: number): void { const s = this.streamOf(id); if (s) s.bias += ms; }
 
-  /** Where the stream is in its queue, from the time it started. */
+  /** Where the stream is in its queue, from the time it started (a held one where it stopped; gaps between songs silent). */
   where(id: string, t = Date.now()): { index: number; positionMs: number; playing: boolean } | null {
     const s = this.streamOf(id);
     if (!s) return null;
-    let pos = t - s.startedAt + s.bias, index = 0;
-    if (t < s.startedAt) return { index: 0, positionMs: 0, playing: false };
-    while (s.durations[index] && pos >= s.durations[index]! && index < s.durations.length - 1) { pos -= s.durations[index]!; index++; }
-    return { index, positionMs: pos, playing: !s.paused };
+    const held = s.heldAt != null;
+    const tt = held ? s.heldAt! : t;
+    let pos = tt - s.startedAt + s.bias, index = 0;
+    if (tt < s.startedAt) return { index: 0, positionMs: 0, playing: false };
+    const gapOf = (i: number) => { const g = this.o.gapMs?.[s.key]; return typeof g === 'function' ? g(i) : g ?? 0; };
+    while (s.durations[index] && pos >= s.durations[index]! && index < s.durations.length - 1) {
+      pos -= s.durations[index]!;
+      const g = gapOf(index);
+      index++;
+      if (pos < g) return { index, positionMs: 0, playing: false };
+      pos -= g;
+    }
+    return { index, positionMs: pos, playing: !s.paused && !held };
   }
 
   async playbackPosition(d: Device): Promise<PlaybackPosition | null> {
@@ -91,8 +108,10 @@ export class FakeSpeakers implements Adapter {
     if (!s) throw new Error('not playing');
     this.seeks.push({ id: d.id, at: Date.now(), ...to });
     // Lands after the seek delay at exactly that place.
-    const before = s.durations.slice(0, to.index).reduce((a, b) => a + b, 0);
+    const gapOf = (i: number) => { const g = this.o.gapMs?.[s.key]; return typeof g === 'function' ? g(i) : g ?? 0; };
+    const before = s.durations.slice(0, to.index).reduce((a, b, i) => a + b + gapOf(i), 0);
     s.startedAt = Date.now() + (this.o.seekLatency ?? 0) - before - to.positionMs;
     s.bias = 0;
+    s.heldAt = undefined;
   }
 }

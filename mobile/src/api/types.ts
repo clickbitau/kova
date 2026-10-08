@@ -256,6 +256,8 @@ export interface SpeakerGroup {
   parts?: GroupPart[];
   /** A sync test plays until then (ms). */
   testUntil?: number | null;
+  /** How loud each member is against the others (hubs from 0.7.65): the group's volume keeps it. */
+  balance?: Record<string, number>;
 }
 
 /** Today's energy (hub services/energy.ts). Watts and kWh; `use` null when nothing meters the home. */

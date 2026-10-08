@@ -4,7 +4,7 @@ import { C, SP, alpha } from '../theme';
 import { useHub } from '../state/hub';
 import { describeHubUpdate, type HubUpdate } from '../logic/integrations';
 import { describeUpdate, notesBetween } from '../logic/ota';
-import { ago, historyRows, hubProgress } from '../logic/updates';
+import { ago, historyRows, hubProgress, updateSteps } from '../logic/updates';
 import { applyAppUpdate, checkForAppUpdate, running, useAppUpdate } from '../native/updates';
 import { Icon } from '../ui/Icon';
 import { Button, Card, IconWell, Sheet, Spinner, SwitchRow } from '../ui/kit';
@@ -17,11 +17,13 @@ const HIST = { ok: C.green, warn: C.amber, error: C.red } as const;
 
 /** Kova on the hub: what's running, what's out and what it brings, Update now (with progress), Check now, overnight updates, the licence, and what happened before. */
 function HubUpdateCard({ u }: { u: HubUpdate }) {
-  const { act, api, say } = useHub();
+  const { act, api, say, conn } = useHub();
   const now = Date.now();
   const d = describeHubUpdate(u, now);
-  const progress = hubProgress(u);
+  const steps = updateSteps(u, { away: conn !== 'live', now });
+  const progress = steps ? null : hubProgress(u);
   const history = historyRows(u, now);
+  const [older, setOlder] = useState(false);
   const [keyOpen, setKeyOpen] = useState(false);
   const [key, setKey] = useState('');
   const [keyErr, setKeyErr] = useState<string | null>(null);
@@ -32,14 +34,15 @@ function HubUpdateCard({ u }: { u: HubUpdate }) {
       <View style={{ padding: SP[4], gap: SP[3] }}>
         <T v="eyebrow" color={C.stone2}>Kova on your hub</T>
         <View style={{ flexDirection: 'row', gap: SP[3], alignItems: 'flex-start' }} accessibilityLiveRegion="polite">
-          {progress ? (
+          {progress || steps ? (
             <View style={{ width: 40, height: 40, borderRadius: 13, backgroundColor: alpha(C.blue, 0.14), alignItems: 'center', justifyContent: 'center' }}><Spinner color={C.blue} /></View>
           ) : <IconWell icon={ready ? 'cloud_download' : d.tone === 'error' ? 'cloud_off' : 'check_circle'} color={ready ? C.blue : d.tone === 'error' ? C.red : C.green} size={40} fill={!ready} />}
           <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
             <T v="headline">{d.title}</T>
-            <T v="footnote" color={C.stone}>{progress ?? d.sub}</T>
+            <T v="footnote" color={C.stone}>{progress ?? (steps ? `From ${u.current.version}. Your devices keep working; only Kova restarts.` : d.sub)}</T>
           </View>
         </View>
+        {steps ? <UpdateProgress s={steps} /> : null}
         {d.changes.length ? (
           <View style={{ gap: 4, paddingTop: SP[3], borderTopWidth: 1, borderTopColor: C.hairline }}>
             <T v="eyebrow" color={C.stone2}>{`What’s new in ${u.available?.version ?? ''}`}</T>
@@ -60,17 +63,14 @@ function HubUpdateCard({ u }: { u: HubUpdate }) {
           onChange={on => void act('PUT', '/api/update/settings', { on }, on ? 'Kova updates itself overnight when one is waiting' : 'Overnight updates off')} />
       ) : null}
       {history.length ? (
-        <View style={{ padding: SP[4], gap: SP[3], borderTopWidth: 1, borderTopColor: C.hairline }}>
-          <T v="eyebrow" color={C.stone2}>History</T>
-          {history.map(h => (
-            <View key={h.key} style={{ flexDirection: 'row', gap: SP[3], alignItems: 'flex-start' }}>
-              <Icon name={h.icon} size={18} color={HIST[h.tone]} style={{ marginTop: 1 }} />
-              <View style={{ flex: 1, gap: 1 }}>
-                <T v="callout" weight={600}>{h.title}</T>
-                <T v="footnote" color={C.stone}>{h.sub}</T>
-              </View>
-            </View>
-          ))}
+        <View style={{ paddingHorizontal: SP[4], paddingVertical: SP[3], gap: SP[2], borderTopWidth: 1, borderTopColor: C.hairline }}>
+          <HistoryLine h={history[0]!} />
+          {history.length > 1 ? (
+            <>
+              {older ? history.slice(1).map(h => <HistoryLine key={h.key} h={h} />) : null}
+              <Button size="sm" kind="ghost" icon={older ? 'expand_less' : 'history'} label={older ? 'Show less' : `Earlier updates (${history.length - 1})`} onPress={() => setOlder(x => !x)} />
+            </>
+          ) : null}
         </View>
       ) : null}
       <Sheet open={confirm} onClose={() => setConfirm(false)} label="Update Kova">
@@ -94,6 +94,41 @@ function HubUpdateCard({ u }: { u: HubUpdate }) {
         </View>
       </Sheet>
     </Card>
+  );
+}
+
+/** One past update: what happened, when. */
+function HistoryLine({ h }: { h: ReturnType<typeof historyRows>[number] }) {
+  return (
+    <View style={{ flexDirection: 'row', gap: SP[3], alignItems: 'flex-start' }}>
+      <Icon name={h.icon} size={18} color={HIST[h.tone]} style={{ marginTop: 1 }} />
+      <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
+        <T v="callout" weight={600}>{h.title}</T>
+        <T v="footnote" color={C.stone}>{h.sub}</T>
+      </View>
+    </View>
+  );
+}
+
+/** An update on its way: a bar, then each step ticked off as the hub gets there. */
+function UpdateProgress({ s }: { s: NonNullable<ReturnType<typeof updateSteps>> }) {
+  const fg = s.bad ? C.amber : C.blue;
+  return (
+    <View style={{ gap: SP[3], paddingTop: SP[3], borderTopWidth: 1, borderTopColor: C.hairline }} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: 100, now: Math.round(s.share * 100) }} accessibilityLabel={s.line}>
+      <View style={{ height: 6, borderRadius: 3, backgroundColor: alpha(fg, 0.16), overflow: 'hidden' }}>
+        <View style={{ width: `${Math.round(s.share * 100)}%`, height: 6, borderRadius: 3, backgroundColor: fg }} />
+      </View>
+      <View style={{ gap: SP[2] }}>
+        {s.rows.map(r => (
+          <View key={r.label} style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2] }}>
+            {r.state === 'now' ? <View style={{ width: 18, alignItems: 'center' }}><Spinner color={fg} size={16} /></View>
+              : <Icon name={r.state === 'done' ? 'check_circle' : 'radio_button_unchecked'} size={18} color={r.state === 'done' ? C.green : C.stone2} fill={r.state === 'done'} />}
+            <T v="footnote" weight={r.state === 'now' ? 600 : 400} color={r.state === 'next' ? C.stone2 : C.bone2} style={{ flex: 1, minWidth: 0 }}>{r.label}</T>
+          </View>
+        ))}
+      </View>
+      <T v="footnote" color={s.bad ? C.amber : C.stone}>{s.line}</T>
+    </View>
   );
 }
 

@@ -37,7 +37,47 @@ export interface UpdateStatus {
   last: { result: 'updated' | 'rolled-back' | 'failed'; from: string; to: string; at: number; log?: string[] } | null;
   /** Every update this hub has seen, newest first (the last 20). */
   history: UpdateRecord[];
+  /** While it updates: where it is, read from the updater's log as it goes. Null otherwise. */
+  progress: UpdateProgress | null;
   auto: { on: boolean; hour: number };
+}
+
+export interface UpdateProgress {
+  /** The step now (0-based), of `steps`. */
+  step: number;
+  steps: string[];
+  /** The step now, in words ("Backing up your home"); while it goes back, what it's doing. */
+  label: string;
+  startedAt: number | null;
+  /** The new version didn't come up: it's going back to the one before. */
+  rollingBack: boolean;
+}
+
+/** An update's steps, as Software update shows them. */
+export const UPDATE_STEPS = ['Downloading', 'Unpacking and checking', 'Backing up your home', 'Restarting Kova', 'Making sure it started properly'];
+
+/**
+ * Where an update is, from the updater's log (deploy/updater.sh, install-release.sh, update.sh write "==> …" steps).
+ * `running` is the version this hub runs: once it's the new one, the restart is behind it.
+ */
+export function progressOf(log: string, o: { startedAt?: number | null; running?: string; to?: string | null } = {}): UpdateProgress {
+  let step = 0, rollingBack = false, label = '';
+  for (const raw of log.split('\n')) {
+    const line = raw.replace(/\x1b\[[0-9;]*m/g, '');
+    const m = /==>\s*(.*)$/.exec(line);
+    if (!m) continue;
+    const t = m[1]!;
+    if (/^Downloading|^Pulling/.test(t)) step = Math.max(step, 0);
+    else if (/^Unpacking|^Installing dependencies/.test(t)) step = Math.max(step, 1);
+    else if (/^Backing up/.test(t)) step = Math.max(step, 2);
+    else if (/^Switching|^Restarting/.test(t)) step = Math.max(step, 3);
+    else if (/is up$/.test(t)) step = 4;
+    else if (/didn.t come (up|back)|going back/i.test(t)) { rollingBack = true; label = 'It didn’t start properly: going back to the version before'; }
+    else if (/^Restoring/.test(t) && rollingBack) label = 'Putting your data back as it was';
+  }
+  // This is the new version answering: the restart is done, the updater is checking it.
+  if (!rollingBack && o.to && o.running === o.to) step = Math.max(step, 4);
+  return { step, steps: UPDATE_STEPS, label: label || UPDATE_STEPS[step]!, startedAt: o.startedAt ?? null, rollingBack };
 }
 
 export interface UpdateRecord { result: 'updated' | 'rolled-back' | 'failed'; from: string; to: string; at: number }
@@ -51,6 +91,7 @@ interface Raw {
   current?: { version: string; commit: string };
   available?: UpdateStatus['available'];
   last?: UpdateStatus['last'];
+  startedAt?: number;
 }
 
 type Notify = (n: { title: string; body: string; tag: string; url?: string }) => Promise<unknown>;
@@ -124,6 +165,9 @@ export class Updates {
   status(): UpdateStatus {
     const r = this.raw();
     const req = this.requested();
+    const updating = !req && r?.state === 'updating';
+    let log = '';
+    if (updating) { try { log = readFileSync(join(this.dir, 'last-update.log'), 'utf8').slice(-20_000); } catch { /* not yet */ } }
     return {
       updater: !!r?.updater,
       state: req ? 'requested' : (r?.state === 'checking' || r?.state === 'updating' ? r.state : 'idle'),
@@ -137,6 +181,7 @@ export class Updates {
       checkError: r?.checkError?.length ? r.checkError.join(' ').slice(0, 300) : null,
       last: r?.last ?? null,
       history: this.history(r?.last ?? null),
+      progress: updating ? progressOf(log, { startedAt: r?.startedAt ?? null, running: KOVA_VERSION, to: r?.available?.version ?? null }) : null,
       auto: this.autoSettings(),
     };
   }

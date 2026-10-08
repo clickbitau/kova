@@ -23,6 +23,8 @@ interface Speaker {
   queue: { q: Queue; index: number; from: number; to: number } | null;
   /** Paused (on hold, keeping its place), as the speaker last said. */
   paused?: boolean;
+  /** Waiting at a song's end for a speaker group's others (hold()): not paused, whatever it says, until then. */
+  holdUntil?: number;
 }
 
 /**
@@ -259,7 +261,7 @@ export class SonosAdapter implements Adapter {
   }
 
   /**
-   * Where the queue is. Sonos says whole seconds only, so while it plays Kova reads again every 60 ms or so until
+   * Where the queue is. Sonos says whole seconds only, so while it plays Kova reads again every 25 ms or so until
    * the second ticks over: at that moment the place is exactly that second (to within half the gap between reads).
    */
   async playbackPosition(device: Device): Promise<PlaybackPosition | null> {
@@ -278,7 +280,7 @@ export class SonosAdapter implements Adapter {
     if (!playing) return out(a, a.rel * 1000, a.at);
     const until = Date.now() + 1300;
     while (Date.now() < until) {
-      await sleep(60);
+      await sleep(25);
       const b = await this.readPos(s);
       if (b.track === a.track && b.rel === a.rel + 1) return out(b, b.rel * 1000, Math.round((a.at + b.at) / 2));
       if (b.track !== a.track || b.rel !== a.rel) return out(b, b.rel * 1000 + 500, b.at);
@@ -299,6 +301,17 @@ export class SonosAdapter implements Adapter {
     if (secs > 0 || to.index === qu.index) await this.soap(s.host, AVT, 'Seek', { InstanceID: 0, Unit: 'REL_TIME', Target: hms(secs) });
     await this.soap(s.host, AVT, 'Play', { InstanceID: 0, Speed: 1 });
     qu.index = to.index;
+    s.holdUntil = undefined;
+  }
+
+  /** Wait where it is (a speaker played alongside, at a song's end, for the others to start the next): syncTo plays it again. */
+  async hold(device: Device): Promise<void> {
+    const s0 = this.speakers.get(device.id);
+    if (!s0) throw new Error(`Unknown Sonos speaker ${device.id}`);
+    const s = this.lead(s0);
+    // Not "paused" to anyone looking meanwhile: it plays again in a moment.
+    s.holdUntil = Date.now() + 15_000;
+    await this.soap(s.host, AVT, 'Pause', { InstanceID: 0 });
   }
 
   private async skip(s: Speaker, delta: number): Promise<void> {
@@ -336,7 +349,7 @@ export class SonosAdapter implements Adapter {
         ]);
         const state = tag(ti, 'CurrentTransportState') ?? '';
         // Paused counts as on (it keeps its place), as with every player that can pause.
-        s.paused = /PAUSED/.test(state) && !!(s.queue || s.media);
+        s.paused = /PAUSED/.test(state) && !!(s.queue || s.media) && !((s.holdUntil ?? 0) > Date.now());
         const playing = /PLAYING|TRANSITIONING/.test(state) || s.paused;
         // The queue ran out, or someone played something else from the Sonos app.
         if (!playing && /STOPPED/.test(state)) s.queue = null;
