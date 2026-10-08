@@ -13,6 +13,7 @@ import { Button, HScroll, Press } from '../ui/kit';
 import { ConnBanner } from '../ui/Screen';
 import { T } from '../ui/Text';
 import { Appear, haptic, useLoop, useStateValue } from '../ui/motion';
+import { listen, quiet, setVoiceLang, speak, stopListening, useSpeechRecognitionEvent, voiceLang, voiceReady, type VoiceLang } from '../native/voice';
 
 type Msg = ChatMsg;
 const TRY = ['What’s happening tonight?', 'Who’s home?', 'Turn off the kitchen', 'Lamp to 30%', 'Why is the porch light on?', 'I’m leaving'];
@@ -87,7 +88,10 @@ export function AskScreen() {
   const queue = useRef<string[]>([]);
   const asking = useRef(false);
   const following = useRef(new Set<string>());
+  /** Asked by voice, in that language: its answer is read out. */
+  const spoken = useRef<VoiceLang | null>(null);
   const land = (r: AskReply, jobId?: string) => {
+    if (spoken.current) { speak(r.text, spoken.current); spoken.current = null; }
     setChat(c => (jobId && c.some(m => m.job === jobId && m.from === 'kova')) ? c
       : [...c, { id: `k${Date.now()}`, from: 'kova', text: r.text, src: r.source || undefined, engine: r.engine, actions: r.actions, undo: r.undo, failed: r.failed, ts: Date.now(), ...(jobId ? { job: jobId } : {}) }]);
     if (r.failed) haptic.error(); else if (r.undo) haptic.success();
@@ -138,6 +142,31 @@ export function AskScreen() {
     return () => sub.remove();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Talking: what's heard fills the box as it's said, and is asked when the speaker stops.
+  const [listening, setListening] = useState(false);
+  const [lang, setLang] = useState<VoiceLang>('en-AU');
+  const heard = useRef('');
+  useEffect(() => { void voiceLang().then(setLang); }, []);
+  useSpeechRecognitionEvent('result', e => { const t = e.results[0]?.transcript ?? ''; heard.current = t; setText(t); });
+  useSpeechRecognitionEvent('end', () => {
+    setListening(false);
+    const t = heard.current.trim();
+    heard.current = '';
+    if (t) { spoken.current = lang; ask(t); }
+  });
+  useSpeechRecognitionEvent('error', e => {
+    setListening(false);
+    if (e.error === 'aborted') return;
+    say(e.error === 'no-speech' ? 'Didn’t hear anything' : e.error === 'not-allowed' ? 'Allow the microphone for Kova in Settings to talk to it' : `Couldn’t listen: ${e.message || e.error}`, { error: e.error !== 'no-speech' });
+  });
+  const mic = async () => {
+    if (listening) { stopListening(); return; }
+    quiet();
+    heard.current = ''; setText('');
+    try { await listen(lang); setListening(true); haptic.select(); } catch (e) { say((e as Error).message, { error: true }); }
+  };
+  const switchLang = () => { const l: VoiceLang = lang === 'bn-BD' ? 'en-AU' : 'bn-BD'; setLang(l); void setVoiceLang(l); say(l === 'bn-BD' ? 'Listening in Bangla' : 'Listening in English'); };
 
   const ask = (q: string) => {
     const t = q.trim();
@@ -231,6 +260,12 @@ export function AskScreen() {
         ) : !text ? (
           <View style={{ paddingHorizontal: SP.gutter }}>
             <HScroll>
+              {voiceReady ? (
+                <Press onPress={switchLang} label={lang === 'bn-BD' ? 'Talking in Bangla: switch to English' : 'Talking in English: switch to Bangla'} style={{ height: 34, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, borderRadius: R.full, backgroundColor: C.card, borderWidth: 1, borderColor: C.line }}>
+                  <Icon name="mic" size={15} color={C.stone} />
+                  <T v="label" size={12.5} weight={700} color={C.bone2}>{lang === 'bn-BD' ? 'বাংলা' : 'English'}</T>
+                </Press>
+              ) : null}
               {TRY.map(q => (
                 <Press key={q} onPress={() => void ask(q)} label={`Ask: ${q}`} style={{ height: 34, justifyContent: 'center', paddingHorizontal: 13, borderRadius: R.full, backgroundColor: C.card, borderWidth: 1, borderColor: C.line }}>
                   <T v="label" size={12.5} weight={600} color={C.bone2}>{q}</T>
@@ -240,9 +275,14 @@ export function AskScreen() {
           </View>
         ) : null}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2], paddingHorizontal: SP[3] }}>
-          <TextInput value={text} onChangeText={setText} placeholder="Ask or tell Kova…" placeholderTextColor={C.stone2} returnKeyType="send" onSubmitEditing={() => void ask(text)}
+          <TextInput value={text} onChangeText={setText} placeholder={listening ? (lang === 'bn-BD' ? 'শুনছি…' : 'Listening…') : 'Ask or tell Kova…'} placeholderTextColor={C.stone2} returnKeyType="send" onSubmitEditing={() => void ask(text)}
             onFocus={() => setFocus(true)} onBlur={() => setFocus(false)} accessibilityLabel="Ask or tell Kova"
             style={{ flex: 1, minWidth: 0, height: 48, paddingHorizontal: SP[4], borderRadius: 24, backgroundColor: C.card, borderWidth: 1, borderColor: focus ? C.amberLine : C.line, color: C.bone, fontFamily: F[500], fontSize: 16 }} />
+          {voiceReady && (!text || listening) ? (
+            <Press onPress={() => void mic()} label={listening ? 'Stop listening' : 'Talk to Kova'} selected={listening} style={{ width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: listening ? C.red : C.card, borderWidth: listening ? 0 : 1, borderColor: C.line }}>
+              <Icon name={listening ? 'stop' : 'mic'} size={23} color={listening ? C.onRed : C.bone} fill={listening} />
+            </Press>
+          ) : null}
           <Press onPress={() => void ask(text)} label="Send" disabled={!ready} style={{ width: 48, height: 48, borderRadius: 24 }}>
             <Animated.View style={{ flex: 1, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: can.interpolate({ inputRange: [0, 1], outputRange: [C.control, C.amber] }) }}>
               <Icon name="arrow_upward" size={23} color={ready ? C.onAmber : C.stone2} />
