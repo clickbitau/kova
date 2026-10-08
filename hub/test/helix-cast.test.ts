@@ -78,6 +78,11 @@ test('Helix casting: Helix’s token lists the speakers and groups, plays its qu
     assert.equal(by('group_whole').kind, 'group');
     assert.deepEqual(by('group_whole').members, ['kitchen', 'dining', 'ray']);
     assert.equal(by('kitchen').playing, null);
+    // Something that isn't a queue (an announcement, a radio stream) still shows as playing, by its name.
+    (h.fc as unknown as { ctx: { report(id: string, s: object): void } }).ctx.report('dining', { on: true, media: 'Adhan' });
+    const dining = ((await h.helixCall('GET', '/api/helix/speakers')).json().speakers as any[]).find(s => s.id === 'dining');
+    assert.deepEqual([dining.playing.state, dining.playing.track.title, dining.playing.queue], ['playing', 'Adhan', []]);
+    (h.fc as unknown as { ctx: { report(id: string, s: object): void } }).ctx.report('dining', { on: false, media: null });
     assert.ok(!list.some(s => s.id === 'lounge_main'), 'a light isn’t a speaker');
     // Helix's token reaches only these (and its TVs); a device command for a light is still refused.
     assert.equal((await h.helixCall('POST', '/api/devices/lounge_main', { on: true })).statusCode, 401);

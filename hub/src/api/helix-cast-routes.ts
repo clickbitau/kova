@@ -79,6 +79,14 @@ export function registerHelixCastRoutes(app: FastifyInstance, hub: Hub): void {
           index: idx,
           queue: (songs ?? []).slice(0, QUEUE_MAX).map(t => song(t, false)),
         };
+      } else if (s.on && s.media) {
+        // Something that isn't a queue of songs: an announcement (the adhan), a radio stream, another app's cast.
+        const announcing = players(d).some(p => hub.announcer?.announcing(p.id)) || hub.announcer?.announcing(d.id);
+        playing = {
+          session: sessionOf(s.media), state: s.paused ? 'paused' : 'playing',
+          track: { id: `kova:${s.media}`, title: s.media }, index: 0, queue: [],
+          ...(announcing ? { announcement: true } : {}),
+        };
       }
       const caps = ['volume', ...(d.capabilities.includes('pause') ? ['pause'] : []), ...(players(d).some(p => !!hub.reg.adapters.get(p.adapter)?.syncTo) ? ['seek'] : []), 'queue'];
       const g = isGroup(d) ? groupOf(d) : undefined;
