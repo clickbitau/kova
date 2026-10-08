@@ -102,6 +102,37 @@ test('Cast: several speakers playing the same thing use their Cast group (perfec
   }
 });
 
+test('Cast: an announcement on a Cast group’s speakers plays through the group (in step), each at its own volume; put back, the group stops', async () => {
+  const a = fakeCast('Music Room Speaker'), b = fakeCast('Baby Room speaker'), c = fakeCast('Guest Room speaker');
+  const g = fakeCast('Home Speaker Group', ['aaaa0000-0000-0000-0000-000000000001', 'bbbb0000-0000-0000-0000-000000000002']);
+  const ep = async (f: ReturnType<typeof fakeCast>, id: string, model: string) => ({ id, name: f.name, model, host: '127.0.0.1', port: await listen(f) });
+  const reg = new Registry(new Store(':memory:'));
+  const cast = new CastAdapter({
+    discover: false, insecure: true, pollMs: 0, batchMs: 20,
+    endpoints: [await ep(a, 'aaaa0000000000000000000000000001', 'Nest Audio'), await ep(b, 'bbbb0000000000000000000000000002', 'Nest Audio'), await ep(c, 'cccc0000000000000000000000000003', 'Nest Audio'), await ep(g, 'dddd0000000000000000000000000004', 'Google Cast Group')],
+  });
+  await reg.addAdapter(cast);
+  try {
+    const clip = { url: 'http://hub/api/clip/adhan.mp3', title: 'Adhan', contentType: 'audio/mpeg', durationMs: 3000 };
+    const ids = ['cast_aaaa0000000000000000000000000001', 'cast_bbbb0000000000000000000000000002', 'cast_cccc0000000000000000000000000003'];
+    const snaps = await Promise.all(ids.map(id => reg.snapshotPlayback(id)));
+    const r = await reg.playClips([{ id: ids[0]!, clip, vol: 10 }, { id: ids[1]!, clip, vol: 5 }, { id: ids[2]!, clip, vol: 8 }], { kind: 'automation', label: 'Call to prayer' }, { startWaitMs: 0 });
+    assert.deepEqual(r.map(x => x.status), ['fulfilled', 'fulfilled', 'fulfilled']);
+    // One load on the group for its two speakers; the third on its own.
+    assert.equal(g.log.filter(l => l.type === 'LOAD').length, 1);
+    assert.equal(a.log.filter(l => l.type === 'LOAD').length + b.log.filter(l => l.type === 'LOAD').length, 0);
+    assert.equal(c.log.filter(l => l.type === 'LOAD').length, 1);
+    assert.deepEqual([a.st.level, b.st.level, c.st.level], [0.1, 0.05, 0.08], 'each at its own volume');
+    assert.equal(reg.get(ids[0]!)!.state.media, 'Adhan');
+    // Put back: the group's clip stops.
+    await Promise.all(ids.map((id, i) => reg.restorePlayback(id, snaps[i]!, { kind: 'automation', label: 'Call to prayer' })));
+    assert.equal(g.st.app, null);
+  } finally {
+    await reg.stop();
+    for (const f of [a, b, c, g]) f.server.close();
+  }
+});
+
 test('Cast: a group that stopped answering is stopped speaker by speaker', async () => {
   const a = fakeCast('Music Room Speaker'), b = fakeCast('Baby Room speaker');
   const g = fakeCast('Home Speaker Group', ['aaaa0000-0000-0000-0000-000000000001', 'bbbb0000-0000-0000-0000-000000000002']);

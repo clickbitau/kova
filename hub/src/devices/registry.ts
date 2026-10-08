@@ -396,6 +396,54 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
   }
 
   /** Play an announcement clip on a speaker at a volume: through its integration's own clip support, else as a source. */
+  /**
+   * A clip on several speakers, as together as they can be: each at its own volume first; an integration that plays
+   * them together (a Cast group covering some, sample-locked) gets them in one go, and the rest start the moment that
+   * one is heard (a Cast group takes seconds to start; a Sonos a fraction of one), so they don't run ahead of it.
+   * One result per item, in order.
+   */
+  async playClips(items: { id: string; clip: Clip; vol: number }[], cause: Cause, o: { startWaitMs?: number } = {}): Promise<PromiseSettledResult<void>[]> {
+    const res: PromiseSettledResult<void>[] = items.map(() => ({ status: 'rejected', reason: new Error('not played') }));
+    const byAdapter = new Map<string, number[]>();
+    items.forEach((x, i) => { const d = this.devices.get(x.id); if (d) byAdapter.set(d.adapter, [...(byAdapter.get(d.adapter) ?? []), i]); else res[i] = { status: 'rejected', reason: new Error(`Unknown device ${x.id}`) }; });
+    const together = [...byAdapter].filter(([a, is]) => is.length > 1 && !!this.adapters.get(a)?.playClipTogether);
+    const grouped = new Set(together.map(([a]) => a));
+    const rest = [...byAdapter].filter(([a]) => !grouped.has(a)).flatMap(([, is]) => is);
+    // The volumes, all at once, before anything plays.
+    await Promise.allSettled(items.map(x => { const d = this.devices.get(x.id); return d?.capabilities.includes('volume') ? this.command(x.id, { vol: x.vol }, cause, { quiet: true }) : Promise.resolve(); }));
+    for (const [aid, is] of together) {
+      const a = this.adapters.get(aid)!;
+      const ds = is.map(i => this.devices.get(items[i]!.id)!);
+      const clipOf = new Map(is.map(i => [items[i]!.id, items[i]!.clip]));
+      const r = await a.playClipTogether!(ds, d => clipOf.get(d.id)!);
+      r.forEach((x, k) => {
+        const i = is[k]!, d = ds[k]!;
+        if (x.status === 'fulfilled') {
+          const patch = this.diff(d, { on: true, media: items[i]!.clip.title, paused: false, ...(x.value ?? {}) });
+          if (Object.keys(patch).length) this.apply(d, patch, cause, true);
+          res[i] = { status: 'fulfilled', value: undefined };
+        } else res[i] = x as PromiseRejectedResult;
+      });
+    }
+    // The others once the first of those is heard (or straight away, when there's none or it can't say).
+    if (together.length && rest.length) {
+      const lead = together.flatMap(([, is]) => is).map(i => this.devices.get(items[i]!.id)!).find(d => !!this.adapters.get(d.adapter)?.playbackPosition);
+      const a = lead ? this.adapters.get(lead.adapter) : undefined;
+      const until = Date.now() + (o.startWaitMs ?? 6000);
+      while (lead && a?.playbackPosition && Date.now() < until) {
+        const pos = await a.playbackPosition(lead).catch(() => null);
+        if (pos?.playing && pos.positionMs > 0) break;
+        await new Promise(r => setTimeout(r, 150));
+      }
+    }
+    await Promise.all(rest.map(async i => {
+      const x = items[i]!;
+      try { await this.playClip(x.id, x.clip, x.vol, cause, { keepVol: true }); res[i] = { status: 'fulfilled', value: undefined }; }
+      catch (e) { res[i] = { status: 'rejected', reason: e }; }
+    }));
+    return res;
+  }
+
   async playClip(id: string, clip: Clip, vol: number, cause: Cause, o: { keepVol?: boolean } = {}): Promise<void> {
     const d = this.devices.get(id);
     if (!d) throw new Error(`Unknown device ${id}`);

@@ -204,10 +204,11 @@ export class Announcer {
       // Every speaker at its own volume, then all of them start in the same moment.
       const vols = new Map(list.map(x => [x.d.id, announceVol(x.level, trimOf(cfg, x.d.id))]));
       const started = this.o.now?.() ?? Date.now();
-      const plays = await Promise.allSettled(list.map(async x => {
-        const clip: PlayClip = { url: what.url(x.d), title: what.title, contentType: what.contentType, ...(what.durationMs ? { durationMs: what.durationMs } : {}) };
-        await this.reg.playClip(x.d.id, clip, vols.get(x.d.id)!, run.cause);
-      }));
+      // Together: speakers a Cast group covers play through it, in step; the rest start as it's heard.
+      const plays = await this.reg.playClips(list.map(x => ({
+        id: x.d.id, vol: vols.get(x.d.id)!,
+        clip: { url: what.url(x.d), title: what.title, contentType: what.contentType, ...(what.durationMs ? { durationMs: what.durationMs } : {}) } as PlayClip,
+      })), run.cause);
       plays.forEach((p, i) => {
         const id = list[i]!.d.id;
         if (p.status === 'fulfilled') result.played.push(id);

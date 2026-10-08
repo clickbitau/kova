@@ -702,10 +702,38 @@ export class CastAdapter implements Adapter {
     return { on: true, media: clip.title, paused: false, track: null, shuffle: false };
   }
 
+  /** An announcement on several speakers: through the Cast group that covers them (in step), the rest on their own. */
+  async playClipTogether(devices: Device[], clipOf: (d: Device) => Clip): Promise<PromiseSettledResult<void | DeviceState>[]> {
+    const ids = devices.map(d => this.speakerId(d));
+    const parts = ids.length > 1 ? partition(ids, this.castGroups()) : [{ ids }];
+    const out = new Map<string, Promise<void | DeviceState>>();
+    const played = (clip: Clip): DeviceState => ({ on: true, media: clip.title, paused: false, track: null, shuffle: false });
+    for (const part of parts) {
+      const gid = part.native?.id;
+      const first = devices[ids.indexOf(part.ids[0]!)]!;
+      if (gid && this.receivers.get(gid)) {
+        const clip = clipOf(first);
+        const p = (async () => {
+          await this.receivers.get(gid)!.playClip(clip);
+          for (const id of part.ids) { this.viaGroup.set(id, gid); this.silenced.delete(id); this.receivers.get(id)!.media = clip.title; this.receivers.get(id)!.clip = clip.title; }
+          return played(clip);
+        })();
+        for (const id of part.ids) out.set(id, p);
+        continue;
+      }
+      for (const id of part.ids) { const d = devices[ids.indexOf(id)]!; out.set(id, this.playClip(d, clipOf(d))); }
+    }
+    return Promise.allSettled(ids.map(id => out.get(id)!));
+  }
+
   async restorePlayback(device: Device, snap0: unknown | null): Promise<{ words: string; state?: DeviceState }> {
     const id = this.speakerId(device);
     const r = this.receivers.get(id);
     if (!r) throw new Error(`${device.name} isn’t reachable`);
+    // An announcement it heard through a Cast group: that group's clip stops (once, for the first of its speakers back).
+    const via = this.viaGroup.get(id), g = via ? this.receivers.get(via) : undefined;
+    if (g?.clip && r.clip === g.clip) { await g.stop().catch(() => {}); g.clip = null; }
+    if (r.clip && via) { this.viaGroup.delete(id); r.clip = null; r.media = null; }
     const snap = snap0 as null | { other?: boolean; via?: string; paused?: boolean; queue?: { q: Queue; index: number; position: number }; stream?: { url: string; title: string; loop: boolean } };
     if (!snap) {
       if (r.clip || r.media) await r.stop().catch(() => {});

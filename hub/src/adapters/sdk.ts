@@ -71,6 +71,11 @@ export interface Adapter {
   /** Optional: play a short clip once, on this speaker alone (out of any group, not as a radio stream). */
   playClip?(device: Device, clip: Clip, cause?: Cause): Promise<void | DeviceState>;
   /**
+   * Play a clip on several of this adapter's speakers together: the ones a native group covers through it (sample-
+   * locked), the rest each on its own. One result per device, in order. Volumes are set before (Registry.playClips).
+   */
+  playClipTogether?(devices: Device[], clip: (d: Device) => Clip): Promise<PromiseSettledResult<void | DeviceState>[]>;
+  /**
    * Optional: put back what snapshotPlayback saw (null: it played nothing; leave it idle as it was before). Says
    * in words what it did ("resumed Loved at 1:23"), with the state when it knows it.
    */
