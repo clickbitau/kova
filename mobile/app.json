@@ -38,7 +38,10 @@
           "remote-notification"
         ],
         "ITSAppUsesNonExemptEncryption": false,
-        "NSSupportsLiveActivities": true
+        "NSSupportsLiveActivities": true,
+        "NSMicrophoneUsageDescription": "Kova uses the microphone only while you talk to Ask Kova, to turn what you say into text.",
+        "NSSpeechRecognitionUsageDescription": "Kova uses Apple’s speech recognition to turn what you say to Ask Kova into text. It runs on your iPhone where it can; otherwise Apple processes the audio. The text goes only to your own Kova hub.",
+        "NSPhotoLibraryUsageDescription": "Kova only opens your photo library if you choose to attach a photo, for example on a page from your Kova hub."
       },
       "entitlements": {
         "com.apple.security.application-groups": [
@@ -72,7 +75,7 @@
         "expo-camera",
         {
           "cameraPermission": "Kova uses the camera to scan the code that connects it to your home.",
-          "microphonePermission": false,
+          "microphonePermission": "Kova uses the microphone only while you talk to Ask Kova, to turn what you say into text.",
           "recordAudioAndroid": false
         }
       ],
@@ -137,8 +140,8 @@
       [
         "expo-speech-recognition",
         {
-          "microphonePermission": "Kova listens only while the microphone in Ask Kova is on, to hear what you ask it.",
-          "speechRecognitionPermission": "Kova turns what you say to Ask Kova into words, on this phone where it can.",
+          "microphonePermission": "Kova uses the microphone only while you talk to Ask Kova, to turn what you say into text.",
+          "speechRecognitionPermission": "Kova uses Apple’s speech recognition to turn what you say to Ask Kova into text. It runs on your iPhone where it can; otherwise Apple processes the audio. The text goes only to your own Kova hub.",
           "androidSpeechServicePackages": [
             "com.google.android.googlequicksearchbox",
             "com.google.android.as"
