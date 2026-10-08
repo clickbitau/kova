@@ -1562,6 +1562,9 @@ const FAILURE_WORDS = new Set(['couldn’t', 'couldnt', 'couldn', 'change', 'eve
 /** A reply that says something didn't or can't happen. */
 const NEGATIVE = /\b(can[’']?t|cannot|couldn[’']?t|didn[’']?t|unable|not able|isn[’']?t|aren[’']?t|doesn[’']?t|has no|have no|no such|failed|wasn[’']?t|won[’']?t|not possible)\b/i;
 
+/** Words that answer or correct the last turn rather than ask something on their own. */
+const FOLLOW_UP = /^\s*(yes|yeah|yep|yup|no|nope|ok|okay|sure|please|do it|go ahead|that one|not that|instead|actually|sorry)\b/i;
+
 /** A reply that says it changed something ("Done", "Master Bed zone set to 19°", "Turned the lamp off"). */
 const CLAIMED = /^\s*(all )?done\b|\b(set to|turned (on|off)|switched (on|off)|now (heating|cooling|on|off)|opened|closed|is now)\b/i;
 
@@ -1934,7 +1937,9 @@ export class AiAssistant {
       this.logRequest(e.label, q, text, tools.called, !checked.flagged, tools.calls);
       // A clean run that changed something becomes a learned phrase: next time it replays without the AI.
       // Undoing the AI's work drops the phrase — the user said it was wrong.
-      const learnedSomething = tools.okAll && !checked.flagged && tools.learned.length > 0;
+      // A follow-up only means something in its conversation ("Yes", "Heating, not cooling"): never replayed later.
+      const followUp = FOLLOW_UP.test(q) || (history.length > 0 && q.split(/\s+/).filter(Boolean).length < 5);
+      const learnedSomething = tools.okAll && !checked.flagged && tools.learned.length > 0 && !followUp;
       if (learnedSomething) this.learn(key, e.label, tools.learned);
       return { text: text || (tools.undos.length ? 'Done.' : 'I don’t have an answer for that.'), source, actions: [], understood: true, engine: kind, undo: this.undoFor(tools.undos, learnedSomething ? () => this.unlearn(key) : undefined) };
     } catch (err) {
