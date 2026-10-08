@@ -83,6 +83,7 @@ export function streamUrlError(url: string): string | null {
 
 /** The line under a source: where it streams from and whether it repeats. */
 export function sourceSub(s: MediaSource): { text: string; missing: boolean } {
+  if (s.helix) return { text: `${s.helix.title} from Helix · repeats seamlessly`, missing: false };
   if (!s.url) return { text: 'No stream address yet', missing: true };
   let host = s.url;
   try { host = new URL(s.url).host || s.url; } catch { /* keep it as typed */ }

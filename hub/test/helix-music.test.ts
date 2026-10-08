@@ -784,3 +784,18 @@ test('Profiles: every call is for the profile set in Kova; a locked one is said 
     assert.equal(m3.isMusic('Loved'), false);
   } finally { await off.close(); }
 });
+
+test('A Helix song as a looping sound: found by name or id, signed as Helix’s crossfaded long version, reused', async () => {
+  const h = await fakeHelix(5, { modern: true });
+  const music = new HelixMusic(() => ({ url: h.url, token: TOKEN }));
+  try {
+    assert.deepEqual(await music.findSong(h.lib[1]!.id), { id: h.lib[1]!.id, title: h.lib[1]!.title, ...(h.lib[1]!.artist ? { artist: h.lib[1]!.artist } : {}) });
+    const url = await music.loopUrl(h.lib[1]!.id);
+    assert.match(url, /\/v1\/play\/t2\?sig=/);
+    const asked = h.signed.at(-1)!;
+    assert.deepEqual(asked.body.loop, { crossfadeMs: 8000, minutes: 60 }, 'the looping version, crossfaded');
+    const n = h.signed.length;
+    assert.equal(await music.loopUrl(h.lib[1]!.id), url, 'reused while it lasts');
+    assert.equal(h.signed.length, n);
+  } finally { await h.close(); }
+});

@@ -23,7 +23,8 @@ const MUSIC = '#c79bf2';
 function SourceSheet({ src, onClose }: { src: MediaSource | null; onClose: () => void }) {
   const { act } = useHub();
   const [url, setUrl] = useState('');
-  useEffect(() => { if (src) setUrl(src.url ?? ''); }, [src?.name]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [song, setSong] = useState('');
+  useEffect(() => { if (src) { setUrl(src.url ?? ''); setSong(''); } }, [src?.name]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!src) return <Sheet open={false} onClose={onClose}>{null}</Sheet>;
   const err = streamUrlError(url);
   const changed = url.trim() !== (src.url ?? '');
@@ -35,17 +36,22 @@ function SourceSheet({ src, onClose }: { src: MediaSource | null; onClose: () =>
   return (
     <Sheet open onClose={onClose} label={src.name}>
       <SheetHead kicker="Source" title={src.name} icon={src.icon} color={C.blue} />
-      <Section title="Stream address" caption gap={SP[2]}>
+      <Section title="A song from Helix" caption gap={SP[2]}>
+        <T v="footnote" color={C.stone}>{src.helix ? `Plays ${src.helix.title} from your Helix music, repeating without a break: each time round fades into the next.` : 'Play a song from your Helix music instead, repeating without a break: each time round fades into the next.'}</T>
+        <TextField value={song} onChange={setSong} placeholder={src.helix ? 'Another song’s name' : 'Song name'} label="Helix song" onSubmit={() => void (song.trim() && act('PUT', path, { helix: song.trim() }, `${src.name} plays it from Helix now`).then(ok => { if (ok) setSong(''); return ok; }))} />
+        <Button full kind={song.trim() ? 'primary' : 'secondary'} icon="music_note" label={src.helix ? 'Use this song' : 'Use a Helix song'} onPress={song.trim() ? () => act('PUT', path, { helix: song.trim() }, `${src.name} plays it from Helix now`).then(ok => { if (ok) setSong(''); return ok; }) : undefined} />
+      </Section>
+      <Section title={src.helix ? 'Or a stream address' : 'Stream address'} caption gap={SP[2]}>
         <TextField value={url} onChange={setUrl} keyboard="url" placeholder="https://… stream or file" label="Stream address" onSubmit={() => void save()} />
         <T v="footnote" color={err ? C.redText : C.stone2}>{err ?? 'Speakers play it from here: a live stream, or a recording.'}</T>
       </Section>
       <Button full kind={changed && !err ? 'primary' : 'secondary'} icon="check" label="Save" onPress={changed && !err ? save : undefined} />
-      <Section title="When a recording ends" caption gap={SP[2]}>
+      {src.helix ? null : <Section title="When a recording ends" caption gap={SP[2]}>
         <Segmented label="When a recording ends" value={src.loop ? 'loop' : 'once'} color={C.blue}
           options={[{ id: 'once', label: 'Plays once', icon: 'arrow_forward' }, { id: 'loop', label: 'Repeats', icon: 'repeat' }]}
           onChange={id => void act('PUT', path, { loop: id === 'loop' }, loopDone(src, id === 'loop'))} />
         <T v="footnote" color={C.stone2}>Repeats plays it again from the start until someone stops it. Live streams never end, so it doesn’t matter for them.</T>
-      </Section>
+      </Section>}
     </Sheet>
   );
 }

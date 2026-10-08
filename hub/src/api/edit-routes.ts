@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { randomUUID } from 'node:crypto';
 import type { Hub } from '../hub.ts';
-import type { Automation, Command, HomeConfig, OverlayEnd, Rhythm, Targets } from '../model/types.ts';
+import type { Automation, Command, HomeConfig, MediaSource, OverlayEnd, Rhythm, Targets } from '../model/types.ts';
 import { resolveRhythm, rhythmPhrase } from '../rhythms/rhythms.ts';
 import { localDate } from '../util/time.ts';
 import { checkAutomation } from '../engine/automation-check.ts';
@@ -312,15 +312,24 @@ export function registerEditRoutes(app: FastifyInstance, hub: Hub): void {
   // -------------------------------------------------------------- sources --
   // Media sources (Tarateel, rain sounds…) need a stream address before speakers can play them.
   // Only what's sent changes: { url }, { loop } (a recording plays again when it ends), { icon }.
-  app.put<{ Params: { name: string }; Body: { url?: string; icon?: string; loop?: boolean } }>('/api/sources/:name', async (req, reply) => {
+  // { helix: "<song name or id>" } plays a song from Helix as the sound, looped seamlessly; { helix: null } stops that.
+  app.put<{ Params: { name: string }; Body: { url?: string; icon?: string; loop?: boolean; helix?: string | null } }>('/api/sources/:name', async (req, reply) => {
     const b = req.body ?? {};
     const url = typeof b.url === 'string' ? b.url.trim() : undefined;
     if (url && !/^https?:\/\/\S+$/.test(url)) return reply.code(400).send({ error: 'Use an http(s) stream address' });
     if (b.loop !== undefined && typeof b.loop !== 'boolean') return reply.code(400).send({ error: 'loop must be true or false' });
+    let song: NonNullable<MediaSource['helix']> | null | undefined;
+    if (typeof b.helix === 'string' && b.helix.trim()) {
+      if (!hub.music) return reply.code(400).send({ error: 'Pair Kova with Helix first' });
+      song = await hub.music.findSong(b.helix);
+      if (!song) return reply.code(404).send({ error: `Helix has no song called “${b.helix.trim()}”` });
+    } else if (b.helix === null) song = null;
     return edit(c => {
       let s = c.sources.find(x => x.name === req.params.name);
       if (!s) { s = { name: req.params.name, icon: b.icon ?? 'radio' }; c.sources.push(s); }
-      if (url !== undefined) s.url = url || undefined;
+      if (song) { s.helix = song; s.loop = true; }
+      else if (song === null) delete s.helix;
+      if (url !== undefined) { s.url = url || undefined; if (url) delete s.helix; }
       if (b.icon) s.icon = b.icon;
       if (b.loop !== undefined) { if (b.loop) s.loop = true; else delete s.loop; }
     });

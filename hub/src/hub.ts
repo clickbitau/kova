@@ -136,8 +136,13 @@ export class Hub extends EventEmitter<{ changed: [] }> {
     this.store = new Store(opts.dbPath, opts.now);
     this.config = new ConfigStore(this.store, opts.initialConfig);
     migratePrayer(this.config);
-    this.reg = new Registry(this.store, name => this.config.get().sources.find(s => s.name === name)?.url, () => this.config.get().devices ?? {});
-    this.reg.sourceLoops = name => !!this.config.get().sources.find(s => s.name === name)?.loop;
+    this.reg = new Registry(this.store, name => {
+      const s = this.config.get().sources.find(x => x.name === name);
+      // A Helix song as the sound: from the hub, which fetches Helix's looping version (api/sound).
+      if (s?.helix) { const base = this.lanBase(); return base ? `${base}/api/sound/${encodeURIComponent(s.name)}.aac` : undefined; }
+      return s?.url;
+    }, () => this.config.get().devices ?? {});
+    this.reg.sourceLoops = name => { const s = this.config.get().sources.find(x => x.name === name); return !!(s?.loop || s?.helix); };
     this.config.on('changed', () => this.reg.reapplySettings());
     this.groups = new SpeakerGroupsAdapter(this.reg, () => this.config.get().speakerGroups ?? []);
     this.config.on('changed', () => this.groups.sync());

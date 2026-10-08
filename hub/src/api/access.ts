@@ -24,6 +24,7 @@ export const ROUTES: Record<string, Rule> = {
   'GET /api/snap/:key': r('public'),
   // Announcement audio for the speakers, which can't send a key: the clip's random id is its key (announce-routes.ts).
   'GET /api/clip/:file': r('public'),
+  'GET /api/sound/:file': r('public'),
   'POST /api/login/start': r('public'),
   'GET /api/login/poll/:id': r('public'),
   'POST /api/login/password': r('public'),

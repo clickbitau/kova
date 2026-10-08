@@ -492,6 +492,11 @@ export interface MediaSource {
    * doesn't go quiet after an hour). Live streams never end, so it doesn't matter for them.
    */
   loop?: boolean;
+  /**
+   * A song in Helix played as this sound, looped (Thunderstorm from the owner's rain album): speakers fetch it from
+   * the hub (/api/sound/<name>), which serves Helix's long version with each pass crossfading into the next.
+   */
+  helix?: { id: string; title: string; artist?: string };
 }
 
 /**

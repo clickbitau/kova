@@ -74,6 +74,8 @@ const SAME_ORDER_MS = 60_000;
 /** How long a signed song URL lasts (Helix takes 60–86400 s), and how long before the end Kova asks for a new one. */
 export const SIGNED_TTL_S = 21_600;
 const RESIGN_BEFORE_MS = 10 * 60_000;
+/** A looping sound's crossfade between passes. */
+const LOOP_CROSSFADE_MS = 8000;
 /** The share of a song a speaker must play for it to count as played. */
 export const PLAYED_SHARE = 0.85;
 
@@ -171,6 +173,50 @@ export class HelixMusic {
     const h = this.linked();
     if (!h) throw new Error('Pair Kova with Helix first');
     return this.noted(lanJson<T>(`${h.url}${path}`, { method: 'POST', body, token: h.token, headers: helixHeaders(h.profile), timeoutMs: 15_000 }).then(r => r.json), h.profile);
+  }
+
+  /** A song by name ("Heavy Thunderstorm"), by Helix's own lookup: its id and title, or null. */
+  async findSong(words: string): Promise<{ id: string; title: string; artist?: string } | null> {
+    const w = words.trim();
+    if (/^helix:[a-z0-9]+$/i.test(w)) {
+      const t = (await this.get<{ tracks?: HelixTrack[] }>(`/v1/music/tracks?ids=${encodeURIComponent(w)}`).catch(() => null))?.tracks?.[0];
+      return t ? { id: t.id, title: t.title, ...(t.artist ? { artist: t.artist } : {}) } : null;
+    }
+    const pick = await this.get<SiriPick>(`/v1/music/siri?name=${encodeURIComponent(w)}&type=song`).catch(() => null);
+    return pick?.kind === 'track' && pick.id ? { id: pick.id, title: pick.title || w, ...(pick.artist ? { artist: pick.artist } : {}) } : null;
+  }
+
+  /** Signed looping versions by song id, reused until shortly before they run out. */
+  private loops = new Map<string, { url: string; until: number }>();
+
+  /**
+   * A song as a seamless loop: Helix's long version of it (about an hour, each pass crossfading into the next, its
+   * end mixed into its start), signed for a speaker. A Helix that can't loop gives the song itself (the speaker
+   * repeats it, with a seam). A first render may answer 202 {retryAfterMs}: waited for, a few times.
+   */
+  async loopUrl(id: string): Promise<string> {
+    const hit = this.loops.get(id);
+    if (hit && hit.until > this.now) return hit.url;
+    const h = this.linked();
+    if (!h) throw new Error('Pair Kova with Helix first');
+    const ask = async (loop: boolean) => {
+      for (let i = 0; i < 4; i++) {
+        const r = await lanJson<{ url?: string; path?: string; expiresAt?: number; retryAfterMs?: number }>(`${h.url}/v1/items/${encodeURIComponent(id.replace(/^helix:/, ''))}/play-url`, {
+          method: 'POST', token: h.token, headers: helixHeaders(h.profile), timeoutMs: 20_000,
+          body: { format: 'aac', ttl: SIGNED_TTL_S, profile: h.profile, ...(loop ? { loop: { crossfadeMs: LOOP_CROSSFADE_MS, minutes: 60 } } : {}) },
+        });
+        if (r.status === 202 || (!r.json?.url && !r.json?.path && r.json?.retryAfterMs)) { await new Promise(res => setTimeout(res, Math.min(10_000, Math.max(500, r.json?.retryAfterMs ?? 2000)))); continue; }
+        const url = r.json?.url ?? (r.json?.path ? `${h.url}${r.json.path}` : undefined);
+        if (!url) throw new Error('Helix didn’t give a song address');
+        return { url, until: Math.min((r.json?.expiresAt ? r.json.expiresAt * 1000 : this.now + SIGNED_TTL_S * 1000), this.now + SIGNED_TTL_S * 1000) - RESIGN_BEFORE_MS };
+      }
+      throw new Error('Helix is still preparing the sound. Try again in a moment.');
+    };
+    let got: { url: string; until: number };
+    try { got = await ask(true); }
+    catch (e) { if (e instanceof LanHttpError && e.status === 400) got = await ask(false); else throw e; }
+    this.loops.set(id, got);
+    return got.url;
   }
 
   /** Count a song a speaker played to (nearly) the end as played in Helix, under the speaker's name. */

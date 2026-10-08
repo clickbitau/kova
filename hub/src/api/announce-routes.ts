@@ -1,3 +1,5 @@
+import http from 'node:http';
+import https from 'node:https';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { Readable } from 'node:stream';
 import type { Hub } from '../hub.ts';
@@ -77,6 +79,29 @@ export function registerAnnounceRoutes(app: FastifyInstance, hub: Hub, port: () 
   });
 
   // What speakers fetch: no token (they can't send one). A clip's random id is its key; the recordings and the chime are public.
+  // A Helix song as a sound (Media → Sounds), for speakers (no key: they can't send one): Helix's looping version,
+  // fetched for them, ranges and all. Only sounds the home has set up this way.
+  app.get<{ Params: { file: string } }>('/api/sound/:file', async (req, reply) => {
+    const name = decodeURIComponent(req.params.file).replace(/\.aac$/, '');
+    const src = hub.config.get().sources.find(x => x.name === name && x.helix);
+    if (!src?.helix || !hub.music) return reply.code(404).send({ error: 'No such sound' });
+    let url: string;
+    try { url = await hub.music.loopUrl(src.helix.id); } catch (e) { return reply.code(502).send({ error: (e as Error).message }); }
+    const u = new URL(url);
+    const range = typeof req.headers.range === 'string' ? req.headers.range : undefined;
+    return new Promise<void>(done => {
+      const up = (u.protocol === 'https:' ? https : http).get(u, { headers: range ? { range } : {} }, res => {
+        const pass: Record<string, string> = {};
+        for (const h of ['content-type', 'content-length', 'content-range', 'accept-ranges', 'last-modified', 'etag']) { const v = res.headers[h]; if (typeof v === 'string') pass[h] = v; }
+        reply.code(res.statusCode ?? 502).headers({ ...pass, 'cache-control': 'no-store' });
+        void reply.send(res);
+        res.on('end', () => done()).on('error', () => done());
+      });
+      up.on('error', e => { if (!reply.sent) void reply.code(502).send({ error: e.message }); done(); });
+      req.raw.on('close', () => up.destroy());
+    });
+  });
+
   app.get<{ Params: { file: string } }>('/api/clip/:file', async (req, reply) => {
     const f = hub.clips.file(req.params.file) ?? hub.adhans.serve(req.params.file);
     if (!f) return reply.code(404).send({ error: 'No such clip' });

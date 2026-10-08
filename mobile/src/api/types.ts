@@ -203,7 +203,8 @@ export interface SecurityState {
 }
 
 /** A stream speakers can play by name. `loop`: a recording plays again from the start when it ends. */
-export interface MediaSource { name: string; icon: string; url?: string; loop?: boolean }
+/** `helix`: a song from Helix played as the sound, looped seamlessly (each pass crossfades into the next). */
+export interface MediaSource { name: string; icon: string; url?: string; loop?: boolean; helix?: { id: string; title: string; artist?: string } }
 
 export type PrayerName = 'fajr' | 'sunrise' | 'dhuhr' | 'asr' | 'maghrib' | 'isha';
 
