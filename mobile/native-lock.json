@@ -1,6 +1,6 @@
 {
   "runtimeVersion": "kova-mobile-0.2",
-  "fingerprint": "6b2641ee54bc921705ce0165cfcda8f83e1ffc1fc43f3add0d3c0f50988e9b11",
+  "fingerprint": "4dc12daae1c9b8f571273110c6f12ccf3fa4edabb9d725da2d598d434e84d6ed",
   "inputs": {
     "dependency expo": "9b788954798e4a2638457d014c6d74cd64b6acd9108f06a02ee332807fcc92d3",
     "dependency expo-build-properties": "251a9c39f0d96c642bd40a6a7e679207e3da9a1cb3c16b3598d1bafb508e619e",
@@ -16,6 +16,8 @@
     "dependency expo-notifications": "1361071af4844b05da5bca65ec3b15be89a9e87a0bcb281ba85f3450df193cc2",
     "dependency expo-quick-actions": "e3e732c06ba926fedb8389423aa062c5efe203f98c56b489d3b126950bad8d49",
     "dependency expo-secure-store": "5fc347767154bf28e8c8232013905cddb08c97999bd41feea31654a48ad3d3e9",
+    "dependency expo-speech": "d0afb9e85f4b60fdb561e9d9c35dfe3325f6e190be0d84dd9c516f5b4baa05f8",
+    "dependency expo-speech-recognition": "52859cef5656a648e639855911f60bd876910637fe0e7748c7a88b754c7396de",
     "dependency expo-splash-screen": "219aea7aae53c0ccfc3d3d829a4edc31441ec8b9d04fcaeb8cb8405589e59805",
     "dependency expo-status-bar": "d70c576562bc195191496a7d847205c11719fb347c5da3490bd9ec2521bb35d9",
     "dependency expo-system-ui": "f2a7cf12ccda17869019bbd28a1f7a3b63ef66f22e81ab884016b316c6967803",
@@ -29,7 +31,7 @@
     "dependency react-native-screens": "6c38f9fa813b59f87363a713f08a7a7a9b51b469c3481f74e8c43f95e260f56a",
     "dependency react-native-svg": "9825fce45f8c0e5b5b761fa00912517d852ee0e114e146311c27363efedb3e36",
     "dependency react-native-webview": "f893ae767276ba6adc6471d60706bccc61e8f7333b2fbfc12b3ad4428322fafe",
-    "app.json native config": "9390be7cb280c4668751023186212d87b9b9258c153a25487d1a123284346a6a",
+    "app.json native config": "91589d4268be51ec73452bc0b58c12b009b2c4027b261d840ee58afdd07d978e",
     "mobile/assets/images/adaptive-icon.png": "e7582e22fd30ae9995069e7cf86c51d0cc0cd35a288430d93e547032ddedff33",
     "mobile/assets/images/icon.png": "26b63da7d28469b92b88b10b9925597012f56e9b2168894e0716ff95ed1d10c5",
     "mobile/assets/images/notification-icon.png": "914bfd0a59ce9ec22cddc608bb8a54b497473427684d0e64fa780b1fbda2239b",

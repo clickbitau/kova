@@ -133,6 +133,17 @@
             }
           ]
         }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Kova listens only while the microphone in Ask Kova is on, to hear what you ask it.",
+          "speechRecognitionPermission": "Kova turns what you say to Ask Kova into words, on this phone where it can.",
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox",
+            "com.google.android.as"
+          ]
+        }
       ]
     ],
     "owner": "dkathel",
