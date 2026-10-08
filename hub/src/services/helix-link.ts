@@ -337,6 +337,8 @@ export class HelixLink {
   /** What Helix's token may do: control a linked TV or soundbar, and read them. */
   allows(method: string, path: string): boolean {
     if (method === 'GET' && path === '/api/state') return true;
+    // Casting from Helix's apps to Kova's speakers (api/helix-cast-routes.ts).
+    if ((method === 'GET' && path === '/api/helix/speakers') || (method === 'POST' && /^\/api\/helix\/(play|control|queue)$/.test(path))) return true;
     const m = method === 'POST' && /^\/api\/devices\/([^/]+)$/.exec(path);
     const id = m ? decodeURIComponent(m[1]) : '';
     return !!m && this.screens().some(x => x.tvDeviceId === id || x.soundbarDeviceId === id);

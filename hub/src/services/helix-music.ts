@@ -35,6 +35,12 @@ import { LanHttpError, lanJson, trimUrl } from '../util/lan-http.ts';
  * A song counts as played in Helix (`POST /v1/music/tracks/<id>/played`) once a speaker has played at least 85% of it
  * (PlayCounter), with the speaker's name and the song's length; Helix marks a repeat within 2 minutes a duplicate.
  */
+/** A song as Helix's apps send it to play on Kova's speakers (POST /api/helix/play). */
+export interface CastSong {
+  id: string; path: string; expiresAt?: number; contentType?: string;
+  title?: string; artist?: string; album?: string; artPath?: string; durationMs?: number;
+}
+
 export interface HelixMusicConfig { url?: string; token?: string; /** Helix profile whose loved songs and playlists Kova uses. Default "default". */ musicProfile?: string }
 
 interface HelixTrack {
@@ -120,6 +126,20 @@ export class HelixMusic {
   private trouble: string | null = null;
   /** Whether Helix offers music to its clients (`/v1/client/features`); null when it doesn't say. */
   private musicOn: boolean | null = null;
+  /** The Helix profile a cast song is signed and counted for (Helix's apps cast for their own profile). */
+  private profileOf = new WeakMap<QueueTrack, string>();
+  /**
+   * Queues Helix's apps cast to Kova's speakers (POST /api/helix/play), by the name they play under: the songs as
+   * Helix sent them, and each speaker format's copy (kept, so songs added later reach the speakers playing it).
+   */
+  private casts = new Map<string, { q: Queue; profile: string; views: Map<AudioFormat, Queue> }>();
+  /** The last queue each name played, for what's playing (GET /api/helix/speakers); the last 40 names. */
+  private lastQueue = new Map<string, Queue>();
+  private remember(media: string, q: Queue): void {
+    this.lastQueue.delete(media);
+    this.lastQueue.set(media, q);
+    if (this.lastQueue.size > 40) this.lastQueue.delete(this.lastQueue.keys().next().value!);
+  }
 
   constructor(private cfg: () => HelixMusicConfig | undefined, private o: { random?: () => number; now?: () => number } = {}) {}
 
@@ -154,11 +174,11 @@ export class HelixMusic {
   }
 
   /** Count a song a speaker played to (nearly) the end as played in Helix, under the speaker's name. */
-  async played(trackId: string, player: string, durationMs?: number): Promise<void> {
+  async played(trackId: string, player: string, durationMs?: number, profile?: string): Promise<void> {
     const h = this.linked();
     if (!h || !/^helix:/.test(trackId)) return;
     await this.post(`/v1/music/tracks/${encodeURIComponent(trackId.replace(/^helix:/, ''))}/played`, {
-      profileId: h.profile, player, playedAt: new Date(this.now).toISOString(), ...(durationMs ? { durationMs: Math.round(durationMs) } : {}),
+      profileId: profile ?? this.castProfile(trackId) ?? h.profile, player, playedAt: new Date(this.now).toISOString(), ...(durationMs ? { durationMs: Math.round(durationMs) } : {}),
     }).catch(() => {});
   }
 
@@ -188,6 +208,7 @@ export class HelixMusic {
 
   /** Whether a name is Helix music (as opposed to a radio source). */
   isMusic(media: string): boolean {
+    if (this.casts.has(media)) return true;
     if (!this.linked() || this.musicOn === false) return false;
     const n = media.trim().toLowerCase();
     return CHOICES.some(c => c.name.toLowerCase() === n) || /^(station|artist|album|song): /i.test(media) || this.specs.has(media)
@@ -245,6 +266,13 @@ export class HelixMusic {
    * order (a group's speakers), each format its own copy of the songs.
    */
   queueFor(media: string, opts: QueueOptions = {}): Promise<Queue | null> {
+    const cast = this.casts.get(media);
+    if (cast) {
+      const format = opts.format ?? 'aac';
+      let v = cast.views.get(format);
+      if (!v) { v = this.view(cast.q, format); cast.views.set(format, v); }
+      return Promise.resolve(v);
+    }
     if (!this.linked()) return Promise.resolve(null);
     const key = `${media}\0${opts.shuffle ? 1 : 0}`;
     for (const [k, v] of this.recent) if (this.now - v.at > SAME_ORDER_MS) this.recent.delete(k);
@@ -257,7 +285,7 @@ export class HelixMusic {
     const format = opts.format ?? 'aac';
     let view = hit.views.get(format);
     if (!view) {
-      view = hit.queue.then(q => q && this.view(q, format));
+      view = hit.queue.then(q => { if (q) this.remember(media, q); return q && this.view(q, format); });
       hit.views.set(format, view);
     }
     return view;
@@ -331,6 +359,8 @@ export class HelixMusic {
       const art = this.artPath.get(t), codec = this.codecOf.get(t);
       if (art) this.artPath.set(c, art);
       if (codec) this.codecOf.set(c, codec);
+      const profile = this.profileOf.get(t);
+      if (profile) this.profileOf.set(c, profile);
       return c;
     });
     const sign = (list: QueueTrack[], from: number, to: number) => this.sign(list, from, to, format);
@@ -366,7 +396,8 @@ export class HelixMusic {
   /** One song's signed URL: 'ok', 'drop' (no file, or Helix won't sign it), or 'old' (a Helix without play-url). */
   private async signOne(t: QueueTrack, h: { url: string; profile: string }, format: AudioFormat): Promise<'ok' | 'drop' | 'old'> {
     const id = t.id.replace(/^helix:/, '');
-    const key = `${id}\0${format}\0${h.profile}`;
+    const profile = this.profileOf.get(t) ?? h.profile;
+    const key = `${id}\0${format}\0${profile}`;
     const cached = this.signedCache.get(key);
     if (cached && cached.until > this.now) { this.apply(t, cached); return 'ok'; }
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -374,7 +405,7 @@ export class HelixMusic {
         // Helix answers url (absolute), path, expiresAt (Unix seconds), profile, format ("" = the original file), maxRate,
         // artUrl and artPath (null without a cover).
         const r = await this.post<{ url?: string; path?: string; artUrl?: string | null; artPath?: string | null; expiresAt?: number; format?: string }>(
-          `/v1/items/${encodeURIComponent(id)}/play-url`, { format, maxRate: 48000, ttl: SIGNED_TTL_S, profile: h.profile });
+          `/v1/items/${encodeURIComponent(id)}/play-url`, { format, maxRate: 48000, ttl: SIGNED_TTL_S, profile });
         const url = r.url && /^https?:\/\//.test(r.url) ? r.url : r.path ? `${h.url}${r.path}` : null;
         if (!url) return 'drop';
         const ends = typeof r.expiresAt === 'number' && Number.isFinite(r.expiresAt) ? r.expiresAt * 1000 : NaN;
@@ -426,6 +457,64 @@ export class HelixMusic {
       const { status, body } = e as { status?: number; body?: unknown };
       if (this.artSigning === null && (status === 405 || (status === 404 && !(body && typeof body === 'object')))) this.artSigning = false;
     }
+  }
+
+  // ------------------------------------------------------------- casting --
+
+  /**
+   * A queue Helix's apps cast (POST /api/helix/play), playable by `media`: each song at Helix's signed URL (joined to
+   * the Helix Kova paired with; the phone's address isn't used), which Kova keeps for FLAC speakers until shortly
+   * before it runs out and signs again (for that profile) when it has, or for a speaker that takes another format.
+   */
+  castQueue(media: string, label: string, songs: CastSong[], profile: string): Queue {
+    const h = this.linked();
+    if (!h) throw new Error('Kova isn’t paired with Helix');
+    const tracks = songs.map(x => this.castTrack(x, h.url, profile));
+    const q: Queue = { label, tracks, shuffle: false };
+    this.casts.set(media, { q, profile, views: new Map() });
+    this.remember(media, q);
+    return q;
+  }
+
+  private castTrack(x: CastSong, base: string, profile: string): QueueTrack {
+    const id = /^helix:/.test(x.id) ? x.id : `helix:${x.id}`;
+    const url = /^https?:\/\//.test(x.path) ? x.path : `${base}${x.path}`;
+    const art = x.artPath ? abs(base, x.artPath) ?? undefined : undefined;
+    const t: QueueTrack = {
+      id, url, contentType: x.contentType || 'audio/flac', title: x.title || 'Song',
+      ...(x.artist ? { artist: x.artist } : {}), ...(x.album ? { album: x.album } : {}), ...(art ? { art } : {}), ...(x.durationMs ? { durationMs: x.durationMs } : {}),
+    };
+    this.profileOf.set(t, profile);
+    // Helix signed it as FLAC (48 kHz at most) for this profile: kept for FLAC speakers until shortly before it ends.
+    const ends = typeof x.expiresAt === 'number' && Number.isFinite(x.expiresAt) ? x.expiresAt * 1000 : NaN;
+    if (Number.isFinite(ends) && ends - RESIGN_BEFORE_MS > this.now) {
+      this.signedCache.set(`${id.replace(/^helix:/, '')}\0flac\0${profile}`, { url, contentType: t.contentType, ...(art ? { art } : {}), until: ends - RESIGN_BEFORE_MS });
+    }
+    return t;
+  }
+
+  /** Songs added to a cast queue: after the one at `after` (next), or at the end. Every speaker format's copy too. */
+  castAdd(media: string, songs: CastSong[], at: { after: number } | 'end'): number {
+    const c = this.casts.get(media);
+    const h = this.linked();
+    if (!c || !h) return 0;
+    const add = (list: QueueTrack[], made: QueueTrack[]) => { if (at === 'end') list.push(...made); else list.splice(Math.min(list.length, at.after + 1), 0, ...made); };
+    add(c.q.tracks, songs.map(x => this.castTrack(x, h.url, c.profile)));
+    for (const v of c.views.values()) add(v.tracks, songs.map(x => this.castTrack(x, h.url, c.profile)));
+    return c.q.tracks.length;
+  }
+
+  /** The songs a name is playing (a cast queue, or Kova's own Helix music), in order, as Helix listed them. */
+  songsOf(media: string): QueueTrack[] | null { return (this.casts.get(media)?.q ?? this.lastQueue.get(media))?.tracks ?? null; }
+
+  isCast(media: string): boolean { return this.casts.has(media); }
+
+  forgetCast(media: string): void { this.casts.delete(media); }
+
+  /** The profile a cast song was sent for, by its id (the most recent cast that has it). */
+  private castProfile(trackId: string): string | undefined {
+    for (const c of [...this.casts.values()].reverse()) if (c.q.tracks.some(t => t.id === trackId)) return c.profile;
+    return undefined;
   }
 
   private track(t: HelixTrack, h: { url: string; token: string }): QueueTrack {

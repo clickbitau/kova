@@ -56,6 +56,12 @@ export const ROUTES: Record<string, Rule> = {
   'GET /api/ask/history': r('view'),
   'GET /api/jev/status': r('view'),
 
+  // ---- casting from Helix's apps (Helix's own token reaches these; the owner's key too)
+  'GET /api/helix/speakers': r('owner'),
+  'POST /api/helix/play': r('owner'),
+  'POST /api/helix/control': r('owner'),
+  'POST /api/helix/queue': r('owner'),
+
   // ---- switching devices (a child or a guest: only theirs)
   'POST /api/devices/:id': r('control', { device: 'id' }),
   'POST /api/rooms/:id/off': r('control', { room: 'id' }),

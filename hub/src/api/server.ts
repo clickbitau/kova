@@ -42,6 +42,7 @@ import { SetupError, type IntegrationsManager } from '../integrations-store.ts';
 import type { HaImport } from '../import/ha-scan.ts';
 import { registerImportRoutes } from './import-routes.ts';
 import { registerHomeRoutes } from './home-routes.ts';
+import { registerHelixCastRoutes } from './helix-cast-routes.ts';
 import { registerAnnounceRoutes } from './announce-routes.ts';
 import { registerSecurityRoutes } from './security-routes.ts';
 import { registerLanAppRoutes } from './lan-apps-routes.ts';
@@ -201,6 +202,8 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
     app.addHook('preHandler', async (req, reply) => {
       if (!fromHelix.has(req)) return;
       reply.header('cache-control', 'no-store');
+      // Casting from Helix's apps has routes of its own (api/helix-cast-routes.ts).
+      if (req.url.startsWith('/api/helix/')) return;
       if (req.method === 'GET') return reply.send(opts.helixLink!.state());
       // Helix's command (D98.11: one key, by its names) as Kova's, from its remote or, with X-Helix-Origin: auto, its own
       // switching. Answered within Helix's timeout; a slow one (a TV waking up) is accepted and finished in the background.
@@ -637,6 +640,7 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
   registerEditRoutes(app, hub);
   registerImportRoutes(app, opts.haImport, hub);
   registerHomeRoutes(app, hub);
+  registerHelixCastRoutes(app, hub);
   registerAnnounceRoutes(app, hub, () => { const a = app.server.address(); return typeof a === 'object' && a ? a.port : Number(process.env.KOVA_PORT ?? 8140); });
   registerSecurityRoutes(app, hub);
   registerLanAppRoutes(app, { integrations: opts.integrations, helixLink: opts.helixLink, ...opts.lanApps });
