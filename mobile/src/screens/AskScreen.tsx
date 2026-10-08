@@ -13,7 +13,7 @@ import { Button, HScroll, Press } from '../ui/kit';
 import { ConnBanner } from '../ui/Screen';
 import { T } from '../ui/Text';
 import { Appear, haptic, useLoop, useStateValue } from '../ui/motion';
-import { listen, quiet, setVoiceLang, speak, stopListening, useSpeechRecognitionEvent, voiceLang, voiceReady, type VoiceLang } from '../native/voice';
+import { langName, listen, markFailed, markWorked, quiet, setVoiceLang, speak, stopListening, useSpeechRecognitionEvent, voiceLang, voiceLangs, voiceReady } from '../native/voice';
 
 type Msg = ChatMsg;
 const TRY = ['What’s happening tonight?', 'Who’s home?', 'Turn off the kitchen', 'Lamp to 30%', 'Why is the porch light on?', 'I’m leaving'];
@@ -89,7 +89,7 @@ export function AskScreen() {
   const asking = useRef(false);
   const following = useRef(new Set<string>());
   /** Asked by voice, in that language: its answer is read out. */
-  const spoken = useRef<VoiceLang | null>(null);
+  const spoken = useRef<string | null>(null);
   const land = (r: AskReply, jobId?: string) => {
     if (spoken.current) { speak(r.text, spoken.current); spoken.current = null; }
     setChat(c => (jobId && c.some(m => m.job === jobId && m.from === 'kova')) ? c
@@ -145,7 +145,10 @@ export function AskScreen() {
 
   // Talking: what's heard fills the box as it's said, and is asked when the speaker stops.
   const [listening, setListening] = useState(false);
-  const [lang, setLang] = useState<VoiceLang>('en-AU');
+  const langs = voiceLangs();
+  const [lang, setLang] = useState(langs[0]!);
+  /** The language this listen is in (the one chosen, or the one it fell back to). */
+  const hearing = useRef(lang);
   const heard = useRef('');
   useEffect(() => { void voiceLang().then(setLang); }, []);
   useSpeechRecognitionEvent('result', e => { const t = e.results[0]?.transcript ?? ''; heard.current = t; setText(t); });
@@ -153,20 +156,26 @@ export function AskScreen() {
     setListening(false);
     const t = heard.current.trim();
     heard.current = '';
-    if (t) { spoken.current = lang; ask(t); }
+    if (t) { markWorked(hearing.current); spoken.current = hearing.current; ask(t); }
   });
   useSpeechRecognitionEvent('error', e => {
     setListening(false);
     if (e.error === 'aborted') return;
+    if (e.error === 'language-not-supported' || e.error === 'network' || e.error === 'service-not-allowed') markFailed(hearing.current);
     say(e.error === 'no-speech' ? 'Didn’t hear anything' : e.error === 'not-allowed' ? 'Allow the microphone for Kova in Settings to talk to it' : `Couldn’t listen: ${e.message || e.error}`, { error: e.error !== 'no-speech' });
   });
   const mic = async () => {
     if (listening) { stopListening(); return; }
     quiet();
     heard.current = ''; setText('');
-    try { await listen(lang); setListening(true); haptic.select(); } catch (e) { say((e as Error).message, { error: true }); }
+    try {
+      const r = await listen(lang);
+      hearing.current = r.lang;
+      if (r.note) say(r.note);
+      setListening(true); haptic.select();
+    } catch (e) { say((e as Error).message, { error: true }); }
   };
-  const switchLang = () => { const l: VoiceLang = lang === 'bn-BD' ? 'en-AU' : 'bn-BD'; setLang(l); void setVoiceLang(l); say(l === 'bn-BD' ? 'Listening in Bangla' : 'Listening in English'); };
+  const switchLang = () => { const l = langs[(langs.indexOf(lang) + 1) % langs.length]!; setLang(l); void setVoiceLang(l); say(`Listening in ${langName(l)}`); };
 
   const ask = (q: string) => {
     const t = q.trim();
@@ -260,10 +269,10 @@ export function AskScreen() {
         ) : !text ? (
           <View style={{ paddingHorizontal: SP.gutter }}>
             <HScroll>
-              {voiceReady ? (
-                <Press onPress={switchLang} label={lang === 'bn-BD' ? 'Talking in Bangla: switch to English' : 'Talking in English: switch to Bangla'} style={{ height: 34, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, borderRadius: R.full, backgroundColor: C.card, borderWidth: 1, borderColor: C.line }}>
+              {voiceReady && langs.length > 1 ? (
+                <Press onPress={switchLang} label={`Talking in ${langName(lang)}: tap to change`} style={{ height: 34, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, borderRadius: R.full, backgroundColor: C.card, borderWidth: 1, borderColor: C.line }}>
                   <Icon name="mic" size={15} color={C.stone} />
-                  <T v="label" size={12.5} weight={700} color={C.bone2}>{lang === 'bn-BD' ? 'বাংলা' : 'English'}</T>
+                  <T v="label" size={12.5} weight={700} color={C.bone2}>{langName(lang)}</T>
                 </Press>
               ) : null}
               {TRY.map(q => (
@@ -275,7 +284,7 @@ export function AskScreen() {
           </View>
         ) : null}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2], paddingHorizontal: SP[3] }}>
-          <TextInput value={text} onChangeText={setText} placeholder={listening ? (lang === 'bn-BD' ? 'শুনছি…' : 'Listening…') : 'Ask or tell Kova…'} placeholderTextColor={C.stone2} returnKeyType="send" onSubmitEditing={() => void ask(text)}
+          <TextInput value={text} onChangeText={setText} placeholder={listening ? (hearing.current.startsWith('bn') ? 'শুনছি…' : 'Listening…') : 'Ask or tell Kova…'} placeholderTextColor={C.stone2} returnKeyType="send" onSubmitEditing={() => void ask(text)}
             onFocus={() => setFocus(true)} onBlur={() => setFocus(false)} accessibilityLabel="Ask or tell Kova"
             style={{ flex: 1, minWidth: 0, height: 48, paddingHorizontal: SP[4], borderRadius: 24, backgroundColor: C.card, borderWidth: 1, borderColor: focus ? C.amberLine : C.line, color: C.bone, fontFamily: F[500], fontSize: 16 }} />
           {voiceReady && (!text || listening) ? (
