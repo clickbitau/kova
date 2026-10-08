@@ -2,8 +2,12 @@
   "//": "The Kova app's version (docs/VERSIONING.md). store: the X.Y.0 a store binary on this train carries (app.json version). version: what runs, store or over the air (X.Y.Z, PATCH only). train: the native runtime (app.json runtimeVersion). history: newest first; an over-the-air release adds an entry.",
   "train": "kova-mobile-0.2",
   "store": "0.2.0",
-  "version": "0.2.37",
+  "version": "0.2.38",
   "history": [
+    {
+      "version": "0.2.38",
+      "title": "Speaker groups: a speaker played alongside now waits for the main group to start, then joins it in time"
+    },
     {
       "version": "0.2.37",
       "title": "Speaker groups across brands: a Cast group and a Sonos (or any speaker) play together, with a timing slider per speaker, a sync test you tune by ear, and each speaker’s measured start delay"
