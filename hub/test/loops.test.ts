@@ -28,6 +28,11 @@ test('Seamless loops: passes that crossfade into each other, repeated to about t
   execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=0.6', '-c:a', 'libmp3lame', tiny]);
   await assert.rejects(loops.make(tiny, 'tick'), /too short/);
   assert.match(loops.problem(loops.key('tick'))!, /too short/);
+  // A recording longer than the loop (a 10-hour rain file): only as much as the loop needs is used.
+  const long = join(dir, 'long.mp3');
+  execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'anoisesrc=d=150:c=brown:a=0.2', '-c:a', 'libmp3lame', '-b:a', '64k', long]);
+  const lf = await loops.make(long, 'long', { crossfadeMs: 4000, minutes: 1 });
+  assert.ok(len(lf) > 59 && len(lf) < 63, `cut to about a minute: ${len(lf)}`);
   // Pruned when no sound uses it.
   loops.prune(new Set());
   assert.deepEqual(readdirSync(join(dir, 'loops')), []);
