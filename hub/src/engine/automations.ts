@@ -572,7 +572,7 @@ export class Automations {
           if (!this.announcer) { step('Announce', false, 'announcements aren’t set up on this hub'); break; }
           const r = await this.announcer.run(x, { cause, trigger: live.trigger, overlay: this.engine.overlayId(), wait: (ms, done) => this.waitUntil(ms, done, live) });
           for (const l of r.lines) step(l.text, l.ok, l.detail);
-          if (r.played.length) this.store.append({ kind: 'run', device: null, feed: 'auto', what: `${a.name}: announced on ${r.played.map(id => this.reg.get(id)?.name ?? id).join(', ')} · ${live.run.why}`, data: { automation: a.id, changed: r.played, failed: r.failed }, cause });
+          if (r.played.length) this.store.append({ kind: 'run', device: null, feed: 'auto', what: `${a.name}: announced on ${r.played.length > 3 ? `${r.played.length} speakers` : r.played.map(id => this.reg.get(id)?.name ?? id).join(', ')} · ${live.run.why}`, data: { automation: a.id, changed: r.played, failed: r.failed }, cause });
           if (live.cancelled) throw new Cancelled();
           break;
         }

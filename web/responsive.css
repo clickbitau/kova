@@ -43,9 +43,9 @@
     position: sticky; top: 0; z-index: 20;
     margin: calc(-10px - env(safe-area-inset-top, 0px)) -16px 0;
     padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 10px;
-    background: rgba(14, 15, 16, 0.92);
+    background: var(--k-glass2);
     -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    border-bottom: 1px solid rgba(var(--k-fg-rgb), 0.06);
   }
 
   /* Headings: one step down so titles fit on a line. */
@@ -99,9 +99,9 @@
   [data-kova-afoot] {
     position: sticky; bottom: 0; z-index: 15;
     margin: 0 -16px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px)) !important;
-    background: rgba(14, 15, 16, 0.94);
+    background: var(--k-glass);
     -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    border-top: 1px solid rgba(var(--k-fg-rgb), 0.06);
   }
   [data-kova-afoot] > div:first-child { flex-basis: 100% !important; min-width: 0 !important; }
   [data-kova-afoot] > button { flex: 1; }

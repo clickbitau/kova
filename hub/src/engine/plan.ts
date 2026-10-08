@@ -61,7 +61,8 @@ export function summarize(targets: Targets, devices: Map<string, Device>): strin
   if (zonesOpen) parts.push(`${n(zonesOpen, 'zone', 'zones')} open`);
   if (zonesClosed) parts.push(`${n(zonesClosed, 'zone', 'zones')} closed`);
   const s = parts.join(', ');
-  return s ? s[0].toUpperCase() + s.slice(1) : 'No device changes';
+  // Nothing to switch: said as nothing (a mode can matter without changing a device).
+  return s ? s[0].toUpperCase() + s.slice(1) : '';
 }
 
 export class Planner {

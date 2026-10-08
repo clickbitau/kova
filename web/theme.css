@@ -1,0 +1,98 @@
+/* Kova's colours, light and dark, following the system. index.html names these (var(--k-…)) instead of fixed colours;
+   --k-fg-rgb is the base of every hairline and wash (white on dark, black on light). Colours that are saved to the
+   hub (a mode's colour, a light's) stay as they are. */
+:root {
+  color-scheme: dark;
+  --k-fg-rgb: 255, 255, 255;
+  --k-bg: #0e0f10;
+  --k-side: #141517;
+  --k-side2: #141518;
+  --k-card: #16171a;
+  --k-deep: #17181b;
+  --k-deep2: #18191c;
+  --k-deep3: #1b1c1f;
+  --k-inset: #1c1d20;
+  --k-inset2: #1c1d21;
+  --k-sel: #1f2024;
+  --k-sel2: #202125;
+  --k-sel3: #222327;
+  --k-hover: #232428;
+  --k-raised: #26272b;
+  --k-raised2: #2a2b2f;
+  --k-raised3: #35363a;
+  --k-line: #3a3b3f;
+  --k-line2: #4a4b50;
+  --k-navy: #1f2a3a;
+  --k-navy2: #243142;
+  --k-text: #f1efea;
+  --k-text2: #d8d5cf;
+  --k-text3: #c9c6c0;
+  --k-mute: #a3a09a;
+  --k-mute2: #8a8781;
+  --k-mute3: #6f6d69;
+  --k-amber: #f2b14c;
+  --k-amber2: #f7cb82;
+  --k-blue: #7cb8f0;
+  --k-green: #7fd4a0;
+  --k-red: #ff6b5e;
+  --k-red2: #ff8a7e;
+  --k-red3: #ffa094;
+  --k-yellow: #dcd27e;
+  --k-purple: #c9a0f0;
+  --k-purple2: #c79bf2;
+  --k-orange: #ffb060;
+  --k-on-amber: #1a1408;
+  --k-on-blue: #0d1a26;
+  --k-overlay: rgba(0, 0, 0, 0.55);
+  --k-glass: rgba(14, 15, 16, 0.94);
+  --k-glass2: rgba(14, 15, 16, 0.92);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --k-fg-rgb: 30, 26, 20;
+    --k-bg: #f5f3ee;
+    --k-side: #efece6;
+    --k-side2: #efece6;
+    --k-card: #ffffff;
+    --k-deep: #fbfaf7;
+    --k-deep2: #f8f6f2;
+    --k-deep3: #f6f4f0;
+    --k-inset: #f3f0ea;
+    --k-inset2: #f3f0ea;
+    --k-sel: #ece8e0;
+    --k-sel2: #ebe7df;
+    --k-sel3: #e8e4dc;
+    --k-hover: #ebe7e0;
+    --k-raised: #e6e2da;
+    --k-raised2: #e3dfd6;
+    --k-raised3: #d6d1c7;
+    --k-line: #c9c3b8;
+    --k-line2: #b9b3a8;
+    --k-navy: #dfe9f6;
+    --k-navy2: #d2e0f1;
+    --k-text: #1c1b19;
+    --k-text2: #33312d;
+    --k-text3: #46433e;
+    --k-mute: #66625b;
+    --k-mute2: #77736c;
+    --k-mute3: #8f8b83;
+    --k-amber: #b9770b;
+    --k-amber2: #a5690a;
+    --k-blue: #2a73b8;
+    --k-green: #1d8a52;
+    --k-red: #cf3a2d;
+    --k-red2: #b8372b;
+    --k-red3: #b8372b;
+    --k-yellow: #8f8312;
+    --k-purple: #7d4cc0;
+    --k-purple2: #7d4cc0;
+    --k-orange: #b8620c;
+    --k-on-amber: #1a1408;
+    --k-on-blue: #ffffff;
+    --k-overlay: rgba(20, 16, 10, 0.35);
+    --k-glass: rgba(245, 243, 238, 0.94);
+    --k-glass2: rgba(245, 243, 238, 0.92);
+  }
+}
