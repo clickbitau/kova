@@ -305,6 +305,8 @@ export interface GroupSyncOptions {
   measureMs?: number;
   /** How near a song's end drift checks wait for the change (default 2 s). */
   nearEndMs?: number;
+  /** How often the main part is read around a start or a song change (default 400 ms), and otherwise while waiting (1 s). */
+  pollMs?: number; farPollMs?: number;
   /** Real time in ms (Date.now): positions and schedules are in it. */
   now?: () => number;
   /** The hub's address as a speaker at this IP reaches it, for the sync test's click track. */
@@ -467,7 +469,7 @@ export class GroupSync extends EventEmitter<{ changed: [] }> {
         this.emit('changed');
         return at;
       }
-      await this.sleep(s, START_POLL_MS);
+      await this.sleep(s, this.o.pollMs ?? START_POLL_MS);
     }
     return null;
   }
@@ -573,7 +575,7 @@ export class GroupSync extends EventEmitter<{ changed: [] }> {
         const far = x && x.index === from && x.playing && x.durationMs && x.durationMs - posAt(x, this.now()) > (this.o.nearEndMs ?? 2000);
         // Near the change, drift checks wait for it (a part waiting at its end isn't drifting).
         if (!far) s.changing = true;
-        await this.sleep(s, far ? 1000 : START_POLL_MS);
+        await this.sleep(s, far ? (this.o.farPollMs ?? 1000) : (this.o.pollMs ?? START_POLL_MS));
       }
       for (const t of holdTimers) { clearTimeout(t); s.timers.delete(t); }
       if (s.ended) return;

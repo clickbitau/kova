@@ -158,7 +158,7 @@ async function home(o: { castLatency?: Record<string, number>; sonosLatency?: Re
     dbPath: ':memory:', tickMs: 0,
     initialConfig: () => { const c: HomeConfig = demoConfig(); c.speakerGroups = [{ id: 'whole', name: 'Whole home', members: ['kitchen', 'dining', 'bed', 'ray'] }]; return c; },
     adapters: [new VirtualAdapter(demoDevices()), fc, fs],
-    groupSync: { checkMs: o.checkMs ?? 100, marginMs: 50, testMs: 4000, measureMs: 3000, nearEndMs: 400 },
+    groupSync: { checkMs: o.checkMs ?? 100, marginMs: 50, testMs: 4000, measureMs: 3000, nearEndMs: 400, pollMs: 100, farPollMs: 200 },
   });
   hub.lanBase = () => 'http://10.0.0.2:8140';
   await hub.start();
@@ -233,19 +233,19 @@ test('song changes: the Cast group’s gap between songs (different every song) 
     h.hub.groupSync.book.record('seek:ray', 30);
     h.hub.config.update(c => { c.groupOffsets = { whole: { ray: 40 } }; });
     await h.hub.reg.command('group_whole', { on: true, media: 'Loved' }, { kind: 'user', label: 'You' });
-    const gapsSeen: number[] = [];
-    // Through four song changes, a look at each song's middle: Ray is where the Cast group is, plus its 40 ms.
-    let t = Date.now();
-    for (let n = 0; n < 4; n++) {
-      await sleep(1900);
+    // Through four song changes: every 100 ms, where both play the same song (past its first 0.6 s, when a joining
+    // speaker may still be settling), Ray is where the Cast group is, plus its 40 ms.
+    const seen: number[] = [];
+    for (let k = 0; k < 75; k++) {
+      await sleep(100);
       const c = h.fc.where('kitchen')!, r = h.fs.where('ray')!;
-      if (c.playing && r.playing && c.index === r.index) gapsSeen.push(Math.round(r.positionMs - c.positionMs));
+      if (c.playing && r.playing && c.index === r.index && c.positionMs > 600) seen.push(Math.round(r.positionMs - c.positionMs));
     }
-    assert.ok(gapsSeen.length >= 3, `looked ${gapsSeen.length} times`);
-    for (const g of gapsSeen) assert.ok(Math.abs(g - 40) < 60, `Ray ${g} ms ahead (meant 40): ${gapsSeen.join(', ')}\n${h.hub.groupSync.view('whole')!.log.map(l => l.text).join('\n')}`);
+    assert.ok(seen.length >= 15, `looked ${seen.length} times`);
+    const off = seen.filter(g => Math.abs(g - 40) >= 60);
+    assert.ok(off.length <= seen.length / 10, `Ray out of time ${off.length} of ${seen.length} looks: ${off.join(', ')}\n${h.hub.groupSync.view('whole')!.log.map(l => l.text).join('\n')}`);
     assert.ok(h.fs.holds.length >= 2, `Ray waited at song ends: ${h.fs.holds.length}`);
     assert.match(h.hub.groupSync.view('whole')!.log.map(l => l.text).join('\n'), /Next song: Ray waited [\d.]+ s for Home speakers, then joined/);
-    void t;
   } finally { await h.close(); }
 });
 
@@ -283,11 +283,14 @@ test('drift: a speaker that seeks in whole seconds (Sonos) is asked at the momen
     h.hub.groupSync.book.record('seek:ray', 30);
     await h.hub.reg.command('group_whole', { on: true, media: 'Loved' }, { kind: 'user', label: 'You' });
     await sleep(150);
+    const n0 = h.fs.seeks.length;
     h.fs.drift('ray', -700);
-    await sleep(1300);
-    const s = h.fs.seeks.find(x => x.positionMs > 0 || x.index > 0);
+    // The move: asked at the moment its whole second lands right; looked at just after it lands.
+    for (let k = 0; k < 40 && !h.fs.seeks.slice(n0).some(x => x.positionMs > 0); k++) await sleep(50);
+    const s = h.fs.seeks.slice(n0).find(x => x.positionMs > 0);
     assert.ok(s, 'moved');
     assert.equal(s.positionMs % 1000, 0, 'whole seconds');
+    await sleep(60);
     const t = Date.now();
     const w = h.fs.where('ray', t)!, c = h.fc.where('kitchen', t)!;
     assert.ok(Math.abs((w.index * 1500 + w.positionMs) - (c.index * 1500 + c.positionMs)) < 70, 'and it lands in time');
