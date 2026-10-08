@@ -384,6 +384,14 @@ export class HelixLink {
           if (typeof st.muted === 'boolean') state.muted = st.muted;
           if (typeof st.sound === 'string' && st.sound) state.mode = st.sound;
           if (typeof st.night === 'boolean') state.nightMode = st.night;
+          // Playing something of Kova's over Wi-Fi (an announcement, music through a speaker group): this soundbar's
+          // other parts (its Cast side, combined with it) say so. Helix leaves the input alone while it does.
+          const cfg = this.hub.config.get();
+          const parts = (cfg.combined ?? []).filter(c => c.members.includes(id) || `combined_${c.id}` === id)
+            .flatMap(c => [`combined_${c.id}`, ...c.members]).filter(x => x !== id);
+          const casting = parts.map(x => this.hub.reg.get(x)).find(x => !!x && x.capabilities.includes('media') && x.state.on && typeof x.state.media === 'string' && x.state.media && !x.state.paused && x.adapter !== 'combined');
+          state.casting = !!casting;
+          if (casting) state.castingMedia = casting.state.media;
         }
         if (change && Number.isFinite(change.at)) { state.inputChangedAt = Math.round(change.at); state.inputChangedBy = change.by; }
         return [{ id, name: d.name, type: bar ? 'soundbar' : d.type, state }];

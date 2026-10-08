@@ -70,6 +70,7 @@ class Tvs implements Adapter {
     ctx.announce([
       { id: 'lounge_tv', name: 'Lounge TV', room: 'lounge', type: 'tv', capabilities: ['onoff', 'volume', 'input'], integration: 'Samsung', address: '10.0.0.20', state: { on: false, online: true } },
       { id: 'bedroom_tv', name: 'Bedroom TV', room: 'bedroom', type: 'tv', capabilities: ['onoff', 'input'], integration: 'Samsung', address: '10.0.0.21', state: { on: false, online: true } },
+      { id: 'lounge_bar_cast', name: 'Soundbar (Cast)', room: 'lounge', type: 'media', capabilities: ['onoff', 'volume', 'media'], integration: 'Google Cast', address: '10.0.0.30', state: { on: false, online: true } },
       { id: 'lounge_bar', name: 'Soundbar', room: 'lounge', type: 'media', capabilities: ['onoff', 'volume', 'mute', 'input', 'sound'], integration: 'Samsung soundbar', address: 'st-1', state: { on: false, online: true, vol: 12, input: 'tv' } },
     ]);
   }
@@ -132,7 +133,7 @@ test('Helix link: after pairing Kova tells Helix where it is, a token and which 
     const state0 = (await app.inject({ method: 'GET', url: '/api/state', headers: helix })).json();
     assert.deepEqual(state0.devices.map((d: { id: string }) => d.id), ['bedroom_tv', 'lounge_tv', 'lounge_bar']);
     // An off soundbar's input (from before it went off) isn't told: it's stale, and Helix would skip its switch on it.
-    assert.deepEqual(state0.devices.find((d: { id: string }) => d.id === 'lounge_bar').state, { on: false, online: true, volume: 12 });
+    assert.deepEqual(state0.devices.find((d: { id: string }) => d.id === 'lounge_bar').state, { on: false, online: true, volume: 12, casting: false });
     const bedroom = t.hub.reg.get('bedroom_tv')!;
     const saved = bedroom.state;
     bedroom.state = {};
@@ -188,7 +189,7 @@ test('Helix link: after pairing Kova tells Helix where it is, a token and which 
     for (const d of st.devices) delete d.state.inputChangedAt;
     assert.deepEqual(st, { devices: [
       { id: 'lounge_tv', name: 'Lounge TV', type: 'tv', state: { on: true, online: true, inputChangedBy: 'helix-auto' } },
-      { id: 'lounge_bar', name: 'Soundbar', type: 'soundbar', state: { on: true, online: true, input: 'hdmi1', volume: 20, muted: true, mode: 'surround', nightMode: true, inputChangedBy: 'Helix remote' } },
+      { id: 'lounge_bar', name: 'Soundbar', type: 'soundbar', state: { on: true, online: true, input: 'hdmi1', volume: 20, muted: true, mode: 'surround', nightMode: true, casting: false, inputChangedBy: 'Helix remote' } },
     ] });
     // Someone changes the TV's input in Kova's app: Helix sees it wasn't its own switching.
     await app.inject({ method: 'POST', url: '/api/devices/lounge_tv', headers: { authorization: 'Bearer master' }, payload: { input: 'hdmi4' } });
@@ -205,6 +206,16 @@ test('Helix link: after pairing Kova tells Helix where it is, a token and which 
     // Who changed an input is kept across a restart.
     t.hub.reg.flush();
     assert.equal(t.hub.store.get<Record<string, { by: string }>>('inputLog')?.lounge_tv?.by, 'You');
+    // The soundbar's Cast side playing something of Kova's (an announcement): casting, and what, so Helix leaves its input alone.
+    t.hub.config.update(c => { c.combined = [...(c.combined ?? []), { id: 'lounge_bar_all', name: 'Soundbar', members: ['lounge_bar', 'lounge_bar_cast'] }]; });
+    tvs.ctx.report('lounge_bar_cast', { on: true, media: 'Adhan' });
+    const bar0 = async () => (await app.inject({ method: 'GET', url: '/api/state', headers: helix })).json().devices.find((d: { type: string }) => d.type === 'soundbar');
+    const sb = await bar0();
+    assert.ok(sb, 'the soundbar is still told (combined or not)');
+    assert.deepEqual([sb.state.casting, sb.state.castingMedia], [true, 'Adhan']);
+    tvs.ctx.report('lounge_bar_cast', { on: false, media: null });
+    assert.equal((await bar0()).state.casting, false);
+    t.hub.config.update(c => { c.combined = (c.combined ?? []).filter(x => x.id !== 'lounge_bar_all'); });
     // Off, then on again: the input it had before isn't told until it's read again (a TV wakes on its own input).
     tvs.ctx.report('lounge_tv', { on: false });
     tvs.ctx.report('lounge_tv', { on: true });
