@@ -30,7 +30,7 @@ const track = (n: number, o: Record<string, unknown> = {}) => ({
  * Kova must send on every call (query or X-Helix-Profile); `locked` answers 403 for it. `noFile`: songs Helix has no
  * file for (play-url 404s them); `broken`: songs play-url fails on (500). `music: false`: Helix has music turned off.
  */
-async function fakeHelix(n = 60, o: { modern?: boolean; profile?: string; locked?: boolean; noFile?: number[]; broken?: number[]; music?: boolean; clock?: () => number } = {}) {
+async function fakeHelix(n = 60, o: { modern?: boolean; profile?: string; locked?: boolean; noFile?: number[]; broken?: number[]; music?: boolean; loops?: boolean; clock?: () => number } = {}) {
   const clock = o.clock ?? Date.now;
   const profile = o.profile ?? 'default';
   const lib = Array.from({ length: n }, (_, i) => track(i + 1));
@@ -49,7 +49,7 @@ async function fakeHelix(n = 60, o: { modern?: boolean; profile?: string; locked
     assert.equal(req.headers['x-helix-profile'], profile);
     if (o.locked) return send(403, { error: `profile ${profile} is locked` });
     const p = u.pathname;
-    if (p === '/v1/client/features') return send(200, { players: { enabled: true, music: o.music !== false, notices: true, devices: true } });
+    if (p === '/v1/client/features') return send(200, { players: { enabled: true, music: o.music !== false, notices: true, devices: true }, ...(o.loops ? { playUrl: { loop: true } } : {}) });
     if (req.method === 'POST') {
       const chunks: Buffer[] = [];
       req.on('data', c => chunks.push(c));
@@ -73,6 +73,8 @@ async function fakeHelix(n = 60, o: { modern?: boolean; profile?: string; locked
             expiresAt: Math.floor(clock() / 1000) + ttl, profile: body.profile ?? 'default',
             format: body.format === 'flac' && t ? '' : body.format ?? '', maxRate: body.maxRate ?? 0,
             artUrl: art ? `${base}${art}` : null, artPath: art,
+            // Helix 1.312+ says when it made the loop asked for.
+            ...(body.loop && o.loops ? { loop: body.loop } : {}),
           });
         }
         if (p === '/v1/art-urls') { artSigned.push(...body.urls); return send(200, { urls: body.urls.map((u: string) => `${u}&sig=batch`) }); }
@@ -786,9 +788,11 @@ test('Profiles: every call is for the profile set in Kova; a locked one is said 
 });
 
 test('A Helix song as a looping sound: found by name or id, signed as Helix’s crossfaded long version, reused', async () => {
-  const h = await fakeHelix(5, { modern: true });
+  const h = await fakeHelix(5, { modern: true, loops: true });
   const music = new HelixMusic(() => ({ url: h.url, token: TOKEN }));
   try {
+    await music.catalog(true);
+    assert.equal(music.offersLoops(), true, 'Helix says it makes loops');
     assert.deepEqual(await music.findSong(h.lib[1]!.id), { id: h.lib[1]!.id, title: h.lib[1]!.title, ...(h.lib[1]!.artist ? { artist: h.lib[1]!.artist } : {}) });
     const url = await music.loopUrl(h.lib[1]!.id);
     assert.match(url, /\/v1\/play\/t2\?sig=/);
@@ -798,4 +802,13 @@ test('A Helix song as a looping sound: found by name or id, signed as Helix’s 
     assert.equal(await music.loopUrl(h.lib[1]!.id), url, 'reused while it lasts');
     assert.equal(h.signed.length, n);
   } finally { await h.close(); }
+  // A Helix that doesn't say so: no loops from it (Kova makes them), and a loop it didn't apply is noticed.
+  const old = await fakeHelix(5, { modern: true });
+  const m2 = new HelixMusic(() => ({ url: old.url, token: TOKEN }));
+  try {
+    await m2.catalog(true);
+    assert.equal(m2.offersLoops(), false);
+    await assert.rejects(m2.loopUrl(old.lib[1]!.id), /didn’t make the loop/);
+    assert.match(await m2.songUrl(old.lib[1]!.id), /\/v1\/play\/t2/);
+  } finally { await old.close(); }
 });

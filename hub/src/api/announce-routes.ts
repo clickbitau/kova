@@ -9,6 +9,7 @@ import { BUILTIN_ADHANS, builtinAdhan } from '../services/adhans.ts';
 import { applyPrayer, prayerView, type PrayerPatch } from '../services/prayer.ts';
 import { DEFAULT_ANNOUNCE_LEVEL } from '../engine/announce.ts';
 import { kovaAddress } from '../services/helix-link.ts';
+import { NotLooped } from '../services/helix-music.ts';
 import type { Automation } from '../model/types.ts';
 
 // Announcements' routes: clips (upload, list, rename, remove), the files speakers fetch, "Play test", and prayer times.
@@ -89,7 +90,10 @@ export function registerAnnounceRoutes(app: FastifyInstance, hub: Hub, port: () 
     if (!src) return reply.code(404).send({ error: 'No such sound' });
     const range = typeof req.headers.range === 'string' ? req.headers.range : undefined;
     try {
-      if (src.helix && hub.music?.offersLoops()) return await proxy(await hub.music.loopUrl(src.helix.id), range, req, reply);
+      if (src.helix && hub.music?.offersLoops()) {
+        const url = await hub.music.loopUrl(src.helix.id).catch(e => { if (e instanceof NotLooped) return null; throw e; });
+        if (url) return await proxy(url, range, req, reply);
+      }
       const stable = src.helix?.id ?? src.url!;
       const made = hub.loops.ready(hub.loops.key(stable));
       if (made) return await sendFile(made, 'audio/mp4', range, reply);

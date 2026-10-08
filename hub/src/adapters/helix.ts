@@ -109,11 +109,13 @@ export function helixHeaders(profile?: string): Record<string, string> {
 }
 
 /** What Helix Server offers its clients (`GET /v1/client/features`): null for a Helix from before it said. */
-export interface HelixFeatures { enabled?: boolean; music?: boolean; notices?: boolean; devices?: boolean }
+/** What Helix offers its clients (`players`), plus `loop`: whether play-url makes seamless loops (top-level `playUrl.loop`). */
+export interface HelixFeatures { enabled?: boolean; music?: boolean; notices?: boolean; devices?: boolean; loop?: boolean }
 export async function helixFeatures(url: string, token: string, profile?: string): Promise<HelixFeatures | null> {
   try {
-    const r = await lanJson<{ players?: HelixFeatures }>(`${trimUrl(url)}/v1/client/features${profile ? `?profile=${encodeURIComponent(profile)}` : ''}`, { token, headers: helixHeaders(profile), timeoutMs: 4000 });
-    return r.json?.players && typeof r.json.players === 'object' ? r.json.players : null;
+    const r = await lanJson<{ players?: HelixFeatures; playUrl?: { loop?: boolean } }>(`${trimUrl(url)}/v1/client/features${profile ? `?profile=${encodeURIComponent(profile)}` : ''}`, { token, headers: helixHeaders(profile), timeoutMs: 4000 });
+    if (!r.json?.players || typeof r.json.players !== 'object') return null;
+    return { ...r.json.players, loop: r.json.playUrl?.loop === true };
   } catch { return null; }
 }
 

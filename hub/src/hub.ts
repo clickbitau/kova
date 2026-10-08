@@ -252,6 +252,11 @@ export class Hub extends EventEmitter<{ changed: [] }> {
         const keep = new Set<string>();
         for (const s of this.config.get().sources) {
           if (!this.viaHub(s)) continue;
+          // Helix makes a Helix song's loop itself: asked for now, so it's ready when it plays.
+          if (s.helix && this.music?.offersLoops()) {
+            const ok = await this.music.loopUrl(s.helix.id).then(() => true, () => false);
+            if (ok) continue;
+          }
           const stable = s.helix?.id ?? s.url!;
           const key = this.loops.key(stable);
           keep.add(key);

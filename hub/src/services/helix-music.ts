@@ -74,6 +74,9 @@ const SAME_ORDER_MS = 60_000;
 /** How long a signed song URL lasts (Helix takes 60–86400 s), and how long before the end Kova asks for a new one. */
 export const SIGNED_TTL_S = 21_600;
 const RESIGN_BEFORE_MS = 10 * 60_000;
+/** Helix answered a loop request with the plain song (it didn't apply the loop). */
+export class NotLooped extends Error { constructor() { super('Helix didn’t make the loop'); } }
+
 /** A looping sound's crossfade between passes. */
 const LOOP_CROSSFADE_MS = 8000;
 /** The share of a song a speaker must play for it to count as played. */
@@ -209,13 +212,15 @@ export class HelixMusic {
     if (!h) throw new Error('Pair Kova with Helix first');
     const ask = async (loop: boolean) => {
       for (let i = 0; i < 4; i++) {
-        const r = await lanJson<{ url?: string; path?: string; expiresAt?: number; retryAfterMs?: number }>(`${h.url}/v1/items/${encodeURIComponent(id.replace(/^helix:/, ''))}/play-url`, {
+        const r = await lanJson<{ url?: string; path?: string; expiresAt?: number; retryAfterMs?: number; loop?: unknown }>(`${h.url}/v1/items/${encodeURIComponent(id.replace(/^helix:/, ''))}/play-url`, {
           method: 'POST', token: h.token, headers: helixHeaders(h.profile), timeoutMs: 20_000,
           body: { format: 'aac', ttl: SIGNED_TTL_S, profile: h.profile, ...(loop ? { loop: { crossfadeMs: LOOP_CROSSFADE_MS, minutes: 60 } } : {}) },
         });
         if (r.status === 202 || (!r.json?.url && !r.json?.path && r.json?.retryAfterMs)) { await new Promise(res => setTimeout(res, Math.min(10_000, Math.max(500, r.json?.retryAfterMs ?? 2000)))); continue; }
         const url = r.json?.url ?? (r.json?.path ? `${h.url}${r.json.path}` : undefined);
         if (!url) throw new Error('Helix didn’t give a song address');
+        // Helix says when it applied the loop; without that it's the plain song, and Kova makes the loop itself.
+        if (loop && !(r.json as { loop?: unknown }).loop) { this.loopFlag = false; throw new NotLooped(); }
         return { url, until: Math.min((r.json?.expiresAt ? r.json.expiresAt * 1000 : this.now + SIGNED_TTL_S * 1000), this.now + SIGNED_TTL_S * 1000) - RESIGN_BEFORE_MS };
       }
       throw new Error('Helix is still preparing the sound. Try again in a moment.');
@@ -246,8 +251,8 @@ export class HelixMusic {
     if (force || this.now - this.listedAt > 5 * 60_000) {
       const f = await helixFeatures(h.url, h.token, h.profile);
       this.musicOn = f && typeof f.music === 'boolean' ? f.music : null;
-      // Helix's flag for play-url `loop` (until it names it: off, and Kova makes the loops).
-      this.loopFlag = !!(f as { playUrlLoop?: boolean; playUrl?: { loop?: boolean } } | null)?.playUrl?.loop || !!(f as { playUrlLoop?: boolean } | null)?.playUrlLoop;
+      // Helix makes seamless loops itself (features' playUrl.loop, Helix 1.312+).
+      this.loopFlag = !!f?.loop;
       try {
         this.playlists = ((await this.get<{ playlists?: Playlist[] }>('/v1/playlists?kind=music')).playlists ?? []).filter(p => !p.kind || p.kind === 'music');
         this.listedAt = this.now;
