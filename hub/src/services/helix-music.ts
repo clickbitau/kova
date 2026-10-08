@@ -291,6 +291,13 @@ export class HelixMusic {
     return view;
   }
 
+  /** The next ask for this name, within SAME_ORDER_MS, gets the songs in the order it last played them (a group carrying on without a speaker). */
+  again(media: string): void {
+    const q = this.lastQueue.get(media);
+    if (!q) return;
+    for (const sh of [0, 1]) this.recent.set(`${media}\0${sh}`, { at: this.now, queue: Promise.resolve(q), views: new Map() });
+  }
+
   private async build(media: string, opts: { shuffle?: boolean }): Promise<Queue | null> {
     const spec = await this.spec(media);
     if (!spec) return null;

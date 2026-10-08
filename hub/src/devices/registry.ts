@@ -75,6 +75,8 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
 
   /** Music by name → a play queue (services/helix-music.ts); set by the hub. */
   queues: ((media: string, opts: QueueOptions) => Promise<Queue | null>) | null = null;
+  /** Have the next ask for this name (within a minute) get the songs in the order it last played them. */
+  queueAgain: ((media: string) => void) | null = null;
   /** Whether a name is music (not a radio source), for a plain answer on speakers that can't play a queue. */
   isMusic: ((media: string) => boolean) | null = null;
 

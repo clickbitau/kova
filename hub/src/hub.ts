@@ -122,6 +122,7 @@ export class Hub extends EventEmitter<{ changed: [] }> {
   useMusic(m: HelixMusic): void {
     this.music = m;
     this.reg.queues = (media, o) => m.queueFor(media, o);
+    this.reg.queueAgain = media => m.again(media);
     this.reg.isMusic = media => m.isMusic(media);
     // A song a speaker played to (nearly) the end counts as played in Helix (Recently played, play counts), as in
     // Helix's own apps; one skipped part-way doesn't.

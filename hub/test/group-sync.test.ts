@@ -294,6 +294,41 @@ test('another app casts to one of the Cast group’s speakers: the group’s mus
   } finally { await h.close(); }
 });
 
+test('a speaker of the Cast group drops off: the music carries on without it, on the rest, from where it had got to', async () => {
+  const h = await home();
+  try {
+    await h.hub.reg.command('group_whole', { on: true, media: 'Loved' }, { kind: 'user', label: 'You' });
+    await sleep(1900);
+    const was = h.fs.where('ray')!.index;
+    assert.ok(was >= 1, 'into the second song');
+    h.fc.unplug('bed');
+    await sleep(700);
+    const log = h.hub.groupSync.view('whole')!.log.map(l => l.text).join('\n');
+    assert.match(log, /Bedroom speaker turned off, which ended Home speakers: carrying on without it, from song \d/);
+    for (const id of ['kitchen', 'dining', 'ray']) assert.equal(h.hub.reg.get(id)!.state.media, 'Loved', id);
+    assert.ok(h.hub.groupSync.session('whole'), 'kept in time again');
+    const t = Date.now(), k = h.fc.where('kitchen', t)!, r = h.fs.where('ray', t)!;
+    assert.ok(k.index >= was && r.index >= was, `carried on from song ${was + 1}: kitchen ${k.index + 1}, Ray ${r.index + 1}`);
+    assert.equal(h.fc.where('bed', t), null);
+  } finally { await h.close(); }
+});
+
+test('a soundbar in the Cast group is switched off (its own power, beside its Cast speaker): the rest carry on', async () => {
+  const h = await home();
+  try {
+    // The bedroom speaker stands in for a soundbar's Cast speaker, the living-room display for its own power.
+    h.hub.config.update(c => { c.combined = [{ id: 'bar', name: 'Soundbar', members: ['living_display', 'bed'] }]; });
+    await h.hub.reg.command('living_display', { on: true }, { kind: 'user', label: 'You' });
+    await h.hub.reg.command('group_whole', { on: true, media: 'Loved' }, { kind: 'user', label: 'You' });
+    await sleep(500);
+    await h.hub.reg.command('living_display', { on: false }, { kind: 'user', label: 'You' });
+    h.fc.takeOver(['bed']);
+    await sleep(700);
+    assert.match(h.hub.groupSync.view('whole')!.log.map(l => l.text).join('\n'), /Bedroom speaker turned off, which ended Home speakers: carrying on without it/);
+    for (const id of ['kitchen', 'dining', 'ray']) assert.equal(h.hub.reg.get(id)!.state.media, 'Loved', id);
+  } finally { await h.close(); }
+});
+
 test('the group’s music carries on while it plays, and paused isn’t stopped', async () => {
   const h = await home();
   try {

@@ -41,6 +41,8 @@ export const DRIFT_SEEK_MS = 400;
 /** At most one mid-song move per part in this long (a speaker that can't hold its place isn't chased). */
 export const SEEK_GAP_MS = 20_000;
 export const CHECK_MS = 5000;
+/** A speaker turned off or gone offline this recently, when the group's music stops, dropped out rather than stopped it. */
+const DROPPED_MS = 60_000;
 /** How long the sync test plays (its click track's length). */
 export { SYNC_TEST_MS };
 export const SYNC_TEST_MEDIA = 'Kova sync test';
@@ -330,6 +332,8 @@ export class GroupSync extends EventEmitter<{ changed: [] }> {
     super();
     this.book = new LatencyBook(store);
     this.now = o.now ?? Date.now;
+    reg.setMaxListeners(Math.max(reg.getMaxListeners(), 30));
+    reg.on('change', e => { if (e.patch.on === false || e.patch.online === false) this.offAt.set(e.device.id, this.now()); });
     // The click track as a one-song queue, so it plays exactly as music does (start delays, offsets, drift checks).
     reg.ownQueues.set(SYNC_TEST_MEDIA, async () => {
       const host = [...this.tests.values()].flatMap(t => t.players).map(id => hostOf(this.reg.get(id)?.address)).find(Boolean);
@@ -339,6 +343,9 @@ export class GroupSync extends EventEmitter<{ changed: [] }> {
       return { label: SYNC_TEST_MEDIA, shuffle: false, tracks: [{ id: 'kova-sync-test', title: 'Sync test', url: `${base}/api/clip/${SYNC_TEST_FILE}`, contentType: 'audio/wav', durationMs: ms }] };
     });
   }
+
+  /** When each device was last seen turning off or dropping off the network. */
+  private offAt = new Map<string, number>();
 
   private group(id: string): SpeakerGroup | undefined { return (this.config.get().speakerGroups ?? []).find(g => g.id === id); }
   private natives(): NativeGroup[] {
@@ -659,9 +666,11 @@ export class GroupSync extends EventEmitter<{ changed: [] }> {
   }
 
   /**
-   * The main part stopped playing the group's music for two checks in a row (another app cast to one of its speakers,
-   * which ends a Cast group, or it was stopped at the speaker): the group's music is over, so the speakers still
-   * playing it stop too, rather than carrying on with the old song on their own.
+   * The main part stopped playing the group's music for two checks in a row. Either another app took one of its
+   * speakers (it plays something else now: a Cast group ends when any member is taken), or someone stopped it there:
+   * the group's music is over, so the speakers still playing it stop too, rather than carrying on with the old song on
+   * their own. Or a speaker of it was turned off or dropped off the network (a soundbar switched off with its TV): the
+   * music carries on, from where it had got to, on the speakers that are left.
    */
   private takenOver(s: Session): boolean {
     const ref = s.parts[0];
@@ -672,6 +681,10 @@ export class GroupSync extends EventEmitter<{ changed: [] }> {
       .filter((d): d is Device => !!d && !!d.state.on && d.state.media === s.media);
     const g = this.group(s.group);
     this.end(s.group);
+    const elsewhere = ds.some(d => d.state.on && d.state.media && d.state.media !== s.media);
+    const dropped = g && !elsewhere ? this.dropped(g) : [];
+    const from = s.parts.slice(1).find(p => p.players.some(id => rest.some(d => d.id === id)));
+    if (g && dropped.length && from) { void this.carryOn(s, g, dropped, from); return true; }
     if (rest.length) {
       this.log(s.group, `${ref!.name} stopped playing ${s.media} (something else plays there, or it was stopped): stopped ${rest.map(d => d.name).join(', ')} too`);
       const cause: Cause = { kind: 'system', label: g?.name ?? 'Speaker group', detail: `its music stopped on ${ref!.name}` };
@@ -679,6 +692,40 @@ export class GroupSync extends EventEmitter<{ changed: [] }> {
     }
     this.emit('changed');
     return true;
+  }
+
+  /**
+   * The group's members that were just turned off or dropped off the network: offline themselves, or another part of
+   * the same combined device (a soundbar's own power, beside its Cast speaker) turned off, in the last minute.
+   */
+  private dropped(g: SpeakerGroup): string[] {
+    const recent = (id: string) => (this.now() - (this.offAt.get(id) ?? -Infinity)) < DROPPED_MS;
+    const combined = this.config.get().combined ?? [];
+    return g.members.filter(m => {
+      const player = playerOf(m, id => this.reg.get(id), combined) ?? m;
+      const d = this.reg.get(player);
+      if (d && d.state.online === false && recent(player)) return true;
+      const c = combined.find(x => `combined_${x.id}` === m || x.members.includes(player));
+      return !!c && c.members.some(id => id !== player && recent(id) && this.reg.get(id)?.state.on === false);
+    });
+  }
+
+  /** The group's music again on the speakers left, at the place `from` had got to (the same songs, in the same order). */
+  private async carryOn(s: Session, g: SpeakerGroup, dropped: string[], from: PlanPart): Promise<void> {
+    const at = await this.position(from);
+    const names = dropped.map(id => this.reg.get(id)?.name ?? id).join(', ');
+    const left: SpeakerGroup = { ...g, members: g.members.filter(m => !dropped.includes(m)) };
+    if (!at?.playing || !left.members.length) return;
+    this.log(g.id, `${names} turned off, which ended ${s.parts[0]!.name}: carrying on without it, from song ${at.index + 1}`);
+    this.reg.queueAgain?.(s.media);
+    const shuffle = !!this.reg.get(from.players[0]!)?.state.shuffle;
+    await this.play(left, { on: true, media: s.media, shuffle }, s.cause, { quiet: true }).catch(() => []);
+    const s2 = this.sessions.get(g.id);
+    if (!s2 || s2.ended) return;
+    // Every part to where it had got to; drift checks line up whatever is left over.
+    let index = at.index, positionMs = Math.round(posAt(at, this.now()));
+    if (at.durationMs && positionMs >= at.durationMs) { index++; positionMs -= at.durationMs; }
+    await Promise.all(s2.parts.map(p => this.syncPart(p, { index, positionMs })));
   }
 
   /** Is the group playing as Kova started it (a session with drift checks)? */

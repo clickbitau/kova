@@ -79,6 +79,12 @@ export class FakeSpeakers implements Adapter {
     for (const [k, s] of this.streams) if (s.ids.some(x => ids.includes(x))) { this.streams.delete(k); for (const id of s.ids) this.ctx!.report(id, { on: ids.includes(id) && !!media, media: ids.includes(id) ? media : null }); }
   }
 
+  /** A speaker drops off the network: the stream it was in ends (a Cast group with it), and it's offline. */
+  unplug(id: string): void {
+    this.takeOver([id]);
+    this.ctx!.report(id, { online: false });
+  }
+
   /** Make the stream that plays this speaker run `ms` ahead (+) or behind (−) from now on. */
   drift(id: string, ms: number): void { const s = this.streamOf(id); if (s) s.bias += ms; }
 
