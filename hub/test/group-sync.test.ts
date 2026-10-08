@@ -168,7 +168,7 @@ async function home(o: { castLatency?: Record<string, number>; sonosLatency?: Re
   return { hub, fc, fs, close: () => hub.stop() };
 }
 
-test('hybrid playback: the Cast group plays as one stream, Ray alongside; start delays learned, then used', async () => {
+test('hybrid playback: the Cast group plays as one stream; Ray joins once it plays, lined up with it, however slow it was', async () => {
   const h = await home({ castLatency: { home: 300 }, sonosLatency: { ray: 80 } });
   try {
     const plan = h.hub.groupSync.plan(h.hub.config.get().speakerGroups![0]!);
@@ -179,27 +179,48 @@ test('hybrid playback: the Cast group plays as one stream, Ray alongside; start 
     assert.equal(sg.castGroup, 'Home speakers');
     assert.deepEqual(sg.parts.map((p: { key: string; reference: boolean }) => [p.key, p.reference]), [['cast:home', true], ['ray', false]]);
     assert.ok(st.nativeGroups.some((g: NativeGroup) => g.id === 'home'));
+    h.hub.groupSync.book.record('seek:ray', 30);
 
-    await h.hub.reg.command('group_whole', { on: true, media: 'Loved' }, { kind: 'user', label: 'You' });
-    assert.equal(h.hub.reg.get('ray')!.state.media, 'Loved');
-    // First play: nothing learned, both asked together; the fake Cast batched its three into one stream.
-    await sleep(700);
-    const book = h.hub.groupSync.book;
-    assert.ok(Math.abs(book.get('cast:home')! - 300) < 60, `Cast group's delay learned: ${book.get('cast:home')}`);
-    assert.ok(Math.abs(book.get('ray')! - 80) < 60, `Ray's delay learned: ${book.get('ray')}`);
-    // Second play, with Ray 100 ms earlier: Ray is asked about 300 − 80 − 100 ms after the Cast group.
-    await h.hub.reg.command('group_whole', { on: false, media: null }, { kind: 'user', label: 'You' });
-    h.hub.config.update(c => { c.groupOffsets = { whole: { ray: 100 } }; });
     const from = h.fc.asked.length, fromR = h.fs.asked.length;
     await h.hub.reg.command('group_whole', { on: true, media: 'Loved' }, { kind: 'user', label: 'You' });
+    assert.equal(h.hub.reg.get('ray')!.state.media, 'Loved');
+    const book = h.hub.groupSync.book;
+    assert.ok(Math.abs(book.get('cast:home')! - 300) < 80, `Cast group's delay learned: ${book.get('cast:home')}`);
+    // Ray isn't asked until the Cast group plays, so it can't start before it.
     const castAt = h.fc.asked[from]!.at, rayAt = h.fs.asked[fromR]!.at;
-    assert.ok(Math.abs(rayAt - castAt - (book.get('cast:home')! - book.get('ray')! - 100)) < 40, `Ray asked ${rayAt - castAt} ms after the Cast group`);
-    await sleep(600);
-    // Both now sound together, Ray 100 ms ahead as tuned.
-    const t = Date.now(), c = h.fc.where('kitchen', t)!, r = h.fs.where('ray', t)!;
+    assert.ok(rayAt - castAt >= 300, `Ray asked ${rayAt - castAt} ms after the Cast group`);
+    let t = Date.now() + 100, c = h.fc.where('kitchen', t)!, r = h.fs.where('ray', t)!;
     assert.equal(c.index, r.index);
-    assert.ok(Math.abs(r.positionMs - c.positionMs - 100) < 50, `Ray ${r.positionMs - c.positionMs} ms ahead`);
-    assert.match(h.hub.groupSync.view('whole')!.log.map(l => l.text).join('\n'), /Ray started .* after it was asked/);
+    assert.ok(Math.abs(r.positionMs - c.positionMs) < 60, `Ray ${r.positionMs - c.positionMs} ms from the Cast group`);
+    assert.match(h.hub.groupSync.view('whole')!.log.map(l => l.text).join('\n'), /Home speakers first, then Ray once it plays/);
+
+    // A song the Cast group is much slower to start (it fetches and buffers each one) than it learned, with Ray 100 ms
+    // earlier: Ray still waits for it, and plays 100 ms ahead, as tuned.
+    await h.hub.reg.command('group_whole', { on: false, media: null }, { kind: 'user', label: 'You' });
+    h.hub.config.update(c => { c.groupOffsets = { whole: { ray: 100 } }; });
+    (h.fc as unknown as { o: { latency: Record<string, number> } }).o.latency.home = 1200;
+    const fromC2 = h.fc.asked.length, fromR2 = h.fs.asked.length;
+    await h.hub.reg.command('group_whole', { on: true, media: 'Loved' }, { kind: 'user', label: 'You' });
+    assert.ok(h.fs.asked[fromR2]!.at - h.fc.asked[fromC2]!.at >= 1200, 'Ray waited for the slow start');
+    t = Date.now() + 100; c = h.fc.where('kitchen', t)!; r = h.fs.where('ray', t)!;
+    assert.equal(c.index, r.index);
+    assert.ok(Math.abs(r.positionMs - c.positionMs - 100) < 60, `Ray ${r.positionMs - c.positionMs} ms ahead`);
+    assert.match(h.hub.groupSync.view('whole')!.log.map(l => l.text).join('\n'), /Home speakers started 1\.\d\d s after it was asked/);
+  } finally { await h.close(); }
+});
+
+test('a part asked to play later (−) is asked that much after the main part starts', async () => {
+  const h = await home({ castLatency: { home: 200 } });
+  try {
+    h.hub.groupSync.book.record('seek:ray', 30);
+    h.hub.config.update(c => { c.groupOffsets = { whole: { ray: -300 } }; });
+    const from = h.fc.asked.length, fromR = h.fs.asked.length;
+    await h.hub.reg.command('group_whole', { on: true, media: 'Loved' }, { kind: 'user', label: 'You' });
+    assert.ok(h.fs.asked[fromR]!.at - h.fc.asked[from]!.at >= 480, 'after the start, and 300 ms more');
+    await sleep(100);
+    const t = Date.now(), c = h.fc.where('kitchen', t)!, r = h.fs.where('ray', t)!;
+    const gap = (r.index * 1500 + r.positionMs) - (c.index * 1500 + c.positionMs);
+    assert.ok(Math.abs(gap + 300) < 70, `and 300 ms behind it: ${gap}\n${h.hub.groupSync.view('whole')!.log.map(l => l.text).join('\n')}`);
   } finally { await h.close(); }
 });
 
@@ -209,14 +230,15 @@ test('drift: a small slip is lined up at the next song (on the shared time); a b
     h.hub.groupSync.book.record('seek:ray', 30);
     await h.hub.reg.command('group_whole', { on: true, media: 'Loved' }, { kind: 'user', label: 'You' });
     await sleep(200);
+    const n0 = h.fs.seeks.length;
     h.fs.drift('ray', 200);
     // Within the next song change (1.5 s songs): no move mid-song, then a start of the next song at the shared time.
     await sleep(1800);
     const log = () => h.hub.groupSync.view('whole')!.log.map(l => l.text).join('\n');
     assert.match(log(), /Ray is (1|2)\d\d ms ahead: lining it up at the start of the next song/);
-    assert.ok(h.fs.seeks.length >= 1, 'lined up');
-    assert.equal(h.fs.seeks[0]!.positionMs, 0, 'at the start of a song');
-    assert.ok(h.fs.seeks[0]!.index >= 1);
+    assert.ok(h.fs.seeks.length > n0, 'lined up');
+    assert.equal(h.fs.seeks[n0]!.positionMs, 0, 'at the start of a song');
+    assert.ok(h.fs.seeks[n0]!.index >= 1);
     let t = Date.now();
     assert.ok(Math.abs(h.fs.where('ray', t)!.positionMs - h.fc.where('kitchen', t)!.positionMs) < 60, 'back in time');
     // A big slip: moved now, mid-song, and the log says so.

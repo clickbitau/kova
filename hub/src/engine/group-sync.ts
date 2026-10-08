@@ -14,9 +14,11 @@ import { SYNC_TEST_FILE, SYNC_TEST_MS } from '../services/clips.ts';
 // groups on the fly): those are sample-locked by their own system. The rest (another brand, a lone speaker) play
 // alongside, each as its own stream. partition() picks the native groups that leave the fewest streams.
 //
-// Every stream starts the same thing at a shared "start at" moment. For a queue (Helix music, Kova's own sync test)
-// each part is asked early by its learned start delay (play command → the speaker playing, measured on each play)
-// and moved by its offset, the owner's tuning (+ plays earlier, − later). A radio stream gets the offsets only: each
+// A queue (Helix music, Kova's own sync test) starts on the main part first (the biggest; the one the others follow).
+// The others are asked only once it's really playing, and moved straight away to its place, plus their offset (the
+// owner's tuning: + plays earlier, − later). Start delays aren't trusted to line up a start: the same Cast group can
+// take 0.7 s for one song and 3.6 s for the next (it fetches and buffers each), so a part asked "early by its delay"
+// can play seconds before the rest. They're still learned and shown. A radio stream gets the offsets only: each
 // speaker buffers a live stream by itself, so a start time means little there.
 //
 // While a queue plays, each part's place is read every few seconds and compared with the main part (the biggest; the
@@ -41,6 +43,12 @@ export const SYNC_TEST_LEVEL = 15;
 /** A seek's delay before anything is learned. */
 const SEEK_GUESS_MS = 400;
 const LATENCY_MAX_MS = 15_000;
+/** Further out than this, a reading is of something else (a speaker that stopped, or started over), not drift. */
+const DRIFT_SANE_MS = 30_000;
+/** How often the main part is read while waiting for it to start. */
+const START_POLL_MS = 150;
+/** At a start, a part closer than this is left be; further, it's moved (a move a second into a song isn't heard). */
+const JOIN_TOLERANCE_MS = 50;
 
 // ------------------------------------------------------------------ the plan --
 
@@ -389,21 +397,37 @@ export class GroupSync extends EventEmitter<{ changed: [] }> {
     };
     this.sessions.set(g.id, s);
     if (parts.length > 1) {
-      this.log(g.id, `Playing ${media}${live ? ' (a live stream: offsets only)' : ''} as ${parts.length} streams: ${parts.map(p => {
-        const lat = this.book.get(this.latencyKey(p));
-        return `${p.name} asked at +${Math.max(0, Math.round(sch.sends[p.key]! - now))} ms${!live ? ` (start delay ${lat != null ? sec(lat) : 'not learned yet'})` : ''}${offs[p.key] ? `, ${signed(offs[p.key]!)}` : ''}`;
-      }).join('; ')}`);
+      this.log(g.id, live
+        ? `Playing ${media} (a live stream: offsets only) as ${parts.length} streams: ${parts.map(p => `${p.name} asked at +${Math.max(0, Math.round(sch.sends[p.key]! - now))} ms${offs[p.key] ? `, ${signed(offs[p.key]!)}` : ''}`).join('; ')}`
+        : `Playing ${media} as ${parts.length} streams: ${parts[0]!.name} first, then ${parts.slice(1).map(p => `${p.name}${offs[p.key] ? ` (${signed(offs[p.key]!)})` : ''}`).join(', ')} once it plays`);
     }
     const sentAt = new Map<string, number>();
-    const out = await Promise.all(parts.map(async p => {
-      await this.sleep(s, sch.sends[p.key]! - this.now());
+    const send = async (p: PlanPart): Promise<{ id: string; result: PromiseSettledResult<unknown> }[]> => {
       if (s.ended) return p.players.map(id => ({ id, result: { status: 'rejected', reason: new Error('Something else was played on the group') } as PromiseSettledResult<unknown> }));
       sentAt.set(p.key, this.now());
       const r = await Promise.allSettled(p.players.map(id => this.reg.command(id, cmd, cause, { quiet: !!o.quiet })));
       return p.players.map((id, i) => ({ id, result: r[i]! }));
-    }));
+    };
+    let out: { id: string; result: PromiseSettledResult<unknown> }[][];
+    if (live || parts.length < 2) {
+      out = await Promise.all(parts.map(async p => { await this.sleep(s, sch.sends[p.key]! - this.now()); return send(p); }));
+    } else {
+      // The main part first; the others once it plays, each lined up with it.
+      const [ref, ...rest] = parts as [PlanPart, ...PlanPart[]];
+      const refOut = send(ref);
+      const started = await this.waitStart(s, ref, () => sentAt.get(ref.key) ?? now);
+      if (!started && !s.ended) this.log(g.id, `${ref.name} didn’t say it was playing, so the others started anyway`);
+      const restOut = rest.map(async p => {
+        const off = offs[p.key] ?? 0;
+        // Asked to play later: no need to start it before then.
+        if (started && off < 0) await this.sleep(s, -off);
+        const r = await send(p);
+        if (started && !s.ended && r.some(x => x.result.status === 'fulfilled')) await this.lineUp(s, p, ref, off);
+        return r;
+      });
+      out = [await refOut, ...(await Promise.all(restOut))];
+    }
     if (!live && !s.ended && parts.length > 1) {
-      for (const p of parts) { const t0 = sentAt.get(p.key); if (t0 != null) void this.measureStart(s, p, t0); }
       const every = this.o.checkMs ?? CHECK_MS;
       if (every > 0) { s.timer = setInterval(() => void this.check(s), every); s.timer.unref?.(); }
     }
@@ -411,19 +435,33 @@ export class GroupSync extends EventEmitter<{ changed: [] }> {
     return out.flat();
   }
 
-  /** Watch a part start, and learn its start delay: when it really began (its place, back from when it said so) less when it was asked. */
-  private async measureStart(s: Session, p: PlanPart, t0: number): Promise<void> {
-    const until = t0 + (this.o.measureMs ?? 15_000);
+  /**
+   * Wait for a part to really play (its place moving in its first song), and learn its start delay: when it began (its
+   * place, back from when it said so) less when it was asked. The reading, or null if it didn't start in time.
+   */
+  private async waitStart(s: Session, p: PlanPart, askedAt: () => number): Promise<PlaybackPosition | null> {
+    const until = this.now() + (this.o.measureMs ?? 15_000);
     while (!s.ended && this.now() < until) {
       const at = await this.position(p);
       if (at && at.playing && at.index === 0 && at.positionMs > 0) {
-        const ms = Math.round(at.at - at.positionMs - t0);
-        if (this.book.record(this.latencyKey(p), Math.max(0, ms))) this.log(s.group, `${p.name} started ${sec(Math.max(0, ms))} after it was asked`);
+        const ms = Math.max(0, Math.round(at.at - at.positionMs - askedAt()));
+        if (this.book.record(this.latencyKey(p), ms)) this.log(s.group, `${p.name} started ${sec(ms)} after it was asked`);
         this.emit('changed');
-        return;
+        return at;
       }
-      await this.sleep(s, 200);
+      await this.sleep(s, START_POLL_MS);
     }
+    return null;
+  }
+
+  /** A part that just started, moved to where the main part is (plus its offset). */
+  private async lineUp(s: Session, p: PlanPart, ref: PlanPart, off: number): Promise<void> {
+    const [r, at] = await Promise.all([this.position(ref), this.position(p)]);
+    if (s.ended || !r?.playing) return;
+    const d = at?.playing ? driftOf(r, at, off) : null;
+    if (d != null && Math.abs(d) <= JOIN_TOLERANCE_MS) { this.log(s.group, `${p.name} joined in time`); return; }
+    await this.seek(s, p, r, at ?? { index: 0, positionMs: 0, at: this.now(), playing: false }, off, false);
+    if (!s.ended) this.log(s.group, `${p.name} joined ${ref.name}${d != null ? ` (it was ${Math.abs(d)} ms ${d > 0 ? 'ahead' : 'behind'})` : ''}`);
   }
 
   /** One drift check: every part's place against the reference's, and a correction where one is due. */
@@ -441,7 +479,8 @@ export class GroupSync extends EventEmitter<{ changed: [] }> {
         const part = s.parts[k]!, at = pos[k];
         if (!at || !at.playing || s.ended) { s.drift.set(part.key, null); continue; }
         const off = offs[part.key] ?? 0;
-        const d = driftOf(ref, at, off);
+        const d0 = driftOf(ref, at, off);
+        const d = d0 != null && Math.abs(d0) > DRIFT_SANE_MS ? null : d0;
         s.drift.set(part.key, d);
         // How far the last move landed from where it was meant to: the seek delay to use next time.
         if (s.seeked.has(part.key) && d != null) {

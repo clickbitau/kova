@@ -51,7 +51,7 @@ export function testSteps(parts: Pick<GroupPart, 'reference' | 'name' | 'listenW
   return `Kova plays a short tick every second, with a lower tone on each minute, on every speaker at once, quietly; afterwards each goes back to what it was doing. Stand between ${near} and ${p.name}, where you hear both about as loud. If ${p.name}’s tick comes after the other, move ${p.name} towards Earlier; if before, towards Later. Use ±50 until they’re close, then ±10, until you hear one tick.`;
 }
 
-export const EXPECT = 'Speakers in a native group (a Google Home group, Sonos speakers together) are sample-locked. Speakers played alongside start within roughly 50–150 ms of the shared moment once their start delay is learned, and Kova lines them up again at the next song when they drift more than 120 ms (at once, mid-song, past 400 ms). Live radio gets the timing only: each speaker buffers it by itself, so it can sit up to a second or so apart.';
+export const EXPECT = 'Speakers in a native group (a Google Home group, Sonos speakers together) are sample-locked. Speakers played alongside wait for the main group to start, then join it at its place (you may hear one settle in the first second or two), and Kova lines them up again at the next song when they drift more than 120 ms (at once, mid-song, past 400 ms). Live radio gets the timing only: each speaker buffers it by itself, so it can sit up to a second or so apart.';
 
 /** "3:05 left" for a running sync test; null when none runs. */
 export function testLeft(until: number | null | undefined, now = Date.now()): string | null {
