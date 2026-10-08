@@ -199,6 +199,8 @@ export class HelixLink {
     helix: () => HelixLinkConfig | undefined; dataDir: string; port: () => number; debounceMs?: number;
     /** How long Helix's command may take before Kova answers and finishes it in the background. Default 2 s (Helix waits 3). */
     answerMs?: number;
+    /** The same for a volume press (default 400 ms): answered "pending" by then, and finished in the background. */
+    stepAnswerMs?: number;
     /** How often to check that Kova's address hasn't changed (a new DHCP lease). Default 60 s; 0 turns it off. */
     watchMs?: number;
     /** Interfaces, for tests. */
@@ -365,7 +367,9 @@ export class HelixLink {
       void tail.then(() => { if (this.queue.get(deviceId) === tail) this.queue.delete(deviceId); });
     }
     let timer: NodeJS.Timeout | undefined;
-    const late = new Promise<'late'>(r => { timer = setTimeout(() => r('late'), this.o.answerMs ?? 2000); timer.unref?.(); });
+    // A volume press is answered quickly (the remote should feel instant); a soundbar that's slow finishes it after.
+    const wait = t.cmd.volStep !== undefined ? Math.min(this.o.stepAnswerMs ?? 400, this.o.answerMs ?? 2000) : this.o.answerMs ?? 2000;
+    const late = new Promise<'late'>(r => { timer = setTimeout(() => r('late'), wait); timer.unref?.(); });
     try {
       const r = await Promise.race([done.then(() => 'done' as const), late]);
       return r === 'done' ? { status: 200, body: { ok: true } } : { status: 202, body: { ok: true, pending: true } };
