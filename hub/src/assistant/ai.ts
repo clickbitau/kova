@@ -223,6 +223,11 @@ export const TOOLS = [
     parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
   },
   {
+    name: 'find_music',
+    description: 'Look up the owner\'s own audio in their Helix library by name (a song, album, artist or playlist, e.g. an adhan they added, "Fajr adhan"). Returns the media name to use in an announce step or to play. Use it whenever the owner says they added or have something in Helix; never ask them for a name they already gave.',
+    parameters: { type: 'object', properties: { name: { type: 'string', description: 'The words the owner used' } }, required: ['name'] },
+  },
+  {
     name: 'list_schedule',
     description: 'List what the home has planned for the rest of tonight (mode changes and timed moments), and every one-time schedule still to come.',
     parameters: { type: 'object', properties: {} },
@@ -706,6 +711,7 @@ export class Toolbox {
       case 'end_overlay': return both('Ending the overlay', 'end the overlay');
       case 'explain_device': return both(`Looking into ${this.nameOf(a.id)}`, `look into ${this.nameOf(a.id)}`);
       case 'list_schedule': return both('Reading what’s planned', 'read what’s planned');
+      case 'find_music': return both(`Looking for “${String(a.name ?? '')}” in Helix`, `look for “${String(a.name ?? '')}” in Helix`);
       case 'remember': return both('Remembering that', 'remember that');
       case 'forget': return both('Forgetting that', 'forget that');
       case 'create_automation': return both(`Making the automation “${String(a.name ?? '')}”`, `make the automation “${String(a.name ?? '')}”`);
@@ -1000,6 +1006,13 @@ export class Toolbox {
           if (!d) return JSON.stringify({ ok: false, error: `Unknown device ${String(args.id)}` });
           const w = this.ai.engine.why(d.id);
           return JSON.stringify({ ok: true, on: !!d.state.on, why: w.now, next: w.next });
+        }
+        case 'find_music': {
+          const name = typeof args.name === 'string' ? args.name.trim() : '';
+          if (!name) return JSON.stringify({ ok: false, error: 'Say what to look for' });
+          if (!this.ai.findMusic) return JSON.stringify({ ok: false, error: 'Helix isn’t set up, so there’s no library to look in' });
+          const hit = await this.ai.findMusic(name).catch(() => null);
+          return JSON.stringify(hit ? { ok: true, media: hit.media, kind: hit.kind } : { ok: false, error: `Nothing in Helix called “${name}”` });
         }
         case 'list_schedule': {
           const e = this.ai.engine, tz = this.ai.config.get().timezone, now = e.now();
@@ -1521,7 +1534,7 @@ Rooms: use a room only if it is in the Rooms list under that name (or plainly th
 When a tool call fails because of how it was written (an unknown kind, a bad time, a wrong id), correct it and call again — the error says what to send instead. Never ask the user about formats, ids, schemas or tool shapes; they don't know them and shouldn't see them. Ask the user only about real choices (which automations, which room).
 A request about a group ("the light automations that start at sunset", "all the bedroom lights") means every match: find them all in the home context, change each one (one call each), then name each in the reply.
 Tool results are the truth: each has ok, and when it worked a "result" saying what changed, with real names. Report only what results confirmed. If any call returned ok:false, say plainly what didn't happen and why — never say "all done", "done" or "everything's set" unless every part worked. Don't claim a change you didn't make with a tool.
-Announcements ("play X on all speakers at 15%", a chime, a call to prayer): one automation with an announce step. vol is the level the owner says; each speaker plays it times its own announcement loudness. List every speaker in targets (devices with "speaker": true, or a speaker group); players such as a Helix box or a TV that should stop for it go in pause (they carry on after); restore true puts every speaker back as it was. If the owner didn't say which audio and none in the context plainly fits, leave media out (the automation is saved switched off) and ask which to use, naming the choices; never guess or invent a URL. When the owner says some speakers are louder or quieter than others, suggest an announcement loudness for each (e.g. 80, 70, 60 for louder, louder still, loudest) in the reply and ask them to confirm; set them with update_device loudness only once they agree, then say what each is now.
+Announcements ("play X on all speakers at 15%", a chime, a call to prayer): one automation with an announce step. vol is the level the owner says; each speaker plays it times its own announcement loudness. List every speaker in targets (devices with "speaker": true, or a speaker group: a group keeps its balance between speakers, vol is its loudest speaker's level); players such as a Helix box or a TV that should stop for it go in pause (they carry on after); restore true puts every speaker back as it was. When the owner names audio of their own ("I added Fajr adhan in Helix"), look it up with find_music and use the media it returns; ask only if it finds nothing. If the owner didn't say which audio and none in the context plainly fits, leave media out (the automation is saved switched off) and ask which to use, naming the choices; never guess or invent a URL. When the owner says some speakers are louder or quieter than others, suggest an announcement loudness for each (e.g. 80, 70, 60 for louder, louder still, loudest) in the reply and ask them to confirm; set them with update_device loudness only once they agree, then say what each is now.
 If the request can't be done with these tools or the shared context, say so plainly instead of guessing. Reply like a text message — plain text only, no markdown (never ** or # or \` characters — they show raw in the chat). Keep it short: a sentence or two usually; when listing several things, one item per line starting with "- ". Refer to automations and devices by their names, not their ids.`;
 
 /** Only while prayer times are on. */
@@ -1592,6 +1605,8 @@ export class AiAssistant {
 
   /** Helix music names for the home context (hub.music). */
   music: (() => { name: string; kind: string }[]) | null = null;
+  /** Look a name up in the Helix library (hub.music.find): the media name to play it by. */
+  findMusic: ((words: string) => Promise<{ media: string; kind: string } | null>) | null = null;
   /** Clips kept on the hub ({id, name}), for the home context and words (hub.clips). */
   clips: (() => { id: string; name: string; durationMs?: number }[]) | null = null;
   clipName: ((id: string) => string | undefined) | null = null;

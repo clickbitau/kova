@@ -67,7 +67,7 @@ test('Local AI: tool call changes a device through the engine, logged, tagged an
   assert.equal(fake.received.length, 2);
   assert.equal(fake.received[0].url, '/v1/chat/completions');
   assert.equal(fake.received[0].body.model, 'llama3');
-  assert.deepEqual(fake.received[0].body.tools.map((t: any) => t.function.name), ['set_devices', 'start_overlay', 'end_overlay', 'explain_device', 'list_schedule', 'remember', 'forget', 'create_automation', 'update_automation', 'delete_automation', 'create_room', 'update_device', 'rename_room', 'delete_room', 'combine_devices', 'separate_devices', 'review_action']);
+  assert.deepEqual(fake.received[0].body.tools.map((t: any) => t.function.name), ['set_devices', 'start_overlay', 'end_overlay', 'explain_device', 'find_music', 'list_schedule', 'remember', 'forget', 'create_automation', 'update_automation', 'delete_automation', 'create_room', 'update_device', 'rename_room', 'delete_room', 'combine_devices', 'separate_devices', 'review_action']);
   const toolMsg = fake.received[1].body.messages.find((m: any) => m.role === 'tool');
   assert.equal(toolMsg.tool_call_id, 'call_1');
   assert.equal(JSON.parse(toolMsg.content).ok, true);
@@ -176,7 +176,7 @@ test('Cloud AI: Anthropic Messages tool loop against a fake endpoint', async () 
   assert.equal(first.headers['x-api-key'], 'sk-ant-test');
   assert.equal(first.headers.authorization, undefined);
   assert.equal(first.body.model, 'claude-opus-5-5');
-  assert.deepEqual(first.body.tools.map((t: any) => t.name), ['set_devices', 'start_overlay', 'end_overlay', 'explain_device', 'list_schedule', 'remember', 'forget', 'create_automation', 'update_automation', 'delete_automation', 'create_room', 'update_device', 'rename_room', 'delete_room', 'combine_devices', 'separate_devices', 'review_action']);
+  assert.deepEqual(first.body.tools.map((t: any) => t.name), ['set_devices', 'start_overlay', 'end_overlay', 'explain_device', 'find_music', 'list_schedule', 'remember', 'forget', 'create_automation', 'update_automation', 'delete_automation', 'create_room', 'update_device', 'rename_room', 'delete_room', 'combine_devices', 'separate_devices', 'review_action']);
   assert.ok(!('tool_choice' in first.body) || first.body.tool_choice.type === 'auto');
   const sys = JSON.stringify(first.body.system);
   for (const c of CAMERAS) assert.ok(!sys.includes(c), `camera ${c} was sent`);

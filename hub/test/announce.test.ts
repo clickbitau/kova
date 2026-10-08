@@ -167,6 +167,19 @@ test('Announce: a speaker group stands for its speakers, each at its own loudnes
   } finally { await h.close(); }
 });
 
+test('Announce: a speaker group with a volume balance keeps it: its loudest at the level, the others at their share (× their loudness)', async () => {
+  const h = await announceHub(c => { c.speakerGroups![0]!.balance = { kitchen_spk: 72, loud_spk: 36, plain_spk: 18 }; });
+  try {
+    const going = h.hub.engine.automations.runNow(auto([step({ media: `clip:${h.clip.id}`, vol: 40, targets: { group_whole: {} } })]), 'test');
+    await h.settle();
+    assert.equal(h.dev('kitchen_spk').vol, 40, 'the loudest of the balance: the level');
+    assert.equal(h.dev('loud_spk').vol, 12, 'half of it (20) × its 60% loudness');
+    assert.equal(h.dev('plain_spk').vol, 8, 'a quarter (10) × 80%');
+    await h.pass(4500);
+    await going;
+  } finally { await h.close(); }
+});
+
 test('Announce: no clip length known — it ends when the speakers say they’ve stopped (or at most maxSec)', async () => {
   const h = await announceHub();
   try {

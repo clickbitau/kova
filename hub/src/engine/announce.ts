@@ -1,3 +1,4 @@
+import { balancedVols } from '../adapters/groups.ts';
 import type { AnnounceAction, Cause, Device, HomeConfig, PrayerName, Trigger } from '../model/types.ts';
 import type { Clip as PlayClip } from '../adapters/sdk.ts';
 import type { PlaybackSnap, Registry } from '../devices/registry.ts';
@@ -152,8 +153,10 @@ export class Announcer {
       const level = t.vol ?? a.vol;
       if (isSpeakerGroup(d)) {
         const g = (cfg.speakerGroups ?? []).find(x => `group_${x.id}` === d.id);
-        // A member listed on its own keeps its own setting (its level, switched off, skipped).
-        for (const m of g?.members ?? []) { const md = this.reg.get(m); if (md && canAnnounce(md) && !named.has(m) && !list.has(m)) list.set(m, { d: md, level }); }
+        // The group's balance between its speakers holds here too: the loudest at the level, the others at their
+        // share of it. A member listed on its own keeps its own setting (its level, switched off, skipped).
+        const share = g?.balance ? balancedVols(level, (g.members).map(m => ({ id: m, vol: this.reg.get(m)?.state.vol ?? undefined })), g.balance) : null;
+        for (const m of g?.members ?? []) { const md = this.reg.get(m); if (md && canAnnounce(md) && !named.has(m) && !list.has(m)) list.set(m, { d: md, level: share?.[m] ?? level }); }
         continue;
       }
       if (!canAnnounce(d)) { failed.push({ id, error: 'isn’t a speaker' }); continue; }
