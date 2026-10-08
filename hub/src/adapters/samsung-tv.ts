@@ -441,6 +441,12 @@ export class SamsungTvAdapter implements Adapter {
       if (tv.on) { await this.powerOff(tv); tv.on = false; }
       return;
     }
+    // One press of the remote's volume key: the TV's own volume, or (on eARC) its soundbar's, at once and locally.
+    if (cmd.volStep) {
+      if (!tv.on) throw new Error(`${tv.cfg.name ?? tv.cfg.host} is off`);
+      await this.key(tv, cmd.volStep > 0 ? 'KEY_VOLUP' : 'KEY_VOLDOWN');
+      return;
+    }
     if (cmd.on === true && !tv.on) {
       // Fully-off and standby TVs both wake on the magic packet; SmartThings is asked as well where it
       // knows the TV. It takes a few seconds to boot, so a volume in the same command is left for the

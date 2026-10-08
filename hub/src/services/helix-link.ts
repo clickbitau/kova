@@ -341,6 +341,25 @@ export class HelixLink {
   }
 
   /**
+   * A soundbar's volume press, through its TV's local remote (the TV passes it on over eARC): at once, with no cloud
+   * round trip. Only while that TV is on and the soundbar plays the TV's sound (or can't say); false to use the
+   * soundbar's own way (SmartThings) instead, also when the TV's key fails.
+   */
+  private async stepViaTv(bar: string, step: number, cause: Cause): Promise<boolean> {
+    const sc = this.screens().find(x => x.soundbarDeviceId === bar);
+    const b = this.hub.reg.get(bar);
+    if (!sc || !b || this.casting(bar)) return false;
+    const tvInput = sc.soundbarTvInput ?? 'tv';
+    if (typeof b.state.input === 'string' && b.state.input && b.state.input !== tvInput) return false;
+    const c = (this.hub.config.get().combined ?? []).find(x => `combined_${x.id}` === sc.tvDeviceId);
+    const local = (c ? c.members : [sc.tvDeviceId]).map(id => this.hub.reg.get(id))
+      .find(d => !!d && d.adapter === 'samsungtv' && d.state.on === true && d.state.online !== false);
+    if (!local) return false;
+    try { await this.hub.reg.command(local.id, { volStep: step }, cause, { quiet: true }); return true; }
+    catch { return false; }
+  }
+
+  /**
    * Carry out Helix's command (`POST /api/devices/<id>`, one key): answered within `answerMs`. Commands to one device
    * run one after another, so an input right after "on" waits until the TV is up (never refused for that); the same
    * command again while it runs, or just after, isn't sent twice; one still running at `answerMs` is accepted (202)
@@ -362,6 +381,7 @@ export class HelixLink {
       const before = this.queue.get(deviceId) ?? Promise.resolve();
       done = before.catch(() => {}).then(async () => {
         try {
+          if (t.cmd.volStep !== undefined && await this.stepViaTv(deviceId, t.cmd.volStep, cause)) { this.recent.set(deviceId, { key, at: Date.now() }); return; }
           await this.hub.engine.command(deviceId, t.cmd, cause);
           this.recent.set(deviceId, { key, at: Date.now() });
         } finally {

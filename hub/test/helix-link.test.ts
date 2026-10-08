@@ -643,3 +643,32 @@ test('Helix link: Helix switches the TV and soundbar by default; set to Kova, Ko
     assert.deepEqual(got(), []);
   } finally { link.stop(); await t.hub.stop(); }
 });
+
+test('Helix link: a soundbar volume press goes through its TV’s local remote while the TV is on and the soundbar plays its sound; else SmartThings', async () => {
+  const { t, tvs, link, settle } = await boxOnTv();
+  // The TV is a local Samsung TV (its remote's keys); everything else as before.
+  (t.hub.reg.devices.get('lounge_tv') as Device).adapter = 'samsungtv';
+  const local = new SeenTvs();
+  local.id = 'samsungtv';
+  t.hub.reg.adapters.set('samsungtv', local);
+  try {
+    tvs.ctx.report('lounge_tv', { on: true });
+    tvs.ctx.report('lounge_bar', { on: true, input: 'tv' });
+    assert.equal((await link.command('lounge_bar', { volumeStep: 1 }, false)).status, 200);
+    await settle();
+    assert.deepEqual(local.got.map(g => [g.id, g.cmd]), [['lounge_tv', { volStep: 1 }]]);
+    assert.equal(tvs.got.length, 0, 'not through the cloud');
+    // The soundbar on another input: its own way.
+    tvs.ctx.report('lounge_bar', { input: 'bluetooth' });
+    await link.command('lounge_bar', { volumeStep: -1 }, false);
+    await settle();
+    assert.deepEqual(tvs.got.map(g => [g.id, g.cmd]), [['lounge_bar', { volStep: -1 }]]);
+    // The TV off: its own way too.
+    tvs.got.length = 0; local.got.length = 0;
+    tvs.ctx.report('lounge_bar', { input: 'tv' });
+    tvs.ctx.report('lounge_tv', { on: false });
+    await link.command('lounge_bar', { volumeStep: 1 }, false);
+    await settle();
+    assert.deepEqual([local.got.length, tvs.got.map(g => g.id)], [0, ['lounge_bar']]);
+  } finally { link.stop(); await t.hub.stop(); }
+});
