@@ -131,7 +131,8 @@ test('Helix link: after pairing Kova tells Helix where it is, a token and which 
     const helix = { authorization: `Bearer ${link.token}` };
     const state0 = (await app.inject({ method: 'GET', url: '/api/state', headers: helix })).json();
     assert.deepEqual(state0.devices.map((d: { id: string }) => d.id), ['bedroom_tv', 'lounge_tv', 'lounge_bar']);
-    assert.deepEqual(state0.devices.find((d: { id: string }) => d.id === 'lounge_bar').state, { on: false, online: true, input: 'tv', volume: 12 });
+    // An off soundbar's input (from before it went off) isn't told: it's stale, and Helix would skip its switch on it.
+    assert.deepEqual(state0.devices.find((d: { id: string }) => d.id === 'lounge_bar').state, { on: false, online: true, volume: 12 });
     const bedroom = t.hub.reg.get('bedroom_tv')!;
     const saved = bedroom.state;
     bedroom.state = {};
@@ -204,6 +205,13 @@ test('Helix link: after pairing Kova tells Helix where it is, a token and which 
     // Who changed an input is kept across a restart.
     t.hub.reg.flush();
     assert.equal(t.hub.store.get<Record<string, { by: string }>>('inputLog')?.lounge_tv?.by, 'You');
+    // Off, then on again: the input it had before isn't told until it's read again (a TV wakes on its own input).
+    tvs.ctx.report('lounge_tv', { on: false });
+    tvs.ctx.report('lounge_tv', { on: true });
+    assert.equal((await app.inject({ method: 'GET', url: '/api/state', headers: helix })).json().devices[0].state.input, undefined, 'stale from before');
+    await new Promise(r => setTimeout(r, 5));
+    tvs.ctx.report('lounge_tv', { input: 'tv' });
+    assert.equal((await app.inject({ method: 'GET', url: '/api/state', headers: helix })).json().devices[0].state.input, 'tv', 'read since it came on');
 
     // Anything else is refused: another device, the bedroom TV (no longer linked), other fields, other routes.
     for (const [method, url, payload] of [

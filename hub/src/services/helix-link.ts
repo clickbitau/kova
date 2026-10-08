@@ -210,7 +210,17 @@ export class HelixLink {
       writeFileSync(file, JSON.stringify({ token: t }, null, 2) + '\n', { mode: 0o600 });
     }
     this.token = t;
+    this.hub.reg.on('change', e => {
+      const id = e.device.id, now = Date.now();
+      if (e.patch.on === true && e.prev.on !== true) this.onAt.set(id, now);
+      if (e.patch.on === false || e.patch.online === false) { this.onAt.delete(id); this.inputAt.delete(id); }
+      if (e.patch.input !== undefined) this.inputAt.set(id, now + 1);
+    });
   }
+
+  /** When each device last came on, and when its input was last read: whether an input is fresh (state()). */
+  private onAt = new Map<string, number>();
+  private inputAt = new Map<string, number>();
 
   start(): void {
     const soon = () => {
@@ -365,8 +375,10 @@ export class HelixLink {
         else if (typeof st.on === 'boolean') state.on = st.on;
         if (typeof st.online === 'boolean') state.online = st.online;
         // Only an input read back from the device, never the one asked for: Helix skips its own switch when the
-        // input it wants is already the one here. A TV that can't say has none.
-        if (typeof st.input === 'string' && st.input) state.input = st.input;
+        // input it wants is already the one here. A TV that can't say has none. And only one read since the device
+        // last came on: the input it had before standby is stale (a TV wakes on its own input, an eARC soundbar
+        // follows the TV), and Helix skipping its switch on it left the TV and soundbar on the wrong inputs.
+        if (typeof st.input === 'string' && st.input && st.on !== false && st.online !== false && (this.inputAt.get(id) ?? 0) > (this.onAt.get(id) ?? Infinity)) state.input = st.input;
         if (bar) {
           if (typeof st.vol === 'number' && Number.isFinite(st.vol)) state.volume = Math.max(0, Math.min(100, Math.round(st.vol)));
           if (typeof st.muted === 'boolean') state.muted = st.muted;
