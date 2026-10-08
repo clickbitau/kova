@@ -623,8 +623,13 @@ export const TOOL_PERM: Record<string, Perm> = {
 const MUTATING = new Set<string>(['set_devices', 'start_overlay', 'end_overlay', 'remember', 'forget', 'create_automation', 'update_automation', 'delete_automation', 'create_room', 'update_device', 'rename_room', 'delete_room', 'combine_devices', 'separate_devices']);
 
 /** Runs tool calls against the engine, collecting undo ids. One per ask. */
+/** Words that name an air conditioner's mode: when a request has none, the mode isn't the model's to pick. */
+const MODE_WORDS = /\b(cool|cooling|cold|chill|heat|heating|warm|hot|dry|dehumidif\w*|fan|mode)\b/i;
+
 export class Toolbox {
   readonly undos: string[] = [];
+  /** What the person asked, for the checks that hold the model to their words. */
+  question = '';
   /** Tool names called, in order (for the request log). */
   readonly called: string[] = [];
   /** Each call with args and outcome — enough to see why the AI struggled. */
@@ -902,6 +907,15 @@ export class Toolbox {
               const zc = rid ? this.zoneCommand(x) : undefined;
               if (!rid || !zc) { unknown.push(String(x.id)); continue; }
               if (!Object.keys(this.ai.reg.expandTargets({ [`zone:${rid}`]: zc as unknown as Command })).length) return JSON.stringify({ ok: false, error: `No air conditioner zone serves ${zm[1]} yet — ask the user which zone it is` });
+              // Heat or cool the person didn't name: never a guess against the room ("bedroom AC 21" on a cold night
+              // isn't cooling). The AC's mode when it's on; when it's off, heat if the room is colder than the target.
+              if (zc.hvac && !MODE_WORDS.test(this.question)) {
+                const units = Object.keys(this.ai.reg.expandTargets({ [`zone:${rid}`]: zc as unknown as Command })).map(id => this.ai.reg.get(id)).filter((u): u is Device => !!u);
+                const u = units[0];
+                const temp = this.ai.reg.list().find(t => t.room === rid && typeof t.state.temp === 'number' && t.type === 'sensor')?.state.temp ?? u?.state.temp;
+                if (u?.state.on && u.state.hvac && ['heat', 'cool'].includes(String(u.state.hvac))) zc.hvac = u.state.hvac as typeof zc.hvac;
+                else if (typeof temp === 'number' && zc.target != null) zc.hvac = temp < zc.target ? 'heat' : temp > zc.target ? 'cool' : zc.hvac;
+              }
               targets[`zone:${rid}`] = zc as unknown as Command;
               continue;
             }
@@ -1530,7 +1544,7 @@ const SYSTEM = `You are Ask Kova, the assistant for a smart home hub. The hub's 
 Use the tools to act: set_devices, start_overlay, end_overlay, explain_device, list_schedule, create_automation, update_automation, delete_automation, create_room, rename_room, delete_room, update_device, combine_devices, separate_devices, remember, forget, review_action. Only use device, room, overlay, mode and person ids from the home context below; never invent ids. When the user answers a question you just asked (yes, sure, the second one, do it), read the recent conversation to see what it refers to before answering.
 Anything asked to happen regularly, at a time, or when something else happens is an automation — build it with create_automation, then tell the user what it will do in the words the tool returns. A single change later ("at 9pm", "in an hour") is a one-time schedule: create_automation with a once trigger.
 For destructive, broad, privacy-sensitive, security-sensitive, or hard-to-undo actions, call review_action first. If it says confirm, ask the user to confirm before acting; if it says block, do not do it. Do not use it for routine light, media, or climate changes.
-Ducted air conditioner zones are numbered; a zone only has a name when the state lists one, and the rooms it serves when "AC zones by room" lists them. For a room ("cool the bedroom", "turn off the AC in the study", "open the lounge zone to 50%") use set_devices with id "zone:<room id>": "cool"/"heat" opens the zone with set.hvac; "turn off the AC in" a room only closes its zone (Kova turns the AC off by itself when no zone is left open); never turn the whole AC off for one room. If a room has no zone listed, ask which zone serves it instead of guessing.
+Ducted air conditioner zones are numbered; a zone only has a name when the state lists one, and the rooms it serves when "AC zones by room" lists them. For a room ("cool the bedroom", "turn off the AC in the study", "open the lounge zone to 50%") use set_devices with id "zone:<room id>": "cool"/"heat" opens the zone with set.hvac; when the person doesn't say heat or cool, keep the AC's mode (when it's off, heat if the room is colder than the target). Turning the AC on for a room when it's off opens only that room (Kova closes the rest); when it already runs, say which other rooms' zones are open. "turn off the AC in" a room only closes its zone (Kova turns the AC off by itself when no zone is left open); never turn the whole AC off for one room. If a room has no zone listed, ask which zone serves it instead of guessing.
 Big requests come in several parts: work through every part, one tool call per change, and check each result before the next step. Several things that are "the same device" go into ONE combine_devices call; to add to a device that is already combined, pass its combined id with the new members (no need to separate it first).
 Rooms: use a room only if it is in the Rooms list under that name (or plainly the same name, e.g. "living" for "Living room"). If the user names a room that isn't there ("entryway" when there is only "Front door"), create it with create_room and use the id it returns — never put the device in a different room that seems close. If you can't tell whether they mean an existing room, ask. In the reply, call every room by the name the tool result gives.
 When a tool call fails because of how it was written (an unknown kind, a bad time, a wrong id), correct it and call again — the error says what to send instead. Never ask the user about formats, ids, schemas or tool shapes; they don't know them and shouldn't see them. Ask the user only about real choices (which automations, which room).
@@ -1547,6 +1561,9 @@ const FAILURE_WORDS = new Set(['couldn’t', 'couldnt', 'couldn', 'change', 'eve
 
 /** A reply that says something didn't or can't happen. */
 const NEGATIVE = /\b(can[’']?t|cannot|couldn[’']?t|didn[’']?t|unable|not able|isn[’']?t|aren[’']?t|doesn[’']?t|has no|have no|no such|failed|wasn[’']?t|won[’']?t|not possible)\b/i;
+
+/** A reply that says it changed something ("Done", "Master Bed zone set to 19°", "Turned the lamp off"). */
+const CLAIMED = /^\s*(all )?done\b|\b(set to|turned (on|off)|switched (on|off)|now (heating|cooling|on|off)|opened|closed|is now)\b/i;
 
 /** "All done", "Done.", "Everything's set" at the start of a reply. */
 const OVERCLAIM = /^\s*(all done|done|all set|all sorted|sorted|everything('s| is)? (done|set|sorted|taken care of))\b[\s.!:,;—–-]*/i;
@@ -1895,9 +1912,16 @@ export class AiAssistant {
         cause: { kind: 'assistant', label: 'Ask Kova' },
       });
       tools = new Toolbox(this, ctx, opts.onSteps);
+      tools.question = q;
       const key = norm(q);
       let result: EngineResult;
-      try { result = await e.run(system, chat, tools); } catch (err) {
+      try {
+        result = await e.run(system, chat, tools);
+        // It said it did something but called no tool: one more go, told so, before the reply is checked.
+        if (!tools.called.length && !result.unfinished && CLAIMED.test(cleanReply(result.text))) {
+          result = await e.run(system, [...chat, { role: 'assistant', content: result.text }, { role: 'user', content: 'You didn’t call any tool, so nothing changed. If I asked for a change, make it now with the tools; if you can’t, say so plainly.' }], tools);
+        }
+      } catch (err) {
         const msg = err instanceof AiError ? err.message : `${e.label} failed: ${err instanceof Error ? err.message : String(err)}`;
         // Anything already done stays undoable, and the reply says what it was.
         const out = tools.called.length ? honestReply('', tools.outcome(), { error: msg, changed: tools.changedAnything }).text : msg;

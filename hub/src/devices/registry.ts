@@ -309,6 +309,13 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
       const d = this.devices.get(id), c = expanded[id];
       if (d && c?.zoneSet && c.on === undefined && d.state.on && allClosedAfter(d, c.zoneSet)) c.on = false;
     }
+    // An AC that was off, turned on for some rooms: only their zones. Zones left open from before close ("the bedroom
+    // at 21°" doesn't also heat the lounge because its zone was open when the AC went off).
+    for (const [id, c] of Object.entries(expanded)) {
+      const d = this.devices.get(id);
+      if (!d || !c.zoneSet || c.on !== true || d.state.on === true) continue;
+      for (const z of d.state.zones ?? []) if (z.on && !c.zoneSet[String(z.n)]) c.zoneSet[String(z.n)] = { on: false };
+    }
     return expanded;
   }
 

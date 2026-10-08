@@ -145,8 +145,8 @@ test('Zone targets resolve to the unit serving the room, merge, and close the un
   assert.deepEqual(reg.expandTargets({ 'zone:music': { on: true } as never }), {}, 'no zone serves the music room');
   assert.deepEqual(zoneCommands('lounge', { on: true, ac: false }, reg.list(), h.hub.config.get().devices!), { ducted_ac: { zoneSet: { 1: { on: true } }, on: false } });
 
-  // Running: open the lounge to 50% with the unit cooling; then close the zones one by one.
-  await h.hub.engine.applyMany({ 'zone:lounge': { on: true, open: 50, hvac: 'cool' } as never }, { kind: 'user', label: 'You' });
+  // Running: open the lounge to 50% and the kitchen with the unit cooling; then close the zones one by one.
+  await h.hub.engine.applyMany({ 'zone:lounge': { on: true, open: 50, hvac: 'cool' } as never, 'zone:kitchen': { on: true } as never }, { kind: 'user', label: 'You' });
   assert.deepEqual([h.zone(1).on, h.zone(1).open], [true, 50]);
   assert.equal(reg.get('ducted_ac')!.state.on, true);
   assert.equal(reg.get('ducted_ac')!.state.hvac, 'cool');
@@ -343,5 +343,17 @@ test('Zones named like rooms link to them by themselves, once; a link the owner 
   // Renamed to another room's name: that's new, so it links.
   assert.equal((await h.patch('ducted_ac', { zoneNames: { 1: 'Kitchen' } })).statusCode, 200);
   assert.deepEqual(s().zoneRooms?.['1'], ['kitchen']);
+  await h.done();
+});
+
+test('The AC off with a zone left open from before: turning it on for one room opens only that room', async () => {
+  const h = await setup(mapped);
+  const reg = h.hub.reg;
+  await reg.command('ducted_ac', { on: false, zones: reg.get('ducted_ac')!.state.zones!.map(z => ({ ...z, on: z.n === 1 })) }, { kind: 'user', label: 'You' });
+  const only = reg.expandTargets({ 'zone:guest': { on: true, hvac: 'heat', target: 21 } as never });
+  assert.deepEqual(only.ducted_ac!.zoneSet, { 1: { on: false }, 5: { on: true } }, 'the lounge zone left open closes');
+  // Already running: other open zones are left as they are.
+  await reg.command('ducted_ac', { on: true }, { kind: 'user', label: 'You' });
+  assert.deepEqual(reg.expandTargets({ 'zone:guest': { on: true } as never }).ducted_ac!.zoneSet, { 5: { on: true } });
   await h.done();
 });
