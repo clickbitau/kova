@@ -1,9 +1,13 @@
 {
   "//": "The Kova app's version (docs/VERSIONING.md). store: the X.Y.0 a store binary on this train carries (app.json version). version: what runs, store or over the air (X.Y.Z, PATCH only). train: the native runtime (app.json runtimeVersion). history: newest first; an over-the-air release adds an entry.",
-  "train": "kova-mobile-0.2",
-  "store": "0.2.0",
-  "version": "0.2.40",
+  "train": "kova-mobile-0.3",
+  "store": "0.3.0",
+  "version": "0.3.0",
   "history": [
+    {
+      "version": "0.3.0",
+      "title": "Talk to Ask Kova: in your phone's language or Bangla, and hear the answer"
+    },
     {
       "version": "0.2.40",
       "title": "Try the demo, privacy policy, location asked first; talk to Ask Kova (with the new app build)"

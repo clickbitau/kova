@@ -2,8 +2,8 @@
   "expo": {
     "name": "Kova",
     "slug": "kova",
-    "version": "0.2.0",
-    "runtimeVersion": "kova-mobile-0.2",
+    "version": "0.3.0",
+    "runtimeVersion": "kova-mobile-0.3",
     "updates": {
       "enabled": true,
       "url": "https://updates.invalid/api/app/manifest",

@@ -11,7 +11,17 @@
         "date": "2026-10-01"
       }
     ],
-    "kova-mobile-0.2": []
+    "kova-mobile-0.2": [
+      {
+        "build": 3,
+        "platform": "android",
+        "channel": "play-internal",
+        "version": "0.2.0",
+        "fingerprint": "6b2641ee54bc921705ce0165cfcda8f83e1ffc1fc43f3add0d3c0f50988e9b11",
+        "date": "2026-10-08"
+      }
+    ],
+    "kova-mobile-0.3": []
   },
   "approved": {
     "mobile": []
