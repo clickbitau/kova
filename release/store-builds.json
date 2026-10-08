@@ -39,7 +39,24 @@
         "date": "2026-10-08"
       }
     ],
-    "kova-mobile-0.4": []
+    "kova-mobile-0.4": [
+      {
+        "build": 7,
+        "platform": "ios",
+        "channel": "testflight",
+        "version": "0.4.0",
+        "fingerprint": "45a38aa38829fd53f714087853e29e4c3f6430a2baa42194d5fdf5a9aa2b2511",
+        "date": "2026-10-08"
+      },
+      {
+        "build": 5,
+        "platform": "android",
+        "channel": "play-internal",
+        "version": "0.4.0",
+        "fingerprint": "45a38aa38829fd53f714087853e29e4c3f6430a2baa42194d5fdf5a9aa2b2511",
+        "date": "2026-10-08"
+      }
+    ]
   },
   "approved": {
     "mobile": []
