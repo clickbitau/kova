@@ -1,6 +1,6 @@
 {
   "name": "@kova/hub",
-  "version": "0.7.87",
+  "version": "0.7.88",
   "private": true,
   "type": "module",
   "engines": {

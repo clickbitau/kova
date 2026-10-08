@@ -493,7 +493,17 @@ export class HelixAdapter implements Adapter {
         if (p.playback !== undefined && this.live) this.fromPlayers(b, p);
         else if (old && old.online !== b.online) this.observe(b.kovaId, { ...(this.observed.get(b.kovaId) ?? boxState(null, b.online)), online: b.online, ...(b.online ? {} : { on: false, media: null, paused: false }) }, 'video');
       }
-      // A box Helix no longer lists (unpaired): gone from Kova too, so it doesn't count as a screen.
+      // A box Kova has known that Helix doesn't list right now (asleep or off, a Helix restart, a Helix that leaves
+      // some out) stays, offline: automations, screens and modes that name it keep working. Removing it is the
+      // owner's call (archive it in Kova).
+      for (const k of this.known.values()) {
+        if (now.has(k.kovaId) || players.some(p => p.id === k.id)) continue;
+        const old = this.boxes.get(k.kovaId);
+        const b: Box = { id: k.id, kovaId: k.kovaId, name: k.name, online: false, asleep: false, suspended: false, caps: old?.caps ?? null, soundbar: old?.soundbar ?? false };
+        if (!old) fresh.push(b);
+        else if (old.online) this.observe(b.kovaId, { ...(this.observed.get(b.kovaId) ?? boxState(null, false)), online: false, on: false, media: null, paused: false }, 'video');
+        now.set(b.kovaId, b);
+      }
       const gone = [...this.boxes.keys()].filter(id => !now.has(id));
       this.boxes = now;
       if (gone.length) this.ctx.retract(gone);
