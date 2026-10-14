@@ -238,7 +238,7 @@ export function snapshot(hub: Hub) {
     // `watts` / `typicalWatts`: what a device with no meter draws while on, the owner's figure and Kova's (Energy page).
     // `kind`: device (something to control), sensor (only reports) or camera. Sensors stay here so ids keep working.
     // `live` (cameras): whether the apps can play its live video (its integration streams it over WebRTC).
-    devices: reg.list().map(d => ({ ...d, kind: kindOf(d), why: engine.why(d.id), usedIn: engine.usedIn(d.id), ...wattsSetting(d, cfg.devices?.[d.id]?.watts), ...zoneSettings(d, cfg), ...liveSetting(reg, d), ...(canAnnounce(d) ? { canAnnounce: true, announceTrim: trimOf(cfg, d.id) } : {}) })),
+    devices: reg.list().map(d => ({ ...d, kind: kindOf(d), why: engine.why(d.id), usedIn: engine.usedIn(d.id), ...wattsSetting(d, cfg.devices?.[d.id]?.watts), ...zoneSettings(d, cfg), ...(d.type === 'vacuum' ? { areaRooms: cfg.devices?.[d.id]?.areaRooms ?? {} } : {}), ...liveSetting(reg, d), ...(canAnnounce(d) ? { canAnnounce: true, announceTrim: trimOf(cfg, d.id) } : {}) })),
     modes,
     current: {
       modeId: mn.mode.id, since: mn.since, until: mn.until, untilLabel: clock(mn.until, tz), nextId: mn.next.id,

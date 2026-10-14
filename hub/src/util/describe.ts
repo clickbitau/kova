@@ -1,4 +1,5 @@
 import type { Command, Device, DeviceType, Capability } from '../model/types.ts';
+import { robotWords } from './robot.ts';
 import { zoneCommandWords, type ZoneCommand } from './zones.ts';
 
 export const CAPS: Record<DeviceType, Capability[]> = {
@@ -20,7 +21,7 @@ export const FIELD_CAP: Record<string, Capability> = {
   activity: 'vacuum', battery: 'battery', paused: 'pause', input: 'input', skip: 'queue', shuffle: 'queue',
   muted: 'mute', sound: 'sound', night: 'sound', volStep: 'volume',
   hvac: 'climate', target: 'climate', fanSpeed: 'climate', zoneSet: 'zones', zones: 'zones', extras: 'extras',
-  fanLevel: 'purifier', display: 'purifier', childLock: 'purifier',
+  fanLevel: 'purifier', display: 'purifier', childLock: 'purifier', robotSet: 'vacuum', robot: 'vacuum',
 };
 
 /** Drop fields the device can't do, so a mode can target mixed brands safely. */
@@ -53,11 +54,13 @@ export function targetLabel(d: Device, t: Command): string {
     t.display !== undefined && `display ${t.display ? 'on' : 'off'}`,
     t.fanLevel != null && !said.includes(`speed ${t.fanLevel}`) && `speed ${t.fanLevel}`,
     ...Object.entries(t.extras ?? {}).map(([k, v]) => typeof v === 'boolean' ? `${k} ${v ? 'on' : 'off'}` : `${k} ${v}`),
+    t.robotSet && robotWords(t.robotSet),
   ].filter(Boolean);
   return more.length ? `${head} · ${more.join(', ')}` : head;
 }
 
 function targetHead(d: Device, t: Command): string {
+  if (d.type === 'vacuum' && t.robotSet && t.on === undefined && t.activity === undefined) return d.name;
   if (d.type === 'vacuum') return t.on === false || t.activity === 'returning' || t.activity === 'docked' ? `${d.name} docks` : `${d.name} cleans`;
   if (d.type === 'fan' && t.fanLevel != null && !t.mode) return `${d.name} on speed ${t.fanLevel}`;
   if (d.type === 'fan') return `${d.name} on ${t.mode ?? (t.on === false ? 'off' : 'Auto')}`;

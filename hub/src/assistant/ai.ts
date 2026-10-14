@@ -7,6 +7,7 @@ import type { Store } from '../store/db.ts';
 import { ROOM_ICONS, UNASSIGNED_ROOM, WHOLE_HOME, type Automation, type Cause, type Command, type Device, type Targets } from '../model/types.ts';
 import { FIELD_CAP, isPlayer, pseudoLabel, targetLabel } from '../util/describe.ts';
 import { cleanZoneCommand, ZONE_FIELDS, zonesServing, type ZoneCommand } from '../util/zones.ts';
+import { cleanRobotSet, robotContext } from '../util/robot.ts';
 import { hardwareSummary, hasHardware } from '../util/hardware.ts';
 import { announceWithoutMedia, CheckError, checkAutomation } from '../engine/automation-check.ts';
 import { canAnnounce, isSpeakerGroup, trimOf } from '../engine/announce.ts';
@@ -177,7 +178,7 @@ export function saveSettings(store: Store, patch: SettingsPatch): AssistantSetti
 export const TOOLS = [
   {
     name: 'set_devices',
-    description: 'Change one or more devices. Only use device ids from the home context. bri is brightness 1-100, k is colour temperature in Kelvin, color is #rrggbb, vol is volume 0-100. Turning a speaker or TV off also stops what it plays. paused pauses or carries on (devices with the pause capability). media on a device with the library capability is a film or show title to find and play there (a Helix box). On a speaker with the queue capability, media can also be Helix music: "Shuffle all", "Loved", a playlist title, or "Station: <artist, album or song>"; shuffle true plays it in a shuffled order; skip 1 is the next song, -1 the previous. media can also be a named playable source from the context (ambient loops, radio streams) — prefer those over a station when the name matches. Any other field a device shows in its state is set through "set" — e.g. {"childLock": true}, {"display": false} or {"mode": "Sleep"} on a purifier, {"hvac": "cool", "target": 23, "fanSpeed": "low"} on an air conditioner, {"input": "hdmi1"}, {"muted": true} or {"night": true} on a TV or soundbar, {"zoneSet": {"1": {"on": true, "open": 50}, "2": {"on": false}}} for the named zones of a ducted air conditioner (a zone key can also be the id of a room it serves), {"extras": {"eco": true}} for the extra switches a device lists under "extras". Only fields the device actually lists in its state can be set. A room’s air conditioner zone (see "AC zones by room") is the id "zone:<room id>": on opens (true) or closes (false) the zone, open is how far open 0-100, set.hvac / set.target / set.fanSpeed run the AC itself (a mode turns it on), ac true or false turns the whole AC on or off.',
+    description: 'Change one or more devices. Only use device ids from the home context. bri is brightness 1-100, k is colour temperature in Kelvin, color is #rrggbb, vol is volume 0-100. Turning a speaker or TV off also stops what it plays. paused pauses or carries on (devices with the pause capability). media on a device with the library capability is a film or show title to find and play there (a Helix box). On a speaker with the queue capability, media can also be Helix music: "Shuffle all", "Loved", a playlist title, or "Station: <artist, album or song>"; shuffle true plays it in a shuffled order; skip 1 is the next song, -1 the previous. media can also be a named playable source from the context (ambient loops, radio streams) — prefer those over a station when the name matches. Any other field a device shows in its state is set through "set" — e.g. {"childLock": true}, {"display": false} or {"mode": "Sleep"} on a purifier, {"hvac": "cool", "target": 23, "fanSpeed": "low"} on an air conditioner, {"input": "hdmi1"}, {"muted": true} or {"night": true} on a TV or soundbar, {"zoneSet": {"1": {"on": true, "open": 50}, "2": {"on": false}}} for the named zones of a ducted air conditioner (a zone key can also be the id of a room it serves), {"extras": {"eco": true}} for the extra switches a device lists under "extras". A robot vacuum (state.robot) takes {"robotSet": {…}}: "rooms": [room ids] cleans just those rooms (only rooms its robot.rooms lists; it starts by itself, no on needed), "areas": [map area ids], "suction": quiet|standard|max|max+, "mode": both|vacuum|mop|mopAfter, "water": 1…waterMax, "passes": 1|2, "station": empty|wash|dry runs a base station job, "locate": true plays its “I’m here” sound, "resetPart": a part id after replacing it, "settings": {carpetBoost, obstacles, childLock, voice, resume, voiceAssistant, autoUpdate, autoEmpty: true/false or a number, quiet: {on, start: "22:00", end: "08:00"}, dryMinutes}. on true cleans the whole home, on false sends it to its dock, activity "paused" pauses. Only fields the device actually lists in its state can be set. A room’s air conditioner zone (see "AC zones by room") is the id "zone:<room id>": on opens (true) or closes (false) the zone, open is how far open 0-100, set.hvac / set.target / set.fanSpeed run the AC itself (a mode turns it on), ac true or false turns the whole AC on or off.',
     parameters: {
       type: 'object',
       properties: {
@@ -400,7 +401,7 @@ export interface AskStep { tool: string; label: string; status: 'working' | 'ok'
 export interface AskOutcome { done: string[]; couldnt: string[] }
 
 /** Fields that are readings, not commands — never settable through `set`. */
-const READONLY = new Set(['power', 'energy', 'grid', 'load', 'temp', 'humidity', 'lux', 'pm25', 'airQuality', 'filterLife', 'battery', 'online', 'track', 'fanLevelMax', 'zones']);
+const READONLY = new Set(['robot', 'power', 'energy', 'grid', 'load', 'temp', 'humidity', 'lux', 'pm25', 'airQuality', 'filterLife', 'battery', 'online', 'track', 'fanLevelMax', 'zones']);
 
 /** Models sometimes send a list argument as a JSON string — accept it. */
 /**
@@ -944,6 +945,15 @@ export class Toolbox {
                 const cap = FIELD_CAP[key];
                 if (!cap || READONLY.has(key) || !d.capabilities.includes(cap)) continue;
                 if (ENUMS[key] && !(typeof v === 'string' && ENUMS[key]!.includes(v))) continue;
+                // robotSet: rooms (room ids, through the robot's map), suction, mode, a station job, settings…
+                if (key === 'robotSet') {
+                  try {
+                    const raw = { ...(v as Record<string, unknown>) };
+                    if (raw.rooms != null) raw.rooms = (Array.isArray(raw.rooms) ? raw.rooms : [raw.rooms]).map(r => this.roomId(r) ?? String(r));
+                    c.robotSet = cleanRobotSet(raw);
+                  } catch (e) { skipped.push(`${d.name}: ${(e as Error).message}`); }
+                  continue;
+                }
                 if (key === 'zoneSet') {
                   const zs = cleanZoneSet(this.zoneKeys(d, v));
                   if (zs) c.zoneSet = zs;
@@ -1708,6 +1718,8 @@ export class AiAssistant {
         const zoneNames = cfg.devices?.[d.id]?.zoneNames, zoneRooms = cfg.devices?.[d.id]?.zoneRooms;
         parts.state = Object.fromEntries(Object.entries({ on: s.on, bri: s.bri, k: s.k, color: s.color, mode: s.mode, media: s.media, song: s.track ? `${s.track.title}${s.track.artist ? ` by ${s.track.artist}` : ''}` : undefined, shuffle: s.shuffle || undefined, paused: s.paused || undefined, vol: s.vol, hvac: s.hvac, target: s.target, temp: s.temp, humidity: s.humidity, lux: s.lux, fanSpeed: s.fanSpeed, extras: s.extras, fanLevel: s.fanLevel, fanLevelMax: s.fanLevelMax, airQuality: s.airQuality, pm25: s.pm25, filterLife: s.filterLife, display: s.display, childLock: s.childLock, battery: s.battery, activity: s.activity, zones: s.zones?.map(z => ({ zone: z.n, ...(zoneNames?.[String(z.n)] ? { name: zoneNames[String(z.n)] } : {}), ...(zoneRooms?.[String(z.n)]?.length ? { rooms: zoneRooms[String(z.n)]!.map(r => roomAlias.get(r) ?? r) } : {}), on: z.on, open: z.open, ...(typeof z.temp === 'number' ? { temp: z.temp } : {}) })),
           // Server hardware (the router, from Warden's BMC): what it draws, its power supplies, redundancy, temperatures and fans.
+          // Robot vacuums: how it cleans, its base station, the rooms of its map (areas the owner gave a room), wear and settings.
+          ...(s.robot ? { robot: robotContext(s.robot, cfg.devices?.[d.id]?.areaRooms, r => roomAlias.get(r) ?? r) } : {}),
           ...(hasHardware(d) ? { watts: s.power, supplies: s.supplies?.map(x => x.ok ? `${x.name}: OK` : `${x.name}: ${x.problem ?? 'not OK'}`), redundancy: s.redundancy, sensors: s.sensors?.map(x => `${x.name} ${x.value}${x.kind === 'temp' ? '°C' : ' RPM'}`), fanMode: s.fanMode, fanPercent: s.fanPercent, health: hardwareSummary(d) } : {}),
           online: s.online }).filter(([, v]) => v !== undefined && v !== null));
       }

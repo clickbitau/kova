@@ -67,6 +67,8 @@ export const ROUTES: Record<string, Rule> = {
 
   // ---- switching devices (a child or a guest: only theirs)
   'POST /api/devices/:id': r('control', { device: 'id' }),
+  // A robot vacuum's floor map: for whoever may run the robot (it's where it cleans).
+  'GET /api/devices/:id/map': r('control', { device: 'id' }),
   'POST /api/rooms/:id/off': r('control', { room: 'id' }),
   'POST /api/room-climate/:room': r('control', { room: 'room' }),
   'POST /api/lights/off': r('control'),

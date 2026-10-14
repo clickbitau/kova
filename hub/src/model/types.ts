@@ -53,6 +53,8 @@ export interface DeviceState {
   load?: number | null;
   /** Robot vacuum: what it's doing. `on` is true while cleaning. */
   activity?: VacuumActivity;
+  /** Robot vacuums: how they clean, their base station, wear, map areas and settings, as far as the model reports them. */
+  robot?: RobotState | null;
   /** Battery charge 0–100. */
   battery?: number | null;
   /** Climate (the `climate` capability): what it's doing when on, the temperature it aims for and the room's, in °C, and its fan. */
@@ -108,6 +110,106 @@ export interface Track { title: string; artist?: string; album?: string; art?: s
 
 export type VacuumActivity = 'cleaning' | 'returning' | 'docked' | 'paused' | 'idle' | 'error';
 
+/** How hard a robot vacuum sucks. */
+export type Suction = 'quiet' | 'standard' | 'max' | 'max+';
+export const SUCTIONS: readonly Suction[] = ['quiet', 'standard', 'max', 'max+'];
+/** What a robot's clean does: vacuum, mop, both at once, or vacuum first and mop after. */
+export type CleanMode = 'vacuum' | 'mop' | 'both' | 'mopAfter';
+export const CLEAN_MODES: readonly CleanMode[] = ['both', 'vacuum', 'mop', 'mopAfter'];
+/** What a robot's base station is doing. */
+export type StationState = 'idle' | 'emptying' | 'washing' | 'drying';
+/** A base station job to run now. */
+export type StationJob = 'empty' | 'wash' | 'dry';
+export const STATION_JOBS: readonly StationJob[] = ['empty', 'wash', 'dry'];
+
+/** A robot's settings, as far as the model has them (each one absent where it doesn't). */
+export interface RobotSettings {
+  /** More suction on carpet. */
+  carpetBoost?: boolean;
+  /** Sees and goes round things on the floor (Ecovacs TrueDetect). */
+  obstacles?: boolean;
+  /** The robot's own buttons don't work. */
+  childLock?: boolean;
+  /** Its voice, 0…voiceMax. */
+  voice?: number;
+  voiceMax?: number;
+  /** Goes back to finish a clean after recharging mid-way. */
+  resume?: boolean;
+  /** Do not disturb: no voice and no cleaning starts by itself between these local times ("22:00"–"08:00"). */
+  quiet?: { on: boolean; start: string; end: string };
+  /** Answers its own wake word (Ecovacs YIKO). */
+  voiceAssistant?: boolean;
+  /** Installs its own software updates. */
+  autoUpdate?: boolean;
+  /** The base station empties the dust bin by itself after a clean. */
+  autoEmpty?: boolean;
+  /** How long the station dries the mop after washing, in minutes. */
+  dryMinutes?: number;
+}
+
+/** A part that wears: brush, filter, mop… `left` is % of its life left, `hoursLeft` the hours that is. */
+export interface RobotPart { id: string; name: string; left: number; hoursLeft: number | null }
+/** One area of a robot's map, as the robot numbers it, with its name in the robot's app ("" when it has none). */
+export interface RobotArea { id: string; name: string }
+
+export interface RobotState {
+  suction?: Suction | null;
+  mode?: CleanMode | null;
+  /** Mop water, 1…waterMax. */
+  water?: number | null;
+  waterMax?: number;
+  /** Times it goes over each place (1 or 2). */
+  passes?: number | null;
+  /** Mop pads fitted. */
+  mop?: boolean | null;
+  station?: StationState | null;
+  /** The base station jobs it can run (`StationJob`s). */
+  stationJobs?: StationJob[];
+  parts?: RobotPart[];
+  areas?: RobotArea[];
+  /** The clean now (or the last one): m² and minutes. */
+  last?: { area: number; minutes: number } | null;
+  /** Every clean so far: m², hours and how many. */
+  totals?: { area: number; hours: number; count: number } | null;
+  /** What's wrong, in words (empty when nothing is). */
+  problems?: { code: number; text: string }[];
+  settings?: RobotSettings;
+  firmware?: string | null;
+  /** Wi-Fi signal in dBm. */
+  wifi?: number | null;
+  /** Whether Kova has its map to show (GET /api/devices/:id/map). */
+  map?: boolean;
+  /** Ecovacs: how keen its obstacle avoidance is, kept so turning it on again keeps it. */
+  obstacleLevel?: number;
+}
+
+/** A robot's floor map, to show and to pick areas on: SVG paths in map pixels inside `viewBox` [x, y, width, height],
+ *  each area's shape and middle (for its label), the walls (a line for each, gaps at doorways), and the dock. */
+export interface RobotMap {
+  viewBox: [number, number, number, number];
+  areas: { id: string; path: string; x: number; y: number }[];
+  walls: string;
+  dock: { x: number; y: number } | null;
+}
+
+/**
+ * What to ask of a robot vacuum, beyond start and dock (`on`, `activity`): clean only some rooms (Kova room ids, through
+ * the areas the owner gave them) or map areas, change how it cleans, run a base station job, play its "I'm here" sound,
+ * reset a part's wear after replacing it, and change its settings. Momentary: what it does then shows in `robot`.
+ */
+export interface RobotCommand {
+  rooms?: string[];
+  areas?: string[];
+  suction?: Suction;
+  mode?: CleanMode;
+  water?: number;
+  passes?: number;
+  station?: StationJob;
+  locate?: boolean;
+  resetPart?: string;
+  settings?: Partial<Omit<RobotSettings, 'voiceMax'>>;
+}
+
 export type Capability = 'onoff' | 'brightness' | 'colorTemp' | 'color' | 'fanMode' | 'media' | 'volume' | 'power' | 'energy' | 'events' | 'vacuum' | 'battery' | 'pause' | 'library' | 'input' | 'queue' | 'mute' | 'sound' | 'climate' | 'zones' | 'purifier' | 'extras';
 
 export interface Device {
@@ -157,6 +259,8 @@ export interface DeviceSettings {
   /** Zones Kova linked to rooms by itself because the zone's name plainly is the room's, by zone, with the name it matched:
    *  once done for a name, never redone, so a link the owner removes stays removed. */
   zoneRoomsAuto?: Record<string, string>;
+  /** Robot vacuums: the Kova room each area of its map is in, by area id ("3": "kitchen"). A room can have several. */
+  areaRooms?: Record<string, string>;
   /**
    * Speakers: how loud announcements play here, in % of the level asked for (100 = as asked). A speaker that sounds
    * louder than the rest at the same volume gets less (a soundbar at 60 plays "15%" at 9%), so one level sounds the
@@ -173,6 +277,8 @@ export type Command = Partial<DeviceState> & {
   skip?: number; volStep?: number;
   /** Change some zones of a ducted air conditioner, by zone number: on or off, and how far open. */
   zoneSet?: Record<string, { on?: boolean; open?: number }>;
+  /** Robot vacuums: rooms to clean, how, station jobs and settings (see RobotCommand). */
+  robotSet?: RobotCommand;
 };
 
 /** One zone of a ducted air conditioner, numbered as the unit numbers them. `temp`: the zone's own reading, on systems with a sensor per zone. */

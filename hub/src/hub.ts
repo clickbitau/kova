@@ -147,6 +147,7 @@ export class Hub extends EventEmitter<{ changed: [] }> {
       if (s && this.viaHub(s)) { const base = this.lanBase(); return base ? `${base}/api/sound/${encodeURIComponent(s.name)}.m4a` : s.url; }
       return s?.url;
     }, () => this.config.get().devices ?? {});
+    this.reg.roomName = id => this.config.get().rooms.find(r => r.id === id)?.name ?? id;
     this.reg.sourceLoops = name => { const s = this.config.get().sources.find(x => x.name === name); return !!(s?.loop || s?.helix); };
     this.config.on('changed', () => this.reg.reapplySettings());
     this.config.on('changed', () => this.prepareLoops());

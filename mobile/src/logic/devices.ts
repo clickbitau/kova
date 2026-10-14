@@ -97,6 +97,11 @@ export function stateOf(d: Dev): [string, string] {
   if (d.online === false) return ['Not responding', C.red];
   if (d.type === 'vacuum') {
     const a = d.activity || (d.on ? 'cleaning' : 'idle');
+    // Something wrong at the robot or its station says so first; a station at work says what it's doing.
+    const trouble = d.robot?.problems?.[0]?.text;
+    if (trouble) return [trouble, C.red];
+    const job = d.robot?.station && d.robot.station !== 'idle' ? { emptying: 'Emptying its bin', washing: 'Washing its mop', drying: 'Drying its mop' }[d.robot.station] : null;
+    if (job && a !== 'cleaning') return [`${job}${d.battery != null ? ` · ${d.battery}%` : ''}`, C.blue];
     return [`${VAC[a] || 'Idle'}${d.battery != null ? ` · ${d.battery}%` : ''}`, a === 'error' ? C.red : a === 'cleaning' ? C.amber : C.stone];
   }
   if (d.type === 'fan') {

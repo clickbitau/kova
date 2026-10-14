@@ -1,4 +1,4 @@
-import type { Cause, Command, Device, DeviceState, Track } from '../model/types.ts';
+import type { Cause, Command, Device, DeviceState, RobotMap, Track } from '../model/types.ts';
 
 /**
  * A device as an adapter announces it. The registry fills in the rest.
@@ -61,6 +61,8 @@ export interface Adapter {
   status(): AdapterStatus;
   /** Optional: live camera video over WebRTC, negotiated with the browser through the hub. */
   liveView?: LiveView;
+  /** Optional: a robot vacuum's floor map, its areas as shapes (null until the robot has given one). */
+  floorMap?(device: Device): RobotMap | null;
   /** Optional: a still image from a camera (e.g. of its latest event). */
   snapshot?(device: Device): Promise<Snapshot>;
   /**

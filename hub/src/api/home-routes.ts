@@ -158,7 +158,7 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
   // zoneRooms: ducted units, the rooms each zone serves ({ "1": ["lounge"], "5": ["office", "guest"] }; a room id alone
   // is one room; [] or null clears that zone). Merged by zone, like zoneNames.
   // archived: out of every list, the assistant and alerts, and modes leave it alone, until it's restored.
-  app.patch<{ Params: { id: string }; Body: { name?: string | null; room?: string | null; hidden?: boolean; archived?: boolean; favourite?: boolean; watts?: number | null; zoneNames?: Record<string, string | null>; zoneRooms?: Record<string, string | string[] | null> | null; outdoor?: boolean | null; alerts?: AlertPrefs | null; announceTrim?: number | null } }>('/api/devices/:id/settings', async (req, reply) => {
+  app.patch<{ Params: { id: string }; Body: { name?: string | null; room?: string | null; hidden?: boolean; archived?: boolean; favourite?: boolean; watts?: number | null; zoneNames?: Record<string, string | null>; zoneRooms?: Record<string, string | string[] | null> | null; areaRooms?: Record<string, string | null> | null; outdoor?: boolean | null; alerts?: AlertPrefs | null; announceTrim?: number | null } }>('/api/devices/:id/settings', async (req, reply) => {
     const d = hub.reg.get(req.params.id);
     if (!d) return bad(reply, 'Unknown device', 404);
     const b = req.body ?? {};
@@ -200,9 +200,23 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
         }
       }
     }
+    // areaRooms: robot vacuums, the room each area of its map is in ({ "3": "kitchen" }; null clears an area, or all).
+    if (b.areaRooms !== undefined && b.areaRooms !== null) {
+      if (d.type !== 'vacuum') return bad(reply, `${d.name} isn’t a robot vacuum`);
+      if (typeof b.areaRooms !== 'object' || Array.isArray(b.areaRooms) || Object.keys(b.areaRooms).some(n => !/^\w{1,12}$/.test(n))) return bad(reply, 'areaRooms is { "3": "kitchen", … }');
+      const rooms = hub.config.get().rooms;
+      const unknown = Object.values(b.areaRooms).find(v => v != null && !rooms.some(r => r.id === v));
+      if (unknown) return bad(reply, `Unknown room ${unknown}`);
+    }
     return edit(c => {
       const s = { ...(c.devices?.[d.id] ?? {}) };
       const orig = d.original ?? { name: d.name, room: d.room };
+      if (b.areaRooms === null) delete s.areaRooms;
+      else if (b.areaRooms) {
+        const a = { ...(s.areaRooms ?? {}) };
+        for (const [n, r] of Object.entries(b.areaRooms)) { if (r) a[n] = r; else delete a[n]; }
+        if (Object.keys(a).length) s.areaRooms = a; else delete s.areaRooms;
+      }
       if (b.name !== undefined) { const n = b.name === null ? '' : text(b.name); if (!n || n === orig.name) delete s.name; else s.name = n; }
       if (b.room !== undefined) { if (!b.room || b.room === orig.room) delete s.room; else s.room = b.room; }
       if (b.hidden !== undefined) { if (b.hidden) s.hidden = true; else delete s.hidden; }

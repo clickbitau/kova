@@ -4,6 +4,7 @@ import type { Cause, Command, Device, DeviceSettings, DeviceState, Targets } fro
 import type { Store } from '../store/db.ts';
 import { CAPS, changeSentence, fitCommand, PSEUDO_TARGET, typeMatch } from '../util/describe.ts';
 import { isSensor } from '../util/sensors.ts';
+import { areaName, resolveRooms, robotWords } from '../util/robot.ts';
 import { allClosedAfter, mergeCommand, zoneCommands, type ZoneCommand } from '../util/zones.ts';
 
 /**
@@ -12,7 +13,7 @@ import { allClosedAfter, mergeCommand, zoneCommands, type ZoneCommand } from '..
  * humidity, light and air are readings too, whichever device senses them. A server's power supplies and
  * sensors (the router's BMC) too: a supply that changes comes with an event, and that's logged.
  */
-const MEASUREMENTS = new Set(['online', 'power', 'energy', 'grid', 'load', 'battery', 'activity', 'temp', 'humidity', 'lux', 'pm25', 'airQuality', 'filterLife', 'supplies', 'redundancy', 'sensors', 'fanMode', 'fanPercent']);
+const MEASUREMENTS = new Set(['online', 'power', 'energy', 'grid', 'load', 'battery', 'activity', 'temp', 'humidity', 'lux', 'pm25', 'airQuality', 'filterLife', 'supplies', 'redundancy', 'sensors', 'fanMode', 'fanPercent', 'robot']);
 
 /** Value equality for state fields: objects (extras, zones, track) compare by content, not reference. */
 function same(a: unknown, b: unknown): boolean {
@@ -79,6 +80,8 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
   queueAgain: ((media: string) => void) | null = null;
   /** Whether a name is music (not a radio source), for a plain answer on speakers that can't play a queue. */
   isMusic: ((media: string) => boolean) | null = null;
+  /** A room's name by id, for what's said about a device (the hub gives the home's rooms). */
+  roomName: (id: string) => string = id => id;
 
   /** Whether a source loops (set by the hub from the home's sources). */
   sourceLoops: (name: string) => boolean = () => false;
@@ -235,7 +238,7 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
     const out: Command = {};
     for (const [k, v] of Object.entries(patch)) {
       // A skip or volume step is momentary: always sent, never kept as state.
-      if (k === 'skip' || k === 'volStep' || k === 'zoneSet' || !same((d.state as Record<string, unknown>)[k], v)
+      if (k === 'skip' || k === 'volStep' || k === 'zoneSet' || k === 'robotSet' || !same((d.state as Record<string, unknown>)[k], v)
         || (k === 'input' && !this.inputFresh(d.id))) (out as Record<string, unknown>)[k] = v;
     }
     return out;
@@ -252,6 +255,8 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
       throw new Error(`${d.name} can’t play Helix music yet (Google Cast, Sonos and AirPlay speakers can)`);
     }
     const patch = this.diff(d, fitCommand(d, cmd));
+    // A robot told to clean rooms cleans the areas of its map the owner gave those rooms.
+    if (patch.robotSet?.rooms) patch.robotSet = resolveRooms(d, patch.robotSet, this.settings()[d.id]?.areaRooms, r => this.roomName(r));
     if (!Object.keys(patch).length) return {};
     const adapter = this.adapters.get(d.adapter);
     if (!adapter) throw new Error(`No adapter ${d.adapter} for ${id}`);
@@ -269,14 +274,16 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
     if (typeof patch.input === 'string' && patch.input) this.recordInput(d.id, patch.input, cause, before);
     this.noteState(d, { ...patch, ...(did ?? {}) } as DeviceState);
     // zoneSet is a change to some zones: what's kept is the zones as the adapter reports them after it.
-    const { skip: _skip, volStep: _step, zoneSet: _zones, ...kept } = did ? { ...patch, ...did } : patch;
-    // A skip changes the song (which the speaker reports), a step the volume: log it, keep no state for it.
-    if ((_skip || _step) && !Object.keys(kept).length) {
-      const what = _skip ? (_skip > 0 ? 'next song' : 'previous song') : `volume ${_step! > 0 ? 'up' : 'down'}`;
-      this.store.append({ kind: 'state', device: d.id, feed: cause.kind === 'user' || cause.kind === 'assistant' ? 'device' : null, what: `${d.name}: ${what}`, data: { patch }, cause });
+    const { skip: _skip, volStep: _step, zoneSet: _zones, robotSet: _robot, ...kept } = did ? { ...patch, ...did } : patch;
+    // A skip changes the song (which the speaker reports), a step the volume: log it, keep no state for it. A robot's
+    // job, setting or rooms likewise (what it does then, it reports).
+    const robotSaid = _robot && `${d.name}: ${robotWords(_robot, a => areaName(a, d.state.robot?.areas, this.settings()[d.id]?.areaRooms, r => this.roomName(r)), r => this.roomName(r))}`;
+    if ((_skip || _step || _robot) && !Object.keys(kept).length) {
+      const what = robotSaid || `${d.name}: ${_skip ? (_skip > 0 ? 'next song' : 'previous song') : `volume ${_step! > 0 ? 'up' : 'down'}`}`;
+      this.store.append({ kind: 'state', device: d.id, feed: cause.kind === 'user' || cause.kind === 'assistant' ? 'device' : null, what, data: { patch }, cause });
       return {};
     }
-    return this.apply(d, kept, cause, opts.quiet);
+    return this.apply(d, kept, cause, opts.quiet, robotSaid || undefined);
   }
 
   /**
@@ -336,7 +343,7 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
     return { changed, prev, failed };
   }
 
-  private apply(d: Device, patch: Command, cause: Cause, quiet = false): Command {
+  private apply(d: Device, patch: Command, cause: Cause, quiet = false, what?: string): Command {
     const prev: Command = {};
     for (const k of Object.keys(patch)) (prev as Record<string, unknown>)[k] = (d.state as Record<string, unknown>)[k] ?? null;
     d.state = { ...d.state, ...patch };
@@ -348,7 +355,7 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
     const feed = sensor ? ('open' in patch ? 'people' : null) : direct && !quiet ? 'device' : null;
     this.store.append({
       kind: 'state', device: d.id, feed,
-      what: changeSentence(d, prev, patch), data: { patch, prev }, cause,
+      what: what ?? changeSentence(d, prev, patch), data: { patch, prev }, cause,
     });
     this.emit('change', { device: d, prev, patch, cause });
     return prev;

@@ -1,4 +1,4 @@
-import { WHOLE_HOME, type Capability, type HomeConfig, type Targets } from '../model/types.ts';
+import { WHOLE_HOME, type Capability, type HomeConfig, type RobotMap, type Targets } from '../model/types.ts';
 import type { DeviceInfo } from '../adapters/sdk.ts';
 
 // A demo home modelled on a real one (the owner's former Home Assistant setup):
@@ -63,6 +63,36 @@ export const DEMO_DUCTED: DeviceInfo = {
 export const DEMO_ZONE_NAMES: Record<string, string> = { 1: 'Lounge', 2: 'Kitchen', 3: 'Master', 4: 'Baby', 5: 'Office & Guest', 6: 'Music' };
 
 /** The demo home's simulated solar array (about 3 kW, like the real one). */
+/** A robot vacuum with a base station, its map in five areas (two given rooms, so both kinds show). */
+const R = (x: number, y: number, w: number, h: number) => `M${x} ${y}L${x + w} ${y}L${x + w} ${y + h}L${x} ${y + h}Z`;
+export const DEMO_ROBOT_MAP: RobotMap = {
+  viewBox: [-4, -4, 108, 90],
+  areas: [
+    { id: '1', path: R(0, 0, 60, 40), x: 30, y: 20 }, { id: '2', path: R(60, 0, 40, 40), x: 80, y: 20 }, { id: '3', path: R(0, 40, 100, 12), x: 50, y: 46 },
+    { id: '4', path: R(0, 52, 40, 30), x: 20, y: 67 }, { id: '5', path: R(40, 52, 60, 30), x: 70, y: 67 },
+  ],
+  walls: `M0 0L100 0L100 82L0 82Z M60 0L60 16M60 26L60 40L80 40M90 40L100 40 M0 40L20 40M30 40L60 40 M0 52L10 52M20 52L60 52M70 52L100 52 M40 52L40 82`,
+  dock: { x: 96, y: 4 },
+};
+export const DEMO_ROBOT: DeviceInfo = {
+  id: 'robot_vacuum', name: 'Robot vacuum', room: 'kitchen', type: 'vacuum', integration: 'Ecovacs (simulated)', address: 'demo.robot_vacuum',
+  capabilities: ['onoff', 'vacuum', 'battery'],
+  state: {
+    on: false, activity: 'docked', battery: 100, online: true,
+    robot: {
+      suction: 'standard', mode: 'both', water: 28, waterMax: 50, passes: 1, mop: true, station: 'idle', stationJobs: ['empty', 'wash', 'dry'],
+      parts: [
+        { id: 'brush', name: 'Main brush', left: 54, hoursLeft: 162 }, { id: 'sideBrush', name: 'Side brushes', left: 4, hoursLeft: 6 }, { id: 'heap', name: 'Filter', left: 81, hoursLeft: 97 },
+        { id: 'roundMop', name: 'Mop pads', left: 16, hoursLeft: 24 }, { id: 'dustBag', name: 'Dust bag', left: 91, hoursLeft: 45 }, { id: 'unitCare', name: 'Sensors and contacts', left: 70, hoursLeft: 21 },
+      ],
+      areas: ['1', '2', '3', '4', '5'].map(id => ({ id, name: '' })),
+      last: { area: 44, minutes: 60 }, totals: { area: 4820, hours: 124, count: 256 }, problems: [],
+      settings: { carpetBoost: true, obstacles: true, childLock: false, voice: 6, voiceMax: 10, resume: true, quiet: { on: true, start: '22:00', end: '08:00' }, voiceAssistant: true, autoUpdate: false, autoEmpty: true, dryMinutes: 240 },
+      firmware: '1.123.127', wifi: -50, map: true,
+    },
+  },
+};
+
 export const DEMO_SOLAR = { id: 'solar_inverter', lat: -31.95, lon: 115.86, peakW: 2900, tz: 'Australia/Perth' };
 
 export function demoDevices(): DeviceInfo[] {
@@ -75,7 +105,7 @@ export function demoDevices(): DeviceInfo[] {
       : type === 'plug' ? { on: true, power: 14 }
       : type === 'camera' || type === 'sensor' ? { online: true }
       : { on: false },
-  })), ...SENSORS.map(d => ({ ...d, state: { ...d.state } })), structuredClone(DEMO_DUCTED)];
+  })), ...SENSORS.map(d => ({ ...d, state: { ...d.state } })), structuredClone(DEMO_DUCTED), structuredClone(DEMO_ROBOT)];
 }
 
 const LIGHTS = ROWS.filter(r => r[3] === 'light' || r[3] === 'dimmer').map(r => r[0]);
@@ -166,6 +196,6 @@ export function demoConfig(): HomeConfig {
     ],
     groups: {},
     dismissedFindings: [],
-    devices: { ducted_ac: { zoneNames: { ...DEMO_ZONE_NAMES } } },
+    devices: { ducted_ac: { zoneNames: { ...DEMO_ZONE_NAMES } }, robot_vacuum: { areaRooms: { '1': 'lounge', '2': 'kitchen' } } },
   };
 }

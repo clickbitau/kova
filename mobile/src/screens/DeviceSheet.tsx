@@ -18,6 +18,7 @@ import { Button, Card, Chips, Group, IconButton, Notice, IconWell, Pill, HScroll
 import { T } from '../ui/Text';
 import { features, meOf } from '../logic/roles';
 import { CameraStill } from './SecurityScreen';
+import { RobotPanel } from './RobotPanel';
 import { SensorReadings, WatchSettings } from './SensorPanel';
 import { isSensor } from '../logic/sensors';
 import { calibratedVol, trimOf } from '../logic/automations';
@@ -338,26 +339,7 @@ export function DeviceSheet() {
         <Segmented label="Fan mode" value={D.on !== false ? D.mode ?? null : null} color={C.blue} options={[{ id: 'Auto', label: 'Auto', icon: 'auto_mode' }, { id: 'Sleep', label: 'Sleep', icon: 'bedtime' }, { id: 'Manual', label: 'Manual', icon: 'tune' }]} onChange={m => void send(D.id, { on: true, mode: m })} />,
       ) : null}
 
-      {vac ? (
-        <Card style={{ padding: SP[4], gap: SP[4] }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3] }}>
-            <View style={{ flex: 1, gap: 2 }}>
-              <T v="eyebrow" color={C.stone2}>Battery</T>
-              <T v="title" tabular>{D.battery != null ? `${D.battery}%` : '–'}</T>
-            </View>
-            <Tag text={st.split(' · ')[0]} color={sf} />
-          </View>
-          {D.battery != null ? (
-            <View style={{ height: 8, borderRadius: 4, backgroundColor: C.control, overflow: 'hidden' }}>
-              <View style={{ width: `${D.battery}%`, height: 8, borderRadius: 4, backgroundColor: D.battery < 20 ? C.red : C.green }} />
-            </View>
-          ) : null}
-          <View style={{ flexDirection: 'row', gap: SP[2] }}>
-            <View style={{ flex: 1 }}><Button full icon="cleaning_services" label={vac === 'cleaning' ? 'Cleaning' : 'Clean'} kind={vac === 'cleaning' ? 'secondary' : 'primary'} onPress={() => send(D.id, { on: true })} /></View>
-            <View style={{ flex: 1 }}><Button full icon="home" label={vac === 'docked' ? 'Docked' : vac === 'returning' ? 'Returning' : 'Dock'} kind="secondary" onPress={() => send(D.id, { on: false })} /></View>
-          </View>
-        </Card>
-      ) : null}
+      {vac ? <RobotPanel D={D} vac={vac} status={st.split(' · ')[0]!} statusColor={sf} /> : null}
 
       {D.type === 'camera' ? (
         <View style={{ gap: SP[3] }}>

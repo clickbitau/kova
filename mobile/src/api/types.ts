@@ -27,6 +27,8 @@ export interface DeviceState {
   energy?: number | null;
   activity?: string;
   battery?: number | null;
+  /** Robot vacuums: how they clean, their base station, wear, map areas and settings, as far as the model reports them. */
+  robot?: RobotState | null;
   /** Air conditioners (`climate`): cool/heat/dry/fan/auto, the temperature it aims for and the room's (°C), and its fan. */
   hvac?: 'cool' | 'heat' | 'dry' | 'fan' | 'auto' | null;
   target?: number | null;
@@ -63,8 +65,39 @@ export interface DeviceState {
   online?: boolean;
 }
 
+/** A robot vacuum beyond activity and battery (hub model/types.ts RobotState). */
+export interface RobotState {
+  suction?: 'quiet' | 'standard' | 'max' | 'max+' | null;
+  mode?: 'both' | 'vacuum' | 'mop' | 'mopAfter' | null;
+  water?: number | null;
+  waterMax?: number;
+  passes?: number | null;
+  mop?: boolean | null;
+  station?: 'idle' | 'emptying' | 'washing' | 'drying' | null;
+  stationJobs?: ('empty' | 'wash' | 'dry')[];
+  parts?: { id: string; name: string; left: number; hoursLeft: number | null }[];
+  areas?: { id: string; name: string }[];
+  last?: { area: number; minutes: number } | null;
+  totals?: { area: number; hours: number; count: number } | null;
+  problems?: { code: number; text: string }[];
+  settings?: {
+    carpetBoost?: boolean; obstacles?: boolean; childLock?: boolean; voice?: number; voiceMax?: number; resume?: boolean;
+    quiet?: { on: boolean; start: string; end: string }; voiceAssistant?: boolean; autoUpdate?: boolean; autoEmpty?: boolean; dryMinutes?: number;
+  };
+  firmware?: string | null;
+  wifi?: number | null;
+  map?: boolean;
+}
+
+/** What to ask of a robot vacuum (hub RobotCommand): rooms or map areas to clean, how, a station job, its settings. */
+export interface RobotCommand {
+  rooms?: string[]; areas?: string[]; suction?: NonNullable<RobotState['suction']>; mode?: NonNullable<RobotState['mode']>; water?: number; passes?: number;
+  station?: 'empty' | 'wash' | 'dry'; locate?: boolean; resetPart?: string;
+  settings?: Partial<Omit<NonNullable<RobotState['settings']>, 'voiceMax'>>;
+}
+
 /** `skip`: 1 = next song, -1 = previous (speakers with `queue`). `volStep`: 1 = volume up a step, -1 = down. */
-export type Command = Partial<DeviceState> & { skip?: number; volStep?: number; /** Some zones of a ducted air conditioner, by number. */ zoneSet?: Record<string, { on?: boolean; open?: number }> };
+export type Command = Partial<DeviceState> & { skip?: number; volStep?: number; /** Some zones of a ducted air conditioner, by number. */ zoneSet?: Record<string, { on?: boolean; open?: number }>; /** Robot vacuums. */ robotSet?: RobotCommand };
 
 /** device: something to control; sensor: only reports; camera. (hub util/sensors.ts) */
 export type DeviceKind = 'device' | 'sensor' | 'camera';
@@ -85,6 +118,8 @@ export interface Device {
   zoneNames?: Record<string, string>;
   /** Ducted air conditioners: the rooms each zone serves, as the owner confirmed them ({ "5": ["office", "guest"] }). */
   zoneRooms?: Record<string, string[]>;
+  /** Robot vacuums: the room each area of its map is in, by area id. */
+  areaRooms?: Record<string, string>;
   /** Ducted air conditioners: rooms Kova suggests for named zones not confirmed yet, from their names. */
   zoneSuggest?: Record<string, string[]>;
   hidden?: boolean;

@@ -1,6 +1,7 @@
 import type { Adapter, AdapterContext, AdapterStatus, DeviceInfo, Snapshot } from './sdk.ts';
 import SunCalc from 'suncalc';
-import type { Command, Device, DeviceState } from '../model/types.ts';
+import type { Command, Device, DeviceState, RobotMap } from '../model/types.ts';
+import { DEMO_ROBOT, DEMO_ROBOT_MAP } from '../seed/demo-home.ts';
 import { atLocal, localDate } from '../util/time.ts';
 
 /** A simulated solar inverter: power follows the sun's height, as a real array roughly would. */
@@ -104,7 +105,22 @@ ${door
 
   async stop(): Promise<void> { if (this.timer) clearInterval(this.timer); if (this.life) clearInterval(this.life); }
 
+  /** The demo robot's floor map. */
+  floorMap(d: Device): RobotMap | null { return d.id === DEMO_ROBOT.id ? DEMO_ROBOT_MAP : null; }
+
   async command(d: Device, cmd: Command): Promise<void | DeviceState> {
+    // A robot does what it's told (its settings, a station job, rooms to clean) and says so, as a real one does.
+    if (cmd.robotSet && d.state.robot) {
+      const rs = cmd.robotSet, r = { ...d.state.robot, settings: { ...d.state.robot.settings, ...rs.settings } };
+      for (const k of ['suction', 'mode', 'water', 'passes'] as const) if (rs[k] != null) (r as Record<string, unknown>)[k] = rs[k];
+      if (rs.station) r.station = rs.station === 'empty' ? 'emptying' : rs.station === 'wash' ? 'washing' : 'drying';
+      if (rs.resetPart) r.parts = r.parts?.map(p => p.id === rs.resetPart ? { ...p, left: 100 } : p);
+      return { robot: r, ...(rs.areas?.length ? { on: true, activity: 'cleaning' as const } : {}) };
+    }
+    if (d.type === 'vacuum' && (cmd.on !== undefined || cmd.activity)) {
+      const a = cmd.activity ?? (cmd.on ? 'cleaning' : 'returning');
+      return { activity: a, on: a === 'cleaning' };
+    }
     // A real device would acknowledge here; virtual ones always accept. A ducted unit reports its zones back after a
     // change to some of them, as a real one does.
     if (cmd.zoneSet && Array.isArray(d.state.zones)) {

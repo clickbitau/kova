@@ -21,6 +21,7 @@ import { registerEditRoutes } from './edit-routes.ts';
 import { AiAssistant, loadSettings, publicSettings, saveSettings, requestLog, learnedPhrases, forgetPhrase, memoryList, forgetMemory, convoAdd, convoRecent, engineInfo, type AiOptions, type SettingsPatch } from '../assistant/ai.ts';
 import { AskJobs, type AskJob } from '../assistant/ask-jobs.ts';
 import { isLight, isPlayer } from '../util/describe.ts';
+import { areaName } from '../util/robot.ts';
 import type { HomeKitBridge } from '../bridges/homekit.ts';
 import type { MatterBridge } from '../bridges/matter-bridge.ts';
 import { LiveViewUnavailable, NEST_DEFAULT_REDIRECT, exchangeNestCode, nestAuthUrl, type NestOptions } from '../adapters/nest.ts';
@@ -385,6 +386,16 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
     const s = opts.snapLinks?.get(req.params.key);
     if (!s) return reply.code(404).send({ error: 'No such picture' });
     return reply.type(s.contentType).header('cache-control', 'no-store').send(s.body);
+  });
+  // A robot vacuum's floor map: each area's shape, middle, name and the room the owner gave it, the walls and the dock.
+  app.get<{ Params: { id: string } }>('/api/devices/:id/map', async (req, reply) => {
+    const d = hub.reg.get(req.params.id);
+    const a = d && hub.reg.adapters.get(d.adapter);
+    const map = d && a?.floorMap?.(d);
+    if (!d || !map) return reply.code(404).send({ error: d ? `${d.name} hasn’t sent its map yet` : 'Unknown device' });
+    const cfg = hub.config.get(), rooms = cfg.devices?.[d.id]?.areaRooms ?? {};
+    const roomName = (id: string) => cfg.rooms.find(r => r.id === id)?.name ?? id;
+    return { ...map, areas: map.areas.map(x => ({ ...x, name: areaName(x.id, d.state.robot?.areas, rooms, roomName), own: d.state.robot?.areas?.find(y => y.id === x.id)?.name || null, room: rooms[x.id] ?? null })) };
   });
   app.get<{ Params: { id: string } }>('/api/devices/:id/snapshot', async (req, reply) => {
     const d = hub.reg.get(req.params.id);

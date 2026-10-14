@@ -1,5 +1,6 @@
 import type { Command, Device, Rhythm } from '../model/types.ts';
 import { fitCommand } from '../util/describe.ts';
+import { cleanRobotSet } from '../util/robot.ts';
 
 // Checks for anything a person edits: rhythms and device targets.
 
@@ -118,6 +119,7 @@ export function cleanTarget(d: Device, cmd: Command): Command {
     }
     if (Object.keys(ex).length) c.extras = ex; else delete c.extras;
   }
+  if (c.robotSet != null) c.robotSet = cleanRobotSet(c.robotSet);
   if (c.k != null) c.k = Math.max(1500, Math.min(9000, Math.round(Number(c.k))));
   if (c.color != null && !/^#[0-9a-f]{6}$/i.test(String(c.color))) throw new Error('Colour must be #rrggbb');
   if (!Object.keys(c).length) throw new Error(`${d.name} can't do that`);

@@ -4,6 +4,7 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { constants, createHash, generateKeyPairSync, privateDecrypt } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
+import { zstdCompressSync } from 'node:zlib';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Store } from '../src/store/db.ts';
@@ -22,7 +23,11 @@ const sign = (p: Record<string, string>, extra: Record<string, string>, key: str
 function fakeCloud(email: string, password: string) {
   let token = '';
   let n = 0;
-  const bot = { activity: 'docked' as string, battery: 100 };
+  const bot = { activity: 'docked' as string, battery: 100, speed: 1, customAmount: 28, mode: 0, count: 1, carpet: 1, block: { enable: 0, start: '22:0', end: '8:0' }, station: 0, autoEmpty: 1, life: { brush: 9701, sideBrush: 0, heap: 7200, roundMop: 1424, dustBag: 2727, unitCare: 1260 } as Record<string, number>, mts: 100 };
+  // The T50's map: two areas (a kitchen-shaped square and a hall) and their outline, as getMapInfo_V2 / getMapSet_V2 send them.
+  const z = (j: unknown) => zstdCompressSync(Buffer.from(JSON.stringify(j))).toString('base64');
+  const subsets = z([['0', '', '0', '2', '0', '500', '-500', '1-0-2', ' ', '1'], ['2', 'Hall', '0', '0', '0', '1500', '-500', '1-0-2', ' ', '1']]);
+  const info = z([['1', '0;0,0,2;1000,0,2;1000,-1000,2;0,-1000,3-1-0'], ['2', '0;0,0;1000,0;1000,-1000;0,-1000', '2;1000,0;2000,0;2000,-1000;1000,-1000']]);
   const calls: { cmdName: string; data?: unknown; body: Record<string, any>; query: URLSearchParams }[] = [];
   const state = { logins: 0, portalLogins: 0, needsVerify: false, codesSent: 0, verified: 0, expire: () => { token = 'expired-' + token; } };
   // Ecovacs' published key for encrypting the account in the email-verification calls.
@@ -106,6 +111,45 @@ function fakeCloud(email: string, password: string) {
                   : bot.activity === 'error' ? { trigger: 'alert', state: 'idle' } : { trigger: 'none', state: 'idle' });
           case 'clean_V2': bot.activity = d.act === 'pause' ? 'paused' : d.act === 'stop' ? 'idle' : 'cleaning'; return ok();
           case 'charge': bot.activity = 'returning'; return ok();
+          case 'getStationState': return ok({ content: { error: [314], motionState: bot.station ? 1 : 0, type: bot.station }, state: bot.station ? 1 : 0 });
+          case 'getError': return ok({ code: [] });
+          case 'getStats': return ok({ area: 44, time: 3600, start: '1791949918' });
+          case 'getSpeed': return ok({ speed: bot.speed });
+          case 'setSpeed': bot.speed = d.speed; return ok();
+          case 'getWaterInfo': return ok({ customAmount: bot.customAmount, enable: 1, mopCount: 2, sweepType: 1, type: 1 });
+          case 'setWaterInfo': bot.customAmount = d.customAmount; return ok();
+          case 'getWorkMode': return ok({ mode: bot.mode });
+          case 'setWorkMode': bot.mode = d.mode; return ok();
+          case 'getCleanCount': return ok({ count: bot.count });
+          case 'setCleanCount': bot.count = d.count; return ok();
+          case 'getCarpertPressure': return ok({ enable: bot.carpet });
+          case 'setCarpertPressure': bot.carpet = d.enable; return ok();
+          case 'getTrueDetect': return ok({ enable: 1, level: 1 });
+          case 'getChildLock': return ok({ on: 0 });
+          case 'getVolume': return ok({ total: 10, volume: 10 });
+          case 'getBreakPoint': return ok({ enable: 1 });
+          case 'getBlock': return ok(bot.block);
+          case 'setBlock': bot.block = d; return ok();
+          case 'getVoiceAssistantState': return ok({ enable: 1, lifeRemind: 1, wakeupWord: 0 });
+          case 'getAutoEmpty': return ok({ enable: bot.autoEmpty, frequency: 'auto', intensity: 0, status: 0 });
+          case 'getDryingDuration': return ok({ duration: 240 });
+          case 'getTotalStats': return ok({ area: 4820, count: 256, time: 446811 });
+          case 'getNetInfo': return ok({ ip: '10.0.0.9', rssi: '-50', ssid: 'Home' });
+          case 'getOta': return ok({ autoSwitch: 0, supportAuto: 1, status: 'idle', ver: '1.123.127' });
+          case 'getLifeSpan': {
+            // The real bot fails the whole ask for a part it doesn't have ("format error"), and wants a plain list.
+            if (!Array.isArray(d) || d.some((t: string) => !(t in bot.life))) return send({ ret: 'ok', resp: { body: { code: 20003, msg: 'format error' } } });
+            return ok(d.map((t: string) => ({ type: t, left: bot.life[t], total: t === 'brush' ? 18000 : t === 'unitCare' ? 1800 : t === 'dustBag' ? 3000 : t === 'heap' ? 7200 : 9000 })));
+          }
+          case 'resetLifeSpan': bot.life[d.type] = 99999; return ok();
+          case 'getCachedMapInfo': return ok({ enable: 1, info: [{ index: 0, mid: '0', using: 0 }, { index: 1, mid: '7808', mts: bot.mts, name: 'Home', using: 1 }] });
+          case 'getMapSet_V2': assert.deepEqual(d, { mid: '7808', type: 'ar' }); return ok({ mid: '7808', type: 'ar', subsets });
+          case 'getMapInfo_V2': assert.deepEqual(d, { mid: '7808', type: '0' }); return ok({ mid: '7808', info, outlineVer: '1' });
+          case 'getPos': assert.deepEqual(d, ['chargePos']); return ok({ chargePos: [{ x: 500, y: -900, a: 0, invalid: 0 }], mid: '7808' });
+          case 'stationAction': bot.station = d.type === 4 ? 3 : d.type; return ok();
+          case 'setTrueDetect': assert.deepEqual(d, { enable: 0, level: 1 }); return ok();
+          case 'playSound': case 'setChildLock': case 'setVolume': return ok();
+          case 'setAutoEmpty': bot.autoEmpty = d.enable; return ok();
           default: return send({ ret: 'ok', resp: { body: { code: 20001, msg: 'unknown command' } } });
         }
       }
@@ -129,6 +173,7 @@ async function setup(password = 'hunter2', opts: Record<string, unknown> = {}) {
   return { fake, reg, ev, done };
 }
 
+const core = (s: import('../src/model/types.ts').DeviceState) => ({ on: s.on, activity: s.activity, battery: s.battery, online: s.online });
 const sent = (calls: { cmdName: string; data?: unknown }[]) => calls.filter(c => !c.cmdName.startsWith('get')).map(c => ({ cmdName: c.cmdName, data: c.data }));
 
 test('Ecovacs: logs in, lists vacuums, and reports activity and battery', async () => {
@@ -142,8 +187,8 @@ test('Ecovacs: logs in, lists vacuums, and reports activity and battery', async 
     assert.equal(d.name, 'Deebot');
     assert.equal(d.room, 'living_room');
     assert.equal(d.integration, 'Ecovacs DEEBOT T50 OMNI');
-    assert.deepEqual(d.capabilities, ['onoff', 'vacuum', 'battery', 'extras']);
-    assert.deepEqual(d.state, { on: false, activity: 'docked', battery: 100, online: true });
+    assert.deepEqual(d.capabilities, ['onoff', 'vacuum', 'battery']);
+    assert.deepEqual(core(d.state), { on: false, activity: 'docked', battery: 100, online: true });
     const up = reg.get('ecovacs_ne0000000002')!;
     assert.equal(up.state.online, false, 'status 0 in the device list = offline');
     assert.equal(up.room, 'unassigned');
@@ -153,10 +198,10 @@ test('Ecovacs: logs in, lists vacuums, and reports activity and battery', async 
     // Started from the Ecovacs app: shows up on the next poll.
     fake.bot.activity = 'cleaning'; fake.bot.battery = 64;
     await ev.poll();
-    assert.deepEqual(reg.get(d.id)!.state, { on: true, activity: 'cleaning', battery: 64, online: true });
+    assert.deepEqual(core(reg.get(d.id)!.state), { on: true, activity: 'cleaning', battery: 64, online: true });
     fake.bot.activity = 'paused';
     await ev.poll();
-    assert.deepEqual(reg.get(d.id)!.state, { on: false, activity: 'paused', battery: 64, online: true });
+    assert.deepEqual(core(reg.get(d.id)!.state), { on: false, activity: 'paused', battery: 64, online: true });
     fake.bot.activity = 'error';
     await ev.poll();
     assert.equal(reg.get(d.id)!.state.activity, 'error');
@@ -178,7 +223,7 @@ test('Ecovacs: on/off start, resume and dock with the exact JSON commands', asyn
     assert.equal(c.body.payload.header.pri, '1');
     assert.equal(c.query.get('did'), 'e0001234-aaaa-bbbb-cccc-t50omni00001');
     assert.equal(c.query.get('mid'), 'lf3bn4');
-    assert.deepEqual(reg.get('vac')!.state, { on: true, activity: 'cleaning', battery: 100, online: true });
+    assert.deepEqual(core(reg.get('vac')!.state), { on: true, activity: 'cleaning', battery: 100, online: true });
     assert.equal(fake.bot.activity, 'cleaning');
 
     fake.calls.length = 0;
@@ -310,4 +355,99 @@ test('Ecovacs helpers', () => {
   assert.equal(commandFor({ battery: 5 }, 'docked'), null);
   assert.ok(isJsonVacuum({ did: 'x', class: 'c', resource: 'r', company: 'eco-ng' }));
   assert.ok(!isJsonVacuum({ did: 'x', class: 'c', resource: 'r', company: 'eco-legacy' }));
+});
+
+test('Ecovacs: everything the robot reports — how it cleans, station, wear, totals, settings, map areas', async () => {
+  const { reg, ev, done } = await setup('hunter2', { ids: { Deebot: 'vac' } });
+  try {
+    const r = reg.get('vac')!.state.robot!;
+    assert.equal(r.suction, 'max');
+    assert.equal(r.mode, 'both');
+    assert.equal(r.water, 28);
+    assert.equal(r.waterMax, 50);
+    assert.equal(r.passes, 1);
+    assert.equal(r.mop, true);
+    assert.equal(r.station, 'idle');
+    assert.deepEqual(r.problems, [], 'an optional station module not fitted (314) is no problem');
+    assert.deepEqual(r.last, { area: 44, minutes: 60 });
+    assert.deepEqual(r.totals, { area: 4820, hours: 124, count: 256 });
+    assert.deepEqual(r.parts!.map(p => [p.id, p.left]), [['brush', 54], ['sideBrush', 0], ['heap', 100], ['roundMop', 16], ['dustBag', 91], ['unitCare', 70]], 'learned part by part: the bot has no cleaning-solution part');
+    assert.equal(r.parts![0]!.name, 'Main brush');
+    assert.equal(r.parts![0]!.hoursLeft, 162);
+    assert.deepEqual(r.areas, [{ id: '0', name: '' }, { id: '2', name: 'Hall' }]);
+    assert.deepEqual(r.settings, { carpetBoost: true, obstacles: true, childLock: false, voice: 10, voiceMax: 10, resume: true, quiet: { on: false, start: '22:00', end: '08:00' }, voiceAssistant: true, autoUpdate: false, autoEmpty: true, dryMinutes: 240 });
+    assert.equal(r.firmware, '1.123.127');
+    assert.equal(r.wifi, -50);
+    assert.equal(r.map, true);
+    assert.equal(reg.get('vac')!.state.extras, null, 'no extras any more: it all has a place in robot');
+    const map = ev.floorMap(reg.get('vac')!)!;
+    assert.deepEqual(map.areas.map(a => [a.id, a.path, a.x, a.y]), [['0', 'M0 0L20 0L20 20L0 20Z', 10, 10], ['2', 'M20 0L40 0L40 20L20 20Z', 30, 10]]);
+    assert.equal(map.walls, 'M0 0L20 0L20 20M0 20L0 0', 'a doorway leaves a gap');
+    assert.deepEqual(map.dock, { x: 10, y: 18 });
+    assert.deepEqual(map.viewBox, [-4, -4, 48, 28]);
+  } finally { await done(); }
+});
+
+test('Ecovacs: rooms to clean, how, station jobs, wear reset and settings — the exact commands', async () => {
+  const fake = fakeCloud('me@example.com', 'hunter2');
+  await new Promise<void>(r => fake.server.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${(fake.server.address() as AddressInfo).port}`;
+  const settings: Record<string, import('../src/model/types.ts').DeviceSettings> = { vac: { areaRooms: { '0': 'kitchen', '2': 'hall' } } };
+  const reg = new Registry(new Store(':memory:'), () => undefined, () => settings);
+  reg.roomName = id => ({ kitchen: 'Kitchen', hall: 'Hall', study: 'Study' } as Record<string, string>)[id] ?? id;
+  const ev = new EcovacsAdapter({ email: 'me@example.com', password: 'hunter2', country: 'au', pollMs: 0, refreshMs: 0, ids: { Deebot: 'vac' }, urls: { login: `${base}/login`, auth: `${base}/auth`, portal: `${base}/api` } });
+  await reg.addAdapter(ev);
+  const you = { kind: 'user' as const, label: 'You' };
+  try {
+    fake.calls.length = 0;
+    await reg.command('vac', { robotSet: { rooms: ['kitchen'], suction: 'max+', mode: 'mopAfter', water: 99, passes: 2 } }, you);
+    assert.deepEqual(sent(fake.calls), [
+      { cmdName: 'setSpeed', data: { speed: 2 } }, { cmdName: 'setWorkMode', data: { mode: 3 } }, { cmdName: 'setWaterInfo', data: { customAmount: 50 } },
+      { cmdName: 'setCleanCount', data: { count: 2 } }, { cmdName: 'clean_V2', data: { act: 'start', content: { type: 'spotArea', value: '0' } } },
+    ], 'how first, then where: the kitchen is area 0');
+    const s = reg.get('vac')!.state;
+    assert.equal(s.activity, 'cleaning');
+    assert.equal(s.on, true);
+    assert.equal(s.robot!.suction, 'max+');
+    assert.equal(s.robot!.water, 50);
+    await assert.rejects(reg.command('vac', { robotSet: { rooms: ['study'] } }, you), /doesn’t know where Study is on its map/);
+
+    fake.calls.length = 0;
+    await reg.command('vac', { robotSet: { station: 'empty' } }, you);
+    await reg.command('vac', { robotSet: { station: 'wash' } }, you);
+    await reg.command('vac', { robotSet: { station: 'dry' } }, you);
+    await reg.command('vac', { robotSet: { locate: true } }, you);
+    await reg.command('vac', { robotSet: { resetPart: 'sideBrush' } }, you);
+    await reg.command('vac', { robotSet: { settings: { obstacles: false, carpetBoost: false, quiet: { on: true, start: '21:30', end: '07:05' }, childLock: true, voice: 4, autoEmpty: false } } }, you);
+    assert.deepEqual(sent(fake.calls), [
+      { cmdName: 'stationAction', data: { act: 1, type: 1 } }, { cmdName: 'stationAction', data: { act: 1, type: 4 } }, { cmdName: 'stationAction', data: { act: 1, type: 2 } },
+      { cmdName: 'playSound', data: { count: 1, sid: 30 } }, { cmdName: 'resetLifeSpan', data: { type: 'sideBrush' } },
+      { cmdName: 'setCarpertPressure', data: { enable: 0 } }, { cmdName: 'setTrueDetect', data: { enable: 0, level: 1 } }, { cmdName: 'setChildLock', data: { on: 1 } }, { cmdName: 'setVolume', data: { volume: 4 } },
+      { cmdName: 'setBlock', data: { enable: 1, start: '21:30', end: '7:5' } }, { cmdName: 'setAutoEmpty', data: { enable: 0 } },
+    ]);
+    assert.equal(reg.get('vac')!.state.robot!.settings!.childLock, true);
+    assert.equal(reg.get('vac')!.state.robot!.parts!.find(p => p.id === 'sideBrush')!.left, 100);
+    // What it was told is in Activity, in words.
+    const log = (reg as unknown as { store: Store }).store.feed(20).map(e => e.what);
+    assert.ok(log.some((w: string) => /empty the dust bin/.test(w)), log.join(' | '));
+    // Read back on the next poll: the station is busy, the block is on.
+    await ev.poll();
+    assert.equal(reg.get('vac')!.state.robot!.settings!.quiet!.start, '21:30');
+  } finally { await reg.stop(); fake.server.close(); }
+});
+
+test('Robot commands are checked, and said in words', async () => {
+  const { cleanRobotSet, robotWords, resolveRooms, areaName } = await import('../src/util/robot.ts');
+  assert.deepEqual(cleanRobotSet({ rooms: 'kitchen', suction: 'Max Plus', passes: '2' }), { rooms: ['kitchen'], suction: 'max+', passes: 2 });
+  assert.deepEqual(cleanRobotSet({ suction: 'strong' }), { suction: 'max' });
+  assert.throws(() => cleanRobotSet({ mode: 'sweep' }), /Mode is/);
+  assert.throws(() => cleanRobotSet({ settings: { laser: true } }), /Unknown robot setting laser/);
+  assert.throws(() => cleanRobotSet({ settings: { quiet: { on: true, start: '25:00' } } }), /HH:MM/);
+  assert.throws(() => cleanRobotSet({}), /asks for nothing/);
+  assert.equal(robotWords({ rooms: ['Kitchen', 'Hall'], suction: 'max', mode: 'mop' }), 'cleans Kitchen and Hall, suction Max, mop only');
+  assert.equal(robotWords({ station: 'wash' }), 'wash the mop');
+  const d = { name: 'Robot', state: { robot: { areas: [{ id: '1', name: '' }, { id: '4', name: '' }] } } };
+  assert.deepEqual(resolveRooms(d, { rooms: ['k'], suction: 'max' }, { '1': 'k', '4': 'k', '9': 'k' }, x => x), { suction: 'max', areas: ['1', '4'] }, 'a room in two areas cleans both; an area the map lost is left out');
+  assert.equal(areaName('4', d.state.robot.areas, {}, x => x), 'Area B');
+  assert.equal(areaName('4', d.state.robot.areas, { '4': 'k' }, () => 'Kitchen'), 'Kitchen');
 });
