@@ -23,6 +23,7 @@ async function fakeWarden() {
       s.got.push({ method: req.method!, path, body });
       if (path === '/integrations/kova/devices') return send(200, { devices: body, matched: body.map((d: any) => ({ kovaId: d.kovaId, ...(d.ip === '192.168.1.41' ? { deviceId: 'dev_lamp' } : {}) })) });
       if (path === '/integrations/kova/access') return send(200, { waiting: true });
+      if (path.startsWith('/survey')) return send(404, { error: 'not found' }); // a Warden without the Wi-Fi survey
       send(200, { ok: true });
     });
   });
@@ -169,4 +170,52 @@ test('Warden link helpers', () => {
     dev({ id: 'e', address: '10.0.0.8', adapter: 'virtual' }),
     dev({ id: 'f', address: '10.0.0.9', hidden: true }),
   ], () => undefined, id => id === 'tuya' ? 'Tuya' : undefined).map(d => [d.kovaId, d.ip ?? d.mac, d.kind ?? '']), [['a', '10.0.0.5', 'light'], ['b', 'aa:bb:cc:dd:ee:ff', ''], ['c', '10.0.0.7', 'light']]);
+});
+
+test('Warden link: the floor plan goes to Warden’s Wi-Fi survey, with how well Warden hears each placed Wi-Fi device there', async () => {
+  // A Warden with the survey: one floor of its own already there, and a phone-shaped device it hears.
+  const floors: any[] = [{ id: 'f1', name: 'Upstairs', widthMeters: 5, heightMeters: 5, rooms: [], aps: [] }];
+  const samples: any[] = [{ id: 's0', note: 'walked by hand' }, { id: 's1', note: 'Kova: Old reading' }];
+  const got: { method: string; path: string; body: any }[] = [];
+  const server = http.createServer((req, res) => {
+    const chunks: Buffer[] = [];
+    req.on('data', c => chunks.push(c));
+    req.on('end', () => {
+      const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : undefined;
+      const send = (code: number, j: unknown) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(j)); };
+      const path = req.url!.replace(/^\/api\/v1/, '');
+      got.push({ method: req.method!, path, body });
+      if (path === '/integrations/kova/devices') return send(200, { matched: body.map((d: any) => ({ kovaId: d.kovaId, ...(d.kovaId === 'lounge_lamp' ? { deviceId: 'dev_lamp' } : {}) })) });
+      if (path === '/survey/floors' && req.method === 'GET') return send(200, { floors });
+      if (path === '/survey/floors' && req.method === 'POST') { const f = { id: 'f2', ...body, rooms: [], aps: [] }; floors.push(f); return send(201, f); }
+      if (path === '/survey/floors/f2' && req.method === 'GET') return send(200, { ...floors[1], aps: [{ id: 'ap1', label: 'Hall AP', x: 3, y: 3 }] });
+      if (path === '/survey/floors/f2' && req.method === 'PUT') { Object.assign(floors[1], body); return send(200, floors[1]); }
+      if (path === '/devices?online=true') return send(200, { devices: [{ id: 'dev_lamp', online: true, connection: { medium: 'wireless', ssid: 'Home', band: '5', rssi: -61 } }] });
+      if (path === '/survey/floors/f2/samples' && req.method === 'GET') return send(200, { samples });
+      if (path.startsWith('/survey/floors/f2/samples/') && req.method === 'DELETE') return send(204, {});
+      send(200, { ok: true });
+    });
+  });
+  await new Promise<void>(r => server.listen(0, '127.0.0.1', r));
+  const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const t = await testHub(12);
+  await t.hub.reg.addAdapter(new Lan());
+  t.hub.config.update(c => { c.floorPlan = { widthM: 10, heightM: 8, walls: 'concrete', rooms: [{ id: 'a', name: 'Lounge', room: 'lounge', points: [[0, 0], [6, 0], [6, 4], [0, 4]] }], places: { lounge_lamp: [2, 1.5] } }; });
+  const link = new WardenLink(t.hub, { warden: () => ({ url, token: 'tok' }), port: () => 8140, debounceMs: 0 });
+  try {
+    await link.sync();
+    // A floor of Kova's own, made once; Warden's access point on it kept.
+    assert.deepEqual(got.filter(g => g.path === '/survey/floors' && g.method === 'POST').map(g => g.body), [{ name: 'The Parkers (from Kova)', widthMeters: 10, heightMeters: 8 }]);
+    const put = got.find(g => g.path === '/survey/floors/f2' && g.method === 'PUT')!.body;
+    assert.deepEqual(put.rooms, [{ id: 'a', name: 'Lounge', points: [{ x: 0, y: 0 }, { x: 6, y: 0 }, { x: 6, y: 4 }, { x: 0, y: 4 }] }]);
+    assert.deepEqual(put.aps, [{ id: 'ap1', label: 'Hall AP', x: 3, y: 3 }]);
+    // Kova's old reading goes, the hand-walked one stays, and the lamp is heard at its spot.
+    assert.deepEqual(got.filter(g => g.method === 'DELETE').map(g => g.path), ['/survey/floors/f2/samples/s1']);
+    assert.deepEqual(got.find(g => g.path === '/survey/floors/f2/samples' && g.method === 'POST')!.body, { samples: [{ ssid: 'Home', band: '5', x: 2, y: 1.5, rssi: -61, source: 'gateway', note: 'Kova: Lounge lamp' }] });
+    assert.match(link.status()!.note, /floor plan shared with Wi-Fi from 1 device/);
+    // Nothing changed and not half an hour yet: the floor isn't sent again.
+    const n = got.length;
+    await link.sync();
+    assert.equal(got.slice(n).filter(g => g.path.startsWith('/survey')).length, 0);
+  } finally { link.stop(); await t.hub.stop(); await new Promise<void>(r => { server.closeAllConnections(); server.close(() => r()); }); }
 });

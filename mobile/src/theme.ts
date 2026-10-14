@@ -1,6 +1,6 @@
 // Kova's design tokens (docs/design/tokens), for the phone. Colour means state:
 // amber = light / on / primary, blue = media and air, green = healthy / present / live, red = alert.
-export const C = {
+const DARK = {
   page: '#0e0f10',
   nav: '#111214',
   card: '#16171a',
@@ -45,7 +45,108 @@ export const C = {
   /** The scrim behind a sheet: dark enough that the page clearly steps back. */
   scrimDeep: 'rgba(0,0,0,0.66)',
   shimmer: 'rgba(255,255,255,0.06)',
+  /** The clear end of a shimmer sweep: the shimmer colour at no alpha, so the gradient doesn't pass through another hue. */
+  shimmerEnd: 'rgba(255,255,255,0)',
+  /** Sensor and chart accents beyond the four state colours. */
+  yellow: '#dcd27e',
+  violet: '#c9a0f0',
+  /** Music (stations): its own accent, and text on it. */
+  music: '#c79bf2',
+  onMusic: '#1a1020',
+  /** The page and the tab bar seen through frosted glass (the large title bar, the tab bar). */
+  glass: 'rgba(14,15,16,0.94)',
+  navGlass: 'rgba(17,18,20,0.97)',
+  /** A dashed outline around an empty state. */
+  dash: 'rgba(255,255,255,0.1)',
+  /** An avatar ring on a lit (amber) tile: the tile's tint settled onto the card. */
+  amberSolid: '#2a2318',
+  /** Toasts: the bone toast's edge, an error toast's fill, and the Undo button on a bone toast. */
+  toastEdge: 'rgba(255,255,255,0.6)',
+  toastErr: '#3a1d1a',
+  toastBtn: 'rgba(0,0,0,0.08)',
+  /** A day bar's "skipped" swatch, and its key. */
+  skipped: '#26272b',
+  skippedKey: '#3a3b40',
+  /** The "now" line across the day bar. */
+  nowLine: '#ffffff',
 };
+
+export type Palette = { [K in keyof typeof DARK]: string };
+
+const LIGHT: Palette = {
+  page: '#f5f3ee',
+  nav: '#efece6',
+  card: '#ffffff',
+  inset: '#f3f0ea',
+  control: '#ebe7e0',
+  selected: '#e3dfd6',
+  switchOff: '#d6d1c7',
+  sheet: '#fbfaf7',
+  coal: '#fbfaf7',
+  bone: '#1c1b19',
+  bone2: '#33312d',
+  soft: '#46433e',
+  stone: '#66625b',
+  stone2: '#77736c',
+  stone3: '#8f8b83',
+  amber: '#b9770b',
+  amberHover: '#a5690a',
+  onAmber: '#1a1408',
+  blue: '#2a73b8',
+  onBlue: '#ffffff',
+  green: '#1d8a52',
+  red: '#cf3a2d',
+  hairline: 'rgba(30,26,20,0.06)',
+  line: 'rgba(30,26,20,0.10)',
+  control2: 'rgba(30,26,20,0.06)',
+  scrim: 'rgba(20,16,10,0.35)',
+  amberTint: 'rgba(185,119,11,0.10)',
+  amberLine: 'rgba(185,119,11,0.30)',
+  blueTint: 'rgba(42,115,184,0.10)',
+  blueLine: 'rgba(42,115,184,0.30)',
+  greenTint: 'rgba(29,138,82,0.11)',
+  greenLine: 'rgba(29,138,82,0.30)',
+  redTint: 'rgba(207,58,45,0.10)',
+  redLine: 'rgba(207,58,45,0.30)',
+  onRed: '#ffffff',
+  redText: '#b8372b',
+  raised: '#ffffff',
+  edge: 'rgba(30,26,20,0.08)',
+  edgeTop: 'rgba(30,26,20,0.05)',
+  scrimDeep: 'rgba(20,16,10,0.45)',
+  shimmer: 'rgba(30,26,20,0.06)',
+  shimmerEnd: 'rgba(30,26,20,0)',
+  yellow: '#8f8312',
+  violet: '#7d4cc0',
+  music: '#7d4cc0',
+  onMusic: '#ffffff',
+  glass: 'rgba(245,243,238,0.94)',
+  navGlass: 'rgba(239,236,230,0.97)',
+  dash: 'rgba(30,26,20,0.14)',
+  amberSolid: '#f7ecd6',
+  toastEdge: 'rgba(30,26,20,0.9)',
+  toastErr: '#fbe9e6',
+  toastBtn: 'rgba(255,255,255,0.14)',
+  skipped: '#e3dfd6',
+  skippedKey: '#d6d1c7',
+  nowLine: '#1c1b19',
+};
+
+export type Scheme = 'light' | 'dark';
+let current: Scheme = 'dark';
+
+/** The colours in use. Screens read `C.x` when they render; `applyScheme` rewrites this object, then the app remounts. */
+export const C: Palette = { ...DARK };
+
+/** Switch the palette (and the shadows) to light or dark. Nothing re-renders by itself: App.tsx remounts under a new key. */
+export function applyScheme(s: Scheme) {
+  current = s === 'light' ? 'light' : 'dark';
+  Object.assign(C, current === 'light' ? LIGHT : DARK);
+  Object.assign(SHADOW, current === 'light' ? SHADOW_LIGHT : SHADOW_DARK);
+}
+
+/** The scheme in use. */
+export const scheme = (): Scheme => current;
 
 /**
  * The type scale. Every piece of text in the app is one of these; screens don't pick sizes.
@@ -107,6 +208,37 @@ export const alpha = (hex: string, a: number) => {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 };
 
+/** Text and glyphs over a camera picture or live video: always light, on the dark pill behind them, in either scheme. */
+export const ON_PHOTO = { text: '#f1efea', dim: '#d8d5cf' } as const;
+
+/** The light square behind a QR code, so it scans in either scheme. */
+export const QR_PAPER = '#f1efea';
+
+/** How bright a #rrggbb is, 0 to 1 (WCAG relative luminance). */
+const luma = (hex: string) => {
+  const n = parseInt(hex.slice(1), 16);
+  const f = (v: number) => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+  return 0.2126 * f((n >> 16) & 255) + 0.7152 * f((n >> 8) & 255) + 0.0722 * f(n & 255);
+};
+
+/**
+ * A colour the person or the design picked (a mode's, a light's) as text or a glyph on the page: unchanged on dark;
+ * on light, a pale one is darkened toward the text colour until it can be read there.
+ */
+export const ink = (hex: string): string => {
+  if (current !== 'light' || !/^#[0-9a-f]{6}$/i.test(hex)) return hex;
+  let out = hex;
+  for (let i = 0; i < 12 && luma(out) > 0.17; i++) {
+    const a = parseInt(out.slice(1), 16), b = parseInt(LIGHT.bone.slice(1), 16);
+    const m = (s: number) => Math.round(((a >> s) & 255) * 0.85 + ((b >> s) & 255) * 0.15);
+    out = `#${[16, 8, 0].map(s => m(s).toString(16).padStart(2, '0')).join('')}`;
+  }
+  return out;
+};
+
+/** Text or a glyph on a fill of this colour: the coal one on dark; on light, dark on a pale fill and white on a deep one. */
+export const readableOn = (hex: string): string => current !== 'light' || !/^#[0-9a-f]{6}$/i.test(hex) ? C.coal : luma(hex) > 0.18 ? LIGHT.onAmber : '#ffffff';
+
 /**
  * Motion tokens. Durations from the design language (120 ms press to 0.97, 200 ms state changes, 280 ms sheets);
  * springs for anything a finger lets go of, so it settles with a little weight instead of stopping dead.
@@ -138,7 +270,7 @@ export const MOTION = {
 } as const;
 
 /** Elevation for things that float over the page (sheets, toasts), and the glow of a lit tile. */
-export const SHADOW = {
+const SHADOW_DARK = {
   sheet: '0px -12px 48px rgba(0,0,0,0.6)',
   /** A card lifted a little off the page. */
   card: '0px 1px 2px rgba(0,0,0,0.4), 0px 8px 24px rgba(0,0,0,0.18)',
@@ -146,4 +278,12 @@ export const SHADOW = {
   fab: '0px 6px 18px rgba(242,177,76,0.35), 0px 2px 6px rgba(0,0,0,0.4)',
   toast: '0px 10px 28px rgba(0,0,0,0.45)',
   raised: '0px 4px 14px rgba(0,0,0,0.35)',
-} as const;
+};
+const SHADOW_LIGHT: typeof SHADOW_DARK = {
+  sheet: '0px -12px 48px rgba(30,26,20,0.18)',
+  card: '0px 1px 2px rgba(30,26,20,0.08), 0px 8px 24px rgba(30,26,20,0.06)',
+  fab: '0px 6px 18px rgba(185,119,11,0.3), 0px 2px 6px rgba(30,26,20,0.15)',
+  toast: '0px 10px 28px rgba(30,26,20,0.25)',
+  raised: '0px 4px 14px rgba(30,26,20,0.12)',
+};
+export const SHADOW: typeof SHADOW_DARK = { ...SHADOW_DARK };

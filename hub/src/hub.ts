@@ -65,7 +65,7 @@ export interface Service { id: string; name: string; icon: string; kind: 'Local'
  */
 export const onlyDevicesOffline = (note?: string) => !!note && /^\s*\d+ of \d+ (?:not responding|offline)(?: \([^)]*\))?\s*$/i.test(note);
 
-export class Hub extends EventEmitter<{ changed: [] }> {
+export class Hub extends EventEmitter<{ changed: []; floorplan: [] }> {
   readonly store: Store;
   readonly config: ConfigStore;
   readonly reg: Registry;

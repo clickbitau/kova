@@ -633,6 +633,41 @@ export interface HomeLocation {
   fetchedAt?: number;
 }
 
+/** A point on the floor plan, in metres from its top-left corner (x across, y down). */
+export type PlanPoint = [number, number];
+
+/** One room drawn on the floor plan: a shape (usually a rectangle) and, when it is one, the Kova room it is. */
+export interface PlanRoom {
+  id: string;
+  /** What the plan calls it ("Bed", "Ensuite", "Patio"). */
+  name: string;
+  /** The Kova room it is, or none (a hallway, a patio, a walk-in robe). */
+  room?: string | null;
+  points: PlanPoint[];
+  /** Outside (a patio, a deck): not part of the home's walls. */
+  outdoor?: boolean;
+}
+
+/** Where a robot vacuum's own map sits on the plan: turned (degrees clockwise), mirrored, then moved (metres). */
+export interface PlanRobotFit { rot: 0 | 90 | 180 | 270; flip: boolean; dx: number; dy: number }
+
+/**
+ * The home's floor plan (one storey): its size, what its walls are made of, its rooms, where each device is, a
+ * picture of the plan to trace over, and how each robot's map lines up with it. Kova shares it with Warden.
+ */
+export interface FloorPlan {
+  widthM: number;
+  heightM: number;
+  /** What most walls are made of: how far Wi-Fi and sound carry. */
+  walls?: 'concrete' | 'brick' | 'timber' | 'plasterboard' | 'glass';
+  rooms: PlanRoom[];
+  /** Devices placed by hand, by device id. One not here shows in its room. */
+  places?: Record<string, PlanPoint>;
+  /** The picture traced over (an /api/photo/ address). */
+  image?: string | null;
+  robots?: Record<string, PlanRobotFit>;
+}
+
 export interface HomeConfig {
   name: string;
   /** A brand-new hub's home, until its owner has been through setup (name, where it is). */
@@ -673,6 +708,8 @@ export interface HomeConfig {
   devices?: Record<string, DeviceSettings>;
   /** Devices on the owner's Now screen, in order. */
   favourites?: string[];
+  /** The floor plan (Settings → Home → Floor plan). */
+  floorPlan?: FloorPlan;
   /** Speakers the owner grouped to play together (any brands). Each group is a device of its own. */
   speakerGroups?: SpeakerGroup[];
   /**

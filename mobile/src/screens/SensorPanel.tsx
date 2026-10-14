@@ -5,7 +5,7 @@ import Svg, { Path } from 'react-native-svg';
 import { C, SP, alpha } from '../theme';
 import { useHub } from '../state/hub';
 import type { SensorView } from '../api/types';
-import { alertRows, readingText, sparkPath, TREND } from '../logic/sensors';
+import { alertRows, readingText, sparkPath, trendOf } from '../logic/sensors';
 import { deg } from '../logic/climate';
 import type { Dev } from '../logic/devices';
 import { Icon } from '../ui/Icon';
@@ -29,7 +29,7 @@ export function SensorReadings({ v }: { v: SensorView }) {
     <View style={{ gap: SP[3] }}>
       <Card style={{ overflow: 'hidden' }}>
         {v.readings.map((r, i) => {
-          const tr = r.trend ? TREND[r.trend] : null;
+          const tr = r.trend ? trendOf(r.trend) : null;
           return (
             <View key={r.field} accessible accessibilityLabel={`${r.label} ${readingText(r)}${tr ? `, ${tr[2].toLowerCase()}` : ''}`} style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3], paddingVertical: SP[3], paddingHorizontal: SP[4], borderTopWidth: i ? 1 : 0, borderTopColor: C.hairline }}>
               <View style={{ flex: 1, minWidth: 0, gap: 1 }}>

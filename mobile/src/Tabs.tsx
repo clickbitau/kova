@@ -64,7 +64,7 @@ function Bar({ state, navigation }: BottomTabBarProps) {
   const onAsk = TABS[state.index]?.[0] === 'Ask';
   return (
     <View accessibilityRole="tablist" onLayout={e => setW(e.nativeEvent.layout.width - 16)}
-      style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 8, paddingHorizontal: 8, paddingBottom: Math.max(insets.bottom, 10) + 2, backgroundColor: 'rgba(17,18,20,0.97)', borderTopWidth: 1, borderTopColor: C.edge }}>
+      style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 8, paddingHorizontal: 8, paddingBottom: Math.max(insets.bottom, 10) + 2, backgroundColor: C.navGlass, borderTopWidth: 1, borderTopColor: C.edge }}>
       {seg ? (
         <Animated.View pointerEvents="none" style={{ position: 'absolute', top: 8, left: 8 + (seg - 56) / 2, width: 56, height: 30, borderRadius: 15, backgroundColor: alpha(C.amber, 0.13), opacity: onAsk ? 0 : 1,
           transform: [{ translateX: x.interpolate({ inputRange: [0, TABS.length - 1], outputRange: [0, seg * (TABS.length - 1)] }) }] }} />

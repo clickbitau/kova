@@ -7,7 +7,8 @@ import { useNav } from '../navigation';
 import { combineIdeasOf, devs, groupDevices, isLight, isSensor, plural, roomOffApplies, roomPills, toggleCommand, TYPES, type Dev } from '../logic/devices';
 import { zonesByRoom } from '../logic/zones';
 import { Icon } from '../ui/Icon';
-import { Button, Empty, HScroll, IconButton, Pill, Press } from '../ui/kit';
+import { Button, Card, Empty, HScroll, IconButton, Pill, Press, Segmented } from '../ui/kit';
+import { FloorPlanView } from './FloorPlanView';
 import { Screen } from '../ui/Screen';
 import { T } from '../ui/Text';
 import { TileGrid } from '../ui/Tile';
@@ -39,6 +40,9 @@ export function DevicesScreen() {
   const [type, setType] = useState('all');
   const [q, setQ] = useState('');
   const [showHidden, setShowHidden] = useState(false);
+  const [view, setView] = useState<'list' | 'plan'>('list');
+  const plan = s.floorPlan ?? null;
+  const onPlan = view === 'plan' && !!plan;
   // Sensors only report: they're on their own screen, not here or in the counts.
   const all = Object.values(devs(s)).filter(d => !isSensor(d));
   const sensors = (s.sensors ?? []).filter(x => !x.hidden).length;
@@ -65,6 +69,15 @@ export function DevicesScreen() {
       </View>
     }>
       {combineIdeasOf(s).map(ci => <CombineIdeaCard key={ci.key} ci={ci} />)}
+      {plan ? <Segmented compact label="Show devices as" value={view} onChange={v => { animateLayout(); setView(v as 'list' | 'plan'); }}
+        options={[{ id: 'list', label: 'List' }, { id: 'plan', label: 'Floor plan' }]} /> : null}
+      {onPlan ? (
+        <Card pad={SP[3]}>
+          <FloorPlanView plan={plan!} devices={visible} onDevice={id => sheet.open(id)} onRoom={r => { animateLayout(); setRoom(r); setView('list'); }} />
+        </Card>
+      ) : null}
+      {onPlan ? <T v="footnote" color={C.stone}>Tap a device to open it, a room to see its devices. Rooms and spots are drawn on the web, in Devices → Floor plan.</T> : null}
+      {onPlan ? null : <>
       <View style={{ gap: SP[3] }}>
         <SearchField value={q} onChange={setQ} placeholder="Search devices" />
         <HScroll>{pills.map(p => <Pill key={p.id} label={p.name} on={room === p.id} onPress={() => { animateLayout(); setRoom(p.id); }} />)}</HScroll>
@@ -107,6 +120,7 @@ export function DevicesScreen() {
           : can.integrations ? <Empty icon="devices" tone={C.amber} title="No devices yet" text="Add your lights, speakers and cameras. Kova finds some by itself." action="Add a device" onAction={add} />
           : <Empty icon="devices" title="No devices for you yet" text="The home’s owner chooses the rooms and devices you can use." />
       ) : null}
+      </>}
 
       {hidden ? (
         <Press onPress={() => { animateLayout(); setShowHidden(v => !v); }} style={{ alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, height: 38, paddingHorizontal: SP[4], borderRadius: R.full, backgroundColor: C.control2 }}>

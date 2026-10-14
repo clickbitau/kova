@@ -2,13 +2,13 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { TextInput, View, useWindowDimensions } from 'react-native';
 import { Image } from 'expo-image';
 import Svg, { Circle, Path } from 'react-native-svg';
-import { C, F, R, SP, alpha } from '../theme';
+import { C, F, R, SP, alpha, readableOn } from '../theme';
 import { useHub } from '../state/hub';
 import { useSheet } from '../state/sheet';
 import { useNav } from '../navigation';
 import { VoiceNote } from './VoiceScreen';
 import { hubUrl } from '../logic/connect';
-import { AIR, combinedOf, devs, FAN_SPEEDS, filterNote, has, HVAC, ICON, iconOf, isPlayer, routerPanel, stateOf, tint, type Dev } from '../logic/devices';
+import { airRating, combinedOf, devs, FAN_SPEEDS, filterNote, has, hvac, ICON, iconOf, isPlayer, routerPanel, stateOf, tint, type Dev } from '../logic/devices';
 import { arcPath, deg, stepTarget, TARGET_MAX, TARGET_MIN, toDisplay } from '../logic/climate';
 import { servesLine, snapOpen, suggestionsBody, toggleRoom, visibleZones, zoneRoomsBody, zoneRoomViews, roomWords } from '../logic/zones';
 import { combineChoices, placeChoices, placeName } from '../logic/customise';
@@ -35,7 +35,6 @@ const SOUNDS: [string, string, string][] = [['standard', 'Standard', 'equalizer'
 /** A fallback list with the choice a device reports being on added, if it isn't there. */
 const withCurrent = <T extends string[]>(list: T[], now: string | null | undefined, make: (id: string) => T): T[] => now && !list.some(x => x[0] === now) ? [...list, make(now)] : list;
 const COLOURS: [string, string][] = [['#ff5a4e', 'Red'], ['#ff9f43', 'Orange'], ['#ffd93d', 'Yellow'], ['#6bd968', 'Green'], ['#3fd0c9', 'Teal'], ['#4aa3ff', 'Blue'], ['#8b6bff', 'Violet'], ['#ff6bd6', 'Pink']];
-const MUSIC = '#c79bf2';
 
 /** One choice of a few (an input, a sound mode): a tile with an icon, two to a row, the chosen one lit. */
 export function Choice({ label, icon, on, onPress, color = C.blue }: { label: string; icon: string; on: boolean; onPress: () => void; color?: string }) {
@@ -147,7 +146,7 @@ export function DeviceSheet() {
   const stackHead = width - SP[5] * 2 - 52 - 14 - (watched ? 0 : 68) < 190 * Math.max(1, fontScale);
   const power = canPower ? <Switch big label={`${D.name} power`} on={!!D.on} onChange={v => void send(D.id, isPlayer(D) && !v ? { on: false, media: null } : { on: v })} /> : null;
   const shownTarget = target ?? D.target ?? 24;
-  const hv = HVAC.find(h => h[0] === D.hvac);
+  const hv = hvac().find(h => h[0] === D.hvac);
   const nudge = (d: number) => {
     const n = stepTarget(shownTarget, d < 0 ? -1 : 1);
     if (n === shownTarget) return;
@@ -197,7 +196,7 @@ export function DeviceSheet() {
             return (
               <Press key={k} onPress={() => void send(D.id, { on: true, k, color: null })} label={`${nm}, ${k} kelvin`} selected={a} style={{ flex: 1, alignItems: 'center', gap: 6 }}>
                 <View style={{ width: '100%', height: 44, borderRadius: R.md, backgroundColor: bg, borderWidth: 2, borderColor: a ? C.bone : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
-                  {a ? <Icon name="check" size={20} color={C.coal} /> : null}
+                  {a ? <Icon name="check" size={20} color={readableOn(bg)} /> : null}
                 </View>
                 <T v="micro" size={10.5} color={a ? C.bone : C.stone}>{nm}</T>
               </Press>
@@ -231,7 +230,7 @@ export function DeviceSheet() {
               </View>
             )}
           </Card>
-          {block('hvac', 'Mode', <Segmented label="Mode" value={D.on ? D.hvac ?? null : null} options={HVAC.map(([id, label, icon, color]) => ({ id, label, icon, color }))} onChange={id => void send(D.id, { on: true, hvac: id as Dev['hvac'] })} />)}
+          {block('hvac', 'Mode', <Segmented label="Mode" value={D.on ? D.hvac ?? null : null} options={hvac().map(([id, label, icon, color]) => ({ id, label, icon, color }))} onChange={id => void send(D.id, { on: true, hvac: id as Dev['hvac'] })} />)}
           {block('fan', 'Fan', <Chips label="Fan speed" value={D.fanSpeed ?? null} color={C.blue} options={FAN_SPEEDS.map(([id, label]) => ({ id, label }))} onChange={id => void send(D.id, { fanSpeed: id as Dev['fanSpeed'] })} />)}
           {D.zones?.length ? <Zones D={D} /> : null}
           {D.zones?.length && snap?.roomClimate ? <VoiceNote integration={D.integration} onOpen={() => { close(); nav.navigate('Voice'); }} /> : null}
@@ -244,16 +243,16 @@ export function DeviceSheet() {
             <Card style={{ padding: SP[4], gap: SP[4] }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3] + 2 }}>
                 {D.track.art ? <Image source={{ uri: D.track.art }} style={{ width: 64, height: 64, borderRadius: R.sm + 2, backgroundColor: C.inset }} contentFit="cover" transition={200} /> : (
-                  <View style={{ width: 64, height: 64, borderRadius: R.sm + 2, backgroundColor: alpha(MUSIC, 0.16), alignItems: 'center', justifyContent: 'center' }}><Icon name="music_note" size={28} color={MUSIC} /></View>
+                  <View style={{ width: 64, height: 64, borderRadius: R.sm + 2, backgroundColor: alpha(C.music, 0.16), alignItems: 'center', justifyContent: 'center' }}><Icon name="music_note" size={28} color={C.music} /></View>
                 )}
                 <View style={{ flex: 1, gap: 2 }}>
-                  <T v="eyebrow" color={MUSIC}>Now playing</T>
+                  <T v="eyebrow" color={C.music}>Now playing</T>
                   <T v="headline" size={16} numberOfLines={1}>{D.track.title}</T>
                   <T v="footnote" color={C.stone} numberOfLines={1}>{[D.track.artist, D.media].filter(Boolean).join(' · ')}</T>
                 </View>
               </View>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: SP[2] }}>
-                <IconButton icon="shuffle" label={D.shuffle ? 'Shuffle is on. Play in order' : 'Shuffle'} tone="ghost" color={D.shuffle ? MUSIC : C.stone} onPress={() => void send(D.id, { shuffle: !D.shuffle }, D.shuffle ? 'Back in order' : 'Shuffled')} size={44} />
+                <IconButton icon="shuffle" label={D.shuffle ? 'Shuffle is on. Play in order' : 'Shuffle'} tone="ghost" color={D.shuffle ? C.music : C.stone} onPress={() => void send(D.id, { shuffle: !D.shuffle }, D.shuffle ? 'Back in order' : 'Shuffled')} size={44} />
                 <IconButton icon="skip_previous" label="Previous song" onPress={() => void send(D.id, { skip: -1 })} size={52} fill />
                 {has(D, 'pause') ? <IconButton icon={D.paused ? 'play_arrow' : 'pause'} label={D.paused ? 'Play' : 'Pause'} tone="amber" onPress={() => void send(D.id, { paused: !D.paused })} size={60} fill /> : null}
                 <IconButton icon="skip_next" label="Next song" onPress={() => void send(D.id, { skip: 1 })} size={52} fill />
@@ -297,7 +296,7 @@ export function DeviceSheet() {
                   return <Pill key={m.name} icon={m.icon} label={m.name} on={!!D.on && D.media === m.name} onPress={() => void send(D.id, { on: true, media: m.name, shuffle: sh }, `Playing ${m.name}${sh && m.kind !== 'all' ? ' on shuffle' : ''} on ${D.name}`)} />;
                 })}
               </HScroll>
-              <FieldWithButton value={station} onChange={setStation} placeholder="A station from an artist, album or song" button="Play" color={MUSIC} onColor="#1a1020" onSubmit={playStation} label="Start a station" />
+              <FieldWithButton value={station} onChange={setStation} placeholder="A station from an artist, album or song" button="Play" color={C.music} onColor={C.onMusic} onSubmit={playStation} label="Start a station" />
             </View>,
           ) : null}
           {has(D, 'sound') && D.on ? (
@@ -590,7 +589,7 @@ function RouterPower({ P }: { P: NonNullable<ReturnType<typeof routerPanel>> }) 
 /** An air purifier: the air and the filter, fan speed (choosing one switches to Manual), display and child lock. */
 function Purifier({ D }: { D: Dev }) {
   const { send } = useHub();
-  const air = AIR[D.airQuality ?? 0];
+  const air = airRating(D.airQuality ?? 0);
   const fl = D.filterLife;
   const flColor = fl == null ? C.stone : fl <= 10 ? C.red : fl <= 20 ? C.amber : C.green;
   const max = D.fanLevelMax ?? 3;

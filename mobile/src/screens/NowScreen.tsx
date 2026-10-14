@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { C, R, SP, alpha } from '../theme';
+import { C, R, SP, alpha, ink } from '../theme';
 import { useHub, useSnap } from '../state/hub';
 import { useSheet } from '../state/sheet';
 import { useNav } from '../navigation';
@@ -77,7 +77,7 @@ export function NowScreen() {
         <T v="callout" color={C.stone} tabular>{`${shortDate(s.home)} · ${nowClock}${w ? ` · ${deg(w.temp)} ${w.text.toLowerCase()}` : ''}`}</T>
         {M ? (
           <Press onPress={can.modes ? () => nav.navigate('Modes') : undefined} label={can.modes ? `${M.name} mode. Open modes` : `${M.name} mode`} style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3], alignSelf: 'flex-start' }}>
-            <Icon name={M.icon ?? 'routine'} size={38} color={M.color} fill />
+            <Icon name={M.icon ?? 'routine'} size={38} color={ink(M.color)} fill />
             <T v="hero">{M.name}</T>
             {can.modes ? <Icon name="chevron_right" size={26} color={C.stone2} /> : null}
           </Press>
@@ -144,10 +144,10 @@ export function NowScreen() {
         <View style={{ height: 40, borderRadius: R.sm, overflow: 'hidden', flexDirection: 'row' }} accessibilityLabel={`Today: ${bands.map(b => `${b.name} from ${b.from}`).join(', ')}`}>
           {bands.map((b, i) => (
             <View key={i} style={{ height: '100%', width: `${b.width * 100}%`, backgroundColor: alpha(b.color, b.current ? 0.42 : 0.2), borderRightWidth: i < bands.length - 1 ? 1 : 0, borderRightColor: C.card, justifyContent: 'center', paddingHorizontal: 6 }}>
-              {b.width >= 0.12 ? <T v="micro" size={10.5} color={b.current ? C.bone : b.color} numberOfLines={1}>{b.name}</T> : null}
+              {b.width >= 0.12 ? <T v="micro" size={10.5} color={b.current ? C.bone : ink(b.color)} numberOfLines={1}>{b.name}</T> : null}
             </View>
           ))}
-          <View style={{ position: 'absolute', left: `${(s.home.nowHour / 24) * 100}%`, top: 0, bottom: 0, width: 2, marginLeft: -1, backgroundColor: '#fff', boxShadow: '0px 0px 6px rgba(255,255,255,0.6)' }} />
+          <View style={{ position: 'absolute', left: `${(s.home.nowHour / 24) * 100}%`, top: 0, bottom: 0, width: 2, marginLeft: -1, backgroundColor: C.nowLine, boxShadow: `0px 0px 6px ${alpha(C.nowLine, 0.6)}` }} />
         </View>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
           {hourMarks(s.home.hour12).map(h => <T key={h} mono size={10.5} color={C.stone2}>{h}</T>)}
@@ -164,7 +164,7 @@ export function NowScreen() {
                   <Card style={{ width: 216, padding: SP[4], gap: SP[2], opacity: u.skipped ? 0.6 : 1, flex: 1 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                       <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
-                      <T mono size={12.5} color={color}>{u.t}</T>
+                      <T mono size={12.5} color={ink(color)}>{u.t}</T>
                     </View>
                     <T v="headline" style={u.skipped ? { textDecorationLine: 'line-through' } : null}>{u.label}</T>
                     <T v="footnote" color={C.stone} numberOfLines={2} style={{ flex: 1 }}>{u.skipped ? 'Skipped tonight' : u.what}</T>

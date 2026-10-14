@@ -17,6 +17,8 @@ export type FromMap =
   | { kova: 'error'; message: string };
 export type ToMap = { kova: 'set'; latitude: number; longitude: number; radiusM: number; fit?: boolean } | { kova: 'clear'; radiusM: number };
 
+import { C } from '../theme.ts';
+
 const LEAFLET = 'https://unpkg.com/leaflet@1.9.4/dist';
 const CSS_SRI = 'sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=';
 const JS_SRI = 'sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=';
@@ -46,7 +48,7 @@ export function mapPageHtml(start: { latitude: number; longitude: number; radius
   const init = JSON.stringify(start ?? null);
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <link rel="stylesheet" href="${LEAFLET}/leaflet.css" integrity="${CSS_SRI}" crossorigin="">
-<style>html,body,#map{margin:0;height:100%;background:#1c1d20}body{font:13px -apple-system,system-ui,sans-serif;color:#a3a09a}.msg{padding:16px}
+<style>html,body,#map{margin:0;height:100%;background:${C.inset}}body{font:13px -apple-system,system-ui,sans-serif;color:${C.stone}}.msg{padding:16px}
 .leaflet-control-attribution{font-size:10px}</style></head><body><div id="map"></div>
 <script>
 (function(){

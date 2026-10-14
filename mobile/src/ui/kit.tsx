@@ -3,7 +3,7 @@ import { Animated, Modal, PanResponder, Pressable, ScrollView, StyleSheet, View,
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, Path } from 'react-native-svg';
-import { C, MOTION, R, SHADOW, SP, alpha } from '../theme';
+import { C, MOTION, R, SHADOW, SP, alpha, ink, readableOn } from '../theme';
 import { useHub, type Toast } from '../state/hub';
 import { Image } from 'expo-image';
 import { Icon } from './Icon';
@@ -110,7 +110,7 @@ export function IconButton({ icon, label, onPress, size = 40, tone = 'plain', fi
 export function IconWell({ icon, color = C.bone, bg, size = 36, fill, radius }: { icon: string; color?: string; bg?: string; size?: number; fill?: boolean; radius?: number }) {
   return (
     <View style={{ width: size, height: size, borderRadius: radius ?? Math.round(size * 0.32), backgroundColor: bg ?? alpha(color, 0.14), alignItems: 'center', justifyContent: 'center' }}>
-      <Icon name={icon} size={Math.round(size * 0.55)} color={color} fill={fill} />
+      <Icon name={icon} size={Math.round(size * 0.55)} color={ink(color)} fill={fill} />
     </View>
   );
 }
@@ -144,7 +144,7 @@ export function Pill({ label, on, onPress, icon, count }: { label: string; on?: 
       style={{ minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingLeft: icon ? 11 : 15, paddingRight: 15, borderRadius: R.full, backgroundColor: on ? C.bone : C.card, borderWidth: 1, borderColor: on ? C.bone : C.edge }}>
       {icon ? <Icon name={icon} size={16} color={on ? C.coal : C.stone} /> : null}
       <T v="labelSm" color={on ? C.coal : C.bone2}>{label}</T>
-      {count != null ? <T v="micro" color={on ? alpha('#000000', 0.55) : C.stone2}>{String(count)}</T> : null}
+      {count != null ? <T v="micro" color={on ? alpha(C.coal, 0.55) : C.stone2}>{String(count)}</T> : null}
     </Press>
   );
 }
@@ -330,7 +330,7 @@ export function Spinner({ size = 18, color = C.stone, width = 2.2 }: { size?: nu
   return (
     <Animated.View accessibilityRole="progressbar" accessibilityLabel="Working" style={{ width: size, height: size, transform: [{ rotate: t.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] }) }] }}>
       <Svg width={size} height={size}>
-        <Circle cx={size / 2} cy={size / 2} r={r} stroke={alpha(color === C.stone ? '#a3a09a' : color, 0.22)} strokeWidth={width} fill="none" />
+        <Circle cx={size / 2} cy={size / 2} r={r} stroke={alpha(color, 0.22)} strokeWidth={width} fill="none" />
         <Circle cx={size / 2} cy={size / 2} r={r} stroke={color} strokeWidth={width} fill="none" strokeDasharray={`${c * 0.28} ${c}`} strokeLinecap="round" />
       </Svg>
     </Animated.View>
@@ -360,7 +360,7 @@ export function Skeleton({ w, h, r = R.sm, style }: { w?: number | `${number}%`;
     <View onLayout={e => setWidth(e.nativeEvent.layout.width)} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
       style={[{ width: w, height: h, borderRadius: r, backgroundColor: C.inset, overflow: 'hidden' }, style]}>
       <Animated.View style={{ position: 'absolute', top: 0, bottom: 0, width: 160, transform: [{ translateX: t.interpolate({ inputRange: [0, 1], outputRange: [-160, width + 160] }) }] }}>
-        <LinearGradient colors={['rgba(255,255,255,0)', C.shimmer, 'rgba(255,255,255,0)']} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={{ flex: 1 }} />
+        <LinearGradient colors={[C.shimmerEnd, C.shimmer, C.shimmerEnd]} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={{ flex: 1 }} />
       </Animated.View>
     </View>
   );
@@ -492,11 +492,11 @@ export function ToastHost({ toast, onUndo, bottom }: { toast: Toast | null; onUn
     <Animated.View {...swipe.panHandlers} accessibilityLiveRegion="polite" accessibilityRole="alert" style={{ position: 'absolute', left: SP[4], right: SP[4], bottom,
       opacity: Animated.multiply(a.interpolate({ inputRange: [0, 1], outputRange: [0, 1], extrapolate: 'clamp' }), x.interpolate({ inputRange: [-300, 0, 300], outputRange: [0, 1, 0], extrapolate: 'clamp' })),
       transform: [{ translateX: x }, ...move] }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3], minHeight: 52, paddingVertical: SP[3], paddingLeft: SP[4], paddingRight: cur.undo || cur.action ? 6 : SP[4], borderRadius: R.lg, backgroundColor: cur.error ? '#3a1d1a' : C.bone, borderWidth: 1, borderColor: cur.error ? C.redLine : 'rgba(255,255,255,0.6)', boxShadow: SHADOW.toast }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3], minHeight: 52, paddingVertical: SP[3], paddingLeft: SP[4], paddingRight: cur.undo || cur.action ? 6 : SP[4], borderRadius: R.lg, backgroundColor: cur.error ? C.toastErr : C.bone, borderWidth: 1, borderColor: cur.error ? C.redLine : C.toastEdge, boxShadow: SHADOW.toast }}>
         <Icon name={cur.error ? 'error' : cur.action ? 'cloud_download' : cur.undo ? 'check_circle' : 'info'} size={20} color={cur.error ? C.redText : C.coal} fill />
         <T v="label" weight={600} color={cur.error ? C.redText : C.coal} style={{ flex: 1 }}>{cur.text}</T>
         {cur.undo || cur.action ? (
-          <Press onPress={() => cur.action ? cur.action.run() : onUndo(cur)} haptic="select" label={cur.action?.label ?? 'Undo'} style={{ minHeight: 40, justifyContent: 'center', paddingVertical: SP[2], paddingHorizontal: SP[4], borderRadius: R.sm + 2, backgroundColor: cur.action ? C.coal : 'rgba(0,0,0,0.08)' }}>
+          <Press onPress={() => cur.action ? cur.action.run() : onUndo(cur)} haptic="select" label={cur.action?.label ?? 'Undo'} style={{ minHeight: 40, justifyContent: 'center', paddingVertical: SP[2], paddingHorizontal: SP[4], borderRadius: R.sm + 2, backgroundColor: cur.action ? C.coal : C.toastBtn }}>
             <T v="label" weight={800} color={cur.action ? C.bone : C.coal}>{cur.action?.label ?? 'Undo'}</T>
           </Press>
         ) : null}
@@ -509,7 +509,7 @@ export function ToastHost({ toast, onUndo, bottom }: { toast: Toast | null; onUn
 export function Empty({ icon, title, text, action, onAction, compact, tone = C.stone }: { icon: string; title: string; text?: string; action?: string; onAction?: () => void; compact?: boolean; tone?: string }) {
   if (compact) {
     return (
-      <Appear style={{ flexDirection: 'row', alignItems: action ? 'flex-start' : 'center', gap: SP[3], paddingVertical: SP[4], paddingHorizontal: SP[4], borderRadius: R.lg, borderWidth: 1, borderStyle: 'dashed', borderColor: 'rgba(255,255,255,0.1)' }}>
+      <Appear style={{ flexDirection: 'row', alignItems: action ? 'flex-start' : 'center', gap: SP[3], paddingVertical: SP[4], paddingHorizontal: SP[4], borderRadius: R.lg, borderWidth: 1, borderStyle: 'dashed', borderColor: C.dash }}>
         <IconWell icon={icon} color={tone} size={36} />
         {/* The action sits under the words, so they keep the width on a small phone. */}
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
@@ -649,7 +649,7 @@ export function Button({ label, icon, onPress, kind = 'primary', busy, size = 'm
 export function Tag({ text, color = C.stone, solid }: { text: string; color?: string; solid?: boolean }) {
   return (
     <View style={{ paddingVertical: 3, paddingHorizontal: 8, borderRadius: R.full, backgroundColor: solid ? color : alpha(color, 0.14), alignSelf: 'flex-start' }}>
-      <T v="micro" color={solid ? C.coal : color}>{text}</T>
+      <T v="micro" color={solid ? readableOn(color) : ink(color)}>{text}</T>
     </View>
   );
 }

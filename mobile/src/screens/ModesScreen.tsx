@@ -12,7 +12,7 @@ import { T } from '../ui/Text';
 import { Appear, animateLayout, spring } from '../ui/motion';
 import { FindingCard } from './FindingCard';
 
-const DAY = { ok: '', problem: C.red, skipped: '#26272b', none: C.inset } as const;
+const day = () => ({ ok: '', problem: C.red, skipped: C.skipped, none: C.inset }) as const;
 
 /** The 14 days a mode was replayed on, as squares, with what the colours mean. */
 function Days({ m }: { m: ModeView }) {
@@ -21,10 +21,10 @@ function Days({ m }: { m: ModeView }) {
   return (
     <View style={{ gap: SP[2] }} accessible accessibilityLabel={`Last 14 days: ${n.ok} ran fine, ${n.problem} with a problem, ${n.skipped} skipped. ${m.test.text}`}>
       <View style={{ flexDirection: 'row', gap: 4 }}>
-        {m.test.days.map((d, i) => <View key={i} style={{ flex: 1, aspectRatio: 1, borderRadius: 4, backgroundColor: d === 'ok' ? alpha(m.color, 0.85) : DAY[d] }} />)}
+        {m.test.days.map((d, i) => <View key={i} style={{ flex: 1, aspectRatio: 1, borderRadius: 4, backgroundColor: d === 'ok' ? alpha(m.color, 0.85) : day()[d] }} />)}
       </View>
       <View style={{ flexDirection: 'row', gap: SP[3], flexWrap: 'wrap' }}>
-        {([['ok', alpha(m.color, 0.85), 'Ran fine'], ['problem', C.red, 'A problem'], ['skipped', '#3a3b40', 'Skipped']] as const).map(([k, c, l]) => (
+        {([['ok', alpha(m.color, 0.85), 'Ran fine'], ['problem', C.red, 'A problem'], ['skipped', C.skippedKey, 'Skipped']] as const).map(([k, c, l]) => (
           <View key={k} style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
             <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: c }} />
             <T v="micro" color={C.stone}>{l}</T>

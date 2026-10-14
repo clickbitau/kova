@@ -1,4 +1,4 @@
-import { C } from '../theme';
+import { C } from '../theme.ts';
 import type { RobotState } from '../api/types';
 
 // Robot vacuums: the words and choices the panel and the automation editor use (hub util/robot.ts says the same).

@@ -312,6 +312,13 @@ export interface EnergyToday {
   devices: { id: string; name: string; w: number; estimated?: true }[];
 }
 
+/** The home's floor plan (hubs from 0.7.109): metres from its top-left corner, each device's spot. */
+export interface FloorPlan {
+  widthM: number; heightM: number; walls?: string; image?: string | null;
+  rooms: { id: string; name: string; room?: string | null; points: [number, number][]; outdoor?: boolean }[];
+  spots: Record<string, { x: number; y: number; auto?: boolean }>;
+}
+
 export interface Snapshot {
   home: { name: string; timezone: string; now: number; nowHour: number; date: string; dateLabel: string; clock: string; location?: { latitude: number; longitude: number; radiusM?: number; source?: 'manual' | 'geocode' | 'phone' | 'import' | 'map'; updatedAt?: number | null; /** Google's point (shown on Google's map only) or OpenStreetMap's, from an address search. */ provider?: 'google' | 'osm' }; /** Whether the address search goes through Google. */ maps?: { google: boolean }; prayerMethod?: string; pauseForDoorbell?: boolean; /** The street address chosen in Settings. */ address?: string | null; /** Kova learns from what people do (hubs from 0.7.60; unset: on). */ learnFromYou?: boolean;
     /** How the home writes dates and times (BCP-47, e.g. en-US), and whether the person chose it or the hub guessed (hubs from 0.8). */ locale?: string; localeSet?: boolean; /** 12-hour clock; unset: the locale's own. */ hour12?: boolean; /** Show temperatures in °F. Devices and the hub keep °C. */ fahrenheit?: boolean; /** True for a brand-new hub until setup is done. */ firstRun?: boolean };
@@ -324,6 +331,7 @@ export interface Snapshot {
   nativeGroups?: NativeGroup[];
   people: Person[];
   devices: Device[];
+  floorPlan?: FloorPlan | null;
   /** Sensors with their readings (hubs from 0.7.46). */
   sensors?: SensorView[];
   roomStatus?: Record<string, RoomStatus>;

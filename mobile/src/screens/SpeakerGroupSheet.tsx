@@ -11,7 +11,8 @@ import { Icon } from '../ui/Icon';
 import { Button, Card, HScroll, IconWell, Pill, Press, Section, Sheet } from '../ui/kit';
 import { T } from '../ui/Text';
 
-const TONE = { muted: C.stone, green: C.green, amber: C.amber, blue: C.blue } as const;
+/** Read at render: the colours change with the scheme. */
+const tone = () => ({ muted: C.stone, green: C.green, amber: C.amber, blue: C.blue }) as const;
 
 /** A text box the way the app draws them: card surface, hairline edge, amber edge while typing. */
 /** `account`: a username, the password, or a new password (hidden, and filled by the phone's password manager). */
@@ -108,8 +109,8 @@ export function SpeakerGroupSheet({ id, onClose }: { id: string | null; onClose:
         </HScroll>
         <T v="footnote" color={C.stone2}>Automatic puts it in the speakers’ room.</T>
       </Section>
-      <Card style={{ padding: SP[4], flexDirection: 'row', gap: SP[3], backgroundColor: alpha(TONE[note.tone], 0.08), borderColor: alpha(TONE[note.tone], 0.25), borderTopColor: alpha(TONE[note.tone], 0.32) }}>
-        <Icon name={note.icon} size={20} color={TONE[note.tone]} />
+      <Card style={{ padding: SP[4], flexDirection: 'row', gap: SP[3], backgroundColor: alpha(tone()[note.tone], 0.08), borderColor: alpha(tone()[note.tone], 0.25), borderTopColor: alpha(tone()[note.tone], 0.32) }}>
+        <Icon name={note.icon} size={20} color={tone()[note.tone]} />
         <View style={{ flex: 1, gap: 2 }}>
           <T v="headline" size={14}>{note.title}</T>
           <T v="footnote" color={C.stone}>{note.text}</T>

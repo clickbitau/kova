@@ -45,8 +45,8 @@ test('Robot vacuum: its map with area names and rooms, and the owner giving an a
   const h = await setup();
   const map = (await h.app.inject({ url: '/api/devices/robot_vacuum/map' })).json();
   assert.deepEqual(map.areas.map((a: { id: string; name: string; room: string | null }) => [a.id, a.name, a.room]), [['1', 'Lounge', 'lounge'], ['2', 'Kitchen', 'kitchen'], ['3', 'Area C', null], ['4', 'Area D', null], ['5', 'Area E', null]]);
-  assert.equal(map.areas[0].path, 'M0 0L60 0L60 40L0 40Z');
-  assert.deepEqual(map.dock, { x: 96, y: 4 });
+  assert.equal(map.areas[0].path, 'M0 0L144 0L144 96L0 96Z');
+  assert.deepEqual(map.dock, { x: 230.4, y: 9.6 });
   assert.equal((await h.app.inject({ url: '/api/devices/lamp/map' })).statusCode, 404);
 
   let r = await h.app.inject({ method: 'PATCH', url: '/api/devices/robot_vacuum/settings', payload: { areaRooms: { 3: 'office', 4: 'nowhere' } } });

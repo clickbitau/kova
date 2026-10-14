@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { Image } from 'expo-image';
-import { C, R, SP, alpha } from '../theme';
+import { C, R, SP, alpha, ON_PHOTO } from '../theme';
 import { useHub, useSnap } from '../state/hub';
 import { useNav } from '../navigation';
 import { hubUrl } from '../logic/connect';
@@ -47,7 +47,7 @@ function CameraCard({ c, uri, wide, index, onPress, room }: { c: Dev; uri: strin
             <CameraStill uri={uri} off={off} />
             <View style={{ position: 'absolute', left: SP[2] + 2, top: SP[2] + 2, flexDirection: 'row', alignItems: 'center', gap: 6, height: 24, paddingHorizontal: 9, borderRadius: R.full, backgroundColor: 'rgba(14,15,16,0.72)' }}>
               {off ? <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: C.red }} /> : <PulseDot color={C.green} size={7} />}
-              <T v="micro" color={C.bone} numberOfLines={1}>{off ? 'Offline' : can ? 'Watch live' : 'Latest picture'}</T>
+              <T v="micro" color={ON_PHOTO.text} numberOfLines={1}>{off ? 'Offline' : can ? 'Watch live' : 'Latest picture'}</T>
             </View>
           </View>
           <View style={{ paddingVertical: SP[3], paddingHorizontal: SP[3] + 2, gap: 2 }}>

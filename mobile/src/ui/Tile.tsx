@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Animated, View } from 'react-native';
-import { C, R, SP } from '../theme';
+import { C, R, SP, alpha } from '../theme';
 import { useHub } from '../state/hub';
 import { iconOf, isLight, stateOf, tint, type Dev } from '../logic/devices';
 import { AnimatedIcon, Icon } from './Icon';
@@ -73,7 +73,7 @@ export function Tile({ d, onToggle, onOpen }: { d: Dev; onToggle: () => void; on
           <T v="footnote" weight={600} color={dead ? C.red : fg} numberOfLines={1}>{st}</T>
         </View>
         {level != null ? (
-          <View pointerEvents="none" style={{ position: 'absolute', left: SP[3] + 2, right: SP[3] + 2, bottom: 8, height: 3, borderRadius: 2, backgroundColor: 'rgba(242,177,76,0.16)' }}>
+          <View pointerEvents="none" style={{ position: 'absolute', left: SP[3] + 2, right: SP[3] + 2, bottom: 8, height: 3, borderRadius: 2, backgroundColor: alpha(C.amber, 0.16) }}>
             <View style={{ width: `${level * 100}%`, height: 3, borderRadius: 2, backgroundColor: C.amber }} />
           </View>
         ) : null}

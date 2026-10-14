@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { Image } from 'expo-image';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { C, R, SP } from '../theme';
+import { C, R, SP, ON_PHOTO } from '../theme';
 import { useHub, useSnap } from '../state/hub';
 import { useSheet } from '../state/sheet';
 import { hubUrl } from '../logic/connect';
@@ -84,24 +84,24 @@ export function CameraScreen({ route }: NativeStackScreenProps<Stack, 'Camera'>)
               {playing && !picked ? <LivePlayer gen={lv.gen} send={send} onMessage={m => session.fromPage(m)} label={`${d.name} live video`} /> : null}
               {lv.phase === 'connecting' && !picked ? (
                 <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(14,15,16,0.35)' }}>
-                  <Spinner size={30} color={C.bone} width={2.6} />
+                  <Spinner size={30} color={ON_PHOTO.text} width={2.6} />
                 </View>
               ) : null}
               <View pointerEvents="none" style={{ position: 'absolute', left: SP[2] + 2, bottom: SP[2] + 2, right: SP[2] + 2 + 48, flexDirection: 'row' }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 26, paddingHorizontal: 10, paddingVertical: 4, borderRadius: R.full, backgroundColor: 'rgba(14,15,16,0.78)', flexShrink: 1 }}>
-                  {picked ? <Icon name="history" size={14} color={C.bone} />
+                  {picked ? <Icon name="history" size={14} color={ON_PHOTO.text} />
                     : lv.phase === 'live' ? <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: C.red }} />
-                    : lv.phase === 'connecting' ? <Spinner size={12} color={C.bone} width={1.8} />
+                    : lv.phase === 'connecting' ? <Spinner size={12} color={ON_PHOTO.text} width={1.8} />
                     : off ? <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: C.red }} /> : <PulseDot color={C.green} size={7} />}
                   {lv.phase === 'live' && !picked ? (
-                    <><T v="micro" color={C.bone} numberOfLines={1}>LIVE</T><T v="micro" mono color={C.bone2} tabular numberOfLines={1}>{elapsedText(Date.now() - (lv.since ?? Date.now()))}</T></>
-                  ) : <T v="micro" color={C.bone} numberOfLines={1} style={{ flexShrink: 1 }}>{picked ? `${picked.t} · tap for the latest` : lv.phase === 'connecting' ? 'Connecting…' : off ? 'Offline' : 'Latest picture'}</T>}
+                    <><T v="micro" color={ON_PHOTO.text} numberOfLines={1}>LIVE</T><T v="micro" mono color={ON_PHOTO.dim} tabular numberOfLines={1}>{elapsedText(Date.now() - (lv.since ?? Date.now()))}</T></>
+                  ) : <T v="micro" color={ON_PHOTO.text} numberOfLines={1} style={{ flexShrink: 1 }}>{picked ? `${picked.t} · tap for the latest` : lv.phase === 'connecting' ? 'Connecting…' : off ? 'Offline' : 'Latest picture'}</T>}
                 </View>
               </View>
               {lv.phase === 'live' && !picked ? (
                 <Press onPress={toggleSound} label={muted ? 'Sound off. Turn the sound on' : 'Sound on. Turn the sound off'} hitSlop={4}
                   style={{ position: 'absolute', top: SP[2] + 2, right: SP[2] + 2, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(14,15,16,0.78)', alignItems: 'center', justifyContent: 'center' }}>
-                  <Icon name={muted ? 'volume_off' : 'volume_up'} size={21} color={C.bone} />
+                  <Icon name={muted ? 'volume_off' : 'volume_up'} size={21} color={ON_PHOTO.text} />
                 </Press>
               ) : null}
             </View>

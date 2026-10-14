@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { SvgXml } from 'react-native-svg';
-import { C, R, SP, alpha } from '../theme';
+import { C, R, SP, alpha, QR_PAPER } from '../theme';
 import { useHub, useSnap } from '../state/hub';
 import { useNav } from '../navigation';
 import { clashText, comfortStep, googleSteps, homekitState, manualCode, matterState, roomAcRow, seasonLine, type VoicePairing } from '../logic/voice';
@@ -57,7 +57,7 @@ export function VoiceScreen() {
   const ms = matterState(pair), ks = homekitState(pair);
   const code = (qr: string | null | undefined, text: string, label: string) => (
     <View style={{ gap: SP[3], alignItems: 'center' }}>
-      {qr ? <View style={{ borderRadius: R.md, backgroundColor: C.bone, padding: SP[3], overflow: 'hidden' }}><SvgXml xml={qr} width={180} height={180} /></View> : null}
+      {qr ? <View style={{ borderRadius: R.md, backgroundColor: QR_PAPER, padding: SP[3], overflow: 'hidden' }}><SvgXml xml={qr} width={180} height={180} /></View> : null}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2], alignSelf: 'stretch' }}>
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
           <T v="footnote" color={C.stone}>Or type this code</T>

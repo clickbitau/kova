@@ -1,3 +1,4 @@
+import { spots } from '../util/floorplan.ts';
 import type { Hub } from '../hub.ts';
 import { dateWords, homeHour12, homeLocale } from '../util/locale.ts';
 import type { Device, Mode, Targets } from '../model/types.ts';
@@ -240,6 +241,8 @@ export function snapshot(hub: Hub) {
     // `watts` / `typicalWatts`: what a device with no meter draws while on, the owner's figure and Kova's (Energy page).
     // `kind`: device (something to control), sensor (only reports) or camera. Sensors stay here so ids keep working.
     // `live` (cameras): whether the apps can play its live video (its integration streams it over WebRTC).
+    // The floor plan, and where each device shows on it (placed by hand, or in its room).
+    floorPlan: cfg.floorPlan ? { ...cfg.floorPlan, spots: spots(cfg.floorPlan, reg.list().filter(d => !cfg.devices?.[d.id]?.archived).map(d => ({ id: d.id, room: d.room }))) } : null,
     devices: reg.list().map(d => ({ ...d, kind: kindOf(d), why: engine.why(d.id), usedIn: engine.usedIn(d.id), ...wattsSetting(d, cfg.devices?.[d.id]?.watts), ...zoneSettings(d, cfg), ...(d.type === 'vacuum' ? { areaRooms: cfg.devices?.[d.id]?.areaRooms ?? {} } : {}), ...liveSetting(reg, d), ...(canAnnounce(d) ? { canAnnounce: true, announceTrim: trimOf(cfg, d.id) } : {}) })),
     modes,
     current: {

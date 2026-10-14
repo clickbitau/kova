@@ -3,7 +3,7 @@
 import { deg, isFahrenheit } from './climate.ts';
 import type { AlertWhen, Device, Room, RoomStatus, SecurityState, SensorReading, SensorView, Snapshot, TimelineEvent } from '../api/types';
 
-const C = { amber: '#f2b14c', blue: '#7cb8f0', green: '#7fd4a0', red: '#ff6b5e', stone: '#a3a09a', stone2: '#6f6d69', violet: '#c9a0f0', yellow: '#dcd27e' };
+import { C } from '../theme.ts';
 
 /** A reading as written: the hub's words, with a temperature in °F where the home reads °F. */
 export const readingText = (r: Pick<SensorReading, 'value' | 'unit' | 'text'>) => isFahrenheit() && typeof r.value === 'number' && /^°C?$/.test(r.unit.trim()) ? deg(r.value) : r.text;
@@ -12,10 +12,10 @@ export const readingText = (r: Pick<SensorReading, 'value' | 'unit' | 'text'>) =
 export const isSensor = (d: Pick<Device, 'kind' | 'type'>) => d.kind ? d.kind === 'sensor' : d.type === 'sensor';
 export const isCamera = (d: Pick<Device, 'type'>) => d.type === 'camera';
 
-export const TREND: Record<string, [string, string, string]> = {
-  up: ['trending_up', C.amber, 'Rising over the last hour'], down: ['trending_down', C.blue, 'Falling over the last hour'], steady: ['trending_flat', C.stone2, 'Steady'],
-};
-export const KIND_COLOR: Record<string, string> = { climate: C.blue, motion: C.amber, contact: C.amber, light: C.yellow, air: C.green, energy: C.amber, network: C.green, sound: C.violet, other: C.stone };
+export const trendOf = (t: string): [string, string, string] | undefined => ({
+  up: ['trending_up', C.amber, 'Rising over the last hour'], down: ['trending_down', C.blue, 'Falling over the last hour'], steady: ['trending_flat', C.stone3, 'Steady'],
+ } as Record<string, [string, string, string]>)[t];
+const kindColor = (k: string): string | undefined => ({ climate: C.blue, motion: C.amber, contact: C.amber, light: C.yellow, air: C.green, energy: C.amber, network: C.green, sound: C.violet, other: C.stone } as Record<string, string>)[k];
 
 export const EV_ICON: Record<string, string> = { person: 'person', motion: 'sensors', ring: 'doorbell', vehicle: 'directions_car', animal: 'pets', package: 'package_2', sound: 'graphic_eq', opened: 'sensor_door', closed: 'sensor_door' };
 export const EV_WORD: Record<string, string> = { person: 'A person', motion: 'Motion', ring: 'The doorbell', vehicle: 'A vehicle', animal: 'An animal', package: 'A package', sound: 'A sound', opened: 'Opened', closed: 'Closed' };
@@ -39,7 +39,7 @@ const lit = (r?: SensorReading) => !!r && (r.field === 'motion' || r.field === '
 export function sensorCard(x: SensorView, now = Date.now()): SensorCard {
   const main = x.readings.find(r => r.field !== 'battery') ?? x.readings[0];
   const rest = x.readings.filter(r => r !== main && r.field !== 'battery');
-  const color = KIND_COLOR[x.kind] ?? C.stone;
+  const color = kindColor(x.kind) ?? C.stone;
   const live = lit(main);
   const pills = [
     ...(x.online ? [] : [{ icon: 'cloud_off', text: 'Not responding', color: C.red }]),
@@ -48,9 +48,9 @@ export function sensorCard(x: SensorView, now = Date.now()): SensorCard {
   ];
   const moment = main?.field === 'motion' || main?.field === 'open';
   const foot = [main?.changedLabel ? `${moment ? 'Last' : 'Changed'} ${main.changedLabel}` : '', x.seenAt ? `seen ${ago(x.seenAt, now)}` : ''].filter(Boolean).join(' · ');
-  const trend = main?.trend ? TREND[main.trend] ?? null : null;
+  const trend = main?.trend ? trendOf(main.trend) ?? null : null;
   return {
-    id: x.id, name: x.name, icon: x.icon, color, live, main: main ? readingText(main) : '—', mainColor: live ? color : '#f1efea', trend,
+    id: x.id, name: x.name, icon: x.icon, color, live, main: main ? readingText(main) : '—', mainColor: live ? color : C.bone, trend,
     sub: rest.map(readingText).join(' · ') || x.integration, foot, pills, online: x.online,
     label: [x.name, main && readingText(main), ...rest.map(r => `${r.label} ${readingText(r)}`), x.battery != null ? `battery ${x.battery}%` : '', x.online ? '' : 'not responding'].filter(Boolean).join(', '),
   };

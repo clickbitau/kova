@@ -1,5 +1,6 @@
 // The day strip on Now: the hub's mode bands, ready to draw. Plain TypeScript, so the tests run it under Node.
 import type { Snapshot } from '../api/types';
+import { C } from '../theme.ts';
 
 export interface DayBand { modeId: string; name: string; color: string; width: number; current: boolean; from: string }
 
@@ -22,7 +23,7 @@ export function dayBands(s: Pick<Snapshot, 'day' | 'modes' | 'home'>): DayBand[]
     const width = (b.end - b.start) / 24;
     const current = now >= b.start && now < b.end;
     if (prev && prev.modeId === b.modeId) { prev.width += width; prev.current ||= current; continue; }
-    out.push({ modeId: b.modeId, name: m?.name ?? b.modeId, color: m?.color ?? '#a3a09a', width, current, from: hhmm(b.start) });
+    out.push({ modeId: b.modeId, name: m?.name ?? b.modeId, color: m?.color ?? C.stone, width, current, from: hhmm(b.start) });
   }
   return out;
 }

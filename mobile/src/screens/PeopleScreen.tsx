@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Platform, Share, View } from 'react-native';
 import { SvgXml } from 'react-native-svg';
-import { C, R, SP } from '../theme';
+import { C, R, SP, QR_PAPER } from '../theme';
 import { useHub, useSnap } from '../state/hub';
 import { useNav } from '../navigation';
 import { ago, sessionIcon } from '../logic/browsers';
@@ -90,7 +90,7 @@ function InviteSheet({ open, onClose, start, data, resend, onDone }: { open: boo
         <>
           <SheetHead kicker={`Invite · ${made.invite.roleLabel}`} title="Scan this, or send the link" icon="qr_code_2" color={C.amber} />
           <View style={{ alignItems: 'center', gap: SP[3] }}>
-            <View style={{ borderRadius: R.md, backgroundColor: C.bone, padding: SP[3], overflow: 'hidden' }}><SvgXml xml={made.qrSvg} width={200} height={200} /></View>
+            <View style={{ borderRadius: R.md, backgroundColor: QR_PAPER, padding: SP[3], overflow: 'hidden' }}><SvgXml xml={made.qrSvg} width={200} height={200} /></View>
             <T mono size={22} color={C.bone} center selectable>{made.code}</T>
             <T v="footnote" color={C.stone} center>{`One use, for 24 hours. On their phone: the Kova app → Scan the code, or open the link in a browser on your home’s Wi-Fi${made.link.startsWith('https') ? ' or anywhere' : ''}.`}</T>
           </View>

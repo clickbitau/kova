@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Linking, View } from 'react-native';
 import { SvgXml } from 'react-native-svg';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { C, R, SP, alpha } from '../theme';
+import { C, R, SP, alpha, QR_PAPER } from '../theme';
 import { useHub, useSnap } from '../state/hub';
 import { useIntegrationSetup } from '../state/integrations';
 import type { Stack } from '../navigation';
@@ -21,7 +21,7 @@ import { Fields } from './IntegrationFields';
 type Path = (string | number)[];
 type Msg = { ok: boolean; text: string } | null;
 
-const TONE = { ok: C.green, warn: C.amber, idle: C.stone } as const;
+const tone = () => ({ ok: C.green, warn: C.amber, idle: C.stone }) as const;
 
 /** A note under a button: green when it went well, amber or red when not; the hub's error one line per problem. */
 function Note({ msg, err }: { msg?: Msg; err?: string | null }) {
@@ -44,7 +44,7 @@ function Result({ r }: { r: ActionResult }) {
   return (
     <View style={{ gap: SP[3], padding: SP[3], borderRadius: R.md, backgroundColor: C.inset, borderWidth: 1, borderColor: C.edge }}>
       {r.qrSvg ? (
-        <View style={{ alignSelf: 'center', borderRadius: R.md, backgroundColor: C.bone, padding: SP[3], overflow: 'hidden' }}>
+        <View style={{ alignSelf: 'center', borderRadius: R.md, backgroundColor: QR_PAPER, padding: SP[3], overflow: 'hidden' }}>
           <SvgXml xml={r.qrSvg} width={208} height={208} />
         </View>
       ) : null}
@@ -339,10 +339,10 @@ export function IntegrationScreen({ route, navigation }: NativeStackScreenProps<
       onRefresh={() => void setup.reload()} refreshing={setup.loading && !!setup.catalog}>
       <Card style={{ padding: SP[4], gap: SP[3] }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3] }}>
-          <IconWell icon={item.icon} color={st.tone === 'idle' ? C.bone : TONE[st.tone]} bg={st.tone === 'idle' ? C.selected : undefined} size={44} />
+          <IconWell icon={item.icon} color={st.tone === 'idle' ? C.bone : tone()[st.tone]} bg={st.tone === 'idle' ? C.selected : undefined} size={44} />
           <View style={{ flex: 1, gap: 2 }} accessibilityLiveRegion="polite">
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2] }}>
-              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: TONE[st.tone] }} />
+              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: tone()[st.tone] }} />
               <T v="headline" color={st.tone === 'warn' ? C.amber : C.bone}>{st.title}</T>
             </View>
             <T v="footnote" color={st.tone === 'warn' ? C.amber : C.stone}>{st.text}</T>

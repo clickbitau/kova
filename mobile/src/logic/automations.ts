@@ -5,6 +5,7 @@
 // matches, readings, events, every kind of trigger, condition and step, and one-time schedules.
 import type { Command, Device, Room, RoomStatus } from '../api/types';
 import { deg } from './climate.ts';
+import { C } from '../theme.ts';
 import { isCamera, isSensor } from './sensors.ts';
 import { WHOLE_HOME, WHOLE_HOME_NAME, ZONE_FIELDS, zonePresets, zoneCommandWords, zoneTargetOptions, type ZoneCommand } from './zones.ts';
 
@@ -1309,14 +1310,14 @@ export function deviceLabel(id: string, devices: Pick<Device, 'id' | 'name' | 'r
 
 // ----------------------------------------------------------------- list ----
 
-export const RESULT: Record<RunResult, [string, string]> = {
-  done: ['Ran', '#7fd4a0'], stopped: ['Ran', '#7fd4a0'], skipped: ['Skipped', '#a3a09a'], cancelled: ['Cancelled', '#a3a09a'], failed: ['Failed', '#ff6b5e'], running: ['Running', '#f2b14c'],
-};
+export const result = (): Record<RunResult, [string, string]> => ({
+  done: ['Ran', C.green], stopped: ['Ran', C.green], skipped: ['Skipped', C.stone], cancelled: ['Cancelled', C.stone], failed: ['Failed', C.red], running: ['Running', C.amber],
+});
 
 /** The last-run line under an automation, and its colour. */
 export function lastRunLine(r: AutomationView['lastRun']): [string, string] {
-  if (!r) return ['Not run yet', '#6f6d69'];
-  const [label, colour] = RESULT[r.result] ?? ['', '#a3a09a'];
+  if (!r) return ['Not run yet', C.stone3];
+  const [label, colour] = result()[r.result] ?? ['', C.stone];
   const detail = (r.result === 'skipped' || r.result === 'failed') && r.detail ? ` · ${r.detail}` : '';
   return [`${label} ${r.atLabel}${detail}`, colour];
 }
@@ -1369,10 +1370,10 @@ export function scheduleLine(a: AutomationView, now: string): { text: string; to
 
 /** A Home Assistant automation's state: converted, can convert (with what's left out), or needs rebuilding. */
 export function haState(a: HaAutomation): { text: string; colour: string; canConvert: boolean } {
-  if (a.converted) return { text: 'Converted', colour: '#7fd4a0', canConvert: false };
-  if (!a.convertible) return { text: 'Needs rebuilding in Kova', colour: '#a3a09a', canConvert: false };
+  if (a.converted) return { text: 'Converted', colour: C.green, canConvert: false };
+  if (!a.convertible) return { text: 'Needs rebuilding in Kova', colour: C.stone, canConvert: false };
   const n = a.notes.length;
-  return { text: n ? `Can convert · ${n} part${n === 1 ? '' : 's'} left out` : 'Can convert', colour: '#f2b14c', canConvert: true };
+  return { text: n ? `Can convert · ${n} part${n === 1 ? '' : 's'} left out` : 'Can convert', colour: C.amber, canConvert: true };
 }
 export const haText = (a: HaAutomation) => `${a.when[0] ?? ''}${a.cond.length ? `, ${a.cond[0].toLowerCase()}` : ''} → ${a.then[0] ?? ''}`;
 

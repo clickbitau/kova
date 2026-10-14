@@ -7,7 +7,7 @@ import { useHub, useSnap } from '../state/hub';
 import { useNav, type Stack } from '../navigation';
 import type { Adhan, Clip, Command, Device, PrayerView, Room, RoomStatus, SpeakerGroup } from '../api/types';
 import {
-  ACTION_KINDS, CONDITION_KINDS, DAYS, DAY_NAMES, FIELD_UNIT, KIND_ICON, MONTH_NAMES, PRESENCE_EVENTS, RAMP_FIELDS, RESULT, RUN_MODES, STATION_KEY, TITLE_KEY, TRIGGER_KINDS,
+  ACTION_KINDS, CONDITION_KINDS, DAYS, DAY_NAMES, FIELD_UNIT, KIND_ICON, MONTH_NAMES, PRESENCE_EVENTS, RAMP_FIELDS, result, RUN_MODES, STATION_KEY, TITLE_KEY, TRIGGER_KINDS,
   addMinutes, actionText, automationsOf, bodyOf, canMove, canRamp, canSet, carryCommand, changeActionKind, changeKind, clockOf, conditionText, ctxOf, dateOf, dayOn,
   deviceLabel, deviceSections, draftOf, draftSummary, duplicateAt, EVENTS, eventsFor, extrasOf, fieldDefault, fieldsFor, firstCommand, freeFields, isGroup, isOneTime, labelOf,
   localNowOf, matchFields, mediaChoices, mediaFromKey, mediaKey, minToSec, monthGrid, moveAt, newAction, newCondition, newTrigger, onceAt, onceChips, onceProblem, onceState, onceWords,
@@ -277,7 +277,7 @@ function RoomNote({ room }: { room: string }) {
 
 const SUB: Record<string, string> = { trigger: 'trigger', condition: 'condition', action: 'step' };
 /** Rails for what sits inside a part: the colour says what it is. */
-const RAIL: Record<string, string> = { if: C.amber, then: C.green, else: C.stone2, repeat: C.blue, any: C.blue, all: C.green, not: C.red, until: C.amber };
+const rail = (): Record<string, string> => ({ if: C.amber, then: C.green, else: C.stone2, repeat: C.blue, any: C.blue, all: C.green, not: C.red, until: C.amber });
 
 /**
  * One part (a trigger, condition or step): an icon and its kind (tap to change it), a chevron that folds it to
@@ -497,7 +497,7 @@ function ConditionPart({ c, path, index, tag, fixed }: { c: Condition; path: Pat
   let body: ReactNode = null, problem: string | undefined;
   if (isGroup(c)) {
     body = (
-      <Nest title={GROUP_TITLE[c.kind]} rail={RAIL[c.kind]}>
+      <Nest title={GROUP_TITLE[c.kind]} rail={rail()[c.kind]}>
         <ConditionList list={c.conditions} path={[...path, 'conditions']} join={c.kind === 'any' ? 'or' : c.kind === 'not' ? 'nor' : 'and'} />
         <AddCondition path={[...path, 'conditions']} text="Add to this group" />
       </Nest>
@@ -801,7 +801,7 @@ function ActionPart({ a, path, index, tag }: { a: Action; path: Path; index: num
     case 'ramp': body = <RampEditor a={a} path={path} />; if (!Object.keys(a.targets).length) problem = 'Choose what to ramp.'; else if (a.overSec < 10) problem = 'A ramp takes at least 10 seconds.'; break;
     case 'delay': body = <Duration label="How long" min={0} seconds={a.seconds} onChange={s => f('seconds', s ?? 0)} />; if (!a.seconds) problem = 'Say how long to wait.'; break;
     case 'wait': body = (<>
-      <Nest title="Until" rail={RAIL.until}>
+      <Nest title="Until" rail={rail().until}>
         <ConditionPart c={a.until} path={[...path, 'until']} index={0} fixed />
       </Nest>
       <Field label="At most"><Duration label="At most" optional min={0} seconds={a.timeoutSec} onChange={s => { set(path, { ...a, timeoutSec: s, ...(s ? {} : { stopOnTimeout: undefined }) }); }} /></Field>
@@ -826,22 +826,22 @@ function ActionPart({ a, path, index, tag }: { a: Action; path: Path; index: num
       <Field label="Overlay"><Select label="Overlay" value={a.overlay} options={withCurrent(home.overlays.map(o => ({ v: o.id, label: o.name })), a.overlay)} onChange={v => f('overlay', v)} /></Field>
     </>); break;
     case 'if': body = (<>
-      <Nest title="If all of these hold" rail={RAIL.if}>
+      <Nest title="If all of these hold" rail={rail().if}>
         <ConditionList list={a.conditions} path={[...path, 'conditions']} />
         <AddCondition path={[...path, 'conditions']} />
       </Nest>
-      <Nest title="Then" rail={RAIL.then}>
+      <Nest title="Then" rail={rail().then}>
         <ActionList list={a.then} path={[...path, 'then']} />
         <AddAction path={[...path, 'then']} />
       </Nest>
-      <Nest title="Otherwise" rail={RAIL.else}>
+      <Nest title="Otherwise" rail={rail().else}>
         <ActionList list={a.else ?? []} path={[...path, 'else']} />
         <AddAction path={[...path, 'else']} text="Add a step for otherwise" />
       </Nest>
     </>); if (!a.conditions.length) problem = '“If” needs at least one condition.'; else if (!a.then.length && !a.else?.length) problem = '“If” needs something to do.'; break;
     case 'repeat': body = (<>
       <Field label="Times"><Num label="Times" min={1} max={100} value={a.times} onChange={v => f('times', v ?? 1)} unit="times" /></Field>
-      <Nest title={`Do, ${a.times} times`} rail={RAIL.repeat}>
+      <Nest title={`Do, ${a.times} times`} rail={rail().repeat}>
         <ActionList list={a.actions} path={[...path, 'actions']} />
         <AddAction path={[...path, 'actions']} />
       </Nest>
@@ -1294,7 +1294,7 @@ function History({ runs, loading }: { runs: AutomationRun[]; loading: boolean })
   return (
     <View style={{ gap: 10 }}>
       {runs.map((r, i) => {
-        const [label, colour] = RESULT[r.result] ?? ['', C.stone];
+        const [label, colour] = result()[r.result] ?? ['', C.stone];
         return (
           <Appear key={r.id} index={i} style={{ borderRadius: R.lg - 2, backgroundColor: C.card, padding: 14, gap: 8 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>

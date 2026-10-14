@@ -16,7 +16,7 @@ import { SheetHead, TextField } from './SpeakerGroupSheet';
 
 /** Home use in the chart: a light neutral beside solar's amber, so the two read apart without colour too. */
 const USE = '#9c9a95';
-const TONE: Record<EnergyStat['tone'], string> = { amber: C.amber, bone: C.bone, blue: C.blue, green: C.green, muted: C.stone2 };
+const tone = (): Record<EnergyStat['tone'], string> => ({ amber: C.amber, bone: C.bone, blue: C.blue, green: C.green, muted: C.stone2 });
 
 /** A bar with a rounded top, standing on the baseline. */
 const bar = (x: number, w: number, base: number, h: number) => {
@@ -179,7 +179,7 @@ export function EnergyScreen() {
                 <Appear key={st.id} index={i} style={{ flexBasis: '47%', flexGrow: 1 }}>
                   <Card style={{ padding: SP[3] + 2, gap: SP[1], flex: 1 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                      <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: TONE[st.tone] }} />
+                      <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: tone()[st.tone] }} />
                       <T v="eyebrow" color={C.stone2}>{st.label}</T>
                     </View>
                     <T v="title" size={21} tabular color={st.tone === 'muted' ? C.stone : C.bone} maxFontSizeMultiplier={1.2}>{st.value}</T>

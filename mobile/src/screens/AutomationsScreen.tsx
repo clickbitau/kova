@@ -107,7 +107,7 @@ function IdeaCard({ i, onAdd, onChange, onDismiss }: { i: Idea; onAdd: () => voi
   );
 }
 
-const TONE = { amber: C.amber, stone: C.stone, green: C.green, red: C.red } as const;
+const tone = () => ({ amber: C.amber, stone: C.stone, green: C.green, red: C.red }) as const;
 
 /** A one-time schedule still to come: when, in words and how long until; what it does; edit or cancel. */
 function ScheduleCard({ a, now, index, onEdit, onCancel, onTurnOn }: { a: AutomationView; now: string; index: number; onEdit: () => void; onCancel: () => void; onTurnOn: () => void }) {
@@ -120,7 +120,7 @@ function ScheduleCard({ a, now, index, onEdit, onCancel, onTurnOn }: { a: Automa
           <IconWell icon="timer" color={a.enabled ? C.amber : C.stone} size={40} />
           <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
             <T v="headline" numberOfLines={2}>{a.name}</T>
-            <T v="footnote" weight={700} color={TONE[line.tone]}>{line.text}</T>
+            <T v="footnote" weight={700} color={tone()[line.tone]}>{line.text}</T>
           </View>
         </View>
         <T v="footnote" color={C.bone2} numberOfLines={3}>{w.onlyIf ? `${w.then} · only if ${w.onlyIf}` : w.then}</T>
@@ -155,10 +155,10 @@ function DoneSection({ list, now, onAgain, onDelete, onClear }: { list: Automati
             return (
               <View key={a.id} style={{ padding: 14, gap: 8, borderTopWidth: i ? 1 : 0, borderTopColor: C.hairline }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  <Icon name={line.tone === 'red' ? 'error' : 'check_circle'} size={18} color={TONE[line.tone]} />
+                  <Icon name={line.tone === 'red' ? 'error' : 'check_circle'} size={18} color={tone()[line.tone]} />
                   <View style={{ flex: 1, gap: 2 }}>
                     <T v="headline" size={14}>{a.name}</T>
-                    <T v="footnote" color={TONE[line.tone]}>{line.text}</T>
+                    <T v="footnote" color={tone()[line.tone]}>{line.text}</T>
                   </View>
                 </View>
                 <View style={{ flexDirection: 'row', gap: 8 }}>

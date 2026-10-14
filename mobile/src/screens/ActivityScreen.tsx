@@ -9,7 +9,7 @@ import { Screen } from '../ui/Screen';
 import { T } from '../ui/Text';
 import { Appear } from '../ui/motion';
 
-const AS: Record<string, string> = { auto: C.amber, people: C.green, device: C.blue, system: C.stone };
+const kindColour = (): Record<string, string> => ({ auto: C.amber, people: C.green, device: C.blue, system: C.stone });
 const FILTERS = [{ id: 'all', label: 'All' }, { id: 'auto', label: 'Modes' }, { id: 'people', label: 'People' }, { id: 'device', label: 'Devices' }];
 const EMPTY: Record<string, string> = { all: 'Nothing has happened yet today.', auto: 'No mode has changed anything yet.', people: 'Nobody has come or gone yet.', device: 'No device has changed yet.' };
 
@@ -24,7 +24,7 @@ export function ActivityScreen() {
       <Segmented compact label="Show" value={f} options={FILTERS} onChange={setF} />
       <View>
         {rows.map((a, i) => {
-          const fg = AS[a.type] ?? AS.system;
+          const fg = kindColour()[a.type] ?? C.stone;
           const last = i === rows.length - 1;
           return (
             <Appear key={a.id} index={i} style={{ flexDirection: 'row', gap: SP[3] }}>

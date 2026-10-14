@@ -21,7 +21,7 @@ function SensorTile({ c, index, onPress }: { c: SensorCard; index: number; onPre
         <Card tint={c.live ? c.color : undefined} style={{ padding: SP[3] + 2, gap: SP[3], opacity: c.online ? 1 : 0.6 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: SP[2] }}>
             <View style={{ width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: c.live ? c.color : alpha(c.color, 0.16) }}>
-              <Icon name={c.icon} size={20} color={c.live ? '#1a1408' : c.color} fill />
+              <Icon name={c.icon} size={20} color={c.live ? C.onAmber : c.color} fill />
             </View>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, justifyContent: 'flex-end', flexShrink: 1 }}>
               {c.pills.map(p => (

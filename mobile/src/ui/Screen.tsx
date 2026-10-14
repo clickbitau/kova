@@ -151,7 +151,7 @@ export function Screen({ children, title, over, onBack, right, glow, onRefresh, 
       </Animated.ScrollView>
       {/* The compact bar: page-coloured under the status bar always; the title and hairline fade in on scroll. */}
       <View pointerEvents="box-none" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top + (onBack || title ? BAR : 0) }}>
-        <Animated.View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(14,15,16,0.94)', borderBottomWidth: 1, borderBottomColor: C.hairline, opacity: bar }} />
+        <Animated.View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: C.glass, borderBottomWidth: 1, borderBottomColor: C.hairline, opacity: bar }} />
         {!onBack && !title ? null : (
           <View pointerEvents="box-none" style={{ position: 'absolute', top: insets.top, left: 0, right: 0, height: BAR, flexDirection: 'row', alignItems: 'center', paddingHorizontal: SP[3] }}>
             {onBack ? <IconButton icon="arrow_back" label="Back" onPress={onBack} size={38} /> : null}

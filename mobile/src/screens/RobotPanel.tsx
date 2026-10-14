@@ -164,7 +164,7 @@ function FloorMap({ map, picked, naming, onTap }: { map: RobotMap; picked: strin
         <Path d={map.walls} fill="none" stroke={C.bone2} strokeWidth={font / 6} strokeLinecap="round" strokeLinejoin="round" pointerEvents="none" />
         {map.dock ? <Circle cx={map.dock.x} cy={map.dock.y} r={font / 2.2} fill={C.green} stroke={C.page} strokeWidth={font / 10} /> : null}
         {map.areas.map(a => (
-          <SvgText key={`t${a.id}`} x={a.x} y={a.y + font / 3} fontSize={font} fontFamily={F[700]} textAnchor="middle" fill={picked.includes(a.id) || naming === a.id ? C.coal : C.bone} pointerEvents="none">{shortName(a.name)}</SvgText>
+          <SvgText key={`t${a.id}`} x={a.x} y={a.y + font / 3} fontSize={font} fontFamily={F[700]} textAnchor="middle" fill={picked.includes(a.id) || naming === a.id ? C.onAmber : C.bone} pointerEvents="none">{shortName(a.name)}</SvgText>
         ))}
       </Svg>
     </View>

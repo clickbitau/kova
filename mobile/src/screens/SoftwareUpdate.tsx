@@ -12,8 +12,8 @@ import { T } from '../ui/Text';
 import { Input } from './IntegrationFields';
 import appVersion from '../version.json';
 
-const TONE = { ok: C.green, ready: C.amber, busy: C.stone, error: C.red, muted: C.stone } as const;
-const HIST = { ok: C.green, warn: C.amber, error: C.red } as const;
+const tone = () => ({ ok: C.green, ready: C.amber, busy: C.stone, error: C.red, muted: C.stone }) as const;
+const hist = () => ({ ok: C.green, warn: C.amber, error: C.red }) as const;
 
 /** Kova on the hub: what's running, what's out and what it brings, Update now (with progress), Check now, overnight updates, the licence, and what happened before. */
 function HubUpdateCard({ u }: { u: HubUpdate }) {
@@ -101,7 +101,7 @@ function HubUpdateCard({ u }: { u: HubUpdate }) {
 function HistoryLine({ h }: { h: ReturnType<typeof historyRows>[number] }) {
   return (
     <View style={{ flexDirection: 'row', gap: SP[3], alignItems: 'flex-start' }}>
-      <Icon name={h.icon} size={18} color={HIST[h.tone]} style={{ marginTop: 1 }} />
+      <Icon name={h.icon} size={18} color={hist()[h.tone]} style={{ marginTop: 1 }} />
       <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
         <T v="callout" weight={600}>{h.title}</T>
         <T v="footnote" color={C.stone}>{h.sub}</T>
@@ -136,7 +136,7 @@ function UpdateProgress({ s }: { s: NonNullable<ReturnType<typeof updateSteps>> 
 function AppUpdateCard() {
   const u = useAppUpdate();
   const d = describeUpdate(u, running.version);
-  const fg = TONE[d.tone];
+  const fg = tone()[d.tone];
   const notes = u.state === 'ready' ? (u.notes ?? notesBetween(appVersion.history, running.version, u.version)) : appVersion.history.slice(0, 1);
   return (
     <Card tint={u.state === 'ready' ? C.amber : undefined} style={{ padding: SP[4], gap: SP[3] }}>

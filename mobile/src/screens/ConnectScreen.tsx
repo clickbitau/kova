@@ -3,7 +3,7 @@ import { KeyboardAvoidingView, Platform, ScrollView, TextInput, View } from 'rea
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Network from 'expo-network';
-import { C, F, R, SHADOW, SP } from '../theme';
+import { C, F, R, SHADOW, SP, ON_PHOTO } from '../theme';
 import { call, findHub, hello, HubError } from '../api/client';
 import { addressesOf, chooseAddress, display, kindFor } from '../logic/addresses';
 import { normalizeHubUrl, parseConnectLink, parseInviteLink, subnetCandidates, type HubConfig, type InviteLink } from '../logic/connect';
@@ -153,8 +153,8 @@ export function ConnectScreen({ again }: { again?: { onCancel(): void } } = {}) 
           </View>
         </View>
         <View style={{ position: 'absolute', left: SP[5], right: SP[5], top: insets.top + SP[4], alignItems: 'center', gap: 6, padding: SP[3], borderRadius: R.lg, backgroundColor: 'rgba(14,15,16,0.7)' }}>
-          <T v="headline" size={17}>Point at the code</T>
-          <T v="footnote" color={C.bone2} center>On a computer: Kova → Kova on your phone</T>
+          <T v="headline" size={17} color={ON_PHOTO.text}>Point at the code</T>
+          <T v="footnote" color={ON_PHOTO.dim} center>On a computer: Kova → Kova on your phone</T>
         </View>
         <View style={{ position: 'absolute', left: SP[6], right: SP[6], bottom: insets.bottom + SP[6] }}>
           <Button kind="secondary" label="Cancel" onPress={back} />

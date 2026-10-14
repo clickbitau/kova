@@ -1,10 +1,10 @@
 import { useEffect, useRef } from 'react';
-import { View } from 'react-native';
+import { Appearance, View, useColorScheme } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
 import { Manrope_400Regular, Manrope_500Medium, Manrope_600SemiBold, Manrope_700Bold, Manrope_800ExtraBold } from '@expo-google-fonts/manrope';
 import { JetBrainsMono_400Regular } from '@expo-google-fonts/jetbrains-mono';
-import { NavigationContainer, DarkTheme, type NavigationContainerRef } from '@react-navigation/native';
+import { NavigationContainer, DarkTheme, DefaultTheme, type InitialState, type NavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -12,7 +12,9 @@ import { useLastTap } from './src/native/push';
 import { useQuickActionCallback } from 'expo-quick-actions/hooks';
 import { shareHub, syncExtensions } from './src/native/extensions';
 import { CrashBoundary, crumb, initCrashReporting } from './src/native/crash';
-import { C, SP } from './src/theme';
+import { C, SP, applyScheme } from './src/theme';
+import { resolveScheme } from './src/logic/appearance';
+import { useAppearance } from './src/native/appearance';
 import { useHub } from './src/state/hub';
 import { HubRoot, useDemo } from './src/state/demo';
 import { SheetProvider } from './src/state/sheet';
@@ -52,7 +54,14 @@ import { NowSkeleton } from './src/screens/NowScreen';
 import { AppLock } from './src/ui/AppLock';
 
 const Stack = createNativeStackNavigator<StackParams>();
-const theme = { ...DarkTheme, colors: { ...DarkTheme.colors, background: C.page, card: C.nav, primary: C.amber, text: C.bone, border: C.hairline } };
+/** Built at render, from the colours in use. */
+const navTheme = (light: boolean) => {
+  const base = light ? DefaultTheme : DarkTheme;
+  return { ...base, colors: { ...base.colors, background: C.page, card: C.nav, primary: C.amber, text: C.bone, border: C.hairline, notification: C.red } };
+};
+
+/** Where the person was, kept while the app redraws in another scheme. */
+let navState: InitialState | undefined;
 
 function Splash() {
   return (
@@ -79,7 +88,7 @@ function CantReach() {
   );
 }
 
-function Home() {
+function Home({ light }: { light: boolean }) {
   const { cfg, loading, snap, conn, toast, undo, api, say } = useHub();
   const { demo } = useDemo();
   const insets = useSafeAreaInsets();
@@ -121,7 +130,7 @@ function Home() {
   return (
     <SheetProvider>
       <CrashBoundary>
-      <NavigationContainer ref={nav} theme={theme} onStateChange={() => crumb(nav.current?.getCurrentRoute()?.name ?? '')}>
+      <NavigationContainer ref={nav} theme={navTheme(light)} initialState={navState} onStateChange={s => { navState = s; crumb(nav.current?.getCurrentRoute()?.name ?? ''); }}>
         <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.page }, animation: 'slide_from_right', gestureEnabled: true, fullScreenGestureEnabled: true }}>
           <Stack.Screen name="Tabs" component={Tabs} />
           <Stack.Screen name="Modes" component={ModesScreen} />
@@ -165,11 +174,20 @@ export default function App() {
     KovaSymbols: require('./assets/fonts/KovaSymbols.ttf'),
     KovaSymbolsFilled: require('./assets/fonts/KovaSymbolsFilled.ttf'),
   });
+  const { choice, ready } = useAppearance();
+  const system = useColorScheme();
+  const resolved = resolveScheme(choice, system);
+  // The colours are set before anything draws; the key below redraws every screen when they change.
+  applyScheme(resolved);
+  useEffect(() => {
+    // 'unspecified' hands the choice back to the phone.
+    try { Appearance.setColorScheme?.(choice === 'system' ? 'unspecified' : choice); } catch { /* an engine without it */ }
+  }, [choice]);
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: C.page }}>
       <SafeAreaProvider>
-        <StatusBar style="light" />
-        {fonts ? <AppLock><HubRoot><Home /></HubRoot></AppLock> : <View style={{ flex: 1, backgroundColor: C.page }} />}
+        <StatusBar style={resolved === 'light' ? 'dark' : 'light'} />
+        {fonts && ready ? <AppLock><HubRoot><Home key={resolved} light={resolved === 'light'} /></HubRoot></AppLock> : <View style={{ flex: 1, backgroundColor: C.page }} />}
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

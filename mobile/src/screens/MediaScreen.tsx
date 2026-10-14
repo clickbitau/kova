@@ -17,7 +17,6 @@ import { T } from '../ui/Text';
 import { Choice, FieldWithButton } from './DeviceSheet';
 import { SheetHead, SpeakerGroupSheet, TextField } from './SpeakerGroupSheet';
 
-const MUSIC = '#c79bf2';
 
 /** A source's stream address, and whether a recording repeats or plays once. */
 function SourceSheet({ src, onClose }: { src: MediaSource | null; onClose: () => void }) {
@@ -126,18 +125,18 @@ export function MediaScreen() {
         <Card tint={P.on ? C.blue : undefined} style={{ padding: SP[4], gap: SP[4] }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3] + 2 }}>
             {np.art ? <Image source={{ uri: np.art }} style={{ width: 72, height: 72, borderRadius: R.sm + 2, backgroundColor: C.inset }} contentFit="cover" transition={200} /> : (
-              <View style={{ width: 72, height: 72, borderRadius: R.sm + 2, backgroundColor: P.track ? alpha(MUSIC, 0.16) : alpha(C.blue, P.on ? 0.18 : 0.08), alignItems: 'center', justifyContent: 'center' }}>
-                <Icon name={P.track ? 'music_note' : G ? 'speaker_group' : ICON[P.type] ?? 'speaker'} size={32} color={P.track ? MUSIC : P.on ? C.blue : C.stone} fill />
+              <View style={{ width: 72, height: 72, borderRadius: R.sm + 2, backgroundColor: P.track ? alpha(C.music, 0.16) : alpha(C.blue, P.on ? 0.18 : 0.08), alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name={P.track ? 'music_note' : G ? 'speaker_group' : ICON[P.type] ?? 'speaker'} size={32} color={P.track ? C.music : P.on ? C.blue : C.stone} fill />
               </View>
             )}
             <View style={{ flex: 1, gap: 2, minWidth: 0 }}>
-              <T v="eyebrow" color={P.on ? (P.track ? MUSIC : C.blue) : C.stone2}>{P.on ? (P.paused ? 'Paused' : 'Now playing') : 'Idle'}{P.track ? ` · ${P.name}` : ''}</T>
+              <T v="eyebrow" color={P.on ? (P.track ? C.music : C.blue) : C.stone2}>{P.on ? (P.paused ? 'Paused' : 'Now playing') : 'Idle'}{P.track ? ` · ${P.name}` : ''}</T>
               <T v="headline" size={17} numberOfLines={2}>{np.title}</T>
               <T v="footnote" color={C.stone} numberOfLines={2}>{np.sub}</T>
             </View>
           </View>
           <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: SP[4] }}>
-            {np.queue ? <IconButton icon="shuffle" label={P.shuffle ? 'Shuffle is on. Play in order' : 'Shuffle'} tone="ghost" color={P.shuffle ? MUSIC : C.stone} size={44} onPress={() => void send(P.id, { shuffle: !P.shuffle }, P.shuffle ? 'Back in order' : 'Shuffled')} /> : null}
+            {np.queue ? <IconButton icon="shuffle" label={P.shuffle ? 'Shuffle is on. Play in order' : 'Shuffle'} tone="ghost" color={P.shuffle ? C.music : C.stone} size={44} onPress={() => void send(P.id, { shuffle: !P.shuffle }, P.shuffle ? 'Back in order' : 'Shuffled')} /> : null}
             {np.queue ? <IconButton icon="skip_previous" label="Previous song" size={50} fill onPress={() => void send(P.id, { skip: -1 })} /> : null}
             <IconButton icon={np.playing ? (np.canPause ? 'pause' : 'stop') : 'play_arrow'} label={np.playing ? (np.canPause ? 'Pause' : 'Stop') : 'Play'} tone="amber" size={60} fill onPress={() => run(P.id, playPause(P, s.sources))} />
             {np.queue ? <IconButton icon="skip_next" label="Next song" size={50} fill onPress={() => void send(P.id, { skip: 1 })} /> : null}
@@ -200,10 +199,10 @@ export function MediaScreen() {
                 <Pill icon="shuffle" label={shuffle ? 'Shuffle on' : 'Shuffle off'} on={shuffle} onPress={() => setShuffle(v => !v)} />
                 {s.music.map(m => <Pill key={m.name} icon={m.icon} label={m.name} on={!!P.on && P.media === m.name} onPress={() => run(P.id, musicCommand(P, m, shuffle))} />)}
               </HScroll>
-              <FieldWithButton value={station} onChange={setStation} placeholder="A station from an artist, album or song" button="Play" color={MUSIC} onColor="#1a1020" label="Start a station"
+              <FieldWithButton value={station} onChange={setStation} placeholder="A station from an artist, album or song" button="Play" color={C.music} onColor={C.onMusic} label="Start a station"
                 onSubmit={() => { const r = stationCommand(P, station); run(P.id, r); if (r && !('error' in r)) setStation(''); }} />
             </>
-          ) : <Empty compact icon="music_note" tone={MUSIC} title="Pick a speaker that plays a queue" text={`${P?.name ?? 'This one'} can’t play your music library. Google Cast, Sonos and AirPlay speakers can.`} />}
+          ) : <Empty compact icon="music_note" tone={C.music} title="Pick a speaker that plays a queue" text={`${P?.name ?? 'This one'} can’t play your music library. Google Cast, Sonos and AirPlay speakers can.`} />}
         </Section>
       ) : null}
 

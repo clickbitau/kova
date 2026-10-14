@@ -3,7 +3,7 @@ import { C, SP } from '../theme';
 import type { Room, RoomZone } from '../api/types';
 import { useHub } from '../state/hub';
 import { useSheet } from '../state/sheet';
-import { HVAC } from '../logic/devices';
+import { hvac } from '../logic/devices';
 import { acOnFor, offersAcOn, roomZoneLine, sharedWith, suggestWords, zoneOpenAt, zoneSwitch } from '../logic/zones';
 import { Button, Card, IconWell, Press, Slider, Switch } from '../ui/kit';
 import { T } from '../ui/Text';
@@ -22,7 +22,7 @@ function ZoneCard({ z, room, rooms }: { z: RoomZone; room: string; rooms: Room[]
   const { send, say } = useHub();
   const sheet = useSheet();
   const live = z.on && z.ac.on && z.ac.online;
-  const hv = HVAC.find(h => h[0] === z.ac.hvac);
+  const hv = hvac().find(h => h[0] === z.ac.hvac);
   const tone = live ? hv?.[3] ?? C.blue : C.stone;
   const shared = sharedWith(z, room, rooms);
   const title = `${z.name} zone`;

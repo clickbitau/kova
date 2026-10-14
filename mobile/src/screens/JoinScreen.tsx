@@ -84,7 +84,7 @@ export function JoinScreen({ invite, onClose }: { invite: InviteLink; /** Not no
     return (
       <Press key={id} selected={on} haptic="select" label={label} onPress={() => setWho(id)}
         style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2] + 2, minHeight: 52, paddingLeft: 8, paddingRight: 16, paddingVertical: 6, borderRadius: R.lg, backgroundColor: on ? C.amberTint : C.card, borderWidth: 1, borderColor: on ? C.amberLine : C.edge, flexShrink: 1, maxWidth: '100%' }}>
-        {icon ? <IconWell icon={icon} size={36} radius={18} color={on ? C.amber : C.stone} /> : <Avatar name={label} size={36} ring={on ? '#2a2318' : C.card} />}
+        {icon ? <IconWell icon={icon} size={36} radius={18} color={on ? C.amber : C.stone} /> : <Avatar name={label} size={36} ring={on ? C.amberSolid : C.card} />}
         <T v="label" color={on ? C.bone : C.bone2} style={{ flexShrink: 1 }}>{label}</T>
         {on ? <Icon name="check" size={18} color={C.amber} /> : null}
       </Press>

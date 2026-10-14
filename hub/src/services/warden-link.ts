@@ -3,6 +3,7 @@ import type { Device } from '../model/types.ts';
 import { wardenFeed, type FeedEvent, type WardenOptions } from '../adapters/warden.ts';
 import { LanHttpError, lanJson, trimUrl } from '../util/lan-http.ts';
 import { kovaAddress } from './helix-link.ts';
+import { spots } from '../util/floorplan.ts';
 
 /**
  * What Kova tells Warden (docs/KOVA.md in warden-os, the `integration` scope). Warden never calls Kova;
@@ -115,12 +116,18 @@ export class WardenLink {
     this.hub.reg.on('devices', soon);
     this.hub.on('changed', soon);
     wardenFeed.on('event', this.onFeed);
+    // The Wi-Fi readings on the floor plan go stale even when nothing in Kova changes.
+    this.tick = setInterval(() => { if (this.hub.config.get().floorPlan) void this.sync(); }, 30 * 60_000);
+    this.tick.unref?.();
     soon();
   }
+  private tick: NodeJS.Timeout | null = null;
 
   stop(): void {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
+    if (this.tick) clearInterval(this.tick);
+    this.tick = null;
     wardenFeed.off('event', this.onFeed);
   }
 
@@ -131,7 +138,7 @@ export class WardenLink {
     return c?.url && c.token && c.share !== false ? c as WardenLinkConfig & { token: string } : null;
   }
 
-  private call<T = unknown>(c: WardenLinkConfig, method: 'PUT' | 'POST' | 'GET', path: string, body?: unknown): Promise<T> {
+  private call<T = unknown>(c: WardenLinkConfig, method: 'PUT' | 'POST' | 'GET' | 'DELETE', path: string, body?: unknown): Promise<T> {
     return lanJson<T>(`${trimUrl(c.url)}/api/v1${path}`, { method, body, token: c.token, fingerprint: c.fingerprint, publicKeySha256: c.publicKeySha256 }).then(r => r.json);
   }
 
@@ -162,10 +169,12 @@ export class WardenLink {
         if (ip && IPV4.test(ip)) await this.put(c, '/integrations/kova/hub', { ip });
         await this.sendMode(c);
         this.needsScope = false;
+        if (dev?.matched) this.matched = new Map(dev.matched.filter(m => m.deviceId).map(m => [m.kovaId, m.deviceId!]));
+        const floor = await this.sendFloor(c);
         const matched = dev?.matched ? dev.matched.filter(m => m.deviceId).length : undefined;
         const access = await this.call<{ approved?: unknown; waiting?: boolean; proposal?: unknown; problem?: string }>(c, 'GET', '/integrations/kova/access').catch(() => null);
         const rule = access?.problem ? ` · access rule: ${access.problem}` : access?.approved ? ' · access rule approved' : access?.waiting || access?.proposal ? ' · access rule waiting for your Warden admin' : '';
-        this.note = { ok: true, note: `Warden knows ${devices.length} of Kova’s devices${matched !== undefined ? ` (${matched} matched)` : ''} · house mode ${this.lastMode}${rule}` };
+        this.note = { ok: true, note: `Warden knows ${devices.length} of Kova’s devices${matched !== undefined ? ` (${matched} matched)` : ''} · house mode ${this.lastMode}${floor}${rule}` };
       } catch (e) {
         if (e instanceof LanHttpError && e.status === 403) {
           this.needsScope = true;
@@ -184,6 +193,67 @@ export class WardenLink {
   }
 
   private lastMode = 'home';
+  /** Kova's device → Warden's device (dev_…), from what Warden matched. */
+  private matched = new Map<string, string>();
+  private floorId: string | null = null;
+  private readingsAt = 0;
+  private floorSent = '';
+
+  /**
+   * The floor plan, for Warden's Wi-Fi survey (`/survey/floors`): one floor that is Kova's (its name ends "(from
+   * Kova)"), with the plan's size and rooms; the access points placed on it in Warden stay. Then, every half hour,
+   * how well Warden hears each Wi-Fi device Kova has on the plan, at its spot (source "gateway": the access point's
+   * own report), in place of the readings Kova sent before. A Warden without the survey, or a token that may not
+   * use it, just leaves the plan out.
+   */
+  private async sendFloor(c: WardenLinkConfig): Promise<string> {
+    const cfg = this.hub.config.get(), p = cfg.floorPlan;
+    if (!p) return '';
+    const name = `${cfg.name} (from Kova)`;
+    const rooms = p.rooms.map(r => ({ id: r.id, name: r.name, points: r.points.map(([x, y]) => ({ x, y })) }));
+    try {
+      if (!this.floorId) {
+        const list = await this.call<{ floors?: { id: string; name: string }[] }>(c, 'GET', '/survey/floors');
+        this.floorId = list.floors?.find(f => f.name.endsWith('(from Kova)'))?.id ?? null;
+        if (!this.floorId) this.floorId = (await this.call<{ id?: string }>(c, 'POST', '/survey/floors', { name, widthMeters: p.widthM, heightMeters: p.heightM })).id ?? null;
+        if (!this.floorId) throw new Error('Warden didn’t make a floor for it');
+      }
+      const id = encodeURIComponent(this.floorId);
+      const key = JSON.stringify([name, p.widthM, p.heightM, rooms]);
+      if (key !== this.floorSent) {
+        const was = await this.call<{ aps?: unknown[] }>(c, 'GET', `/survey/floors/${id}`);
+        await this.call(c, 'PUT', `/survey/floors/${id}`, { name, widthMeters: p.widthM, heightMeters: p.heightM, rooms, aps: was.aps ?? [] });
+        this.floorSent = key;
+      }
+      const n = await this.sendReadings(c, id);
+      return ` · floor plan shared${n ? ` with Wi-Fi from ${n} device${n === 1 ? '' : 's'}` : ''}`;
+    } catch (e) {
+      if (e instanceof LanHttpError && e.status === 404) this.floorId = null;
+      if (e instanceof LanHttpError && (e.status === 403 || e.status === 401)) return ' · floor plan not shared (Warden doesn’t let Kova add to its Wi-Fi survey yet)';
+      // A Warden without the survey: nothing to say.
+      if (e instanceof LanHttpError && (e.status === 503 || e.status === 404)) return '';
+      return ` · floor plan not shared (${e instanceof Error ? e.message : String(e)})`;
+    }
+  }
+
+  private async sendReadings(c: WardenLinkConfig, floor: string): Promise<number> {
+    if (this.now - this.readingsAt < 30 * 60_000) return this.readingsSent;
+    const cfg = this.hub.config.get(), p = cfg.floorPlan!;
+    const at = spots(p, [...this.hub.reg.devices.values()].filter(d => !cfg.devices?.[d.id]?.archived).map(d => ({ id: d.id, room: d.room })));
+    const devs = await this.call<{ devices?: { id: string; online?: boolean; connection?: { medium?: string; ssid?: string; band?: string; rssi?: number } }[] }>(c, 'GET', '/devices?online=true');
+    const heard = new Map((devs.devices ?? []).filter(d => d.connection?.medium === 'wireless' && typeof d.connection.rssi === 'number' && d.connection.ssid).map(d => [d.id, d.connection!]));
+    const samples = [...this.matched].flatMap(([kova, dev]) => {
+      const s = at[kova], w = heard.get(dev), d = this.hub.reg.get(kova);
+      return s && w && d ? [{ ssid: w.ssid!, ...(w.band ? { band: w.band } : {}), x: s.x, y: s.y, rssi: Math.round(w.rssi!), source: 'gateway', note: `Kova: ${d.name}` }] : [];
+    });
+    const old = await this.call<{ samples?: { id: string; note?: string }[] }>(c, 'GET', `/survey/floors/${floor}/samples`);
+    for (const s of old.samples ?? []) if (s.note?.startsWith('Kova: ')) await this.call(c, 'DELETE', `/survey/floors/${floor}/samples/${encodeURIComponent(s.id)}`);
+    if (samples.length) await this.call(c, 'POST', `/survey/floors/${floor}/samples`, { samples });
+    this.readingsAt = this.now;
+    this.readingsSent = samples.length;
+    return samples.length;
+  }
+  private readingsSent = 0;
 
   private async sendMode(c: WardenLinkConfig): Promise<void> {
     const e = this.hub.engine;

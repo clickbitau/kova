@@ -2,13 +2,13 @@
 // kept free of React Native so the tests can run them under plain Node.
 import type { Command, Device, DeviceState, Room, Snapshot } from '../api/types';
 import { deg } from './climate.ts';
+import { C, alpha } from '../theme.ts';
 import { isSensor } from './sensors.ts';
 import { WHOLE_HOME, WHOLE_HOME_ICON, WHOLE_HOME_NAME } from './zones.ts';
 
 /** A device with its state spread on top, the shape every screen works with. */
 export type Dev = Device & DeviceState;
 
-const C = { amber: '#f2b14c', blue: '#7cb8f0', green: '#7fd4a0', red: '#ff6b5e', stone: '#a3a09a', card: '#16171a', control: '#232428', muted: '#8a8781', onAmber: '#1a1408' };
 
 export const ICON: Record<string, string> = {
   light: 'lightbulb', dimmer: 'lightbulb', fan: 'air_purifier', media: 'speaker', tv: 'tv', camera: 'videocam',
@@ -16,14 +16,14 @@ export const ICON: Record<string, string> = {
 };
 
 /** Air conditioner modes: id, name, icon, colour. */
-export const HVAC: [NonNullable<Dev['hvac']>, string, string, string][] = [
+export const hvac = (): [NonNullable<Dev['hvac']>, string, string, string][] => [
   ['cool', 'Cool', 'ac_unit', C.blue], ['heat', 'Heat', 'local_fire_department', C.amber], ['dry', 'Dry', 'water_drop', C.green],
-  ['fan', 'Fan', 'mode_fan', C.stone], ['auto', 'Auto', 'autorenew', '#c9a0f0'],
+  ['fan', 'Fan', 'mode_fan', C.stone], ['auto', 'Auto', 'autorenew', C.violet],
 ];
 export const FAN_SPEEDS: [NonNullable<Dev['fanSpeed']>, string][] = [['auto', 'Auto'], ['quiet', 'Quiet'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['turbo', 'Turbo']];
 
 /** The air as a purifier rates it: 1 good … 4 very poor, with its colour. */
-export const AIR: Record<number, [string, string]> = { 1: ['Good', C.green], 2: ['Moderate', '#dcd27e'], 3: ['Poor', C.amber], 4: ['Very poor', C.red] };
+export const airRating = (level: number): [string, string] | undefined => ({ 1: ['Good', C.green], 2: ['Moderate', C.yellow], 3: ['Poor', C.amber], 4: ['Very poor', C.red] } as Record<number, [string, string]>)[level];
 
 /** A purifier's filter: how urgent replacing it is. */
 export const filterNote = (life?: number | null) => life == null ? '' : life <= 10 ? 'Replace the filter now' : life <= 20 ? 'Replace the filter soon' : '';
@@ -50,7 +50,7 @@ const inputName = (d: Dev) => d.input ? (d.input === 'tv' ? (has(d, 'sound') ? '
 /** The router (Warden, from its BMC). */
 export const ROUTER_ID = 'warden_router';
 const PROBLEM: Record<string, string> = { 'no input power': 'No input power', failed: 'Failed', 'predicted to fail': 'Predicted to fail', 'input power out of range': 'Input out of range', 'not installed': 'Not installed' };
-const REDUNDANCY: Record<string, [string, string, string]> = { full: ['Full', C.green, 'The supplies back each other up'], degraded: ['Degraded', C.amber, 'Still running, with less backup'], lost: ['Lost', C.red, 'One more failure and it goes off'] };
+const redundancy = (): Record<string, [string, string, string]> => ({ full: ['Full', C.green, 'The supplies back each other up'], degraded: ['Degraded', C.amber, 'Still running, with less backup'], lost: ['Lost', C.red, 'One more failure and it goes off'] });
 
 /** The icon for a device: its type's, or the router's own. */
 export const iconOf = (d: Pick<Device, 'id' | 'type'>) => d.id === ROUTER_ID ? 'dns' : ICON[d.type] ?? 'devices';
@@ -60,7 +60,7 @@ export function routerPanel(s: Pick<Snapshot, 'devices' | 'insights'>, d: Pick<D
   const all = devs(s);
   const R = d.id === ROUTER_ID ? all[ROUTER_ID] : d.id === 'warden_internet' ? all[ROUTER_ID] : undefined;
   if (!R || !(Array.isArray(R.supplies) || Array.isArray(R.sensors) || R.power != null)) return null;
-  const red = R.redundancy ? REDUNDANCY[R.redundancy] : undefined;
+  const red = R.redundancy ? redundancy()[R.redundancy] : undefined;
   const alert = (s.insights ?? []).find(i => i.device === R.id && i.id.startsWith('power:'));
   return {
     title: d.id === R.id ? 'Power' : 'Router power',
@@ -72,7 +72,7 @@ export function routerPanel(s: Pick<Snapshot, 'devices' | 'insights'>, d: Pick<D
       const warn = x.problem === 'predicted to fail';
       return { name: x.name, badge: x.ok ? 'OK' : PROBLEM[x.problem ?? ''] ?? 'Not OK', color: x.ok ? C.green : warn ? C.amber : C.red, icon: x.ok ? 'check_circle' : warn ? 'warning' : 'power_off' };
     }),
-    temps: (R.sensors ?? []).filter(x => x.kind === 'temp').map(x => ({ name: x.name, value: deg(x.value), color: x.value >= 80 ? C.red : x.value >= 65 ? C.amber : '#f1efea' })),
+    temps: (R.sensors ?? []).filter(x => x.kind === 'temp').map(x => ({ name: x.name, value: deg(x.value), color: x.value >= 80 ? C.red : x.value >= 65 ? C.amber : C.bone })),
     fans: (R.sensors ?? []).filter(x => x.kind === 'fan').map(x => `${x.name} · ${x.value} rpm`),
     fanMode: R.fanMode ? `${R.fanMode[0].toUpperCase()}${R.fanMode.slice(1)}${R.fanPercent != null ? ` · ${R.fanPercent}%` : ''}` : '',
   };
@@ -108,11 +108,11 @@ export function stateOf(d: Dev): [string, string] {
   if (d.type === 'fan') {
     if (!d.on) return ['Off', C.stone];
     if (d.filterLife != null && d.filterLife <= 20) return [`${d.mode || 'On'} · filter ${d.filterLife}%`, C.amber];
-    const air = AIR[d.airQuality ?? 0];
+    const air = airRating(d.airQuality ?? 0);
     return [[d.mode || 'On', d.mode === 'Manual' && d.fanLevel ? `speed ${d.fanLevel}` : '', air ? `air ${air[0].toLowerCase()}` : ''].filter(Boolean).join(' · '), C.blue];
   }
   if (d.type === 'climate') {
-    const m = HVAC.find(h => h[0] === d.hvac), room = d.temp != null ? `${d.room === 'whole_home' ? 'inside' : 'room'} ${deg(d.temp)}` : '';
+    const m = hvac().find(h => h[0] === d.hvac), room = d.temp != null ? `${d.room === 'whole_home' ? 'inside' : 'room'} ${deg(d.temp)}` : '';
     return d.on ? [[m?.[1] ?? 'On', d.target != null ? deg(d.target) : '', room].filter(Boolean).join(' · '), m?.[3] ?? C.blue] : [['Off', room].filter(Boolean).join(' · '), C.stone];
   }
   // A soundbar or TV Kova controls but can't stream to: on (and its input) or off, never "Playing".
@@ -128,14 +128,14 @@ export function stateOf(d: Dev): [string, string] {
 /** Tile colours: amber when a light is on, blue for media and air, green for cameras, muted when off. */
 export function tint(d: Dev): { bg: string; border: string; iconBg: string; iconFg: string } {
   const media = isPlayer(d) || d.type === 'climate';
-  if (d.type === 'camera' || d.type === 'sensor') return { bg: C.card, border: 'rgba(255,255,255,0.05)', iconBg: 'rgba(127,212,160,0.15)', iconFg: C.green };
+  if (d.type === 'camera' || d.type === 'sensor') return { bg: C.card, border: C.hairline, iconBg: C.greenTint, iconFg: C.green };
   if (d.type === 'fan' || media) return {
-    bg: d.on && media ? 'rgba(124,184,240,0.12)' : C.card, border: d.on && media ? 'rgba(124,184,240,0.3)' : 'rgba(255,255,255,0.05)',
-    iconBg: d.on ? 'rgba(124,184,240,0.2)' : C.control, iconFg: d.on ? C.blue : C.muted,
+    bg: d.on && media ? C.blueTint : C.card, border: d.on && media ? C.blueLine : C.hairline,
+    iconBg: d.on ? alpha(C.blue, 0.2) : C.control, iconFg: d.on ? C.blue : C.stone2,
   };
   return d.on
-    ? { bg: 'rgba(242,177,76,0.11)', border: 'rgba(242,177,76,0.28)', iconBg: d.color || C.amber, iconFg: C.onAmber }
-    : { bg: C.card, border: 'rgba(255,255,255,0.05)', iconBg: C.control, iconFg: C.muted };
+    ? { bg: C.amberTint, border: C.amberLine, iconBg: d.color || C.amber, iconFg: C.onAmber }
+    : { bg: C.card, border: C.hairline, iconBg: C.control, iconFg: C.stone2 };
 }
 
 /**

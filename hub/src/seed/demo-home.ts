@@ -1,4 +1,4 @@
-import { WHOLE_HOME, type Capability, type HomeConfig, type RobotMap, type Targets } from '../model/types.ts';
+import { WHOLE_HOME, type Capability, type FloorPlan, type HomeConfig, type RobotMap, type Targets } from '../model/types.ts';
 import type { DeviceInfo } from '../adapters/sdk.ts';
 import { TZ_PLACES } from '../util/tz-places.ts';
 
@@ -63,15 +63,37 @@ export const DEMO_DUCTED: DeviceInfo = {
 export const DEMO_ZONE_NAMES: Record<string, string> = { 1: 'Lounge', 2: 'Kitchen', 3: 'Master', 4: 'Baby', 5: 'Office & Guest', 6: 'Music' };
 
 /** A robot vacuum with a base station, its map in five areas (two given rooms, so both kinds show). */
-const R = (x: number, y: number, w: number, h: number) => `M${x} ${y}L${x + w} ${y}L${x + w} ${y + h}L${x} ${y + h}Z`;
+// The demo robot's map, in its own units (50 mm each, as Ecovacs sends them): half of the demo house, 12 m by 9.8 m.
+const K = 2.4;
+const k = (n: number) => Math.round(n * K * 10) / 10;
+const R = (x: number, y: number, w: number, h: number) => `M${k(x)} ${k(y)}L${k(x + w)} ${k(y)}L${k(x + w)} ${k(y + h)}L${k(x)} ${k(y + h)}Z`;
+const scaled = (path: string) => path.replace(/\d+(\.\d+)?/g, n => String(k(Number(n))));
 export const DEMO_ROBOT_MAP: RobotMap = {
-  viewBox: [-4, -4, 108, 90],
+  viewBox: [k(-4), k(-4), k(108), k(90)],
   areas: [
-    { id: '1', path: R(0, 0, 60, 40), x: 30, y: 20 }, { id: '2', path: R(60, 0, 40, 40), x: 80, y: 20 }, { id: '3', path: R(0, 40, 100, 12), x: 50, y: 46 },
-    { id: '4', path: R(0, 52, 40, 30), x: 20, y: 67 }, { id: '5', path: R(40, 52, 60, 30), x: 70, y: 67 },
+    { id: '1', path: R(0, 0, 60, 40), x: k(30), y: k(20) }, { id: '2', path: R(60, 0, 40, 40), x: k(80), y: k(20) }, { id: '3', path: R(0, 40, 100, 12), x: k(50), y: k(46) },
+    { id: '4', path: R(0, 52, 40, 30), x: k(20), y: k(67) }, { id: '5', path: R(40, 52, 60, 30), x: k(70), y: k(67) },
   ],
-  walls: `M0 0L100 0L100 82L0 82Z M60 0L60 16M60 26L60 40L80 40M90 40L100 40 M0 40L20 40M30 40L60 40 M0 52L10 52M20 52L60 52M70 52L100 52 M40 52L40 82`,
-  dock: { x: 96, y: 4 },
+  walls: scaled(`M0 0L100 0L100 82L0 82Z M60 0L60 16M60 26L60 40L80 40M90 40L100 40 M0 40L20 40M30 40L60 40 M0 52L10 52M20 52L60 52M70 52L100 52 M40 52L40 82`),
+  dock: { x: k(96), y: k(4) },
+};
+/** The demo house's floor plan (metres): the robot's half, a row of bedrooms below it, the garage and entry beside. */
+const box = (x: number, y: number, w: number, h: number): [number, number][] => [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
+export const DEMO_FLOOR_PLAN: FloorPlan = {
+  widthM: 18.6, heightM: 14.2, walls: 'brick',
+  rooms: [
+    { id: 'p1', name: 'Lounge', room: 'lounge', points: box(0.3, 0.3, 7.2, 4.8) },
+    { id: 'p2', name: 'Kitchen', room: 'kitchen', points: box(7.5, 0.3, 4.8, 4.8) },
+    { id: 'p3', name: 'Hallway', points: box(0.3, 5.1, 12, 1.44) },
+    { id: 'p4', name: 'Master bed', room: 'master', points: box(0.3, 6.54, 4.8, 3.6) },
+    { id: 'p5', name: 'Office', room: 'office', points: box(5.1, 6.54, 7.2, 3.6) },
+    { id: 'p6', name: 'Music room', room: 'music', points: box(0.3, 10.14, 3.5, 3.76) },
+    { id: 'p7', name: 'Baby room', room: 'baby', points: box(3.8, 10.14, 2.9, 3.76) },
+    { id: 'p8', name: 'Guest room', room: 'guest', points: box(6.7, 10.14, 3.2, 3.76) },
+    { id: 'p9', name: 'Laundry', room: 'laundry', points: box(9.9, 10.14, 2.4, 3.76) },
+    { id: 'p10', name: 'Garage', room: 'garage', points: box(12.3, 0.3, 6, 6.24) },
+    { id: 'p11', name: 'Entry', room: 'front', points: box(12.3, 6.54, 3, 3.6) },
+  ],
 };
 export const DEMO_ROBOT: DeviceInfo = {
   id: 'robot_vacuum', name: 'Robot vacuum', room: 'kitchen', type: 'vacuum', integration: 'Ecovacs (simulated)', address: 'demo.robot_vacuum',
@@ -200,5 +222,6 @@ export function demoConfig(place: Pick<HomeConfig, 'timezone' | 'latitude' | 'lo
     groups: {},
     dismissedFindings: [],
     devices: { ducted_ac: { zoneNames: { ...DEMO_ZONE_NAMES } }, robot_vacuum: { areaRooms: { '1': 'lounge', '2': 'kitchen' } } },
+    floorPlan: structuredClone(DEMO_FLOOR_PLAN),
   };
 }

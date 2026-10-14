@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { TextInput, View } from 'react-native';
-import { C, F, R, SP, alpha } from '../theme';
+import { C, F, R, SP, alpha, readableOn } from '../theme';
 import { useSnap } from '../state/hub';
 import type { Command, Device, TargetRow } from '../api/types';
 import {
@@ -44,7 +44,7 @@ export function Swatches({ colors, value, onChange }: { colors: string[]; value:
         return (
           <Press key={c} onPress={() => onChange(c)} haptic="select" selected={on} label={`Colour ${c}`}
             style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: c, alignItems: 'center', justifyContent: 'center', borderWidth: on ? 3 : 0, borderColor: C.bone }}>
-            {on ? <Icon name="check" size={20} color={C.coal} /> : null}
+            {on ? <Icon name="check" size={20} color={readableOn(c)} /> : null}
           </Press>
         );
       })}

@@ -84,7 +84,7 @@ export class CrashBoundary extends Component<{ children: ReactNode }, { err: Err
         <Text style={{ color: C.bone, fontSize: 17, fontWeight: '700' }}>Something crashed</Text>
         <Text style={{ color: C.stone, fontSize: 13, textAlign: 'center' }}>{this.state.err.message.slice(0, 200)}</Text>
         <TouchableOpacity onPress={() => this.setState({ err: null })} style={{ backgroundColor: C.amber, borderRadius: 12, paddingHorizontal: SP[4], paddingVertical: SP[2] }}>
-          <Text style={{ color: '#1a1408', fontWeight: '700' }}>Try again</Text>
+          <Text style={{ color: C.onAmber, fontWeight: '700' }}>Try again</Text>
         </TouchableOpacity>
       </View>
     );

@@ -211,7 +211,7 @@ function ListField({ f, form, base, set, home, bad }: Omit<FieldProps, 'pasteCod
         const sum = rowSummary(f, r, home);
         const title = noun.length > 24 ? `${i + 1}` : `${noun} ${i + 1}`;
         return (
-          <View key={i} style={{ borderRadius: R.md, borderWidth: 1, borderColor: rowBad(i) ? C.redLine : C.line, backgroundColor: alpha('#ffffff', 0.015), overflow: 'hidden' }}>
+          <View key={i} style={{ borderRadius: R.md, borderWidth: 1, borderColor: rowBad(i) ? C.redLine : C.line, backgroundColor: alpha(C.bone, 0.015), overflow: 'hidden' }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', paddingLeft: SP[3], paddingRight: 4, minHeight: 48 }}>
               <Press onPress={() => { animateLayout(); setOpen(o => { const n = new Set(o); if (n.has(i)) n.delete(i); else n.add(i); return n; }); }} label={`${title}${sum ? `, ${sum}` : ''}`} hint={isOpen ? 'Folds it' : 'Opens it'}
                 style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: SP[2], minHeight: 48 }}>

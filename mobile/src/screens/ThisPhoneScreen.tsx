@@ -11,7 +11,9 @@ import { langName, phoneLang, useVoiceLangs, voiceReady } from '../native/voice'
 import { SPEECH_LANGS } from '../logic/speech';
 import { endHomeActivity, liveActivityRunning, liveActivitySupported, startHomeActivity } from '../native/extensions';
 import { Icon } from '../ui/Icon';
-import { Avatar, Button, Card, Empty, Group, IconWell, Press, Row, Section, Sheet, SwitchRow } from '../ui/kit';
+import { Avatar, Button, Card, Empty, Group, IconWell, Press, Row, Section, Segmented, Sheet, SwitchRow } from '../ui/kit';
+import { APPEARANCES } from '../logic/appearance';
+import { useAppearance } from '../native/appearance';
 import { animateLayout } from '../ui/motion';
 import { locationPlan } from '../logic/presence';
 import { meOf, presenceKeyFrom } from '../logic/roles';
@@ -27,6 +29,7 @@ export function ThisPhoneScreen() {
   const { cfg, api, say, setPerson, forget, addresses, route } = useHub();
   const nav = useNav();
   const { demo, leaveDemo } = useDemo();
+  const appearance = useAppearance();
   const { disclose, view: disclosure } = useLocationDisclosure();
   const [geo, setGeo] = useState(false);
   const [push, setPush] = useState(false);
@@ -133,7 +136,7 @@ export function ThisPhoneScreen() {
               return (
                 <Press key={p.id} selected={on} haptic="select" label={p.name} onPress={() => void setPerson(on ? undefined : p.id)}
                   style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2] + 2, height: 52, paddingLeft: 8, paddingRight: 16, borderRadius: R.lg, backgroundColor: on ? C.amberTint : C.card, borderWidth: 1, borderColor: on ? C.amberLine : C.edge }}>
-                  <Avatar name={p.name} home={p.home} photo={p.photo} size={36} ring={on ? '#2a2318' : C.card} />
+                  <Avatar name={p.name} home={p.home} photo={p.photo} size={36} ring={on ? C.amberSolid : C.card} />
                   <T v="label" color={on ? C.bone : C.bone2}>{p.name}</T>
                   {on ? <Icon name="check" size={18} color={C.amber} /> : null}
                 </Press>
@@ -170,6 +173,12 @@ export function ThisPhoneScreen() {
           </Card>
         </View>
       )}
+
+      <Group title="Appearance" note="Match phone follows the phone’s light or dark setting. This applies to this phone only.">
+        <View style={{ padding: SP[3] }}>
+          <Segmented label="Appearance" value={appearance.choice} options={APPEARANCES} onChange={id => appearance.setChoice(id as typeof appearance.choice)} />
+        </View>
+      </Group>
 
       <Group>
         <SwitchRow first icon="notifications" title="Notifications" sub="On this phone" on={push} busy={busy === 'push'} onChange={v => void togglePush(v)} />

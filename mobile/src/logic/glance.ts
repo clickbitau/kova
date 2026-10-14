@@ -2,11 +2,12 @@
 import type { Glance, Insight } from '../api/types';
 import { deg, toDisplay } from './climate.ts';
 import type { Waqt } from './prayer.ts';
+import { C } from '../theme.ts';
 
 /** A card: a short value (a number or a word, so it fits a third of a phone), a line naming it, and the detail. */
 export interface GlanceCard { key: string; icon: string; color: string; label: string; value: string; caption: string; sub: string; device?: string }
 
-const AIR_COLOR: Record<number, string> = { 1: '#7fd4a0', 2: '#dcd27e', 3: '#f2b14c', 4: '#ff6b5e' };
+const airColor = (level: number): string | undefined => ({ 1: C.green, 2: C.yellow, 3: C.amber, 4: C.red } as Record<number, string>)[level];
 
 export function glanceCards(g: Glance | undefined): GlanceCard[] {
   if (!g) return [];
@@ -14,7 +15,7 @@ export function glanceCards(g: Glance | undefined): GlanceCard[] {
   const o = g.outside;
   if (o) {
     out.push({
-      key: 'outside', icon: o.icon, color: '#f2b14c', label: 'Outside', value: deg(o.temp), caption: o.text,
+      key: 'outside', icon: o.icon, color: C.amber, label: 'Outside', value: deg(o.temp), caption: o.text,
       sub: [o.high != null && o.low != null ? `${deg(o.high)} / ${deg(o.low)} today` : '', o.rain ?? '', !o.rain && o.uvMax != null && o.uvMax >= 6 ? `UV ${Math.round(o.uvMax)} at midday` : '', o.wind != null && o.wind >= 30 ? `windy, ${o.wind} km/h` : ''].filter(Boolean).join(' · '),
     });
   }
@@ -22,14 +23,14 @@ export function glanceCards(g: Glance | undefined): GlanceCard[] {
     const ts = g.inside.map(x => x.temp);
     const lo = Math.round(toDisplay(Math.min(...ts))), hi = Math.round(toDisplay(Math.max(...ts)));
     out.push({
-      key: 'inside', icon: 'thermostat', color: '#7cb8f0', label: 'Inside', device: g.inside[0].device,
+      key: 'inside', icon: 'thermostat', color: C.blue, label: 'Inside', device: g.inside[0].device,
       value: ts.length === 1 ? deg(ts[0]) : lo === hi ? `${lo}°` : `${lo}–${hi}°`, caption: g.inside.length === 1 ? g.inside[0].name : `${g.inside.length} rooms`, sub: g.inside.map(x => `${x.name} ${deg(x.temp)}${x.humidity != null ? ` ${x.humidity}%` : ''}`).join(' · '),
     });
   }
   if (g.air.length) {
     const worst = g.air[0];
     out.push({
-      key: 'air', icon: 'air', color: AIR_COLOR[worst.level] ?? '#a3a09a', label: 'Air', value: worst.label, caption: worst.name, device: worst.device,
+      key: 'air', icon: 'air', color: airColor(worst.level) ?? C.stone, label: 'Air', value: worst.label, caption: worst.name, device: worst.device,
       sub: g.air.slice(1).map(a => `${a.name}: ${a.label.toLowerCase()}`).join(' · '),
     });
   }
@@ -40,11 +41,11 @@ export function glanceCards(g: Glance | undefined): GlanceCard[] {
 export function waqtCard(w: Waqt | null): GlanceCard | null {
   if (!w) return null;
   // The caption stays short enough for a third of a small phone; the countdown is the line that may wrap.
-  return { key: 'waqt', icon: 'mosque', color: w.soon ? '#f2b14c' : '#7fd4a0', label: 'Prayer', value: w.current, caption: `${w.next} ${w.at}`, sub: w.left.charAt(0).toUpperCase() + w.left.slice(1) };
+  return { key: 'waqt', icon: 'mosque', color: w.soon ? C.amber : C.green, label: 'Prayer', value: w.current, caption: `${w.next} ${w.at}`, sub: w.left.charAt(0).toUpperCase() + w.left.slice(1) };
 }
 
 /** An alert's colour, by how urgent it is. */
-export const insightColor = (level: Insight['level']) => level === 'alert' ? '#ff6b5e' : level === 'warning' ? '#f2b14c' : '#7cb8f0';
+export const insightColor = (level: Insight['level']) => level === 'alert' ? C.red : level === 'warning' ? C.amber : C.blue;
 
 /** How many glance cards to a row: three when a third of the phone fits one (a 375 pt phone at the usual text size), else two. */
 export function glanceColumns(width: number, fontScale: number, cards: number): number {

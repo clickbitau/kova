@@ -69,6 +69,8 @@ export function viewFor(s: Snapshot, a: Actor | undefined, accounts?: Accounts) 
     day: { ...s.day, items: s.day.items.map(i => ({ ...i, what: '' })), marks: people ? s.day.marks : [] },
     upcoming: s.upcoming.map(u => ({ ...u, what: '' })),
     lightTheWay: [],
+    // The home's layout is for the people who live there.
+    floorPlan: null,
     automations: [],
     combineIdeas: [],
     combined: s.combined.filter(c => ids.has(c.deviceId)),
