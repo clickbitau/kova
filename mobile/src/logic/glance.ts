@@ -53,10 +53,10 @@ export function glanceColumns(width: number, fontScale: number, cards: number): 
   return Math.max(1, Math.min(cards, fit >= 3 ? 3 : 2));
 }
 
-export type AlertAction = 'open' | 'later' | 'expected';
+export type AlertAction = 'open' | 'remind' | 'ok';
 
 /** What an alert offers: Open (when it's about a device), Not now (a day), That's expected (while it stays so). */
-export const alertActions = (i: Pick<Insight, 'device'>): AlertAction[] => i.device ? ['open', 'later', 'expected'] : ['later', 'expected'];
+export const alertActions = (i: Pick<Insight, 'device'>): AlertAction[] => i.device ? ['open', 'remind', 'ok'] : ['remind', 'ok'];
 
 /**
  * The alerts Now shows in full: the first two (they come most urgent first), or all of them once asked; the rest

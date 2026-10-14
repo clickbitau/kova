@@ -210,14 +210,14 @@ export class Insights extends EventEmitter<{ new: [Insight] }> {
   private snoozes(): Record<string, number> { return this.store.get<Record<string, number>>('insight-snooze') ?? {}; }
 
   /**
-   * Snooze one for so many hours (24 by default), or, with `untilItChanges`, for as long as it stays exactly so: the
+   * Snooze one for so many hours (24 by default, 5 minutes at least; when it shows again an alert is pushed again), or, with `untilItChanges`, for as long as it stays exactly so: the
    * owner says it's expected (a power supply left unplugged on purpose). An insight's id carries what's wrong, so a
    * change shows again, and once it's gone a later return is news too. Snoozes past are forgotten.
    */
   snooze(id: string, hours = 24, untilItChanges = false): void {
     const t = this.inputs().now;
     const s = Object.fromEntries(Object.entries(this.snoozes()).filter(([, until]) => until > t));
-    s[id] = untilItChanges ? HIDDEN_WHILE_SAME : t + Math.max(1, Math.min(24 * 30, hours)) * 3600_000;
+    s[id] = untilItChanges ? HIDDEN_WHILE_SAME : t + Math.round(Math.max(5 / 60, Math.min(24 * 30, hours)) * 3600_000);
     this.store.set('insight-snooze', s);
   }
 

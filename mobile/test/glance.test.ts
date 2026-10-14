@@ -30,8 +30,8 @@ test('glance cards: three to a row on a 375 pt phone, two on a small one or with
 });
 
 test('alerts: Open only for a device; the first two in full and the rest folded, unless only one would fold', () => {
-  assert.deepEqual(alertActions({ device: 'x' }), ['open', 'later', 'expected']);
-  assert.deepEqual(alertActions({}), ['later', 'expected']);
+  assert.deepEqual(alertActions({ device: 'x' }), ['open', 'remind', 'ok']);
+  assert.deepEqual(alertActions({}), ['remind', 'ok']);
   assert.deepEqual(shownAlerts([1, 2, 3], false), { shown: [1, 2, 3], more: 0 });
   assert.deepEqual(shownAlerts([1, 2, 3, 4, 5], false), { shown: [1, 2], more: 3 });
   assert.deepEqual(shownAlerts([1, 2, 3, 4, 5], true), { shown: [1, 2, 3, 4, 5], more: 0 });

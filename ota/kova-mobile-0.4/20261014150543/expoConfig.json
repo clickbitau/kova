@@ -1,7 +1,7 @@
 {
   "name": "Kova",
   "slug": "kova",
-  "version": "0.4.5",
+  "version": "0.4.7",
   "runtimeVersion": "kova-mobile-0.4",
   "updates": {
     "enabled": true,
@@ -187,6 +187,14 @@
     },
     "kovaHistory": [
       {
+        "version": "0.4.7",
+        "title": "Alerts: Remind me in 30 min, or Got it"
+      },
+      {
+        "version": "0.4.6",
+        "title": "Settings in tabs; what Kova does by itself moves to Automations"
+      },
+      {
         "version": "0.4.5",
         "title": "Kova for every home: first-run setup, your own date style, clock and °C or °F, speech in any language"
       },
@@ -197,14 +205,6 @@
       {
         "version": "0.4.3",
         "title": "Photos for people"
-      },
-      {
-        "version": "0.4.2",
-        "title": "Sounds can be a Helix song, looped seamlessly"
-      },
-      {
-        "version": "0.4.1",
-        "title": "Sign out from More"
       }
     ]
   },

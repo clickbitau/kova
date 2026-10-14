@@ -284,11 +284,11 @@ function SetupCard() {
 }
 
 const LEVEL: Record<Insight['level'], string> = { alert: 'Needs you now', warning: 'Worth a look', info: 'Good to know' };
-const ACTION: Record<AlertAction, string> = { open: 'Open', later: 'Not now', expected: 'That’s expected' };
+const ACTION: Record<AlertAction, string> = { open: 'Open', remind: 'Remind me in 30 min', ok: 'Got it' };
 
 /**
- * One alert, as a Notice: how urgent it is, what's wrong and the detail, then Open (in the alert's colour), Not now
- * and That's expected. On a narrow phone or with large text the buttons wrap and share the width.
+ * One alert, as a Notice: how urgent it is, what's wrong and the detail, then Open (in the alert's colour), Remind me
+ * in 30 min and Got it. On a narrow phone or with large text the buttons wrap and share the width.
  */
 function AlertCard({ i, index }: { i: Insight; index: number }) {
   const { act } = useHub();
@@ -296,9 +296,10 @@ function AlertCard({ i, index }: { i: Insight; index: number }) {
   const col = insightColor(i.level);
   const run = (a: AlertAction) => {
     if (a === 'open') sheet.open(i.device!);
-    else if (a === 'later') void act('POST', `/api/insights/${encodeURIComponent(i.id)}/snooze`, { hours: 24 }, 'Hidden for a day');
-    // Hidden for as long as it stays exactly so; a change, or its coming back later, shows again.
-    else void act('POST', `/api/insights/${encodeURIComponent(i.id)}/snooze`, { untilItChanges: true }, 'Hidden while it stays like this');
+    // Back in 30 minutes, and an alert is pushed again then.
+    else if (a === 'remind') void act('POST', `/api/insights/${encodeURIComponent(i.id)}/snooze`, { minutes: 30 }, 'Kova will remind you in 30 minutes');
+    // Got it: hidden for as long as it stays exactly so; a change, or its coming back later, shows again.
+    else void act('POST', `/api/insights/${encodeURIComponent(i.id)}/snooze`, { untilItChanges: true }, 'Got it. Hidden while it stays like this');
   };
   return (
     <Appear index={index}>

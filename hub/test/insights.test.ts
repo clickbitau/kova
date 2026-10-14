@@ -90,6 +90,19 @@ test('insights on a hub: in the snapshot, snoozed, and told once when they first
     s = (await app.inject({ url: '/api/state' })).json();
     assert.ok(!s.insights.some((i: { id: string }) => i.id === 'filter:lamp'), 'snoozed');
     assert.equal((await app.inject({ method: 'POST', url: '/api/insights/x/snooze', payload: { hours: 0 } })).statusCode, 400);
+    assert.equal((await app.inject({ method: 'POST', url: '/api/insights/x/snooze', payload: { minutes: 2 } })).statusCode, 400);
+    assert.equal((await app.inject({ method: 'POST', url: '/api/insights/x/snooze', payload: { minutes: 30 } })).statusCode, 200);
+    // Remind me in 30 minutes: hidden, then back after 30 and told again (a push).
+    t.hub.insights.unsnooze('filter:lamp');
+    t.hub.insights.current();
+    const before = told.length;
+    assert.equal((await app.inject({ method: 'POST', url: '/api/insights/filter:lamp/snooze', payload: { minutes: 30 } })).statusCode, 200);
+    assert.ok(!t.hub.insights.current().some(i => i.id === 'filter:lamp'), 'hidden for now');
+    t.clock.t += 29 * 60_000;
+    assert.ok(!t.hub.insights.current().some(i => i.id === 'filter:lamp'), 'still hidden at 29 minutes');
+    t.clock.t += 2 * 60_000;
+    assert.ok(t.hub.insights.current().some(i => i.id === 'filter:lamp'), 'back after 30 minutes');
+    assert.deepEqual(told.slice(before), ['filter:lamp'], 'reminded');
   } finally { await app.close(); await t.hub.stop(); }
 });
 
