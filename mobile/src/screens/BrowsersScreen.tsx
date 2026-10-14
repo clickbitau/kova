@@ -63,7 +63,7 @@ export function BrowsersScreen() {
           : (
             <Group>
               {(list ?? []).map((s, i) => (
-                <Row key={s.id} first={i === 0} icon={sessionIcon(s.name)} title={s.name} sub={`Signed in ${new Date(s.created).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} · last used ${ago(s.lastSeen)}`}
+                <Row key={s.id} first={i === 0} icon={sessionIcon(s.name)} title={s.name} sub={`Signed in ${new Date(s.created).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} · last used ${ago(s.lastSeen)}`}
                   right={<View><Button size="sm" kind="danger" label="Sign out" onPress={() => signOut(s)} /></View>} />
               ))}
             </Group>

@@ -15,7 +15,7 @@ const YAML = `
       offset: "-00:15:00"
   conditions:
     - condition: state
-      entity_id: person.methel
+      entity_id: person.alex
       state: home
     - condition: time
       weekday: [mon, tue, wed, thu, fri]
@@ -50,7 +50,7 @@ const YAML = `
   alias: Last one out
   triggers:
     - trigger: state
-      entity_id: person.brishti
+      entity_id: person.jordan
       from: home
     - trigger: state
       entity_id: light.lamp
@@ -65,7 +65,7 @@ const YAML = `
 test('Home Assistant automations become Kova automations; what Kova can’t do is listed', async () => {
   const t = await testHub(12);
   try {
-    const names: Record<string, string> = { 'light.lamp': 'Lamp', 'light.office_light': 'Office Light', 'switch.desk_plug': 'Desk plug', 'light.kitchen_thing': 'Kitchen thing', 'person.methel': 'Methel', 'person.brishti': 'Brishti', 'binary_sensor.hall_motion': 'Hall motion' };
+    const names: Record<string, string> = { 'light.lamp': 'Lamp', 'light.office_light': 'Office Light', 'switch.desk_plug': 'Desk plug', 'light.kitchen_thing': 'Kitchen thing', 'person.alex': 'Alex', 'person.jordan': 'Jordan', 'binary_sensor.hall_motion': 'Hall motion' };
     // The office light is called "Ceiling" in Kova; its id matches.
     const look = { name: (e: string) => names[e] ?? e, devices: t.hub.reg.list(), people: t.hub.config.get().people };
     const [porch, hall, out] = (parse(YAML) as Record<string, unknown>[]).map(a => convertHaAutomation(a, look));
@@ -74,7 +74,7 @@ test('Home Assistant automations become Kova automations; what Kova can’t do i
     assert.equal(p.mode, 'restart');
     assert.equal(p.enabled, false, 'starts off: HA may still run it');
     assert.deepEqual(p.triggers, [{ kind: 'time', at: { kind: 'sun', event: 'sunset', offsetMin: -15 } }]);
-    assert.deepEqual(p.conditions, [{ kind: 'presence', who: 'methel', home: true }, { kind: 'time', days: [1, 2, 3, 4, 5] }]);
+    assert.deepEqual(p.conditions, [{ kind: 'presence', who: 'alex', home: true }, { kind: 'time', days: [1, 2, 3, 4, 5] }]);
     assert.deepEqual(p.actions[0], { kind: 'set', targets: { lamp: { on: true, bri: 40, k: 2700 } } });
     assert.deepEqual(p.actions[1], { kind: 'delay', seconds: 600 });
     assert.deepEqual(p.actions[2], { kind: 'notify', message: 'Lamp is on', title: 'Porch' });
@@ -90,7 +90,7 @@ test('Home Assistant automations become Kova automations; what Kova can’t do i
 
     // A person leaving, a state held for 30 min; the unmatched light and the script are noted.
     const o = out.automation!;
-    assert.deepEqual(o.triggers, [{ kind: 'presence', event: 'leaves', person: 'brishti' }, { kind: 'device', device: 'lamp', to: { on: true }, forSec: 1800 }]);
+    assert.deepEqual(o.triggers, [{ kind: 'presence', event: 'leaves', person: 'jordan' }, { kind: 'device', device: 'lamp', to: { on: true }, forSec: 1800 }]);
     assert.deepEqual(o.actions, [{ kind: 'set', targets: { lamp: { on: false } } }]);
     assert.ok(out.notes.some(n => /Kitchen thing/.test(n)));
     assert.ok(out.notes.some(n => /Script/.test(n)));

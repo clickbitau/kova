@@ -31,12 +31,12 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
   // The home's details: only what's sent changes. Location and timezone move sun and prayer times; the prayer
   // method decides how prayer times are worked out. A new location far from the old one (another town) gets the
   // timezone there too, unless one is sent: the answer says so (`timezone`), and Undo puts both back.
-  app.put<{ Body: { name?: string; address?: string | null; timezone?: string; timezoneHint?: string; latitude?: number; longitude?: number; location?: { latitude?: number; longitude?: number; radiusM?: number; source?: string; provider?: string; placeId?: string }; prayerMethod?: string; pauseForDoorbell?: boolean; learnFromYou?: boolean } }>('/api/home', async (req, reply) => {
+  app.put<{ Body: { name?: string; address?: string | null; timezone?: string; timezoneHint?: string; latitude?: number; longitude?: number; location?: { latitude?: number; longitude?: number; radiusM?: number; source?: string; provider?: string; placeId?: string }; prayerMethod?: string; pauseForDoorbell?: boolean; learnFromYou?: boolean; locale?: string | null; hour12?: boolean | null; fahrenheit?: boolean; setupDone?: boolean } }>('/api/home', async (req, reply) => {
     const b = req.body ?? {};
     const name = b.name === undefined ? undefined : text(b.name);
     if (name === '') return bad(reply, 'Give the home a name');
     if (b.timezone !== undefined) {
-      try { new Intl.DateTimeFormat('en', { timeZone: b.timezone }); } catch { return bad(reply, `${b.timezone} isn’t a timezone (e.g. Australia/Perth)`); }
+      try { new Intl.DateTimeFormat('en', { timeZone: b.timezone }); } catch { return bad(reply, `${b.timezone} isn’t a timezone (e.g. Europe/London)`); }
     }
     const latitude = b.location?.latitude ?? b.latitude;
     const longitude = b.location?.longitude ?? b.longitude;
@@ -50,6 +50,8 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
     if (b.prayerMethod !== undefined && !PRAYER_METHODS.includes(b.prayerMethod)) return bad(reply, `Prayer method is one of ${PRAYER_METHODS.join(', ')}`);
     if (b.pauseForDoorbell !== undefined && typeof b.pauseForDoorbell !== 'boolean') return bad(reply, 'pauseForDoorbell must be true or false');
     if (b.learnFromYou !== undefined && typeof b.learnFromYou !== 'boolean') return bad(reply, 'learnFromYou must be true or false');
+    if (b.locale != null) { try { if (typeof b.locale !== 'string' || !Intl.DateTimeFormat.supportedLocalesOf(b.locale).length) throw 0; } catch { return bad(reply, `${b.locale} isn’t a language Kova can write dates in (e.g. en-US, en-GB)`); } }
+    for (const k of ['hour12', 'fahrenheit', 'setupDone'] as const) if (b[k] != null && typeof b[k] !== 'boolean') return bad(reply, `${k} must be true or false`);
     const source = b.location?.source as LocationSource | undefined;
     // The timezone of a new place: only when it moved a long way (fine-tuning the pin never changes the clock), and
     // only when that zone keeps a different clock. The phone's own zone is the best guess when it's the phone's location.
@@ -83,6 +85,10 @@ export function registerHomeRoutes(app: FastifyInstance, hub: Hub): void {
       if (b.prayerMethod) c.prayerMethod = b.prayerMethod;
       if (b.pauseForDoorbell !== undefined) c.pauseForDoorbell = b.pauseForDoorbell;
       if (b.learnFromYou !== undefined) c.learnFromYou = b.learnFromYou;
+      if (b.locale !== undefined) { if (b.locale) c.locale = b.locale; else delete c.locale; }
+      if (b.hour12 !== undefined) { if (b.hour12 === null) delete c.hour12; else c.hour12 = b.hour12; }
+      if (b.fahrenheit !== undefined) { if (b.fahrenheit) c.fahrenheit = true; else delete c.fahrenheit; }
+      if (b.setupDone) delete c.firstRun;
     });
     return { ...r, ...(timezone && timezone !== before.timezone && b.timezone === undefined ? { timezone } : {}) };
   });

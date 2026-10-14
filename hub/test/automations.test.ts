@@ -44,7 +44,7 @@ test('device trigger, condition and set: the TV and speaker go off when the play
     assert.equal(h.dev('master_speaker').on, false);
     assert.equal(h.runs(id)[0].result, 'done');
     assert.equal(h.runs(id)[0].why, 'Living room display turned offline');
-    assert.equal(h.runs(id)[0].steps[0].text, 'Set Bedroom OLED, Speaker');
+    assert.equal(h.runs(id)[0].steps[0].text, 'Set Bedroom TV, Speaker');
     assert.ok(h.hub.store.between(0, Number.MAX_SAFE_INTEGER, 'run').some(e => e.cause?.kind === 'automation' && /TV off with the box: /.test(e.what)), 'in Activity');
 
     // Another input: skipped, and the history says why.
@@ -53,14 +53,14 @@ test('device trigger, condition and set: the TV and speaker go off when the play
     h.virtual.physical('living_display', { online: false });
     await settle();
     assert.equal(h.dev('bedroom_tv').on, true);
-    assert.deepEqual([h.runs(id)[0].result, h.runs(id)[0].detail], ['skipped', 'Bedroom OLED isn’t on HDMI 4']);
+    assert.deepEqual([h.runs(id)[0].result, h.runs(id)[0].detail], ['skipped', 'Bedroom TV isn’t on HDMI 4']);
 
     // In the snapshot, in words.
     const s = (await h.app.inject({ url: '/api/state' })).json();
     const a = s.automations.find((x: { id: string }) => x.id === id);
     assert.deepEqual(a.triggerLabels, ['Living room display turns offline']);
-    assert.deepEqual(a.conditionLabels, ['Bedroom OLED is on HDMI 4']);
-    assert.deepEqual(a.actionLabels, ['Bedroom OLED stops, Speaker stops']);
+    assert.deepEqual(a.conditionLabels, ['Bedroom TV is on HDMI 4']);
+    assert.deepEqual(a.actionLabels, ['Bedroom TV stops, Speaker stops']);
     assert.equal(a.lastRun.result, 'skipped');
     assert.ok(s.devices.find((d: { id: string }) => d.id === 'bedroom_tv').usedIn.some((u: { kind: string }) => u.kind === 'automation'));
   } finally { await h.close(); }
@@ -142,22 +142,22 @@ test('people, modes and overlays start automations; “last one out” and “fi
   const h = await setup();
   try {
     const out = await h.add({ name: 'All off', triggers: [{ kind: 'presence', event: 'last-leaves' }], actions: [{ kind: 'set', targets: { lamp: { on: false } } }] });
-    const home = await h.add({ name: 'Welcome', triggers: [{ kind: 'presence', event: 'first-arrives' }], actions: [{ kind: 'notify', message: 'Welcome home', people: ['methel'] }] });
+    const home = await h.add({ name: 'Welcome', triggers: [{ kind: 'presence', event: 'first-arrives' }], actions: [{ kind: 'notify', message: 'Welcome home', people: ['alex'] }] });
     const movie = await h.add({ name: 'Movie lights', triggers: [{ kind: 'overlay', overlay: 'movie', event: 'starts' }], actions: [{ kind: 'set', targets: { dining: { on: false } } }] });
     const wind = await h.add({ name: 'Wind', triggers: [{ kind: 'mode', mode: 'wind' }], actions: [{ kind: 'set', targets: { office_light: { on: false } } }] });
     h.virtual.physical('lamp', { on: true });
-    await h.hub.engine.setPresence('methel', false);
+    await h.hub.engine.setPresence('alex', false);
     await settle();
     assert.equal(h.runs(out).length, 0, 'someone is still home');
-    await h.hub.engine.setPresence('brishti', false);
+    await h.hub.engine.setPresence('jordan', false);
     await settle();
     assert.equal(h.runs(out).length, 1);
     assert.equal(h.dev('lamp').on, false);
-    await h.hub.engine.setPresence('brishti', true);
-    await h.hub.engine.setPresence('methel', true);
+    await h.hub.engine.setPresence('jordan', true);
+    await h.hub.engine.setPresence('alex', true);
     await settle();
     assert.equal(h.runs(home).length, 1, 'only the first');
-    assert.deepEqual(h.sent, [{ title: 'Welcome', body: 'Welcome home', people: ['methel'], tag: `automation-${home}` }]);
+    assert.deepEqual(h.sent, [{ title: 'Welcome', body: 'Welcome home', people: ['alex'], tag: `automation-${home}` }]);
     await h.hub.engine.startOverlay('movie');
     await settle();
     assert.equal(h.runs(movie).length, 1);

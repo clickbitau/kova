@@ -23,7 +23,8 @@ test('modes run in order across a Kova day', async () => {
   assert.equal(p.modeAt(at(21)).mode.id, 'wind');
   assert.equal(p.modeAt(at(23.75)).mode.id, 'night');
   assert.equal(p.modeAt(at(2)).mode.id, 'night');
-  assert.equal(p.modeAt(at(5.2)).mode.id, 'dawn');
+  const dawn = p.bands(DATE).find(b => b.modeId === 'dawn')!;
+  assert.equal(p.modeAt(at((dawn.start + dawn.end) / 2)).mode.id, 'dawn', 'Dawn: the last while before sunrise');
   const bands = p.bands(DATE).map(b => b.modeId);
   assert.deepEqual(bands, ['night', 'dawn', 'day', 'evening', 'wind', 'night']);
   const total = p.bands(DATE).reduce((s, b) => s + b.end - b.start, 0);
@@ -110,12 +111,12 @@ test('a light someone was already using is left on after Light the way', async (
 
 test('"only when someone is home" waits for an arrival', async () => {
   const { hub, advance, dev } = await testHub(17, c => { c.modes[1].onlyWhenSomeoneHome = true; });
-  await hub.engine.setPresence('methel', false);
-  await hub.engine.setPresence('brishti', false);
+  await hub.engine.setPresence('alex', false);
+  await hub.engine.setPresence('jordan', false);
   await advance(18.5);
   assert.equal(hub.engine.modeId, 'evening');
   assert.equal(dev('kitchen_ceiling').on, false);
-  await hub.engine.setPresence('brishti', true);
+  await hub.engine.setPresence('jordan', true);
   assert.equal(dev('kitchen_ceiling').on, true);
   assert.equal(dev('garage_light').on, true);
   await hub.stop();
@@ -124,11 +125,11 @@ test('"only when someone is home" waits for an arrival', async () => {
 test('Away ends when someone comes home', async () => {
   const { hub, dev } = await testHub(19);
   await hub.engine.command('lounge_main', { on: true });
-  await hub.engine.setPresence('methel', false);
-  await hub.engine.setPresence('brishti', false);
+  await hub.engine.setPresence('alex', false);
+  await hub.engine.setPresence('jordan', false);
   await hub.engine.startOverlay('away');
   assert.equal(dev('lounge_main').on, false);
-  await hub.engine.setPresence('methel', true);
+  await hub.engine.setPresence('alex', true);
   assert.equal(hub.engine.overlay, null);
   assert.equal(dev('lounge_main').on, true);
   await hub.stop();

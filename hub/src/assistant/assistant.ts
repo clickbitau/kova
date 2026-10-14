@@ -1,4 +1,5 @@
 import type { Engine } from '../engine/engine.ts';
+import { dateWords } from '../util/locale.ts';
 import type { HelixMusic } from '../services/helix-music.ts';
 import type { Registry } from '../devices/registry.ts';
 import type { ConfigStore } from '../engine/config.ts';
@@ -42,7 +43,7 @@ export type Intent =
   /** "play The Office in the lounge": a TV that can find titles itself (a Helix box). */
   | { kind: 'play'; title: string; device: string; label: string }
   | { kind: 'pause'; resume: boolean; label: string; devices: string[] }
-  /** "play Bangla Collection on shuffle in the kitchen", "a station from Coke Studio in the lounge": Helix music on speakers. */
+  /** "play Road Trip on shuffle in the kitchen", "a station from Fleetwood Mac in the lounge": Helix music on speakers. */
   | { kind: 'music'; words: string; shuffle: boolean; station: boolean; label: string; devices: string[] }
   /** "next song", "previous song in the kitchen". */
   | { kind: 'skip'; delta: 1 | -1; label: string; devices: string[] }
@@ -69,7 +70,7 @@ export type Intent =
    */
   | { kind: 'suggestion'; op: 'why' | 'apply' | 'list'; id: string | null }
   /**
-   * "Ray is late", "the office speaker is about half a second behind", "sync the speakers": a speaker group's timing
+   * "the office speaker is late", "the office speaker is about half a second behind", "sync the speakers": a speaker group's timing
    * (engine/group-sync.ts). `device` is the speaker named (null: the speakers in general), `group` the group it's in,
    * `deltaMs` how much earlier (+) it should play, when an amount was said.
    */
@@ -85,7 +86,7 @@ export type AskAction =
   | { type: 'roomAc'; room: string; on: boolean; done: string }
   /** Apply something Kova learned from what people do (a learned suggestion's id). */
   | { type: 'suggestion'; id: string }
-  /** A speaker group part's timing to `ms` (+ earlier): "Ray is half a second behind", confirmed. */
+  /** A speaker group part's timing to `ms` (+ earlier): "the office speaker is half a second behind", confirmed. */
   | { type: 'groupOffset'; group: string; part: string; ms: number; done: string }
   /** Open a speaker group's timing (its sync test and sliders): the apps do it; the hub only says where. */
   | { type: 'tune'; group: string; device: string };
@@ -149,7 +150,7 @@ export function notDirect(q: string): string | null {
 }
 
 export class Assistant {
-  /** Helix music on speakers ("play Bangla Collection on shuffle in the kitchen"), once Helix is set up. */
+  /** Helix music on speakers ("play Road Trip on shuffle in the kitchen"), once Helix is set up. */
   music: HelixMusic | null = null;
   /** Room ACs (set by the hub): "turn on the AC in the theatre" goes through its policy. */
   roomClimate: RoomClimate | null = null;
@@ -157,11 +158,11 @@ export class Assistant {
   /** What Kova learned from what people do (set by the hub): "why do you suggest that?", "apply it". */
   learner: Learner | null = null;
 
-  /** Speaker groups' timing (set by the hub): "Ray is late", "sync the speakers". */
+  /** Speaker groups' timing (set by the hub): "the office speaker is late", "sync the speakers". */
   groupSync: GroupSync | null = null;
 
   /**
-   * "Ray is late", "the office is about 200 ms behind", "Ray's a bit early", "sync the speakers", "the speakers echo".
+   * "the office speaker is late", "the office is about 200 ms behind", "the office speaker's a bit early", "sync the speakers", "the speakers echo".
    * Only when a speaker group plays something alongside a part (or the speakers' sync in general is asked about).
    */
   private groupSyncIntent(raw: string, t: string): Intent | null {
@@ -427,7 +428,7 @@ export class Assistant {
     if (LATER.test(raw) && !/^(what|whats|what's|when|is|are|anything)\b/.test(raw)) return null;
     // A message that is only a greeting — "hey turn the lights on" still parses as a command.
     if (/^(hi+|hello+|hey+|yo|hiya|howdy|morning|good (morning|afternoon|evening))( there)?( kova)?$/.test(t)) return { kind: 'greeting' };
-    // A speaker group's timing ("Ray is about half a second behind the others"): before the length check, which
+    // A speaker group's timing ("the office speaker is about half a second behind the others"): before the length check, which
     // "behind the others" or "after the kitchen" would otherwise trip.
     const gsync = norm(q).split(' ').length <= 16 ? this.groupSyncIntent(raw, t) : null;
     if (gsync) return gsync;
@@ -519,7 +520,7 @@ export class Assistant {
       }
     }
     // "play the office in the lounge", "watch dune on the bedroom tv", "put on bluey"
-    // "play Bangla Collection on shuffle in the kitchen", "shuffle my loved songs", "play a station from Coke Studio in the lounge"
+    // "play Road Trip on shuffle in the kitchen", "shuffle my loved songs", "play a station from Fleetwood Mac in the lounge"
     const pl = raw.match(/^(play|watch|put on|shuffle)\s+(.+)$/);
     if (pl) {
       let words = pl[2].trim();
@@ -811,10 +812,10 @@ export class Assistant {
     }
     const before = rooms.latest(i.room, kinds ?? ['person', 'motion', 'ring', 'opened', 'closed', 'package', 'vehicle', 'animal']);
     const what = kinds?.includes('motion') ? 'No motion' : kinds?.includes('person') ? 'Nobody' : 'Nothing';
-    return reply(`${what} ${where} today.${before ? ` The last was ${WORDS[before.kind]?.[0] ?? before.kind} ${localDate(before.at, tz) === localDate(t - 86400_000, tz) ? 'yesterday' : `on ${new Date(before.at).toLocaleDateString('en-AU', { weekday: 'long', timeZone: tz })}`} at ${clock(before.at, tz)}.` : ''}`);
+    return reply(`${what} ${where} today.${before ? ` The last was ${WORDS[before.kind]?.[0] ?? before.kind} ${localDate(before.at, tz) === localDate(t - 86400_000, tz) ? 'yesterday' : `on ${dateWords(before.at, tz, { weekday: 'long' })}`} at ${clock(before.at, tz)}.` : ''}`);
   }
 
-  /** "Ray is late": where Ray plays in its group, and the change to its timing, to confirm; or how to tune. */
+  /** "the office speaker is late": where that speaker plays in its group, and the change to its timing, to confirm; or how to tune. */
   private groupSyncReply(i: Extract<Intent, { kind: 'groupSync' }>, reply: (text: string, source: Source, extra?: Partial<AskReply>) => AskReply): AskReply {
     const src: Source = 'Built-in · nothing left your home';
     const groups = this.config.get().speakerGroups ?? [];

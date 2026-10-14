@@ -1,4 +1,5 @@
 import type { Store, LogEntry } from '../store/db.ts';
+import { dateWords } from '../util/locale.ts';
 import type { ConfigStore } from './config.ts';
 import type { Engine } from './engine.ts';
 import type { Command, Device, HomeConfig, Rhythm, Targets } from '../model/types.ts';
@@ -254,7 +255,7 @@ export class Learner {
   }
 
   private day(ts: number): string {
-    return new Date(ts).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', timeZone: this.config.get().timezone }).replace(',', '').replace(/\bSept\b/, 'Sep');
+    return dateWords(ts, this.config.get().timezone).replace(',', '');
   }
 
   private clock(ts: number): string { const h = localHour(ts, this.config.get().timezone); return `${String(Math.floor(h)).padStart(2, '0')}:${String(Math.floor((h % 1) * 60 + 1e-6)).padStart(2, '0')}`; }

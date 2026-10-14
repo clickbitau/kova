@@ -12,7 +12,7 @@ function fixture(nest: { token?: string; creds?: boolean } = {}) {
   const w = (f: string, data: unknown) => writeFileSync(join(dir, f), JSON.stringify({ version: 1, data }));
   w('core.config', { location_name: 'Test Home', latitude: -31.9, longitude: 115.8, time_zone: 'Australia/Perth' });
   w('core.area_registry', { areas: [{ id: 'kitchen', name: 'Kitchen' }, { id: 'living_room', name: 'Living Room' }, { id: 'music_room', name: 'Music Room' }] });
-  w('person', { items: [{ id: 'p1', name: 'Methel', device_trackers: ['device_tracker.methels_iphone'] }] });
+  w('person', { items: [{ id: 'p1', name: 'Alex', device_trackers: ['device_tracker.alexs_iphone'] }] });
   w('core.config_entries', { entries: [
     { entry_id: 'lt', domain: 'localtuya', title: 'localtuya', data: { devices: { bf00: { friendly_name: 'Kitchen Switch', host: '192.168.1.230', local_key: 'aaaaaaaaaaaaaaaa', protocol_version: '3.3', entities: [{ id: 2, platform: 'switch', friendly_name: 'Kitchen Light' }, { id: 3, platform: 'switch', friendly_name: 'Dining Light' }] }, bf01: { friendly_name: 'Office Switch', host: '192.168.1.214', local_key: 'bbbbbbbbbbbbbbbb', protocol_version: '3.4', entities: [{ id: 1, platform: 'switch', friendly_name: 'Office Switch' }] } } } },
     { entry_id: 'tp1', domain: 'tplink', title: 'Lamp L535', data: { host: '10.0.0.5', alias: 'Lamp', credentials_hash: Buffer.alloc(32, 1).toString('base64') } },
@@ -44,7 +44,7 @@ test('imports rooms, people and local device details from a Home Assistant folde
   const r = importHomeAssistant(fixture());
   assert.equal(r.home.name, 'Test Home');
   assert.equal(r.home.timezone, 'Australia/Perth');
-  assert.deepEqual(r.home.people.map(p => p.name), ['Methel']);
+  assert.deepEqual(r.home.people.map(p => p.name), ['Alex']);
   assert.ok(r.home.rooms.some(x => x.id === 'office'), 'room inferred from a device name');
   const kitchen = r.integrations.tuya!.devices.find(d => d.id === 'bf00')!;
   assert.equal(kitchen.host, '192.168.1.230');

@@ -31,7 +31,7 @@ test('API: state, commands, undo, overlays, preview', async () => {
 
   const p = (await app.inject({ url: '/api/preview?hour=23.6' })).json();
   assert.equal(p.modeId, 'night');
-  assert.equal(p.devices.living_display.media, 'Tarateel');
+  assert.equal(p.devices.living_display.media, 'Ocean waves');
 
   const boot = await app.inject({ url: '/api/boot.js' });
   assert.match(boot.body, /^window\.KOVA_BOOT=/);

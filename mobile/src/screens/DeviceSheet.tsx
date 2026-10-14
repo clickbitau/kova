@@ -9,7 +9,7 @@ import { useNav } from '../navigation';
 import { VoiceNote } from './VoiceScreen';
 import { hubUrl } from '../logic/connect';
 import { AIR, combinedOf, devs, FAN_SPEEDS, filterNote, has, HVAC, ICON, iconOf, isPlayer, routerPanel, stateOf, tint, type Dev } from '../logic/devices';
-import { arcPath, clampTarget, TARGET_MAX, TARGET_MIN } from '../logic/climate';
+import { arcPath, deg, stepTarget, TARGET_MAX, TARGET_MIN, toDisplay } from '../logic/climate';
 import { servesLine, snapOpen, suggestionsBody, toggleRoom, visibleZones, zoneRoomsBody, zoneRoomViews, roomWords } from '../logic/zones';
 import { combineChoices, placeChoices, placeName } from '../logic/customise';
 import { groupHow } from '../logic/group-sync';
@@ -21,15 +21,19 @@ import { CameraStill } from './SecurityScreen';
 import { RobotPanel } from './RobotPanel';
 import { SensorReadings, WatchSettings } from './SensorPanel';
 import { isSensor } from '../logic/sensors';
-import { calibratedVol, trimOf } from '../logic/automations';
+import { calibratedVol, INPUT_NAMES, trimOf } from '../logic/automations';
 import { LOUDNESS_MAX, LOUDNESS_MIN, loudnessBody, loudnessWords, snapLoudness } from '../logic/media';
 
 const TEMPS: [number, string, string][] = [[2200, '#ffb56b', 'Candle'], [2700, '#ffc98a', 'Warm'], [3000, '#ffd9a8', 'Soft'], [4000, '#fff1dc', 'Neutral'], [5000, '#f4f7ff', 'Daylight']];
+// The inputs and sound modes below are fallbacks for devices that don't report which ones they have; one a device
+// says it's on that isn't listed is added by `with` (so it always shows, whatever the maker calls it).
 /** Inputs a TV with `input` can switch to. The one it's on is marked when the TV can say (through SmartThings). */
 const INPUTS: [string, string][] = [['hdmi1', 'HDMI 1'], ['hdmi2', 'HDMI 2'], ['hdmi3', 'HDMI 3'], ['hdmi4', 'HDMI 4'], ['tv', 'TV']];
 /** A soundbar's inputs (it says which it's on) and sound modes: [id, label, icon]. */
 const BAR_INPUTS: [string, string, string][] = [['tv', 'TV (eARC)', 'tv'], ['hdmi1', 'HDMI 1', 'settings_input_hdmi'], ['hdmi2', 'HDMI 2', 'settings_input_hdmi'], ['bluetooth', 'Bluetooth', 'bluetooth'], ['wifi', 'Wi-Fi', 'wifi']];
 const SOUNDS: [string, string, string][] = [['standard', 'Standard', 'equalizer'], ['surround', 'Surround', 'surround_sound'], ['game', 'Game', 'sports_esports'], ['adaptive', 'Adaptive', 'auto_awesome']];
+/** A fallback list with the choice a device reports being on added, if it isn't there. */
+const withCurrent = <T extends string[]>(list: T[], now: string | null | undefined, make: (id: string) => T): T[] => now && !list.some(x => x[0] === now) ? [...list, make(now)] : list;
 const COLOURS: [string, string][] = [['#ff5a4e', 'Red'], ['#ff9f43', 'Orange'], ['#ffd93d', 'Yellow'], ['#6bd968', 'Green'], ['#3fd0c9', 'Teal'], ['#4aa3ff', 'Blue'], ['#8b6bff', 'Violet'], ['#ff6bd6', 'Pink']];
 const MUSIC = '#c79bf2';
 
@@ -67,7 +71,7 @@ function Dial({ target, room, color, on, size = 200 }: { target: number; room: n
   const sw = 12, r = (size - sw) / 2 - 4;
   const f = (target - TARGET_MIN) / (TARGET_MAX - TARGET_MIN);
   return (
-    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }} accessibilityLabel={`Set to ${target} degrees${room != null ? `, room ${room} degrees` : ''}`}>
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }} accessibilityLabel={`Set to ${toDisplay(target)} degrees${room != null ? `, room ${toDisplay(room)} degrees` : ''}`}>
       <Svg width={size} height={size} style={{ position: 'absolute' }}>
         <Path d={arcPath(size / 2, size / 2, r, 1)} stroke={C.control} strokeWidth={sw} strokeLinecap="round" fill="none" />
         {on ? <Path d={arcPath(size / 2, size / 2, r, Math.max(0.02, f))} stroke={color} strokeWidth={sw} strokeLinecap="round" fill="none" /> : null}
@@ -78,8 +82,8 @@ function Dial({ target, room, color, on, size = 200 }: { target: number; room: n
         })() : null}
       </Svg>
       <T v="eyebrow" color={on ? color : C.stone2}>{on ? 'Set to' : 'Off'}</T>
-      <T size={Math.round(size * 0.27)} weight={700} tracking={-0.04} tabular color={on ? C.bone : C.stone} maxFontSizeMultiplier={1.15}>{`${target}°`}</T>
-      {room != null ? <T v="footnote" color={C.stone}>{`Room ${room}°`}</T> : null}
+      <T size={Math.round(size * 0.27)} weight={700} tracking={-0.04} tabular color={on ? C.bone : C.stone} maxFontSizeMultiplier={1.15}>{deg(target)}</T>
+      {room != null ? <T v="footnote" color={C.stone}>{`Room ${deg(room)}`}</T> : null}
     </View>
   );
 }
@@ -106,6 +110,7 @@ export function DeviceSheet() {
   if (!snap || !D) return <Sheet open={false} onClose={close}>{null}</Sheet>;
 
   const t = tint(D);
+  const tvInputs = withCurrent(INPUTS, D.input, id => [id, INPUT_NAMES[id] ?? id]);
   // The sheet's content width (20 pt each side), less the card's padding: room for − and + beside the dial?
   const inner = width - SP[5] * 2 - SP[3] * 2;
   const dialSide = inner >= 200 + 52 * 2 + SP[2] * 2;
@@ -144,7 +149,7 @@ export function DeviceSheet() {
   const shownTarget = target ?? D.target ?? 24;
   const hv = HVAC.find(h => h[0] === D.hvac);
   const nudge = (d: number) => {
-    const n = clampTarget(shownTarget + d);
+    const n = stepTarget(shownTarget, d < 0 ? -1 : 1);
     if (n === shownTarget) return;
     setTarget(n);
     if (timer.current) clearTimeout(timer.current);
@@ -297,13 +302,13 @@ export function DeviceSheet() {
           ) : null}
           {has(D, 'sound') && D.on ? (
             <>
-              {block('in', 'Input', <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SP[2] }}>{BAR_INPUTS.map(([id, label, icon]) => <Choice key={id} label={label} icon={icon} on={D.input === id} onPress={() => void send(D.id, { input: id })} />)}</View>)}
-              {block('snd', 'Sound', <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SP[2] }}>{SOUNDS.map(([id, label, icon]) => <Choice key={id} label={label} icon={icon} on={D.sound === id} onPress={() => void send(D.id, { sound: id })} />)}</View>)}
+              {block('in', 'Input', <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SP[2] }}>{withCurrent(BAR_INPUTS, D.input, id => [id, INPUT_NAMES[id] ?? id, 'settings_input_hdmi']).map(([id, label, icon]) => <Choice key={id} label={label} icon={icon} on={D.input === id} onPress={() => void send(D.id, { input: id })} />)}</View>)}
+              {block('snd', 'Sound', <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SP[2] }}>{withCurrent(SOUNDS, D.sound, id => [id, id.replace(/^./, c => c.toUpperCase()), 'equalizer']).map(([id, label, icon]) => <Choice key={id} label={label} icon={icon} on={D.sound === id} onPress={() => void send(D.id, { sound: id })} />)}</View>)}
               <Group><SwitchRow first icon="nightlight" iconFg={C.blue} color={C.blue} title="Night mode" sub="Softer loud scenes, clearer voices" on={!!D.night} onChange={v => void send(D.id, { night: v })} /></Group>
             </>
           ) : null}
           {has(D, 'input') && !has(D, 'sound') && D.on ? block('src', 'Source',
-            <Segmented compact label="Source" value={D.input ?? null} color={C.blue} options={INPUTS.map(([id, label]) => ({ id, label }))} onChange={id => void send(D.id, { input: id }).then(ok => { if (ok) say(`${D.name} is on ${INPUTS.find(i => i[0] === id)?.[1]}`); })} />,
+            <Segmented compact label="Source" value={D.input ?? null} color={C.blue} options={tvInputs.map(([id, label]) => ({ id, label }))} onChange={id => void send(D.id, { input: id }).then(ok => { if (ok) say(`${D.name} is on ${tvInputs.find(i => i[0] === id)?.[1]}`); })} />,
           ) : null}
           {has(D, 'library') ? block('lib', 'Play a film or show',
             <View style={{ gap: SP[2] }}>

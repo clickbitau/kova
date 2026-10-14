@@ -201,7 +201,7 @@ export function GroupSyncScreen() {
             <View style={{ gap: SP[2], paddingBottom: SP[2] }}>
               {(view?.log ?? []).slice(0, 14).map((l, i) => (
                 <View key={`${l.at}-${i}`} style={{ flexDirection: 'row', gap: SP[2] }}>
-                  <T v="footnote" color={C.stone2} tabular>{new Date(l.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</T>
+                  <T v="footnote" color={C.stone2} tabular>{new Date(l.at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</T>
                   <T v="footnote" color={C.bone2} style={{ flex: 1, minWidth: 0 }}>{l.text}</T>
                 </View>
               ))}

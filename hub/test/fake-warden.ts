@@ -20,11 +20,11 @@ function selfSigned(cn: string): { key: string; cert: string } {
 export async function fakeWarden() {
   const TOKEN = 'cr_' + 'k'.repeat(64);
   const tablet: WardenDevice = { id: 'dev_tablet', name: 'Aisha’s iPad', class: 'tablet', vendor: 'Apple', macs: ['aa:bb:cc:00:00:01'], ips: ['10.10.0.40'], online: true, paused: false, network: { id: 'lan', name: 'Home' } };
-  const phone: WardenDevice = { id: 'dev_phone', name: 'Methel’s iPhone', class: 'phone', owner: 'Methel', macs: ['da:a1:19:6e:02:5f'], ips: ['10.10.0.109'], online: true, paused: false };
+  const phone: WardenDevice = { id: 'dev_phone', name: 'Alex’s iPhone', class: 'phone', owner: 'Alex', macs: ['da:a1:19:6e:02:5f'], ips: ['10.10.0.109'], online: true, paused: false };
   const s = {
     pair: { status: 'pending' as 'pending' | 'approved', collected: false, scopes: [] as string[] },
     devices: [tablet, phone],
-    people: [{ id: 'methel', name: 'Methel', devices: ['dev_phone'], presence: { home: true, via: 'Methel’s iPhone' } }, { id: 'sam', name: 'Sam', devices: ['dev_sam'], presence: { home: false } }],
+    people: [{ id: 'alex', name: 'Alex', devices: ['dev_phone'], presence: { home: true, via: 'Alex’s iPhone' } }, { id: 'sam', name: 'Sam', devices: ['dev_sam'], presence: { home: false } }],
     seen: [] as string[],
     streams: [] as { res: ServerResponse; lastId?: string }[],
     seq: 0,
@@ -49,7 +49,7 @@ export async function fakeWarden() {
       const u = new URL(req.url!, 'https://x');
       const send = (code: number, j?: unknown) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(j === undefined ? '' : JSON.stringify(j)); };
       s.seen.push(`${req.method} ${u.pathname}${raw ? ' ' + raw : ''}`);
-      if (u.pathname === '/.well-known/wardenos-gateway') return send(200, { product: 'WardenOS', siteName: 'Methel Home', version: s.version });
+      if (u.pathname === '/.well-known/wardenos-gateway') return send(200, { product: 'WardenOS', siteName: 'Alex Home', version: s.version });
       if (u.pathname === '/api/v1/apps/pair' && req.method === 'POST') {
         s.pair.scopes = body.scopes;
         return send(201, { pairId: 'pr1', code: 'BM5632', pollSecret: 'ps', expiresAt: new Date(Date.now() + 600_000).toISOString(), pollUrl: '/api/v1/apps/pair/pr1' });

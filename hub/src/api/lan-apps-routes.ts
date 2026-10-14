@@ -123,7 +123,7 @@ export function registerLanAppRoutes(app: FastifyInstance, o: LanAppsOptions): v
 
   // ------------------------------------------------- finding speakers --
   // Speakers on another VLAN aren't heard announcing themselves, so Find asks every address: the hub's own
-  // networks, one the owner names ("10.10.30.0/24"), and every device Warden sees online when it's linked.
+  // networks, one the owner names ("192.168.20.0/24"), and every device Warden sees online when it's linked.
   const findTargets = async (subnet?: string): Promise<string[]> => {
     if (o.findHosts) return o.findHosts;
     let extra: string[] = [];
@@ -162,7 +162,7 @@ export function registerLanAppRoutes(app: FastifyInstance, o: LanAppsOptions): v
       speakers: speakers.map(s => ({ name: s.name, model: s.model, host: s.host })),
       groups: groups.map(g => ({ host: g.host, port: g.port, speakers: g.members.map(m => byName.get(m) ?? m) })),
       added, updated,
-      next: speakers.length ? `${speakers.length} Cast device${speakers.length === 1 ? '' : 's'} and ${groups.length} speaker group${groups.length === 1 ? '' : 's'}${added || updated ? ', saved' : ', nothing new'}.` : 'No Cast devices answered. Name the network they’re on (like 10.10.30.0/24) and try again.',
+      next: speakers.length ? `${speakers.length} Cast device${speakers.length === 1 ? '' : 's'} and ${groups.length} speaker group${groups.length === 1 ? '' : 's'}${added || updated ? ', saved' : ', nothing new'}.` : 'No Cast devices answered. Name the network they’re on (like 192.168.20.0/24) and try again.',
     };
   });
 
@@ -175,7 +175,7 @@ export function registerLanAppRoutes(app: FastifyInstance, o: LanAppsOptions): v
     const all = [...new Set([...(prev.hosts ?? []), ...found.map(f => f.host)])];
     const added = all.length - (prev.hosts ?? []).length;
     if (added) await o.integrations.update('sonos', { ...prev, hosts: all });
-    return { speakers: found, added, next: found.length ? `${found.length} Sonos speaker${found.length === 1 ? '' : 's'}${added ? ', saved' : ', nothing new'}.` : 'No Sonos answered. Name the network they’re on (like 10.10.30.0/24) and try again.' };
+    return { speakers: found, added, next: found.length ? `${found.length} Sonos speaker${found.length === 1 ? '' : 's'}${added ? ', saved' : ', nothing new'}.` : 'No Sonos answered. Name the network they’re on (like 192.168.20.0/24) and try again.' };
   });
 
   // ------------------------------------------------------------------ Helix --

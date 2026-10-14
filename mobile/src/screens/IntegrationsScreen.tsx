@@ -96,7 +96,7 @@ export function IntegrationsScreen() {
               </Group>
             </Appear>
           ) : null}
-          {s.prayer ? (
+          {s.prayer?.on ? (
             <Appear index={2}>
               <Group title="Built in">
                 <Row first icon="mosque" iconFg={s.prayer.on ? C.green : C.stone} title="Prayer times" sub={prayerSub(s.prayer)}
@@ -128,6 +128,8 @@ export function IntegrationAddScreen() {
   const [kind, setKind] = useState('all');
   const all = setup.catalog ? addable(setup.catalog, setup.config, s.integrations) : [];
   const shown = setup.catalog ? addable(setup.catalog, setup.config, s.integrations, q).filter(c => kind === 'all' || c.kind === kind) : [];
+  // Prayer times are built in and off until someone wants them: offered here with the rest to add.
+  const prayerOffer = !!s.prayer && !s.prayer.on && (kind === 'all' || kind === 'Local') && 'prayer times call to prayer adhan'.includes(q.trim().toLowerCase());
   return (
     <Screen title="Add integration" over={setup.catalog ? `${all.length} available` : ' '} onBack={() => nav.goBack()} gap={SP[4]} onRefresh={() => void setup.reload()} refreshing={setup.loading && !!setup.catalog}>
       <View style={{ gap: SP[3] }}>
@@ -138,8 +140,24 @@ export function IntegrationAddScreen() {
         <Empty icon="cloud_off" tone={C.red} title="Couldn’t load the catalog" text={setup.error} action="Try again" onAction={() => void setup.reload()} />
       ) : !setup.catalog ? (
         <View style={{ gap: SP[3] }}>{[0, 1, 2, 3].map(i => <Skeleton key={i} h={96} r={R.lg} />)}</View>
-      ) : shown.length ? (
+      ) : shown.length || prayerOffer ? (
         <View style={{ gap: SP[3] }}>
+          {prayerOffer ? (
+            <Appear>
+              <Press onPress={() => nav.replace('PrayerTimes')} give="soft" label="Prayer times, built in. Prayer times in schedules, the call to prayer and Now"
+                style={{ flexDirection: 'row', gap: SP[3], padding: SP[4], borderRadius: R.lg, backgroundColor: C.card, borderWidth: 1, borderColor: C.edge, borderTopColor: C.edgeTop }}>
+                <IconWell icon="mosque" color={C.amber} size={40} />
+                <View style={{ flex: 1, gap: 4, minWidth: 0 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2] }}>
+                    <T v="headline" style={{ flexShrink: 1 }} numberOfLines={1}>Prayer times</T>
+                    <Tag text="Built in" color={C.stone} />
+                  </View>
+                  <T v="footnote" color={C.stone} numberOfLines={3}>Prayer times in schedules and modes, the call to prayer, and the next prayer on Now.</T>
+                </View>
+                <Icon name="chevron_right" size={20} color={C.stone2} style={{ alignSelf: 'center' }} />
+              </Press>
+            </Appear>
+          ) : null}
           {shown.map((c, i) => (
             <Appear key={c.id} index={i}>
               <Press onPress={() => nav.replace('Integration', { id: c.id })} give="soft" label={`${c.name}, ${c.kind}. ${c.description}`}
@@ -162,7 +180,7 @@ export function IntegrationAddScreen() {
       ) : (
         <Empty icon="check_circle" tone={C.green} title="Everything is set up" text="Every integration Kova has is already on this hub." />
       )}
-      {shown.length ? <T v="footnote" color={C.stone2} center style={{ paddingTop: SP[2] }}>Local ones talk to your devices over your own network. Cloud ones go through the maker’s account.</T> : null}
+      {shown.length || prayerOffer ? <T v="footnote" color={C.stone2} center style={{ paddingTop: SP[2] }}>Local ones talk to your devices over your own network. Cloud ones go through the maker’s account.</T> : null}
     </Screen>
   );
 }

@@ -42,7 +42,7 @@ async function fakeWarden() {
       const auth = req.headers.authorization ?? '';
       const send = (code: number, j?: unknown) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(j === undefined ? '' : JSON.stringify(j)); };
       s.seen.push(`${req.method} ${u.pathname}`);
-      if (u.pathname === '/.well-known/wardenos-gateway') return send(200, { product: 'WardenOS', siteName: 'Methel Home', apiBase: '/api/v1' });
+      if (u.pathname === '/.well-known/wardenos-gateway') return send(200, { product: 'WardenOS', siteName: 'Alex Home', apiBase: '/api/v1' });
       if (u.pathname === '/api/v1/login') {
         if (body?.username === 'admin' && body?.password === 'right') return send(200, { session: { token: 'sess1', role: 'admin' } });
         return send(401, { message: 'invalid username or password' });
@@ -102,7 +102,7 @@ test('Warden: link once, internet status and alerts, pause a device’s internet
     assert.match(bad.json().error, /didn’t accept that sign-in/);
     const ok = await app.inject({ method: 'POST', url: '/api/integrations/warden/link', payload: { url: w.url, username: 'admin', password: 'right' } });
     assert.equal(ok.statusCode, 200, ok.body);
-    assert.match(ok.json().linked, /Methel Home/);
+    assert.match(ok.json().linked, /Alex Home/);
     assert.ok(!ok.body.includes(w.TOKEN), 'the token never goes back to the browser');
     assert.deepEqual(w.s.tokens, [{ name: 'Kova', role: 'operator' }]);
     assert.ok(w.s.seen.includes('POST /api/v1/logout'), 'the sign-in session is closed again');
@@ -151,21 +151,21 @@ test('Warden: link once, internet status and alerts, pause a device’s internet
 
     // Devices on the network, for picking phones and internet switches.
     w.s.clients = [
-      { mac: 'aa:bb:cc:dd:ee:02', name: 'Methel’s iPhone', ip: '10.10.0.52', lastSeenAt: new Date().toISOString(), online: true },
+      { mac: 'aa:bb:cc:dd:ee:02', name: 'Alex’s iPhone', ip: '10.10.0.52', lastSeenAt: new Date().toISOString(), online: true },
       { mac: 'aa:bb:cc:dd:ee:09', hostname: 'old-laptop', lastSeenAt: new Date(Date.now() - 3600_000).toISOString(), online: true },
     ];
     const list = (await app.inject({ method: 'GET', url: '/api/integrations/warden/clients' })).json();
-    assert.deepEqual(list.devices.map((d: { name: string }) => d.name), ['Methel’s iPhone · aa:bb:cc:dd:ee:02 · 10.10.0.52', 'old-laptop · aa:bb:cc:dd:ee:09 · not here now']);
+    assert.deepEqual(list.devices.map((d: { name: string }) => d.name), ['Alex’s iPhone · aa:bb:cc:dd:ee:02 · 10.10.0.52', 'old-laptop · aa:bb:cc:dd:ee:09 · not here now']);
 
     // Who's home: a phone Warden saw lately is home; one it hasn't seen for a while is away.
-    const presence = new Presence(t.hub, { people: { methel: { phones: ['AA:BB:CC:DD:EE:02'] } }, pollSec: 0, awayAfterMin: 0 }, { warden: () => manager.raw('warden') });
-    await t.hub.engine.setPresence('methel', false, 'test');
+    const presence = new Presence(t.hub, { people: { alex: { phones: ['AA:BB:CC:DD:EE:02'] } }, pollSec: 0, awayAfterMin: 0 }, { warden: () => manager.raw('warden') });
+    await t.hub.engine.setPresence('alex', false, 'test');
     presence.start();
     await presence.poll();
-    assert.equal(t.hub.engine.people.methel.home, true);
+    assert.equal(t.hub.engine.people.alex.home, true);
     w.s.clients[0].lastSeenAt = new Date(Date.now() - 3600_000).toISOString();
     await presence.poll();
-    assert.equal(t.hub.engine.people.methel.home, false);
+    assert.equal(t.hub.engine.people.alex.home, false);
     assert.match(presence.status().note ?? '', /Router: 0 phones seen/);
     presence.stop();
 

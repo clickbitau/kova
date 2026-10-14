@@ -27,6 +27,7 @@
 
 <sc-if value="{{ isNow }}" hint-placeholder-val="{{ true }}">
 <div style="display:flex;justify-content:space-between;align-items:center"><div style="display:flex;align-items:center;gap:8px"><svg width="22" height="22" viewBox="0 0 48 48"><path d="M8 26L24 11L40 26" fill="none" stroke="#f1efea" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path><path d="M16 32L24 24.5L32 32" fill="none" stroke="#f1efea" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="24" cy="38.5" r="3.5" fill="#f2b14c"></circle></svg><span style="font-size:13px;font-weight:700;color:#a3a09a">{{ homeName }}</span></div><div style="display:flex;align-items:center;gap:10px"><div style="display:flex"><sc-for list="{{ avatars }}" as="av" hint-placeholder-count="2"><div style="width:30px;height:30px;border-radius:50%;background:#2a2b2f;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;border:2px solid #0e0f10;margin-left:{{ av.ml }};opacity:{{ av.op }}">{{ av.initial }}</div></sc-for></div></div></div>
+<sc-if value="{{ su.on }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:12px;padding:16px;border-radius:18px;background:#16171a;border:1px solid rgba(242,177,76,0.35)"><div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:17px;font-weight:800">Set up your home</span><span style="font-size:12.5px;color:#a3a09a;line-height:1.5">{{ su.sub }}</span></div><div style="display:flex;flex-direction:column;gap:8px"><div onClick="{{ su.addDevices }}" role="button" style="padding:11px 14px;border-radius:12px;font-size:13.5px;font-weight:700;background:#f2b14c;color:#1a1408;text-align:center;cursor:pointer">Add your devices</div><sc-if value="{{ su.askLocal }}" hint-placeholder-val="{{ true }}"><div onClick="{{ su.useLocal }}" role="button" style="padding:11px 14px;border-radius:12px;font-size:13px;font-weight:700;background:rgba(255,255,255,0.07);text-align:center;cursor:pointer">{{ su.localLabel }}</div></sc-if><div onClick="{{ su.finish }}" role="button" style="padding:9px 14px;font-size:12.5px;font-weight:700;color:#a3a09a;text-align:center;cursor:pointer">I’ve done this: finish setup</div></div></div></sc-if>
 <div style="display:flex;flex-direction:column;gap:6px">
 <span style="font-size:13px;color:#a3a09a">{{ dateLine }}</span>
 <div onClick="{{ goModes }}" style="display:flex;align-items:center;gap:10px;cursor:pointer;align-self:flex-start"><span style="font-family:'Material Symbols Rounded';font-size:34px;font-variation-settings:'FILL' 1;color:{{ mode.color }}">{{ mode.icon }}</span><span style="font-size:38px;font-weight:700;letter-spacing:-0.03em;line-height:1">{{ mode.name }}</span><span style="font-family:'Material Symbols Rounded';font-size:26px;color:#6f6d69">chevron_right</span></div>
@@ -35,7 +36,7 @@
 </div>
 <div style="display:flex;flex-direction:column;gap:8px">
 <div style="position:relative;height:30px;border-radius:9px;overflow:hidden;display:flex"><sc-for list="{{ bands }}" as="b" hint-placeholder-count="6"><div style="height:100%;width:{{ b.w }};background:{{ b.bg }}"></div></sc-for><div style="position:absolute;left:{{ nowLeft }};top:0;bottom:0;width:2px;background:#fff"></div></div>
-<div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:10px;color:#6f6d69"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>
+<div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:10px;color:#6f6d69"><sc-for list="{{ hourTicks }}" as="hk" hint-placeholder-count="5"><span>{{ hk.t }}</span></sc-for></div>
 </div>
 <div style="display:flex;flex-direction:column;gap:10px">
 <span style="font-size:16px;font-weight:700">Coming up</span>
@@ -237,7 +238,7 @@
 <div style="position:relative;height:100%"><div style="position:absolute;bottom:0;left:0;right:0;border-radius:3px 3px 0 0;height:{{ b.use }};background:{{ b.useBg }}"></div><div style="position:absolute;bottom:0;left:18%;right:18%;border-radius:2px 2px 0 0;height:{{ b.solar }};background:#f2b14c;opacity:{{ b.op }}"></div></div>
 </sc-for>
 </div>
-<div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:10px;color:#6f6d69"><span>00</span><span>06</span><span>12</span><span>18</span><span>23</span></div>
+<div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:10px;color:#6f6d69"><sc-for list="{{ hourTicks23 }}" as="hk" hint-placeholder-count="5"><span>{{ hk.t }}</span></sc-for></div>
 </div>
 <div style="background:#16171a;border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:12px">
 <span style="font-size:15px;font-weight:700">What’s measured</span>
@@ -264,7 +265,7 @@
 </div></sc-if>
 <sc-if value="{{ mp.has }}" hint-placeholder-val="{{ true }}"><div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#a3a09a">volume_down</span><input type="range" min="0" max="100" value="{{ mp.vol }}" onChange="{{ mp.setVol }}" style="flex:1;accent-color:#7cb8f0"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#a3a09a;width:36px;text-align:right">{{ mp.volLabel }}</span></div></sc-if>
 <sc-if value="{{ hasMusic }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:8px">
-<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">Helix music</span><span onClick="{{ toggleMusicShuffle }}" style="display:flex;align-items:center;gap:4px;font-size:12.5px;font-weight:700;cursor:pointer;color:{{ musicShuffleFg }}"><span style="font-family:'Material Symbols Rounded';font-size:17px">shuffle</span>{{ musicShuffleLabel }}</span></div>
+<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:11px;font-weight:700;color:#a3a09a;text-transform:uppercase;letter-spacing:0.06em">Your music</span><span onClick="{{ toggleMusicShuffle }}" style="display:flex;align-items:center;gap:4px;font-size:12.5px;font-weight:700;cursor:pointer;color:{{ musicShuffleFg }}"><span style="font-family:'Material Symbols Rounded';font-size:17px">shuffle</span>{{ musicShuffleLabel }}</span></div>
 <div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ musicItems }}" as="mu" hint-placeholder-count="4"><div onClick="{{ mu.play }}" style="padding:9px 12px;border-radius:10px;background:#1c1d20;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#c79bf2">{{ mu.icon }}</span>{{ mu.name }}</div></sc-for></div>
 <div style="display:flex;gap:8px"><input value="{{ stationDraft }}" onChange="{{ setStation }}" placeholder="A station from… an artist, album or song" autocapitalize="off" style="padding:10px 12px;border-radius:10px;background:#1c1d20;border:1px solid rgba(255,255,255,0.08);color:#f1efea;font-family:Manrope,sans-serif;font-size:16px;flex:1;min-width:0;outline:none"><div onClick="{{ playStation }}" style="padding:10px 14px;border-radius:10px;background:#c79bf2;color:#1a1020;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:4px"><span style="font-family:'Material Symbols Rounded';font-size:17px">radio</span>Play</div></div>
 </div></sc-if>
@@ -604,6 +605,26 @@ async function api(method,path,body){
   if(!r.ok)throw new Error(j.error||r.statusText);
   return j;
 }
+// How the home writes dates, times and temperatures (Settings → Home): its locale, 12- or 24-hour clocks, °C or °F.
+// Kept from each state the hub sends; before one arrives, this browser's own.
+const HF={locale:undefined,hour12:undefined,F:false};
+const useHome=h=>{const x=h&&h.home;if(x){HF.locale=x.locale||undefined;HF.hour12=typeof x.hour12==='boolean'?x.hour12:undefined;HF.F=!!x.fahrenheit}return h};
+const fmtT=(t,o)=>new Date(t).toLocaleString(HF.locale,{...o,...(o.hour&&HF.hour12!=null?{hour12:HF.hour12}:{})}).replace(/\bSept\b/,'Sep');
+const fmtD=(t,o)=>new Date(t).toLocaleDateString(HF.locale,o).replace(/\bSept\b/,'Sep');
+// A temperature Kova keeps in °C, as the home reads it; and one the person typed, back to °C.
+const tUnit=()=>HF.F?'°F':'°C';
+const tShow=c=>c==null||isNaN(c)?c:HF.F?Math.round(c*9/5+32):Math.round(c*10)/10;
+const tFrom=v=>v==null||v===''||isNaN(v)?v:HF.F?Math.round((Number(v)-32)*5/9*2)/2:Number(v);
+// Things to try asking, from this home: its first room, a light, what's on and its first overlay; general ones when
+// the home is still empty.
+const askChips=H=>{const D=(H&&H.devices)||[],lit=d=>(d.type==='light'||d.type==='dimmer')&&!d.hidden,R=((H&&H.rooms)||[])[0],L=D.find(d=>lit(d)&&d.capabilities&&d.capabilities.includes('brightness')),On=D.find(d=>lit(d)&&d.state&&d.state.on),O=((H&&H.overlays)||[])[0];
+  return [R&&`Turn off the ${R.name.toLowerCase()}`,L&&`${L.name} to 30%`,On&&`Why is the ${On.name.toLowerCase()} on?`,'What’s on?','Who’s home?',O&&`Start ${O.name}`,'What’s happening tonight?'].filter(Boolean).slice(0,5)};
+// The device that measures the home's power (a solar inverter, a grid meter), whatever its brand, and its integration's
+// name for "Today so far · …".
+const energyMeter=H=>((H&&H.devices)||[]).find(d=>!d.archived&&(d.capabilities||[]).includes('energy'));
+const energySource=H=>{const d=energyMeter(H),i=d&&(H.integrations||[]).find(x=>x.id===d.adapter);return i?i.name:'your meter'};
+// The hour marks under a day strip, as the home writes hours ("06" or "6 am").
+const hourMarks=last=>[0,6,12,18,last].map(h=>({t:HF.hour12?new Date(2000,0,1,h%24).toLocaleTimeString(HF.locale,{hour:'numeric',hour12:true}):String(h).padStart(2,'0')}));
 const BOOT=window.KOVA_BOOT||{home:{name:'Kova',timezone:'UTC',nowHour:12,dateLabel:'',clock:''},rooms:[],groups:{},people:[],devices:[],modes:[{id:'day',name:'Day',color:'#dcd27e',icon:'light_mode',startLabel:'',endLabel:'',groups:[],inherit:[],moments:[],test:{days:[],text:''}}],current:{modeId:'day',untilLabel:'',nextId:'day',overlay:null},day:{bands:[],items:[],marks:[]},upcoming:[],overlays:[],sources:[],findings:[],activity:[],integrations:[],lightTheWay:[],weather:null,offline:true};
 const ICON={light:'lightbulb',dimmer:'lightbulb',fan:'air_purifier',media:'speaker',tv:'tv',camera:'videocam',plug:'outlet',sensor:'sensors',vacuum:'cleaning_services',internet:'wifi'};
 const VAC={cleaning:'Cleaning',returning:'Returning to dock',docked:'Docked',paused:'Paused',idle:'Idle',error:'Needs attention'};
@@ -680,7 +701,7 @@ const b64u=s=>{const p='='.repeat((4-s.length%4)%4);const r=atob((s+p).replace(/
 const PUSH_UI={insecure:['Notifications need HTTPS','Open Kova over https:// to get alerts here, or use the ntfy app','notifications_off',null],install:['Add Kova to your Home Screen','iPhone only shows alerts for Home Screen apps: Share → Add to Home Screen','add_to_home_screen',null],unsupported:['No notifications in this browser','Use the ntfy app for alerts instead','notifications_off',null],denied:['Notifications are blocked','Allow them for Kova in Settings → Notifications','notifications_off',null],off:['Enable notifications','Doorbell, lights left on, devices not responding','notifications','Enable'],on:['Notifications are on','Doorbell, lights left on, devices not responding','notifications_active','Test']};
 
 class Component extends DCLogic {
-  state={hub:BOOT,conn:!!window.KOVA_BOOT,tab:'now',room:(BOOT.rooms[0]||{}).id,sheet:null,modeOpen:BOOT.current.modeId,actF:'all',
+  state={hub:useHome(BOOT),conn:!!window.KOVA_BOOT,tab:'now',room:(BOOT.rooms[0]||{}).id,sheet:null,modeOpen:BOOT.current.modeId,actF:'all',
     chat:[{from:'kova',text:`Hi. ${BOOT.modes.find(m=>m.id===BOOT.current.modeId)?.name||'Day'} mode, ${BOOT.devices.filter(d=>isLight(d)&&d.state.on).length} lights on.`,src:'Built-in · nothing left your home'}],
     toast:null,undo:null,draft:'',parse:null,ai:'builtin',aiOpen:false,share:{names:true,rooms:true,history:false,presence:false,security:false},favs:loadFavs(),push:pushBase(),page:null,igCat:null,igCfg:null,igPick:false,ig:null,igLoadErr:null,live:null,sound:false,edit:null};
   componentDidMount(){this.connect();this.pushCheck();this.deepLink();api('GET','/api/assistant/settings').then(r=>this.setState({ai:r.engine,share:r.share})).catch(()=>{})}
@@ -708,7 +729,7 @@ class Component extends DCLogic {
     if(this._closed)return;
     let ws;try{ws=new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.host}/api/ws${KOVA_TOKEN?'?token='+encodeURIComponent(KOVA_TOKEN):''}`)}catch(e){setTimeout(()=>this.connect(),3000);return}
     this._ws=ws;
-    ws.onmessage=ev=>{try{const m=JSON.parse(ev.data);if(m.type==='state')this.setState({hub:m.data,conn:true})}catch(e){}};
+    ws.onmessage=ev=>{try{const m=JSON.parse(ev.data);if(m.type==='state')this.setState({hub:useHome(m.data),conn:true})}catch(e){}};
     ws.onclose=()=>{this.setState({conn:false});setTimeout(()=>this.connect(),2000)};
   }
   toast(t,u){clearTimeout(this._t);this.setState({toast:t,undo:u||null});this._t=setTimeout(()=>this.setState({toast:null,undo:null}),4000)}
@@ -834,7 +855,7 @@ class Component extends DCLogic {
     const acts=H.activity.length;
     const MORE=[['modes','Modes','routine','rgba(242,177,76,0.14)','#f2b14c',`${H.modes.length} modes · now ${(H.modes.find(m=>m.id===H.current.modeId)||{name:''}).name}${H.findings.length?` · ${H.findings.length} to look at`:''}`],
       ['activity','Activity','history','rgba(127,212,160,0.14)','#7fd4a0',acts?`Latest: ${H.activity[0].what}`:'Nothing yet'],
-      ['energy','Energy','electric_meter','rgba(242,177,76,0.14)','#f2b14c',E.available?(H.integrations.some(i=>i.id==='goodwe')||E.solarKwh>0?`${kw(E.now.solar)} solar now · ${E.solarKwh.toFixed(1)} kWh today`:E.now.load!=null?`${E.estimated?'About ':''}${kw(E.now.load)} in use now`:'What’s using power'):'No inverter or meter yet'],
+      ['energy','Energy','electric_meter','rgba(242,177,76,0.14)','#f2b14c',E.available?(E.solarKwh>0||!!energyMeter(H)?`${kw(E.now.solar)} solar now · ${E.solarKwh.toFixed(1)} kWh today`:E.now.load!=null?`${E.estimated?'About ':''}${kw(E.now.load)} in use now`:'What’s using power'):'No inverter or meter yet'],
       ['media','Media','speaker','rgba(124,184,240,0.14)','#7cb8f0',`${pls.filter(d=>d.on).length} playing · ${pls.length} players`],
       ['customise','Customise home','tune','#232428','#d8d5cf',`${H.rooms.length} rooms · ${H.people.length} people · names, favourites`],
       ['integrations','Integrations','hub','#232428','#d8d5cf',bad.length?`${bad.length} need${bad.length===1?'s':''} attention: ${bad.map(i=>i.name).join(', ')}`:`${H.integrations.length} connected`],
@@ -874,7 +895,7 @@ class Component extends DCLogic {
         shuffleBg:P.shuffle?'rgba(199,155,242,0.2)':'transparent',shuffleFg:P.shuffle?'#c79bf2':'#a3a09a'}}
     // Helix music: on speakers that play a queue (Cast, Sonos, their groups)
     const PQ=P&&(P.capabilities||[]).includes('queue');
-    const playMusic=(name,shuffle)=>{if(!P)return;if(!PQ){this.toast(`${P.name} can’t play Helix music yet (Google Cast, Sonos and AirPlay speakers can)`);return}
+    const playMusic=(name,shuffle)=>{if(!P)return;if(!PQ){this.toast(`${P.name} can’t play music from your library yet (Google Cast, Sonos and AirPlay speakers can)`);return}
       this.send(P.id,{on:true,media:name,shuffle:!!shuffle}).then(ok=>ok&&this.toast(`Playing ${name}${shuffle&&name!=='Shuffle all'?' on shuffle':''} on ${P.name}`))};
     const musicItems=(H.music||[]).map(m=>({name:m.name,icon:m.icon,play:()=>playMusic(m.name,m.kind==='all'||!!s.musicShuffle)}));
     const missingUrls=H.sources.filter(so=>!so.url).length;
@@ -890,7 +911,7 @@ class Component extends DCLogic {
     return {isMore:pg==='more',isSecurity:pg==='security',isEnergy:pg==='energy',isMedia:pg==='media',isInteg:pg==='integrations',
       back:()=>this.back(),moreRows,hubLine:`Kova hub · ${list.length} devices · ${H.integrations.length} integrations`,
       secSummary:`${cams.length} camera${cams.length===1?'':'s'} · ${H.people.filter(p=>p.home).length} of ${H.people.length} home`,multiCam:cams.length>1,noCams:!cams.length,goNest:()=>{this.go('integrations');const open=()=>this.openInteg('nest');if(this.state.igCat)open();else this.loadInteg().then(open)},camMain,camThumbs,people,secEvents,noSecEvents:!secEvents.length,
-      enSub:E.available?(E.estimated?'Today so far · about, from what’s on (no meter for the whole home)':`Today so far · ${(H.integrations.find(i=>i.id==='goodwe'||i.id==='virtual')||{name:'inverter'}).name}`):'Connect a solar inverter or grid meter',
+      enSub:E.available?(E.estimated?'Today so far · about, from what’s on (no meter for the whole home)':`Today so far · ${energySource(H)}`):'Connect a solar inverter or grid meter',
       enSolarNow:kw(E.now.solar),enSolarFg:E.now.solar>0?'#f2b14c':'#6f6d69',enSolarLabel:E.now.solar>0?'Solar':'Solar · idle',enLoadNow:kw(E.now.load),enGridNow:kw(E.now.grid),enGridLabel:E.now.grid==null?'Grid':E.now.grid<0?'To grid':'From grid',
       enInsight:!E.available?'No energy source connected yet. Add your inverter in Integrations.':E.estimated&&!E.solarKwh?`About ${kw(E.now.load||0)} in use now${E.devices[0]?`, most of it ${E.devices[0].name}`:''}. A plug that measures power makes it exact.`:E.now.solar>0?`Producing ${kw(E.now.solar)} now${E.now.load!=null&&E.now.solar>E.now.load?', more than the home is using: a good time to run the dishwasher or laundry.':'.'}`:E.solarKwh>0?`Solar made ${E.solarKwh.toFixed(1)} kWh today and has stopped for the day.`:'Solar hasn’t started yet today.',
       enFoot:E.devices.length?`${E.devices.length===1?'1 device reports':E.devices.length+' devices report'} power. Add a whole-home meter or smart plugs to see the rest.`:'Nothing reports its own power yet. Smart plugs with energy monitoring or a whole-home meter fill this in.',
@@ -1090,12 +1111,14 @@ class Component extends DCLogic {
       return{name,icon,fg,sub:r?(r.ok?`Connected · ${r.devices} device${r.devices===1?'':'s'}`:`Needs attention · ${r.note||'not responding'}`):set?'Saved · waiting for its settings':desc,subFg:r&&!r.ok?'#f2b14c':r?'#7fd4a0':'#a3a09a',go:()=>this.openSetup(id)}};
     const B='#7cb8f0',A='#f2b14c',G='#7fd4a0';
     const sections=[
-      {title:'Your network and media',rows:[row('warden','Warden','router',B,'Your router: internet alerts, pause a device’s internet, who’s home'),row('helix','Helix','movie',B,'Your TV boxes: what’s playing, play by name, Movie mode by itself')]},
       {title:'Pair a new device',rows:[row('matter','Matter','hub',G,'Lights, plugs and more, with the code on the device'),row('homekit','HomeKit accessory','home_iot_device',A,'Anything with a HomeKit setup code')]},
       {title:'Speakers and TVs',rows:[row('cast','Google Cast','cast',B,'Nest speakers and displays, Chromecast, Cast groups: found by themselves'),row('sonos','Sonos','speaker',B,'Found by themselves'),row('samsungtv','Samsung TV','tv',B,'By IP address; the TV asks you to allow Kova once'),row('airplay','AirPlay','airplay',B,'Apple TV and AirPlay speakers, through OwnTone'),
         {name:'Speaker group',icon:'speaker_group',fg:B,sub:'Play speakers of any brand as one',subFg:'#a3a09a',go:()=>{kovaClose(()=>this.setState({adding:false}));setTimeout(()=>this.openGroup(null),200)}}]},
-      {title:'Lights, plugs and appliances',rows:[row('tuya','Tuya · Smart Life','toggle_on',A,'Switches, lights and LED strips, locally'),row('tapo','TP-Link Tapo','outlet',A,'Plugs and bulbs, locally'),row('vesync','Levoit (VeSync)','air_purifier',B,'Air purifiers · Cloud'),row('ecovacs','Ecovacs DEEBOT','cleaning_services',A,'Robot vacuums · Cloud'),row('goodwe','GoodWe solar','solar_power',A,'Inverter, over your network')]},
+      {title:'Lights, plugs and appliances',rows:[row('tuya','Tuya · Smart Life','toggle_on',A,'Switches, lights, plugs and strips, locally'),row('tapo','TP-Link Tapo','outlet',A,'Plugs and bulbs, locally'),row('vesync','Levoit (VeSync)','air_purifier',B,'Air purifiers · Cloud'),row('ecovacs','Ecovacs DEEBOT','cleaning_services',A,'Robot vacuums · Cloud'),row('goodwe','GoodWe solar','solar_power',A,'Inverter, over your network')]},
       {title:'Cameras',rows:[row('nest','Google Nest','videocam',G,'Doorbell and cameras · Cloud')]},
+      {title:'From ClickBIT',rows:[row('warden','Warden','router',B,'ClickBIT’s router: internet alerts, pause a device’s internet, who’s home'),row('helix','Helix','movie',B,'ClickBIT’s media server and TV boxes: what’s playing, play by name, Movie mode by itself')]},
+      // Everything else the hub can connect to (its catalog), so nothing it supports is missing here.
+      ...(()=>{const shown=new Set(['matter','homekit','cast','sonos','samsungtv','airplay','tuya','tapo','vesync','ecovacs','goodwe','nest','warden','helix']);const more=(s.igCat||[]).filter(c=>!shown.has(c.id)).map(c=>row(c.id,c.name,c.icon||'extension',B,c.description||''));return more.length?[{title:'More',rows:more}]:[]})(),
     ];
     return{addOpen:!!s.adding,openAdd:()=>this.openAdd(),add:{sections,close:()=>kovaClose(()=>{this.setState({adding:false});if(EMBED&&!this.state.ig)toApp('back')})}};
   }
@@ -1167,10 +1190,15 @@ class Component extends DCLogic {
     const np=!s.page;
     const pg=s.page;
     return {tabs,showTabs:!EMBED,...this.pagesVals(s,H,devs,list,RN),...this.edVals(s,H,devs,RN),...this.devVals(s,H,devs,list,RN),...this.cuVals(s,H,devs,list,RN),...this.addVals(s,H),...this.groupVals(s,H,devs,RN),
-      isNow:np&&s.tab==='now',isDevices:np&&s.tab==='devices',isAsk:np&&s.tab==='ask',isSecurity:(np&&s.tab==='security')||pg==='security',secBack:pg==='security'||EMBED,isMore:(np&&s.tab==='more')||pg==='more',moreBack:pg==='more',
+      su:(()=>{const me=H.me||{},own=!me.can||me.can.owner;if(!H.home.firstRun||!own)return{on:false};
+        const lang=navigator.language||'en-US',reg=(lang.split('-')[1]||'').toUpperCase(),tz=Intl.DateTimeFormat().resolvedOptions().timeZone,h12=(()=>{try{return /^h1/.test(new Intl.DateTimeFormat(lang,{hour:'numeric'}).resolvedOptions().hourCycle||'')}catch(e){return false}})(),F=['US','LR','MM','BS','BZ','KY','PW','FM','MH'].includes(reg);
+        return{on:true,sub:'Add your devices here. Name the home, add its rooms and people in the Kova app or on a computer.',addDevices:()=>this.openAdd(),askLocal:!H.home.localeSet,localLabel:`Use this phone’s settings (${h12?'12':'24'}-hour, °${F?'F':'C'})`,
+          useLocal:()=>api('PUT','/api/home',{locale:lang,hour12:h12,fahrenheit:F,...(tz?{timezone:tz}:{})}).then(()=>this.toast('Dates, clock and temperatures set')).catch(e=>this.err(e)),
+          finish:()=>api('PUT','/api/home',{setupDone:true}).then(()=>this.toast('All set')).catch(e=>this.err(e))}})(),
+      hourTicks:hourMarks(24),hourTicks23:hourMarks(23),isNow:np&&s.tab==='now',isDevices:np&&s.tab==='devices',isAsk:np&&s.tab==='ask',isSecurity:(np&&s.tab==='security')||pg==='security',secBack:pg==='security'||EMBED,isMore:(np&&s.tab==='more')||pg==='more',moreBack:pg==='more',
       isModes:pg==='modes',isActivity:pg==='activity',isCustomise:pg==='customise',goActivity:()=>this.go('activity'),scrollRef:this.scrollRef,
       homeName:H.home.name,avatars:(home.length?home:H.people).slice(0,3).map((x,i)=>({initial:x.name[0],ml:i?'-9px':'0px',op:x.home?1:0.4})),
-      dateLine:`${shortDate(H.home.dateLabel)} · ${H.home.clock}${w?` · ${w.temp}° ${w.text.toLowerCase()}`:''}`,
+      dateLine:`${shortDate(H.home.dateLabel)} · ${H.home.clock}${w?` · ${tShow(w.temp)}° ${w.text.toLowerCase()}`:''}`,
       untilLine:H.current.waitingForSomeone?`Lights wait until someone’s home`:`Until ${H.current.untilLabel}, then ${nx.name}`,nowLeft:(H.home.nowHour/24*100)+'%',
       mode:{...M,glow:M.color+'33'},lightsOn:`${on} light${on===1?'':'s'} on`,bands:H.day.bands.map(b=>{const m=this.modeById(b.modeId);return{w:((b.end-b.start)/24*100)+'%',bg:m.color+(b.modeId===H.current.modeId?'55':'2a')}}),upcoming,favs,overlays,
       overlayOn:!!ov,ovIcon:ov?ov.icon:'',ovLabel:ov?`${ov.name} · ${ov.endsLabel.toLowerCase()}`:'',endOverlay:()=>api('POST','/api/overlays/end').then(()=>this.toast('Back to '+M.name)).catch(x=>this.err(x)),
@@ -1180,7 +1208,7 @@ class Component extends DCLogic {
       push:(()=>{const [title,note,icon,btn]=PUSH_UI[s.push]||PUSH_UI.unsupported;const on=s.push==='on';return{title,note,icon,btn:btn||'',hasBtn:!!btn,iconBg:on?AS.people[0]:AS.system[0],iconFg:on?AS.people[1]:AS.system[1],go:()=>this.pushGo()}})(),
       activity:H.activity.filter(a=>s.actF==='all'||a.type===s.actF).map(a=>({t:a.t,icon:a.icon,what:a.what,why:a.why,iconBg:(AS[a.type]||AS.system)[0],iconFg:(AS[a.type]||AS.system)[1]})),
       chat:s.chat.map(m=>({text:m.text,align:m.from==='you'?'flex-end':'flex-start',bg:m.from==='you'?'#f1efea':'#16171a',fg:m.from==='you'?'#141517':'#f1efea',hasSrc:!!m.src,src:m.src||'',srcIcon:SRC_ICON[m.src]||'lock'})),
-      asks:['Turn off the kitchen','Lamp to 30%','Why is the garage light on?','What’s happening tonight?','Who’s home?','I’m leaving'].map(text=>({text,ask:()=>this.ask(text)})),
+      asks:askChips(H).map(text=>({text,ask:()=>this.ask(text)})),
       hasParse:!!(p&&p.understood),parseChips:p&&p.understood?p.chips.map((t,i)=>({t,bg:i===0?V:N,fg:i===0?VF:(p.kind==='unknownLabel'&&i===1?'#ff6b5e':i===2?'#a3a09a':NF)})):[],
       showNoParse:!!(p&&!p.understood),noParseText:s.ai==='builtin'?'Not a built-in command. Kova can still try, or turn on AI for free-form requests.':'Not a built-in command. This will go to '+(s.ai==='local'?'your local AI.':'cloud AI.'),
       draft:s.draft,setDraft:e=>this.setDraft(e.target.value),draftKey:e=>{if(e.key==='Enter'&&s.draft.trim())this.ask(s.draft.trim())},send:()=>{if(s.draft.trim())this.ask(s.draft.trim())},

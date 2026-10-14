@@ -7,7 +7,7 @@ import { useSheet } from '../state/sheet';
 import { useNav } from '../navigation';
 import type { Command, MediaSource } from '../api/types';
 import { devs, has, ICON, stateOf, type Dev } from '../logic/devices';
-import { groupMembers, loopDone, memberToggle, musicCommand, nowPlaying, pickPlayer, playersOf, playingCount, playPause, sourceCommand, sourceSub, stationCommand, STOP, streamUrlError } from '../logic/media';
+import { groupMembers, loopDone, memberToggle, musicCommand, musicOn, nowPlaying, pickPlayer, playersOf, playingCount, playPause, sourceCommand, sourceSub, stationCommand, STOP, streamUrlError } from '../logic/media';
 import { plural } from '../logic/customise';
 import { groupHow } from '../logic/group-sync';
 import { Icon } from '../ui/Icon';
@@ -22,6 +22,7 @@ const MUSIC = '#c79bf2';
 /** A source's stream address, and whether a recording repeats or plays once. */
 function SourceSheet({ src, onClose }: { src: MediaSource | null; onClose: () => void }) {
   const { act } = useHub();
+  const library = musicOn(useSnap());
   const [url, setUrl] = useState('');
   const [song, setSong] = useState('');
   useEffect(() => { if (src) { setUrl(src.url ?? ''); setSong(''); } }, [src?.name]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -36,12 +37,14 @@ function SourceSheet({ src, onClose }: { src: MediaSource | null; onClose: () =>
   return (
     <Sheet open onClose={onClose} label={src.name}>
       <SheetHead kicker="Source" title={src.name} icon={src.icon} color={C.blue} />
-      <Section title="A song from Helix" caption gap={SP[2]}>
-        <T v="footnote" color={C.stone}>{src.helix ? `Plays ${src.helix.title} from your Helix music, repeating without a break: each time round fades into the next.` : 'Play a song from your Helix music instead, repeating without a break: each time round fades into the next.'}</T>
-        <TextField value={song} onChange={setSong} placeholder={src.helix ? 'Another song’s name' : 'Song name'} label="Helix song" onSubmit={() => void (song.trim() && act('PUT', path, { helix: song.trim() }, `${src.name} plays it from Helix now`).then(ok => { if (ok) setSong(''); return ok; }))} />
-        <Button full kind={song.trim() ? 'primary' : 'secondary'} icon="music_note" label={src.helix ? 'Use this song' : 'Use a Helix song'} onPress={song.trim() ? () => act('PUT', path, { helix: song.trim() }, `${src.name} plays it from Helix now`).then(ok => { if (ok) setSong(''); return ok; }) : undefined} />
-      </Section>
-      <Section title={src.helix ? 'Or a stream address' : 'Stream address'} caption gap={SP[2]}>
+      {library || src.helix ? (
+        <Section title="A song from your music library" caption gap={SP[2]}>
+          <T v="footnote" color={C.stone}>{src.helix ? `Plays ${src.helix.title} from your music library, repeating without a break: each time round fades into the next.` : 'Play a song from your music library instead, repeating without a break: each time round fades into the next.'}</T>
+          <TextField value={song} onChange={setSong} placeholder={src.helix ? 'Another song’s name' : 'Song name'} label="Library song" onSubmit={() => void (song.trim() && act('PUT', path, { helix: song.trim() }, `${src.name} plays it from your library now`).then(ok => { if (ok) setSong(''); return ok; }))} />
+          <Button full kind={song.trim() ? 'primary' : 'secondary'} icon="music_note" label={src.helix ? 'Use this song' : 'Use a library song'} onPress={song.trim() ? () => act('PUT', path, { helix: song.trim() }, `${src.name} plays it from your library now`).then(ok => { if (ok) setSong(''); return ok; }) : undefined} />
+        </Section>
+      ) : null}
+      <Section title={library || src.helix ? 'Or a stream address' : 'Stream address'} caption gap={SP[2]}>
         <TextField value={url} onChange={setUrl} keyboard="url" placeholder="https://… stream or file" label="Stream address" onSubmit={() => void save()} />
         <T v="footnote" color={err ? C.redText : C.stone2}>{err ?? 'Speakers play it from here: a live stream, or a recording.'}</T>
       </Section>
@@ -75,7 +78,7 @@ function PlayerRow({ d, room, first, selected, onPick, onToggle }: { d: Dev; roo
 
 /**
  * Media: what's playing where, with transport and volume; the speakers in a group, each in or out at its own volume;
- * sources and Helix music to play on the chosen speaker; speaker groups; and each source's stream address and
+ * sources and your music library to play on the chosen speaker; speaker groups; and each source's stream address and
  * whether it repeats.
  */
 export function MediaScreen() {
@@ -107,7 +110,7 @@ export function MediaScreen() {
   if (!everything.length) {
     return (
       <Screen title="Media" over={s.home.name} onBack={() => nav.goBack()}>
-        <Empty icon="speaker" tone={C.blue} title="No speakers or TVs yet" text="Kova finds Google Cast and Sonos speakers by itself. Add others in Integrations." />
+        <Empty icon="speaker" tone={C.blue} title="No speakers or TVs yet" text="Kova finds speakers on your network by itself (Google Cast, Sonos, AirPlay). Add others in Integrations." />
       </Screen>
     );
   }
@@ -200,7 +203,7 @@ export function MediaScreen() {
               <FieldWithButton value={station} onChange={setStation} placeholder="A station from an artist, album or song" button="Play" color={MUSIC} onColor="#1a1020" label="Start a station"
                 onSubmit={() => { const r = stationCommand(P, station); run(P.id, r); if (r && !('error' in r)) setStation(''); }} />
             </>
-          ) : <Empty compact icon="music_note" tone={MUSIC} title="Pick a speaker that plays a queue" text={`${P?.name ?? 'This one'} can’t play Helix music. Google Cast, Sonos and AirPlay speakers can.`} />}
+          ) : <Empty compact icon="music_note" tone={MUSIC} title="Pick a speaker that plays a queue" text={`${P?.name ?? 'This one'} can’t play your music library. Google Cast, Sonos and AirPlay speakers can.`} />}
         </Section>
       ) : null}
 

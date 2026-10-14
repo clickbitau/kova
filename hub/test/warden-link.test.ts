@@ -58,7 +58,7 @@ test('Warden link: Kova shares its devices, people, house mode, hub and plugs, a
   await t.hub.reg.addAdapter(lan);
   const cfg = { url: w.url, token: 'tok', outlets: [{ plug: 'hallway_plug', powers: '52-54-00-CC-00-01', role: 'modem' }, { plug: 'nope', powers: 'dev_x' }] };
   let clock = Date.parse('2026-10-01T09:00:00Z');
-  const link = new WardenLink(t.hub, { warden: () => cfg, port: () => 8140, people: () => ({ methel: { wardenPerson: 'person-methel' }, brishti: {} }), debounceMs: 0, now: () => clock });
+  const link = new WardenLink(t.hub, { warden: () => cfg, port: () => 8140, people: () => ({ alex: { wardenPerson: 'person-alex' }, jordan: {} }), debounceMs: 0, now: () => clock });
   try {
     await link.sync();
     // Devices Kova reaches on the LAN, by IP, with kind, room and the port Kova uses; simulated devices aren't sent.
@@ -67,7 +67,7 @@ test('Warden link: Kova shares its devices, people, house mode, hub and plugs, a
       { kovaId: 'hallway_plug', ip: '10.10.0.200', name: 'Hallway plug', manufacturer: 'Tapo', model: 'Tapo P110', kind: 'plug', room: 'Lounge', controls: [{ protocol: 'tcp', port: 80 }] },
       { kovaId: 'lounge_lamp', ip: '10.10.30.41', name: 'Lounge lamp', manufacturer: 'Tapo', model: 'Tapo P100', kind: 'plug', room: 'Lounge', controls: [{ protocol: 'tcp', port: 80 }] },
     ]);
-    assert.deepEqual(w.last('/integrations/kova/people')!.body, [{ kovaPersonId: 'methel', wardenPersonId: 'person-methel' }]);
+    assert.deepEqual(w.last('/integrations/kova/people')!.body, [{ kovaPersonId: 'alex', wardenPersonId: 'person-alex' }]);
     // The plug that feeds the modem; a plug Kova doesn't have is left out.
     assert.deepEqual(w.last('/integrations/kova/outlets')!.body, [{ outletId: 'hallway_plug', name: 'Hallway plug', room: 'Lounge', powers: { mac: '52:54:00:cc:00:01' }, canCycle: true, role: 'modem' }]);
     assert.match(w.last('/integrations/kova/hub')!.body.ip, /^\d+\.\d+\.\d+\.\d+$/);
@@ -92,8 +92,8 @@ test('Warden link: Kova shares its devices, people, house mode, hub and plugs, a
     assert.equal(w.s.got.filter(g => g.path === '/integrations/kova/mode').length, modes + 1);
 
     // A phone arrives: Warden hears it, under the Warden person it's mapped to.
-    await link.presence('methel', true, 'Phone automation');
-    assert.deepEqual(w.last('/integrations/kova/presence')!.body, { person: 'person-methel', kovaPersonName: 'Methel', home: true, at: new Date(clock).toISOString(), source: 'geofence' });
+    await link.presence('alex', true, 'Phone automation');
+    assert.deepEqual(w.last('/integrations/kova/presence')!.body, { person: 'person-alex', kovaPersonName: 'Alex', home: true, at: new Date(clock).toISOString(), source: 'geofence' });
 
     // A token from before the integration permission: say so plainly.
     w.s.deny = true;

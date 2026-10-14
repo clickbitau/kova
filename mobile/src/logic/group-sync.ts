@@ -21,7 +21,7 @@ export const offsetWords = (ms: number) => ms ? `${msWords(ms)} · ${ms > 0 ? 'e
 
 export const viaName = (v: string) => ({ cast: 'Google Cast', sonos: 'Sonos', airplay: 'AirPlay', virtual: 'Demo' } as Record<string, string>)[v] ?? v;
 
-/** A part's title: "Google Cast group “Home speakers”", "Sonos group", "Ray (Sonos)". */
+/** A part's title: "Google Cast group “Home speakers”", "Sonos group", "Office speaker (Sonos)". */
 export function partTitle(p: Pick<GroupPart, 'kind' | 'via' | 'name'>): string {
   if (p.kind === 'native') return p.via === 'cast' ? `Google Cast group “${p.name}”` : `${viaName(p.via)} group`;
   return `${p.name} (${viaName(p.via)})`;
@@ -78,7 +78,7 @@ export function testLeft(until: number | null | undefined, now = Date.now()): st
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')} left`;
 }
 
-/** How a group plays, in a line: "“Home speakers” in perfect sync · Ray alongside". */
+/** How a group plays, in a line: "“Home speakers” in perfect sync · Office speaker alongside". */
 export function groupHow(g: Pick<SpeakerGroup, 'parts' | 'members'>): string {
   const ps = g.parts ?? [];
   if (ps.length < 2) return `${g.members.length} speakers as one stream, in perfect sync`;

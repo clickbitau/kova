@@ -72,19 +72,19 @@ test('an invite: a link and QR with a one-time code, picked or new person, a key
     r = await h.call(null, 'POST', '/api/invite/peek', { code: inv.code.toLowerCase() });
     assert.equal(r.statusCode, 200);
     assert.equal(r.json().roleLabel, 'Adult');
-    assert.deepEqual(r.json().people.map((p: { id: string }) => p.id), ['methel', 'brishti']);
+    assert.deepEqual(r.json().people.map((p: { id: string }) => p.id), ['alex', 'jordan']);
 
     // Accepting as an existing person.
-    r = await h.call(null, 'POST', '/api/invite/accept', { code: inv.code, personId: 'brishti', device: 'Brishti’s iPhone' });
+    r = await h.call(null, 'POST', '/api/invite/accept', { code: inv.code, personId: 'jordan', device: 'Jordan’s iPhone' });
     assert.equal(r.statusCode, 200, r.body);
     const { token, personId, role } = r.json();
-    assert.equal(personId, 'brishti');
+    assert.equal(personId, 'jordan');
     assert.equal(role, 'adult');
     assert.equal((await h.call(token, 'GET', '/api/state')).statusCode, 200);
     const me = (await h.call(token, 'GET', '/api/me')).json();
-    assert.equal(me.me.name, 'Brishti');
+    assert.equal(me.me.name, 'Jordan');
     assert.equal(me.me.role, 'adult');
-    assert.match(me.presence.arriveUrl, /\/api\/people\/brishti\/presence\?key=.+&home=1$/, 'their own presence key, from their account');
+    assert.match(me.presence.arriveUrl, /\/api\/people\/jordan\/presence\?key=.+&home=1$/, 'their own presence key, from their account');
 
     // Single use.
     r = await h.call(null, 'POST', '/api/invite/accept', { code: inv.code, name: 'Someone else' });
@@ -102,7 +102,7 @@ test('an invite: a link and QR with a one-time code, picked or new person, a key
     assert.ok(h.hub.config.get().people.some(p => p.id === sam.personId && p.name === 'Sam'));
 
     // An invite for someone who already has an account is refused.
-    assert.equal((await h.call(MASTER, 'POST', '/api/invites', { role: 'adult', personId: 'brishti' })).statusCode, 400);
+    assert.equal((await h.call(MASTER, 'POST', '/api/invites', { role: 'adult', personId: 'jordan' })).statusCode, 400);
   } finally { await h.close(); }
 });
 
@@ -218,8 +218,8 @@ const MATRIX: [string, string, unknown, ...(number | 'ok')[]][] = [
 test('the role matrix: each role on the routes that matter', async () => {
   const h = await home();
   try {
-    const owner = await h.join({ role: 'owner', personId: 'methel' }, {});
-    const adult = await h.join({ role: 'adult', personId: 'brishti' }, {});
+    const owner = await h.join({ role: 'owner', personId: 'alex' }, {});
+    const adult = await h.join({ role: 'adult', personId: 'jordan' }, {});
     const child = await h.join({ role: 'child', name: 'Kid', rooms: ['baby'] }, {});
     const guest = await h.join({ role: 'guest', name: 'Visitor', rooms: ['guest'] }, {});
     const keys = [owner.token, adult.token, child.token, guest.token];
@@ -333,28 +333,28 @@ test('Activity says who did what; Ask Kova acts as the asker', async () => {
 test('managing members: change a role, resend an invite, remove someone (everything of theirs goes)', async () => {
   const h = await home();
   try {
-    const sam = await h.join({ role: 'adult', personId: 'brishti' }, {});
+    const sam = await h.join({ role: 'adult', personId: 'jordan' }, {});
     // Their phone registers for notifications as them; a member can't register for someone else.
     assert.equal((await h.call(sam.token, 'POST', '/api/push/app', { token: 'ExponentPushToken[sam]' })).statusCode, 200);
-    assert.equal((await h.call(sam.token, 'POST', '/api/push/app', { token: 'ExponentPushToken[x]', personId: 'methel' })).statusCode, 403);
-    assert.equal(h.notifier.appPhones().find(a => a.token === 'ExponentPushToken[sam]')?.personId, 'brishti');
+    assert.equal((await h.call(sam.token, 'POST', '/api/push/app', { token: 'ExponentPushToken[x]', personId: 'alex' })).statusCode, 403);
+    assert.equal(h.notifier.appPhones().find(a => a.token === 'ExponentPushToken[sam]')?.personId, 'jordan');
 
     let m = (await h.call(MASTER, 'GET', '/api/members')).json();
     assert.equal(m.members.length, 1);
-    assert.equal(m.members[0].name, 'Brishti');
+    assert.equal(m.members[0].name, 'Jordan');
     assert.ok(m.members[0].lastSeen > 0);
     assert.equal(m.members[0].sessions.length, 1);
-    assert.deepEqual(m.others.map((p: { personId: string }) => p.personId), ['methel']);
+    assert.deepEqual(m.others.map((p: { personId: string }) => p.personId), ['alex']);
 
     // Change role: their key follows at once.
-    assert.equal((await h.call(MASTER, 'PUT', '/api/members/brishti', { role: 'guest', rooms: ['guest'] })).statusCode, 200);
+    assert.equal((await h.call(MASTER, 'PUT', '/api/members/jordan', { role: 'guest', rooms: ['guest'] })).statusCode, 200);
     assert.equal((await h.call(sam.token, 'GET', '/api/automations')).statusCode, 403);
-    assert.equal((await h.call(MASTER, 'PUT', '/api/members/brishti', { role: 'boss' })).statusCode, 400);
+    assert.equal((await h.call(MASTER, 'PUT', '/api/members/jordan', { role: 'boss' })).statusCode, 400);
 
     // A guest's phone hears only what's sent to them by name.
-    assert.equal(h.notifier.audience('brishti', { title: 'Doorbell', body: '' }), false);
-    assert.equal(h.notifier.audience('brishti', { title: 'Hi', body: '', people: ['brishti'] }), true);
-    assert.equal(h.notifier.audience('methel', { title: 'Doorbell', body: '' }), true);
+    assert.equal(h.notifier.audience('jordan', { title: 'Doorbell', body: '' }), false);
+    assert.equal(h.notifier.audience('jordan', { title: 'Hi', body: '', people: ['jordan'] }), true);
+    assert.equal(h.notifier.audience('alex', { title: 'Doorbell', body: '' }), true);
 
     // Resend: a fresh code; the old one stops working.
     const inv = (await h.call(MASTER, 'POST', '/api/invites', { role: 'adult', name: 'Pat' })).json();
@@ -367,86 +367,86 @@ test('managing members: change a role, resend an invite, remove someone (everyth
     assert.ok(!JSON.stringify(m.invites).includes(again.code), 'the code is never shown again');
 
     // Remove: signed out, no more notifications, a new presence key.
-    const keyBefore = h.presence.keyFor('brishti');
-    const r = (await h.call(MASTER, 'DELETE', '/api/members/brishti')).json();
+    const keyBefore = h.presence.keyFor('jordan');
+    const r = (await h.call(MASTER, 'DELETE', '/api/members/jordan')).json();
     assert.equal(r.signedOut, 1);
     assert.equal((await h.call(sam.token, 'GET', '/api/state')).statusCode, 401);
-    assert.ok(!h.notifier.appPhones().some(a => a.personId === 'brishti'));
-    assert.notEqual(h.presence.keyFor('brishti'), keyBefore);
-    assert.ok(h.hub.config.get().people.some(p => p.id === 'brishti'), 'they still live here (presence), without an account');
+    assert.ok(!h.notifier.appPhones().some(a => a.personId === 'jordan'));
+    assert.notEqual(h.presence.keyFor('jordan'), keyBefore);
+    assert.ok(h.hub.config.get().people.some(p => p.id === 'jordan'), 'they still live here (presence), without an account');
   } finally { await h.close(); }
 });
 
 test('the owner says which person they are: the master key stays, the device gets a key of theirs', async () => {
   const h = await home();
   try {
-    const r = await h.call(MASTER, 'POST', '/api/me/claim', { personId: 'methel', name: 'Kova app on iPhone' });
+    const r = await h.call(MASTER, 'POST', '/api/me/claim', { personId: 'alex', name: 'Kova app on iPhone' });
     assert.equal(r.statusCode, 200, r.body);
     const key = r.json().token as string;
     const me = (await h.call(key, 'GET', '/api/me')).json().me;
-    assert.equal(me.personId, 'methel');
+    assert.equal(me.personId, 'alex');
     assert.equal(me.role, 'owner');
     assert.equal((await h.call(MASTER, 'GET', '/api/members')).statusCode, 200, 'recovery: the master key still works');
     // Now their changes are theirs in Activity.
     await h.call(key, 'POST', '/api/devices/lamp', { on: true });
     const act = (await h.call(key, 'GET', '/api/state')).json().activity;
-    assert.equal(act[0].who, 'Methel');
+    assert.equal(act[0].who, 'Alex');
   } finally { await h.close(); }
 });
 
 test('a member reports only their own presence with their key; the owner anyone’s', async () => {
   const h = await home();
   try {
-    const sam = await h.join({ role: 'adult', personId: 'brishti' }, {});
-    assert.equal((await h.call(sam.token, 'POST', '/api/people/brishti/presence', { home: false })).statusCode, 200);
-    assert.equal((await h.call(sam.token, 'POST', '/api/people/methel/presence', { home: false })).statusCode, 403);
-    assert.equal((await h.call(MASTER, 'POST', '/api/people/methel/presence', { home: false })).statusCode, 200);
+    const sam = await h.join({ role: 'adult', personId: 'jordan' }, {});
+    assert.equal((await h.call(sam.token, 'POST', '/api/people/jordan/presence', { home: false })).statusCode, 200);
+    assert.equal((await h.call(sam.token, 'POST', '/api/people/alex/presence', { home: false })).statusCode, 403);
+    assert.equal((await h.call(MASTER, 'POST', '/api/people/alex/presence', { home: false })).statusCode, 200);
     // The phone automation's own key still works without signing in.
-    const key = h.presence.keyFor('methel')!;
-    assert.equal((await h.call(null, 'POST', `/api/people/methel/presence?key=${encodeURIComponent(key)}&home=1`)).statusCode, 200);
+    const key = h.presence.keyFor('alex')!;
+    assert.equal((await h.call(null, 'POST', `/api/people/alex/presence?key=${encodeURIComponent(key)}&home=1`)).statusCode, 200);
   } finally { await h.close(); }
 });
 
 test('a username and password: set by the person or the owner, sign in on any device, wrong tries limited, kept as a hash', async () => {
   const h = await home();
   try {
-    const b = await h.join({ role: 'adult' }, { personId: 'brishti' });
+    const b = await h.join({ role: 'adult' }, { personId: 'jordan' });
     // Their own username and password, from a signed-in device.
-    let r = await h.call(b.token, 'PUT', '/api/me/login', { user: 'Brishti', password: 'short' });
+    let r = await h.call(b.token, 'PUT', '/api/me/login', { user: 'Jordan', password: 'short' });
     assert.equal(r.statusCode, 400);
-    r = await h.call(b.token, 'PUT', '/api/me/login', { user: 'Brishti', password: 'correct horse' });
+    r = await h.call(b.token, 'PUT', '/api/me/login', { user: 'Jordan', password: 'correct horse' });
     assert.equal(r.statusCode, 200, r.body);
-    assert.equal(r.json().user, 'brishti');
-    assert.equal((await h.call(b.token, 'GET', '/api/me')).json().me.user, 'brishti');
+    assert.equal(r.json().user, 'jordan');
+    assert.equal((await h.call(b.token, 'GET', '/api/me')).json().me.user, 'jordan');
     // Signing in on a new phone: its own key, as them.
-    r = await h.call(null, 'POST', '/api/login/password', { user: ' BRISHTI ', password: 'correct horse', device: 'New phone' });
+    r = await h.call(null, 'POST', '/api/login/password', { user: ' JORDAN ', password: 'correct horse', device: 'New phone' });
     assert.equal(r.statusCode, 200, r.body);
     const key = r.json().token;
-    assert.equal(r.json().personId, 'brishti');
-    assert.equal((await h.call(key, 'GET', '/api/me')).json().me.name, 'Brishti');
+    assert.equal(r.json().personId, 'jordan');
+    assert.equal((await h.call(key, 'GET', '/api/me')).json().me.name, 'Jordan');
     // Wrong password or username: the same answer.
-    const bad1 = await h.call(null, 'POST', '/api/login/password', { user: 'brishti', password: 'wrong one!' }, '10.0.0.7');
+    const bad1 = await h.call(null, 'POST', '/api/login/password', { user: 'jordan', password: 'wrong one!' }, '10.0.0.7');
     const bad2 = await h.call(null, 'POST', '/api/login/password', { user: 'nobody', password: 'correct horse' }, '10.0.0.7');
     assert.deepEqual([bad1.statusCode, bad2.statusCode], [401, 401]);
     assert.equal(bad1.json().error, bad2.json().error);
     // A change needs the current password; the owner can reset it without.
     assert.equal((await h.call(b.token, 'PUT', '/api/me/login', { password: 'another pass', current: 'nope' })).statusCode, 403);
     assert.equal((await h.call(b.token, 'PUT', '/api/me/login', { password: 'another pass', current: 'correct horse' })).statusCode, 200);
-    assert.equal((await h.call(MASTER, 'PUT', '/api/members/brishti/login', { password: 'reset by owner' })).statusCode, 200);
-    assert.equal((await h.call(null, 'POST', '/api/login/password', { user: 'brishti', password: 'reset by owner' })).statusCode, 200);
+    assert.equal((await h.call(MASTER, 'PUT', '/api/members/jordan/login', { password: 'reset by owner' })).statusCode, 200);
+    assert.equal((await h.call(null, 'POST', '/api/login/password', { user: 'jordan', password: 'reset by owner' })).statusCode, 200);
     // Only the owner sets someone else's; usernames are unique.
     const sam = await h.join({ role: 'adult', name: 'Sam' }, {});
-    assert.equal((await h.call(sam.token, 'PUT', '/api/members/brishti/login', { password: 'taken over!' })).statusCode, 403);
-    assert.equal((await h.call(sam.token, 'PUT', '/api/me/login', { user: 'brishti', password: 'sams password' })).statusCode, 409);
+    assert.equal((await h.call(sam.token, 'PUT', '/api/members/jordan/login', { password: 'taken over!' })).statusCode, 403);
+    assert.equal((await h.call(sam.token, 'PUT', '/api/me/login', { user: 'jordan', password: 'sams password' })).statusCode, 409);
     // The owners' list shows the username; only a hash is kept.
-    assert.equal((await h.call(MASTER, 'GET', '/api/members')).json().members.find((m: { personId: string }) => m.personId === 'brishti').user, 'brishti');
+    assert.equal((await h.call(MASTER, 'GET', '/api/members')).json().members.find((m: { personId: string }) => m.personId === 'jordan').user, 'jordan');
     assert.ok(!JSON.stringify(h.hub.store.get('household')).includes('reset by owner'));
     // Too many wrong tries from one address: blocked for a while, even with the right password.
-    for (let i = 0; i < 10; i++) await h.call(null, 'POST', '/api/login/password', { user: 'brishti', password: `guess ${i}xx` }, '10.0.0.9');
-    assert.equal((await h.call(null, 'POST', '/api/login/password', { user: 'brishti', password: 'reset by owner' }, '10.0.0.9')).statusCode, 429);
+    for (let i = 0; i < 10; i++) await h.call(null, 'POST', '/api/login/password', { user: 'jordan', password: `guess ${i}xx` }, '10.0.0.9');
+    assert.equal((await h.call(null, 'POST', '/api/login/password', { user: 'jordan', password: 'reset by owner' }, '10.0.0.9')).statusCode, 429);
     // Removed from the home: the username stops working.
-    await h.call(MASTER, 'DELETE', '/api/members/brishti');
-    assert.equal((await h.call(null, 'POST', '/api/login/password', { user: 'brishti', password: 'reset by owner' }, '10.0.0.3')).statusCode, 401);
+    await h.call(MASTER, 'DELETE', '/api/members/jordan');
+    assert.equal((await h.call(null, 'POST', '/api/login/password', { user: 'jordan', password: 'reset by owner' }, '10.0.0.3')).statusCode, 401);
   } finally { await h.close(); }
 });
 
@@ -454,30 +454,30 @@ test('a person’s photo: set by them or an owner, served at an address that can
   const h = await home();
   h.hub.dataDir = mkdtempSync(join(tmpdir(), 'kova-photos-'));
   try {
-    const b = await h.join({ role: 'adult' }, { personId: 'brishti' });
+    const b = await h.join({ role: 'adult' }, { personId: 'jordan' });
     const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4, 0xff, 0xd9]);
     const put = (key: string, id: string, body = jpeg, type = 'image/jpeg') => h.app.inject({ method: 'PUT', url: `/api/people/${id}/photo`, headers: { authorization: `Bearer ${key}`, 'content-type': type }, payload: body });
-    let r = await put(b.token, 'brishti');
+    let r = await put(b.token, 'jordan');
     assert.equal(r.statusCode, 200, r.body);
     const photo = r.json().photo as string;
-    assert.match(photo, /^\/api\/photo\/brishti-[0-9a-f]{16}\.jpg$/);
-    assert.equal(h.hub.config.get().people.find(p => p.id === 'brishti')!.photo, photo);
+    assert.match(photo, /^\/api\/photo\/jordan-[0-9a-f]{16}\.jpg$/);
+    assert.equal(h.hub.config.get().people.find(p => p.id === 'jordan')!.photo, photo);
     // Anyone's device (an <img>) loads it without a key; a guessed address doesn't.
     r = await h.app.inject({ method: 'GET', url: photo });
     assert.equal(r.statusCode, 200);
     assert.equal(r.headers['content-type'], 'image/jpeg');
     assert.deepEqual(r.rawPayload, jpeg);
-    assert.equal((await h.app.inject({ method: 'GET', url: '/api/photo/brishti-0000000000000000.jpg' })).statusCode, 404);
+    assert.equal((await h.app.inject({ method: 'GET', url: '/api/photo/jordan-0000000000000000.jpg' })).statusCode, 404);
     // Not someone else's (unless an owner); not a file that isn't a photo.
     const sam = await h.join({ role: 'adult', name: 'Sam' }, {});
-    assert.equal((await put(sam.token, 'brishti')).statusCode, 403);
-    assert.equal((await put(b.token, 'brishti', Buffer.from('hello'), 'text/plain')).statusCode, 400);
+    assert.equal((await put(sam.token, 'jordan')).statusCode, 403);
+    assert.equal((await put(b.token, 'jordan', Buffer.from('hello'), 'text/plain')).statusCode, 400);
     // The owner replaces it: a new address, the old one gone.
-    r = await put(MASTER, 'brishti');
+    r = await put(MASTER, 'jordan');
     assert.notEqual(r.json().photo, photo);
     assert.equal((await h.app.inject({ method: 'GET', url: photo })).statusCode, 404);
     // Removed: back to the initial.
-    assert.equal((await h.call(b.token, 'DELETE', '/api/people/brishti/photo')).statusCode, 200);
-    assert.equal(h.hub.config.get().people.find(p => p.id === 'brishti')!.photo, undefined);
+    assert.equal((await h.call(b.token, 'DELETE', '/api/people/jordan/photo')).statusCode, 200);
+    assert.equal(h.hub.config.get().people.find(p => p.id === 'jordan')!.photo, undefined);
   } finally { await h.close(); }
 });

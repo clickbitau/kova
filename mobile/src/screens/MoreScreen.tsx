@@ -13,6 +13,7 @@ import { display, KIND_LABEL } from '../logic/addresses';
 import { linkWords } from '../logic/link';
 import { automationsOf } from '../logic/automations';
 import { features, meOf } from '../logic/roles';
+import { hasSolarPower } from '../logic/energy';
 import { useDemo } from '../state/demo';
 import { openPrivacyPolicy } from '../ui/PrivacyLink';
 
@@ -79,7 +80,7 @@ export function MoreScreen() {
           can.automations && <Row key="autos" icon="account_tree" iconFg={C.amber} title="Automations" sub={autos.length ? `${autos.length} · ${autos.filter(a => a.enabled).length} on` : 'When something happens, do something'} onPress={() => nav.navigate('Automations')} />,
           can.activity && <Row key="activity" icon="history" iconFg={C.blue} title="Activity" sub={can.modes ? 'Everything that happened, and why' : 'What happened with your devices'} onPress={() => nav.navigate('Activity')} />,
           can.sensors && <Row key="sensors" icon="sensors" iconFg={C.green} title="Sensors" sub={s.sensors?.length ? `${s.sensors.length} · temperature, motion, doors and more` : 'Temperature, motion and door sensors'} onPress={() => nav.navigate('Sensors')} />,
-          can.energy && <Row key="energy" icon="solar_power" iconFg={C.amber} title="Energy" sub="Solar, use and the grid today" onPress={() => nav.navigate('Energy')} />,
+          can.energy && <Row key="energy" icon="solar_power" iconFg={C.amber} title="Energy" sub={hasSolarPower(s) ? 'Solar, use and the grid today' : 'Power use today'} onPress={() => nav.navigate('Energy')} />,
           <Row key="media" icon="speaker_group" iconFg={C.blue} title="Media" sub={players ? `${players} playing` : 'Speakers, TVs and speaker groups'} onPress={() => nav.navigate('Media')} />,
         ].filter((r): r is ReactElement<{ first?: boolean }> => !!r).map((r, i) => (i === 0 ? cloneElement(r, { first: true }) : r))}
       </Group>

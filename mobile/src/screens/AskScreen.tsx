@@ -3,7 +3,7 @@ import { Animated, AppState, KeyboardAvoidingView, Platform, ScrollView, TextInp
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRoute, useScrollToTop } from '@react-navigation/native';
 import type { AskReply } from '../api/types';
-import { askKova, Cancelled, engineLine, followJob, mergeHistory, progressLines, sourceIcon, type AskHistory, type AskJob, type ChatMsg } from '../logic/ask';
+import { askKova, askSuggestions, Cancelled, engineLine, followJob, mergeHistory, progressLines, sourceIcon, type AskHistory, type AskJob, type ChatMsg } from '../logic/ask';
 import { C, F, R, SP } from '../theme';
 import { useHub, useSnap } from '../state/hub';
 import { useNav } from '../navigation';
@@ -13,10 +13,10 @@ import { Button, HScroll, Press } from '../ui/kit';
 import { ConnBanner } from '../ui/Screen';
 import { T } from '../ui/Text';
 import { Appear, haptic, useLoop, useStateValue } from '../ui/motion';
-import { langName, listen, markFailed, markWorked, quiet, setVoiceLang, speak, stopListening, useSpeechRecognitionEvent, voiceLang, voiceLangs, voiceReady } from '../native/voice';
+import { langName, listen, markFailed, markWorked, quiet, setVoiceLang, speak, stopListening, useSpeechRecognitionEvent, useVoiceLangs, voiceLang, voiceReady } from '../native/voice';
+import { listeningWord } from '../logic/speech';
 
 type Msg = ChatMsg;
-const TRY = ['What’s happening tonight?', 'Who’s home?', 'Turn off the kitchen', 'Lamp to 30%', 'Why is the porch light on?', 'I’m leaving'];
 
 /** While a long request is worked on: what the hub is doing, step by step (logic/ask.ts progressLines). */
 function Working({ job, trouble }: { job: AskJob | null; trouble: string | null }) {
@@ -59,6 +59,7 @@ export function AskScreen() {
   const insets = useSafeAreaInsets();
   const mode = s.modes.find(m => m.id === s.current.modeId);
   const lights = s.devices.filter(d => isLight(d) && d.state.on).length;
+  const tries = askSuggestions(s);
   const [chat, setChat] = useState<Msg[]>(() => [{ id: 'hello', from: 'kova', text: `Hi. It’s ${mode?.name ?? 'Day'} mode, with ${plural(lights, 'light')} on. Ask me anything about your home, or tell me what to do.`, src: 'Built-in · nothing left your home' }]);
   const [text, setText] = useState('');
   const [chips, setChips] = useState<string[]>([]);
@@ -145,8 +146,9 @@ export function AskScreen() {
 
   // Talking: what's heard fills the box as it's said, and is asked when the speaker stops.
   const [listening, setListening] = useState(false);
-  const langs = voiceLangs();
-  const [lang, setLang] = useState(langs[0]!);
+  const { langs } = useVoiceLangs();
+  const [chosen, setLang] = useState(langs[0]!);
+  const lang = langs.includes(chosen) ? chosen : langs[0]!;
   /** The language this listen is in (the one chosen, or the one it fell back to). */
   const hearing = useRef(lang);
   const heard = useRef('');
@@ -275,7 +277,7 @@ export function AskScreen() {
                   <T v="label" size={12.5} weight={700} color={C.bone2}>{langName(lang)}</T>
                 </Press>
               ) : null}
-              {TRY.map(q => (
+              {tries.map(q => (
                 <Press key={q} onPress={() => void ask(q)} label={`Ask: ${q}`} style={{ height: 34, justifyContent: 'center', paddingHorizontal: 13, borderRadius: R.full, backgroundColor: C.card, borderWidth: 1, borderColor: C.line }}>
                   <T v="label" size={12.5} weight={600} color={C.bone2}>{q}</T>
                 </Press>
@@ -284,7 +286,7 @@ export function AskScreen() {
           </View>
         ) : null}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2], paddingHorizontal: SP[3] }}>
-          <TextInput value={text} onChangeText={setText} placeholder={listening ? (hearing.current.startsWith('bn') ? 'শুনছি…' : 'Listening…') : 'Ask or tell Kova…'} placeholderTextColor={C.stone2} returnKeyType="send" onSubmitEditing={() => void ask(text)}
+          <TextInput value={text} onChangeText={setText} placeholder={listening ? (listeningWord(hearing.current)) : 'Ask or tell Kova…'} placeholderTextColor={C.stone2} returnKeyType="send" onSubmitEditing={() => void ask(text)}
             onFocus={() => setFocus(true)} onBlur={() => setFocus(false)} accessibilityLabel="Ask or tell Kova"
             style={{ flex: 1, minWidth: 0, height: 48, paddingHorizontal: SP[4], borderRadius: 24, backgroundColor: C.card, borderWidth: 1, borderColor: focus ? C.amberLine : C.line, color: C.bone, fontFamily: F[500], fontSize: 16 }} />
           {voiceReady && (!text || listening) ? (

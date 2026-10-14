@@ -60,8 +60,8 @@ test('moments, overlays and stream addresses', async () => {
     r = await app.inject({ method: 'PUT', url: '/api/overlays/movie/targets/dining', payload: { target: { on: false } } });
     assert.deepEqual(hub.config.get().overlays.find(o => o.id === 'movie')!.targets.dining, { on: false });
 
-    r = await app.inject({ method: 'PUT', url: '/api/sources/Tarateel', payload: { url: 'https://stream.example/tarateel.mp3' } });
-    assert.equal(hub.config.get().sources.find(s => s.name === 'Tarateel')!.url, 'https://stream.example/tarateel.mp3');
+    r = await app.inject({ method: 'PUT', url: '/api/sources/Ocean waves', payload: { url: 'https://stream.example/tarateel.mp3' } });
+    assert.equal(hub.config.get().sources.find(s => s.name === 'Ocean waves')!.url, 'https://stream.example/tarateel.mp3');
     r = await app.inject({ method: 'PUT', url: '/api/sources/Bad', payload: { url: 'ftp://nope' } });
     assert.equal(r.statusCode, 400);
   } finally { await app.close(); await hub.stop(); }
@@ -125,7 +125,7 @@ test('home settings: name, location, timezone, prayer method and the doorbell pa
     let r = await put({ latitude: -33.8688, longitude: 151.2093, timezone: 'Australia/Sydney', prayerMethod: 'Karachi', pauseForDoorbell: false });
     assert.equal(r.statusCode, 200, r.body);
     const c = hub.config.get();
-    assert.deepEqual([c.latitude, c.longitude, c.timezone, c.prayerMethod, c.pauseForDoorbell, c.name], [-33.8688, 151.2093, 'Australia/Sydney', 'Karachi', false, 'The Ahmeds']);
+    assert.deepEqual([c.latitude, c.longitude, c.timezone, c.prayerMethod, c.pauseForDoorbell, c.name], [-33.8688, 151.2093, 'Australia/Sydney', 'Karachi', false, 'The Parkers']);
     const s = (await app.inject({ url: '/api/state' })).json();
     assert.deepEqual([s.home.prayerMethod, s.home.pauseForDoorbell, s.home.timezone], ['Karachi', false, 'Australia/Sydney']);
     const firstUndo = r.json().undo;

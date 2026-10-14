@@ -9,17 +9,21 @@ export const DAY_ORDER: PrayerName[] = ['fajr', 'sunrise', 'dhuhr', 'asr', 'magh
 export const ADJUSTABLE: PrayerName[] = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'];
 
 /**
- * Are prayer options shown? While prayer times are off they're hidden. An older hub doesn't say, and showed them
- * always, so they stay.
+ * Are prayer options shown? Only once prayer times are turned on: they're hidden while off, and when the hub
+ * doesn't say (an older hub).
  */
-export const prayerOn = (s: { prayer?: Pick<PrayerView, 'on'> | null } | null | undefined) => s?.prayer ? s.prayer.on : true;
+export const prayerOn = (s: { prayer?: Pick<PrayerView, 'on'> | null } | null | undefined) => s?.prayer ? s.prayer.on : false;
 
-/** A Unix time on the home's clock: "18:04". */
-export function clockAt(ms: number, timezone?: string): string {
+/** How the home writes the time: its locale (BCP-47) and 12-hour or 24-hour clock. Unset: the phone's own. */
+export interface ClockFormat { locale?: string; hour12?: boolean | null }
+export const clockFormat = (h: { locale?: string; hour12?: boolean } | undefined): ClockFormat => ({ locale: h?.locale, hour12: h?.hour12 });
+
+/** A Unix time on the home's clock: "18:04", or "6:04 PM" where the home uses a 12-hour clock. */
+export function clockAt(ms: number, timezone?: string, fmt: ClockFormat = {}): string {
+  const hc = fmt.hour12 == null ? {} : fmt.hour12 ? { hour12: true } : { hourCycle: 'h23' as const };
   try {
-    const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: timezone || undefined, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(ms)).map(x => [x.type, x.value]));
-    if (p.hour && p.minute) return `${p.hour === '24' ? '00' : p.hour}:${p.minute}`;
-  } catch { /* no time zones here */ }
+    return new Intl.DateTimeFormat(fmt.locale || undefined, { timeZone: timezone || undefined, hour: fmt.hour12 === false ? '2-digit' : 'numeric', minute: '2-digit', ...hc }).format(new Date(ms)).replace(/^24(?=\D)/, '00');
+  } catch { /* no time zones here, or an unknown locale */ }
   const d = new Date(ms);
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
@@ -35,18 +39,18 @@ export function countdown(ms: number, now: number): string {
 
 /** The waqt card: the current prayer, the next with a live countdown and its clock time. Null while off (or not known). */
 export interface Waqt { current: string; next: string; /** "Maghrib in 42 min" */ caption: string; /** "in 42 min", or "now" */ left: string; at: string; soon: boolean }
-export function waqtOf(p: PrayerView | null | undefined, now: number, timezone?: string): Waqt | null {
+export function waqtOf(p: PrayerView | null | undefined, now: number, timezone?: string, fmt?: ClockFormat): Waqt | null {
   if (!p?.on || !p.next) return null;
   const next = PRAYER_LABEL[p.next.prayer] ?? p.next.prayer;
   const current = p.current ? PRAYER_LABEL[p.current.prayer] ?? p.current.prayer : next;
   const left = countdown(p.next.at, now);
-  return { current, next, caption: left === 'now' ? `${next} now` : `${next} ${left}`, left, at: clockAt(p.next.at, timezone), soon: p.next.at - now <= 15 * 60000 };
+  return { current, next, caption: left === 'now' ? `${next} now` : `${next} ${left}`, left, at: clockAt(p.next.at, timezone, fmt), soon: p.next.at - now <= 15 * 60000 };
 }
 
 /** Today's times as rows, in the day's order, with the next one marked. */
-export function todayTimes(p: PrayerView | null | undefined, timezone?: string): { prayer: PrayerName; label: string; at: string; next: boolean }[] {
+export function todayTimes(p: PrayerView | null | undefined, timezone?: string, fmt?: ClockFormat): { prayer: PrayerName; label: string; at: string; next: boolean }[] {
   if (!p?.on || !p.times) return [];
-  return DAY_ORDER.filter(k => p.times![k] != null).map(k => ({ prayer: k, label: PRAYER_LABEL[k], at: clockAt(p.times![k], timezone), next: p.next?.prayer === k }));
+  return DAY_ORDER.filter(k => p.times![k] != null).map(k => ({ prayer: k, label: PRAYER_LABEL[k], at: clockAt(p.times![k], timezone, fmt), next: p.next?.prayer === k }));
 }
 
 /** An adjustment kept to what the hub takes: whole minutes, -30 to 30 (0 drops it). */

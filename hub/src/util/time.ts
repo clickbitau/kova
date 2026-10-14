@@ -1,3 +1,4 @@
+import { clockStyle } from './locale.ts';
 // Wall-clock helpers for a home's timezone, without a date library.
 
 interface Parts { y: number; m: number; d: number; h: number; mi: number; s: number }
@@ -53,11 +54,22 @@ export function addDays(date: string, n: number): string {
   return t.toISOString().slice(0, 10);
 }
 
-/** "HH:MM" for an instant in the home's timezone. */
+/** The time of an instant in the home's timezone, as the home writes it: "15:30", or "3:30 pm" with 12-hour clocks. */
 export function clock(ms: number, tz: string): string {
   const p = zonedParts(ms, tz);
-  return `${String(p.h).padStart(2, '0')}:${String(p.mi).padStart(2, '0')}`;
+  return clockStyle().hour12 ? hm12(p.h, p.mi) : `${String(p.h).padStart(2, '0')}:${String(p.mi).padStart(2, '0')}`;
 }
+
+/** A wall-clock time ("15:30", as settings keep it) as the home writes it. */
+export function clockWords(at: string): string {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(at);
+  return m && clockStyle().hour12 ? hm12(Number(m[1]), Number(m[2])) : at;
+}
+/** A 12-hour time the way the home's language writes it: "3:30 PM" (US), "3:30 pm" (UK, Australia). */
+const hm12 = (h: number, mi: number) => {
+  try { return new Intl.DateTimeFormat(clockStyle().locale, { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'UTC' }).format(Date.UTC(2000, 0, 1, h, mi)).replace(/\u202f|\u00a0/g, ' '); }
+  catch { return `${h % 12 || 12}:${String(mi).padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`; }
+};
 
 export function parseClock(at: string): number {
   const [h, m] = at.split(':').map(Number);

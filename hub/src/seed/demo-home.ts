@@ -1,10 +1,10 @@
 import { WHOLE_HOME, type Capability, type HomeConfig, type RobotMap, type Targets } from '../model/types.ts';
 import type { DeviceInfo } from '../adapters/sdk.ts';
+import { TZ_PLACES } from '../util/tz-places.ts';
 
-// A demo home modelled on a real one (the owner's former Home Assistant setup):
-// 28 devices, 10 rooms, the routines rebuilt as 5 modes, 2 moments,
-// 6 overlays and 1 behaviour, plus a few sensors (climate, motion, doors) and
-// the solar inverter. Used by the virtual adapter and first-run config.
+// The demo home (KOVA_DEMO=1, and the tests): a made-up family's home with 28 devices, 10 rooms, 5 modes, 2
+// moments, 6 overlays and 1 behaviour, plus a few sensors (climate, motion, doors) and a solar inverter. Nothing in
+// it is anyone's real home: no real names, places or faith. Run for a demo, it's where the hub's clock says it is.
 
 type Row = [id: string, name: string, room: string, type: DeviceInfo['type'], integration: string];
 const T = 'Tuya (local)';
@@ -24,7 +24,7 @@ const ROWS: Row[] = [
   ['office_cam', 'Camera', 'office', 'camera', 'Google Nest'],
   ['master_purifier', 'Purifier', 'master', 'fan', 'VeSync Levoit'],
   ['master_speaker', 'Speaker', 'master', 'media', 'Google Cast'],
-  ['bedroom_tv', 'Bedroom OLED', 'master', 'tv', 'Samsung TV'],
+  ['bedroom_tv', 'Bedroom TV', 'master', 'tv', 'Samsung TV'],
   ['music_light', 'Ceiling', 'music', 'light', T],
   ['music_speaker', 'Speaker', 'music', 'media', 'Google Cast'],
   ['baby_light', 'Ceiling', 'baby', 'light', T],
@@ -62,7 +62,6 @@ export const DEMO_DUCTED: DeviceInfo = {
 };
 export const DEMO_ZONE_NAMES: Record<string, string> = { 1: 'Lounge', 2: 'Kitchen', 3: 'Master', 4: 'Baby', 5: 'Office & Guest', 6: 'Music' };
 
-/** The demo home's simulated solar array (about 3 kW, like the real one). */
 /** A robot vacuum with a base station, its map in five areas (two given rooms, so both kinds show). */
 const R = (x: number, y: number, w: number, h: number) => `M${x} ${y}L${x + w} ${y}L${x + w} ${y + h}L${x} ${y + h}Z`;
 export const DEMO_ROBOT_MAP: RobotMap = {
@@ -93,7 +92,14 @@ export const DEMO_ROBOT: DeviceInfo = {
   },
 };
 
+/** The demo home's simulated solar array (about 3 kW), where the home is. */
 export const DEMO_SOLAR = { id: 'solar_inverter', lat: -31.95, lon: 115.86, peakW: 2900, tz: 'Australia/Perth' };
+/** The demo's solar array and home somewhere else: a demo run shows the hub's own sky and clock. */
+export function demoAt(tz: string): { solar: typeof DEMO_SOLAR; place: Pick<HomeConfig, 'timezone' | 'latitude' | 'longitude'> } {
+  const at = TZ_PLACES.find(p => p.zone === tz);
+  if (!at) return { solar: DEMO_SOLAR, place: { timezone: DEMO_SOLAR.tz, latitude: DEMO_SOLAR.lat, longitude: DEMO_SOLAR.lon } };
+  return { solar: { ...DEMO_SOLAR, lat: at.latitude, lon: at.longitude, tz }, place: { timezone: tz, latitude: at.latitude, longitude: at.longitude } };
+}
 
 export function demoDevices(): DeviceInfo[] {
   return [...ROWS.map(([id, name, room, type, integration]): DeviceInfo => ({
@@ -114,13 +120,10 @@ const off = (ids: string[]): Targets => Object.fromEntries(ids.map(i => [i, { on
 const play = (ids: string[], media: string, vol: number): Targets => Object.fromEntries(ids.map(i => [i, { on: true, media, vol }]));
 const stop = (ids: string[]): Targets => Object.fromEntries(ids.map(i => [i, { on: false, media: null }]));
 
-export function demoConfig(): HomeConfig {
+export function demoConfig(place: Pick<HomeConfig, 'timezone' | 'latitude' | 'longitude'> = { timezone: DEMO_SOLAR.tz, latitude: DEMO_SOLAR.lat, longitude: DEMO_SOLAR.lon }): HomeConfig {
   return {
-    name: 'The Ahmeds',
-    timezone: 'Australia/Perth',
-    latitude: -31.95,
-    longitude: 115.86,
-    prayerMethod: 'MuslimWorldLeague',
+    name: 'The Parkers',
+    ...place,
     rooms: [
       { id: 'lounge', name: 'Lounge', icon: 'weekend' },
       { id: 'kitchen', name: 'Kitchen', icon: 'kitchen' },
@@ -134,8 +137,8 @@ export function demoConfig(): HomeConfig {
       { id: 'front', name: 'Front door', icon: 'door_front' },
     ],
     people: [
-      { id: 'methel', name: 'Methel', detail: 'iPhone Air' },
-      { id: 'brishti', name: 'Brishti', detail: 'iPhone' },
+      { id: 'alex', name: 'Alex', detail: 'iPhone' },
+      { id: 'jordan', name: 'Jordan', detail: 'Pixel' },
     ],
     modes: [
       { id: 'day', name: 'Day', color: '#dcd27e', icon: 'light_mode', start: { kind: 'sun', event: 'sunrise' },
@@ -152,8 +155,8 @@ export function demoConfig(): HomeConfig {
           lamp: { on: true, bri: 5, k: 2000, color: null }, tv_backlight: { on: true, bri: 16 },
         } },
       { id: 'night', name: 'Night', color: '#8aaef0', icon: 'bedtime', start: { kind: 'time', at: '23:30' }, lightTheWay: true,
-        targets: play(SPK, 'Tarateel', 15) },
-      { id: 'dawn', name: 'Dawn', color: '#d8a6e0', icon: 'wb_sunny', start: { kind: 'prayer', prayer: 'fajr' }, lightTheWay: true,
+        targets: play(SPK, 'Ocean waves', 15) },
+      { id: 'dawn', name: 'Dawn', color: '#d8a6e0', icon: 'wb_sunny', start: { kind: 'sun', event: 'sunrise', offsetMin: -45 }, lightTheWay: true,
         targets: stop(SPK) },
     ],
     moments: [
@@ -188,7 +191,7 @@ export function demoConfig(): HomeConfig {
       ],
     },
     sources: [
-      { name: 'Tarateel', icon: 'menu_book' },
+      { name: 'Ocean waves', icon: 'waves' },
       { name: 'Rain sounds', icon: 'thunderstorm' },
       { name: 'Jazz stream', icon: 'piano' },
       { name: 'Party stream', icon: 'celebration' },

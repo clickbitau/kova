@@ -41,7 +41,7 @@ test('Warden: pair with a code approved at /apps, then follow the live feed, dev
     // Devices on the network come from Warden's device records, with their ids.
     const list = (await app.inject({ method: 'GET', url: '/api/integrations/warden/clients' })).json();
     assert.deepEqual(list.devices[0], { name: 'Aisha’s iPad · tablet · Apple · Home · aa:bb:cc:00:00:01 · 10.10.0.40', deviceId: 'dev_tablet', mac: 'aa:bb:cc:00:00:01', ip: '10.10.0.40', online: true });
-    assert.match(list.devices[1].name, /^Methel’s iPhone · Methel’s · phone/);
+    assert.match(list.devices[1].name, /^Alex’s iPhone · Alex’s · phone/);
 
     // An internet switch set up by MAC (as before) finds its device record, and keeps it when the MAC changes.
     await manager.update('warden', { ...manager.raw('warden'), pollSec: 0, devices: [{ mac: 'aa:bb:cc:00:00:01', name: 'Aisha’s iPad', room: 'lounge' }] });
@@ -91,15 +91,15 @@ test('Warden: pair with a code approved at /apps, then follow the live feed, dev
     w.publish('wan.down', {});
     await until('down again', () => t.dev(INTERNET_ID).on === false);
 
-    // Who's home: Methel by Warden's own presence (same name), even with no phone MAC set in Kova.
+    // Who's home: Alex by Warden's own presence (same name), even with no phone MAC set in Kova.
     const people = t.hub.config.get().people;
-    assert.ok(people.some(p => p.name === 'Methel'), people.map(p => p.name).join());
-    const methel = people.find(p => p.name === 'Methel')!;
-    await t.hub.engine.setPresence(methel.id, false, 'test');
+    assert.ok(people.some(p => p.name === 'Alex'), people.map(p => p.name).join());
+    const alex = people.find(p => p.name === 'Alex')!;
+    await t.hub.engine.setPresence(alex.id, false, 'test');
     const presence = new Presence(t.hub, { pollSec: 0 }, { warden: () => manager.raw('warden') });
     presence.start();
     await presence.poll();
-    assert.equal(t.hub.engine.people[methel.id]?.home, true);
+    assert.equal(t.hub.engine.people[alex.id]?.home, true);
     presence.stop();
   } finally {
     await app.close();

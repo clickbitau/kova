@@ -62,7 +62,7 @@ test('Cast: several speakers playing the same thing use their Cast group (perfec
   const a = fakeCast('Music Room Speaker'), b = fakeCast('Baby Room speaker'), c = fakeCast('Guest Room speaker');
   const g = fakeCast('Home Speaker Group', ['aaaa0000-0000-0000-0000-000000000001', 'bbbb0000-0000-0000-0000-000000000002']);
   const ep = async (f: ReturnType<typeof fakeCast>, id: string, model: string) => ({ id, name: f.name, model, host: '127.0.0.1', port: await listen(f) });
-  const reg = new Registry(new Store(':memory:'), n => (n === 'Tarateel' ? 'https://stream.example/tarateel.mp3' : undefined));
+  const reg = new Registry(new Store(':memory:'), n => (n === 'Ocean waves' ? 'https://stream.example/tarateel.mp3' : undefined));
   const cast = new CastAdapter({
     discover: false, insecure: true, pollMs: 0, batchMs: 20, rooms: { 'Music Room Speaker': 'music', 'Baby Room speaker': 'baby' },
     endpoints: [
@@ -80,8 +80,8 @@ test('Cast: several speakers playing the same thing use their Cast group (perfec
 
     // Both group members at once → one LOAD on the group, volumes set per speaker.
     const { changed } = await reg.applyTargets({
-      cast_aaaa0000000000000000000000000001: { on: true, media: 'Tarateel', vol: 15 },
-      cast_bbbb0000000000000000000000000002: { on: true, media: 'Tarateel', vol: 20 },
+      cast_aaaa0000000000000000000000000001: { on: true, media: 'Ocean waves', vol: 15 },
+      cast_bbbb0000000000000000000000000002: { on: true, media: 'Ocean waves', vol: 20 },
     }, { kind: 'mode', label: 'Night started' });
     assert.equal(changed.length, 2);
     assert.equal(g.loads(), 1);
@@ -91,7 +91,7 @@ test('Cast: several speakers playing the same thing use their Cast group (perfec
     assert.equal(b.st.level, 0.2);
 
     // A speaker with no exact group plays on its own.
-    await reg.command('cast_cccc0000000000000000000000000003', { on: true, media: 'Tarateel' }, { kind: 'user', label: 'You' });
+    await reg.command('cast_cccc0000000000000000000000000003', { on: true, media: 'Ocean waves' }, { kind: 'user', label: 'You' });
     assert.equal(c.loads(), 1);
 
     // Stopping one member mutes it; stopping the rest stops the group session.
@@ -147,14 +147,14 @@ test('Cast: a group that stopped answering is stopped speaker by speaker', async
   const a = fakeCast('Music Room Speaker'), b = fakeCast('Baby Room speaker');
   const g = fakeCast('Home Speaker Group', ['aaaa0000-0000-0000-0000-000000000001', 'bbbb0000-0000-0000-0000-000000000002']);
   const ep = async (f: ReturnType<typeof fakeCast>, id: string, model: string) => ({ id, name: f.name, model, host: '127.0.0.1', port: await listen(f) });
-  const reg = new Registry(new Store(':memory:'), n => (n === 'Tarateel' ? 'https://stream.example/tarateel.mp3' : undefined));
+  const reg = new Registry(new Store(':memory:'), n => (n === 'Ocean waves' ? 'https://stream.example/tarateel.mp3' : undefined));
   const cast = new CastAdapter({
     discover: false, insecure: true, pollMs: 0, batchMs: 20,
     endpoints: [await ep(a, 'aaaa0000000000000000000000000001', 'Nest Audio'), await ep(b, 'bbbb0000000000000000000000000002', 'Nest Audio'), await ep(g, 'dddd0000000000000000000000000004', 'Google Cast Group')],
   });
   await reg.addAdapter(cast);
   try {
-    await reg.applyTargets({ cast_aaaa0000000000000000000000000001: { on: true, media: 'Tarateel' }, cast_bbbb0000000000000000000000000002: { on: true, media: 'Tarateel' } }, { kind: 'user', label: 'You' });
+    await reg.applyTargets({ cast_aaaa0000000000000000000000000001: { on: true, media: 'Ocean waves' }, cast_bbbb0000000000000000000000000002: { on: true, media: 'Ocean waves' } }, { kind: 'user', label: 'You' });
     assert.equal(g.loads(), 1);
     a.st.app = { appId: 'CC1AD845', sessionId: 's', transportId: 'web-1' };
     b.st.app = { appId: 'CC1AD845', sessionId: 's', transportId: 'web-1' };
@@ -173,7 +173,7 @@ test('Cast: a speaker taken out of a playing group goes quiet and off, and back 
   const a = fakeCast('Music Room Speaker'), b = fakeCast('Baby Room speaker');
   const g = fakeCast('Home Speaker Group', ['aaaa0000-0000-0000-0000-000000000001', 'bbbb0000-0000-0000-0000-000000000002']);
   const ep = async (f: ReturnType<typeof fakeCast>, id: string, model: string) => ({ id, name: f.name, model, host: '127.0.0.1', port: await listen(f) });
-  const reg = new Registry(new Store(':memory:'), n => (n === 'Tarateel' ? 'https://stream.example/tarateel.mp3' : undefined));
+  const reg = new Registry(new Store(':memory:'), n => (n === 'Ocean waves' ? 'https://stream.example/tarateel.mp3' : undefined));
   const cast = new CastAdapter({
     discover: false, insecure: true, pollMs: 0, batchMs: 20,
     endpoints: [await ep(a, 'aaaa0000000000000000000000000001', 'Nest Audio'), await ep(b, 'bbbb0000000000000000000000000002', 'Nest Audio'), await ep(g, 'dddd0000000000000000000000000004', 'Google Cast Group')],
@@ -182,7 +182,7 @@ test('Cast: a speaker taken out of a playing group goes quiet and off, and back 
   const A = 'cast_aaaa0000000000000000000000000001', B = 'cast_bbbb0000000000000000000000000002';
   const poll = () => (cast as unknown as { poll(): Promise<void> }).poll();
   try {
-    await reg.applyTargets({ [A]: { on: true, media: 'Tarateel' }, [B]: { on: true, media: 'Tarateel' } }, { kind: 'user', label: 'You' });
+    await reg.applyTargets({ [A]: { on: true, media: 'Ocean waves' }, [B]: { on: true, media: 'Ocean waves' } }, { kind: 'user', label: 'You' });
     assert.equal(g.loads(), 1);
     // The speakers say they're in the group's session.
     a.st.app = b.st.app = { appId: 'MZ', sessionId: 's', transportId: 't' };
@@ -207,13 +207,13 @@ test('Cast: a speaker taken out of a playing group goes quiet and off, and back 
 
 test('Cast: pause keeps the music on hold, and play carries on (not stop)', async () => {
   const a = fakeCast('Kitchen Speaker');
-  const reg = new Registry(new Store(':memory:'), n => (n === 'Tarateel' ? 'https://stream.example/tarateel.mp3' : undefined));
+  const reg = new Registry(new Store(':memory:'), n => (n === 'Ocean waves' ? 'https://stream.example/tarateel.mp3' : undefined));
   const cast = new CastAdapter({ discover: false, insecure: true, pollMs: 0, batchMs: 20, endpoints: [{ id: 'aaaa0000000000000000000000000001', name: a.name, model: 'Nest Audio', host: '127.0.0.1', port: await listen(a) }] });
   await reg.addAdapter(cast);
   const id = 'cast_aaaa0000000000000000000000000001';
   try {
     assert.ok(reg.get(id)!.capabilities.includes('pause'));
-    await reg.command(id, { on: true, media: 'Tarateel' }, { kind: 'user', label: 'You' });
+    await reg.command(id, { on: true, media: 'Ocean waves' }, { kind: 'user', label: 'You' });
     await reg.command(id, { paused: true }, { kind: 'user', label: 'You' });
     assert.equal(a.st.paused, true, 'PAUSE sent to the media session');
     assert.ok(a.st.app, 'the session is kept, not stopped');
@@ -256,7 +256,7 @@ test('Cast: a Kova speaker group whose speakers are a Cast group plays through i
   const a = fakeCast('Music Room Speaker'), b = fakeCast('Baby Room speaker');
   const g = fakeCast('Home Speaker Group', ['aaaa0000-0000-0000-0000-000000000001', 'bbbb0000-0000-0000-0000-000000000002']);
   const ep = async (f: ReturnType<typeof fakeCast>, id: string, model: string) => ({ id, name: f.name, model, host: '127.0.0.1', port: await listen(f) });
-  const reg = new Registry(new Store(':memory:'), n => (n === 'Tarateel' ? 'https://stream.example/tarateel.mp3' : undefined));
+  const reg = new Registry(new Store(':memory:'), n => (n === 'Ocean waves' ? 'https://stream.example/tarateel.mp3' : undefined));
   const cast = new CastAdapter({
     discover: false, insecure: true, pollMs: 0, batchMs: 20,
     endpoints: [await ep(a, 'aaaa0000000000000000000000000001', 'Nest Audio'), await ep(b, 'bbbb0000000000000000000000000002', 'Nest Audio'), await ep(g, 'dddd0000000000000000000000000004', 'Google Cast Group')],
@@ -267,10 +267,10 @@ test('Cast: a Kova speaker group whose speakers are a Cast group plays through i
   await reg.addAdapter(groups);
   try {
     assert.equal(cast.castGroupFor([reg.get('cast_aaaa0000000000000000000000000001')!, reg.get('cast_bbbb0000000000000000000000000002')!]), 'Home Speaker Group');
-    await reg.command('group_kids', { on: true, media: 'Tarateel', vol: 20 }, { kind: 'user', label: 'You' });
+    await reg.command('group_kids', { on: true, media: 'Ocean waves', vol: 20 }, { kind: 'user', label: 'You' });
     assert.equal(g.loads(), 1, 'one LOAD on the Cast group');
     assert.equal(a.loads() + b.loads(), 0, 'not on each speaker separately');
-    assert.equal(reg.get('group_kids')!.state.media, 'Tarateel');
+    assert.equal(reg.get('group_kids')!.state.media, 'Ocean waves');
   } finally {
     await reg.stop();
     for (const f of [a, b, g]) f.server.close();

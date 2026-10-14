@@ -310,7 +310,7 @@ export function registerEditRoutes(app: FastifyInstance, hub: Hub): void {
   });
 
   // -------------------------------------------------------------- sources --
-  // Media sources (Tarateel, rain sounds…) need a stream address before speakers can play them.
+  // Media sources (Ocean waves, rain sounds…) need a stream address before speakers can play them.
   // Only what's sent changes: { url }, { loop } (a recording plays again when it ends), { icon }.
   // { helix: "<song name or id>" } plays a song from Helix as the sound, looped seamlessly; { helix: null } stops that.
   app.put<{ Params: { name: string }; Body: { url?: string; icon?: string; loop?: boolean; helix?: string | null } }>('/api/sources/:name', async (req, reply) => {

@@ -17,12 +17,12 @@ const HIST = { ok: C.green, warn: C.amber, error: C.red } as const;
 
 /** Kova on the hub: what's running, what's out and what it brings, Update now (with progress), Check now, overnight updates, the licence, and what happened before. */
 function HubUpdateCard({ u }: { u: HubUpdate }) {
-  const { act, api, say, conn } = useHub();
+  const { act, api, say, conn, snap } = useHub();
   const now = Date.now();
   const d = describeHubUpdate(u, now);
   const steps = updateSteps(u, { away: conn !== 'live', now });
   const progress = steps ? null : hubProgress(u);
-  const history = historyRows(u, now);
+  const history = historyRows(u, now, 6, snap?.home.locale);
   const [older, setOlder] = useState(false);
   const [keyOpen, setKeyOpen] = useState(false);
   const [key, setKey] = useState('');
@@ -84,7 +84,7 @@ function HubUpdateCard({ u }: { u: HubUpdate }) {
       <Sheet open={keyOpen} onClose={() => setKeyOpen(false)} label="Licence key">
         <View style={{ gap: SP[4] }}>
           <T v="title" size={20}>Licence key</T>
-          <T v="callout" color={C.stone}>{`The Kova licence key from ClickBit, issued for hub ID ${u.licence?.hubId ?? ''}. Updates come from ClickBit’s releases once it’s activated.`}</T>
+          <T v="callout" color={C.stone}>{`The Kova licence key from ClickBIT, issued for hub ID ${u.licence?.hubId ?? ''}. Updates come from ClickBIT’s releases once it’s activated.`}</T>
           <Input label="Licence key" value={key} onChange={setKey} placeholder="KOVA-…" mono autoFocus bad={!!keyErr} />
           {keyErr ? <T v="footnote" weight={600} color={C.redText}>{keyErr}</T> : null}
           <Button full icon="key" label="Activate" onPress={async () => {

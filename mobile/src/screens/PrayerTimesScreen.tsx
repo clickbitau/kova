@@ -5,7 +5,7 @@ import { useHub, useSnap } from '../state/hub';
 import { useNav } from '../navigation';
 import type { Adhan, PrayerName, PrayerView } from '../api/types';
 import { announceMediaName } from '../logic/automations';
-import { ADJUSTABLE, MADHABS, PRAYER_LABEL, adjustSummary, adjustWords, clampAdjust, methodLabel, todayTimes, withAdjust } from '../logic/prayer';
+import { ADJUSTABLE, MADHABS, PRAYER_LABEL, adjustSummary, adjustWords, clampAdjust, clockFormat, methodLabel, todayTimes, withAdjust } from '../logic/prayer';
 import { PRAYER_METHODS } from '../logic/settings';
 import { Icon } from '../ui/Icon';
 import { Button, Card, Empty, ExpandRow, Group, IconButton, Press, Segmented, SwitchRow, Tag } from '../ui/kit';
@@ -84,7 +84,7 @@ export function PrayerTimesScreen() {
     );
   }
   const methods = p.methods.length ? p.methods : PRAYER_METHODS.map(([id, label]) => ({ id, label }));
-  const times = todayTimes(p, s.home.timezone);
+  const times = todayTimes(p, s.home.timezone, clockFormat(s.home));
   const changed = JSON.stringify(adjust) !== JSON.stringify(p.adjust ?? {});
   const names = { clips: s.clips, adhans: s.adhans };
   return (

@@ -1,6 +1,7 @@
 // Ducted air conditioner zones: which to show and what to call them, the rooms each zone serves (the owner confirms
 // Kova's suggestions), a room's zone as a control, and "zone:<room>" targets for automations, modes and overlays.
 // Free of React Native so the tests run it under plain Node. The hub's side: hub/src/util/zones.ts.
+import { deg } from './climate.ts';
 import type { Command, Device, HvacMode, FanSpeed, Room, RoomStatus, RoomZone } from '../api/types';
 
 export interface ZoneView { n: number; name: string; on: boolean; open: number }
@@ -85,7 +86,7 @@ export const zoneState = (z: Pick<RoomZone, 'on' | 'open'>) => (z.on ? (z.open !
 export function acState(z: Pick<RoomZone, 'ac'>): string {
   if (!z.ac.online) return 'AC not responding';
   if (!z.ac.on) return 'AC off';
-  return ['AC', hvacWord(z.ac.hvac).toLowerCase() || 'on', z.ac.target != null ? `${z.ac.target}°` : ''].filter(Boolean).join(' ');
+  return ['AC', hvacWord(z.ac.hvac).toLowerCase() || 'on', z.ac.target != null ? deg(z.ac.target) : ''].filter(Boolean).join(' ');
 }
 
 /** A room's zone in a line, as the room shows it: "Open 60% · AC cool 23°". */
@@ -104,7 +105,7 @@ export const zoneOpenAt = (z: Pick<RoomZone, 'n'>, open: number): Command => {
 /** Turn the air conditioner on for this room, in the mode Kova suggests, with the zone open. */
 export const acOnFor = (z: Pick<RoomZone, 'n' | 'suggest'>): Command => ({ on: true, hvac: z.suggest.hvac, target: z.suggest.target, zoneSet: { [String(z.n)]: { on: true } } });
 /** The suggestion in words: "Cool at 24°". */
-export const suggestWords = (z: Pick<RoomZone, 'suggest'>) => `${hvacWord(z.suggest.hvac)} at ${z.suggest.target}°`;
+export const suggestWords = (z: Pick<RoomZone, 'suggest'>) => `${hvacWord(z.suggest.hvac)} at ${deg(z.suggest.target)}`;
 /** The zone is open but the unit is off: offer to turn it on (never silently). */
 export const offersAcOn = (z: Pick<RoomZone, 'on' | 'ac'>) => z.on && !z.ac.on && z.ac.online;
 
@@ -132,14 +133,14 @@ export const zoneTargetOptions = (devices: Pick<Device, 'capabilities' | 'archiv
 /** A zone target in words, as the hub says it: "open 50%, AC cool 23°", "closed". */
 export function zoneCommandWords(c: ZoneCommand): string {
   const zone = c.on === false ? 'closed' : c.open != null ? (c.open === 0 ? 'closed' : `open ${c.open}%`) : c.on ? 'open' : '';
-  const unit = [c.hvac ?? (c.ac ? 'on' : ''), c.target != null ? `${c.target}°` : '', c.fanSpeed ? `fan ${c.fanSpeed}` : ''].filter(Boolean).join(' ');
+  const unit = [c.hvac ?? (c.ac ? 'on' : ''), c.target != null ? deg(c.target) : '', c.fanSpeed ? `fan ${c.fanSpeed}` : ''].filter(Boolean).join(' ');
   const ac = c.ac === false ? 'AC off' : unit ? `AC ${unit}` : '';
   return [zone, ac].filter(Boolean).join(', ') || 'as it is';
 }
 /** A few zone targets as one tap, each replacing the command. */
-export const ZONE_PRESETS: [ZoneCommand, string][] = [
+export const zonePresets = (): [ZoneCommand, string][] => [
   [{ on: true }, 'Open'], [{ on: true, open: 50 }, 'Open 50%'], [{ on: false }, 'Closed'],
-  [{ on: true, hvac: 'cool', target: 24 }, 'Open, cool to 24°'], [{ on: true, hvac: 'heat', target: 21 }, 'Open, heat to 21°'],
+  [{ on: true, hvac: 'cool', target: 24 }, `Open, cool to ${deg(24)}`], [{ on: true, hvac: 'heat', target: 21 }, `Open, heat to ${deg(21)}`],
 ];
 /** The fields a zone target takes, in the order they're shown. */
 export const ZONE_FIELDS = ['on', 'open', 'hvac', 'target', 'fanSpeed', 'ac'] as const;

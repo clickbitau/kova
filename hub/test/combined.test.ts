@@ -72,33 +72,33 @@ test('a soundbar reached through two integrations becomes one device: each part 
 
 test('combined devices: routing, merged state, and which devices look like one', () => {
   const dev = (id: string, adapter: string, caps: string[], state: DeviceState, name = id, room = 'lounge', type = 'media'): Device => ({ id, name, room, type, adapter, capabilities: caps, state, integration: adapter, address: id } as Device);
-  const tv = dev('tv', 'samsungtv', ['onoff', 'volume', 'input'], { on: true, input: 'hdmi4', vol: 10 }, 'Bedroom Oled (QA55S90DAWXXY)', 'bedroom', 'tv');
-  const cast = dev('c', 'cast', ['onoff', 'media', 'volume', 'pause'], { on: false, media: null }, 'Bedroom Oled', 'bedroom', 'tv');
+  const tv = dev('tv', 'samsungtv', ['onoff', 'volume', 'input'], { on: true, input: 'hdmi4', vol: 10 }, 'Bedroom Frame (QA55S90DAWXXY)', 'bedroom', 'tv');
+  const cast = dev('c', 'cast', ['onoff', 'media', 'volume', 'pause'], { on: false, media: null }, 'Bedroom Frame', 'bedroom', 'tv');
   assert.deepEqual([...routeCommand({ on: false }, [tv, cast])], [['tv', { on: false }]]);
   assert.deepEqual([...routeCommand({ on: true, media: 'Radio', vol: 30 }, [tv, cast])], [['c', { media: 'Radio', on: true }], ['tv', { vol: 30 }]]);
   assert.deepEqual(mergeState([tv, cast]), { input: 'hdmi4', vol: 10, media: null, on: true, online: true });
 
   const ideas = combineIdeas([tv, cast, dev('k', 'cast', ['onoff', 'media'], {}, 'Kitchen speaker'), dev('s', 'sonos', ['onoff', 'media'], {}, 'Kitchen', 'kitchen')], [], [], () => false);
-  assert.deepEqual(ideas.map(i => [i.name, i.members]), [['Bedroom Oled', ['tv', 'c']]], 'a speaker and a Sonos called "Kitchen…" share only a generic word');
+  assert.deepEqual(ideas.map(i => [i.name, i.members]), [['Bedroom Frame', ['tv', 'c']]], 'a speaker and a Sonos called "Kitchen…" share only a generic word');
   assert.deepEqual(combineIdeas([tv, cast], [], ['idea:combine:c+tv'], () => false), [], 'dismissed');
 });
 
 test('the router seeing one MAC at two addresses proves the integrations reached the same device', () => {
   const dev = (id: string, adapter: string, caps: string[], state: DeviceState, name = id, room = 'lounge', type = 'media'): Device => ({ id, name, room, type, adapter, capabilities: caps, state, integration: adapter, address: id } as Device);
   // Different names, different rooms, not even both players — the MAC is still decisive.
-  const tv = dev('tv1', 'samsungtv', ['onoff', 'input'], {}, 'Bedroom Oled (QA55S90DAWXXY)', 'bedroom', 'tv');
-  const tvCast = dev('tv2', 'cast', ['onoff', 'media'], {}, 'Bedroom TV', 'unassigned', 'media');
+  const tv = dev('tv1', 'samsungtv', ['onoff', 'input'], {}, 'Bedroom Frame (QA55S90DAWXXY)', 'bedroom', 'tv');
+  const tvCast = dev('tv2', 'cast', ['onoff', 'media'], {}, 'Bedroom Frame', 'unassigned', 'media');
   const speaker = dev('sp', 'sonos', ['onoff', 'media'], {}, 'Den speaker', 'den', 'media');
   const macs = new Map([['tv1', 'aa:bb:cc:dd:ee:01'], ['tv2', 'aa:bb:cc:dd:ee:01'], ['sp', 'aa:bb:cc:dd:ee:02']]);
-  const netOf = (d: Device) => ({ mac: macs.get(d.id)!, name: 'Bedroom Oled' });
+  const netOf = (d: Device) => ({ mac: macs.get(d.id)!, name: 'Bedroom Frame' });
 
   const ideas = combineIdeas([tv, tvCast, speaker], [], [], () => false, id => id, netOf);
   assert.deepEqual(ideas.map(i => i.members), [['tv1', 'tv2']], 'the two on one MAC pair up; the speaker on its own MAC does not join');
   assert.match(ideas[0].why, /same device on your network/);
-  assert.equal(ideas[0].name, 'Bedroom Oled');
+  assert.equal(ideas[0].name, 'Bedroom Frame');
 
   // Three integrations on one MAC: one idea, all members, control-capable first.
-  const tv3 = dev('tv3', 'smartthings', ['onoff'], {}, 'Bedroom Oled', 'bedroom', 'tv');
+  const tv3 = dev('tv3', 'smartthings', ['onoff'], {}, 'Bedroom Frame', 'bedroom', 'tv');
   macs.set('tv3', 'aa:bb:cc:dd:ee:01');
   const three = combineIdeas([tv, tvCast, tv3, speaker], [], [], () => false, id => id, netOf);
   assert.deepEqual(three.map(i => i.members), [['tv1', 'tv2', 'tv3']]);

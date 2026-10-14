@@ -15,7 +15,7 @@ export const OWNTONE_WINDOW = 50;
 const shown = (t: QueueTrack): Track => ({ id: t.id, title: t.title, ...(t.artist ? { artist: t.artist } : {}), ...(t.album ? { album: t.album } : {}), ...(t.art ? { art: t.art } : {}), ...(t.durationMs ? { durationMs: t.durationMs } : {}) });
 
 export interface AirPlayOptions {
-  /** OwnTone's web address, e.g. http://10.10.10.150:3689 */
+  /** OwnTone's web address, e.g. http://192.168.1.20:3689 */
   url: string;
   /** AirPlay device name → Kova room id. */
   rooms?: Record<string, string>;

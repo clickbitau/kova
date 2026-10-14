@@ -95,7 +95,7 @@ function fakeTuya(consumerBase: () => string) {
       }
       if (h['x-token'] !== access) return send({ success: false, code: 1010, msg: 'token invalid' });
 
-      if (u.pathname === '/v1.0/m/life/users/homes') return reply([{ ownerId: '99127', name: 'The Ahmeds' }]);
+      if (u.pathname === '/v1.0/m/life/users/homes') return reply([{ ownerId: '99127', name: 'The Parkers' }]);
       if (u.pathname === '/v1.0/m/life/ha/home/devices') {
         const params = JSON.parse(dec(qEnc, secret));
         if (String(params.homeId) !== '99127') errors.push('wrong homeId');

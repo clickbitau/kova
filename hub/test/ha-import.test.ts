@@ -39,7 +39,7 @@ const AUTOMATIONS = `
       at: '22:30:00'
   condition:
     - condition: state
-      entity_id: person.methel
+      entity_id: person.alex
       state: home
   action:
     - service: light.turn_off
@@ -52,7 +52,7 @@ const AUTOMATIONS = `
   alias: Welcome home
   triggers:
     - trigger: state
-      entity_id: person.methel
+      entity_id: person.alex
       to: home
   actions:
     - action: notify.mobile_app_iphone
@@ -73,9 +73,9 @@ const AUTOMATIONS = `
 
 function haFiles(): Record<string, Buffer> {
   return {
-    '.storage/core.config': st({ location_name: 'The Ahmeds', latitude: -31.95, longitude: 115.86, time_zone: 'Australia/Perth' }),
+    '.storage/core.config': st({ location_name: 'The Parkers', latitude: -31.95, longitude: 115.86, time_zone: 'Australia/Perth' }),
     '.storage/core.area_registry': st({ areas: [{ id: 'kitchen', name: 'Kitchen' }, { id: 'living_room', name: 'Living Room' }, { id: 'garage', name: 'Garage' }] }),
-    '.storage/person': st({ items: [{ id: 'p1', name: 'Methel', device_trackers: ['device_tracker.iphone'] }, { id: 'p2', name: 'Brishti' }] }),
+    '.storage/person': st({ items: [{ id: 'p1', name: 'Alex', device_trackers: ['device_tracker.iphone'] }, { id: 'p2', name: 'Jordan' }] }),
     '.storage/core.config_entries': st({ entries: [
       { entry_id: 'lt', domain: 'localtuya', title: 'localtuya', data: { devices: { bf00: { friendly_name: 'Kitchen Switch', host: '192.168.1.230', local_key: 'aaaaaaaaaaaaaaaa', protocol_version: '3.3', entities: [{ id: 1, platform: 'switch', friendly_name: 'Kitchen Light' }] } } } },
       { entry_id: 'vs', domain: 'vesync', title: 'VeSync', data: { username: 'me@example.com', password: 'secret-not-imported' } },
@@ -92,7 +92,7 @@ function haFiles(): Record<string, Buffer> {
     '.storage/core.entity_registry': st({ entities: [
       { entity_id: 'light.porch', name: null, original_name: 'Porch light' },
       { entity_id: 'light.path', name: 'Path lights', original_name: 'x' },
-      { entity_id: 'person.methel', original_name: 'Methel' },
+      { entity_id: 'person.alex', original_name: 'Alex' },
       { entity_id: 'automation.goodnight', platform: 'automation', unique_id: '1002' },
       { entity_id: 'automation.porch_lights_at_sunset', platform: 'automation', unique_id: '1001' },
     ] }),
@@ -154,7 +154,7 @@ test('HA import: a config folder → what moves, what needs you, and the automat
     assert.equal(r.statusCode, 200, r.body);
     const x = r.json();
     assert.equal(x.source.haVersion, '2026.2.2');
-    assert.equal(x.location.name, 'The Ahmeds');
+    assert.equal(x.location.name, 'The Parkers');
     const fate = Object.fromEntries(x.integrations.map((i: { domain: string; fate: string }) => [i.domain, i.fate]));
     assert.deepEqual(fate, { localtuya: 'moves', vesync: 'moves', samsungtv: 'moves', sonos: 'set-up', sun: 'built-in', met: 'built-in', opnsense: 'handoff', plex: 'handoff', shelly: 'unsupported' }, 'the disabled Hue entry is left out');
     assert.deepEqual(x.stats.map((t: { n: string }) => t.n), ['3', '1', '4', '4', '3']);
@@ -175,11 +175,11 @@ test('HA import: a config folder → what moves, what needs you, and the automat
     assert.ok(by['1001'].at > 16 && by['1001'].at < 20, `sunset in Perth, got ${by['1001'].at}`);
     assert.equal(by['1001'].kova, 'A mode or a moment');
     assert.deepEqual(by['1002'].when, ['Every day at 22:30']);
-    assert.deepEqual(by['1002'].cond, ['Methel is home']);
+    assert.deepEqual(by['1002'].cond, ['Alex is home']);
     assert.deepEqual(by['1002'].then, ['Turn off Kitchen', 'Wait 5 min', 'Play rain.mp3 on Bedroom speaker']);
-    assert.equal(by['1002'].lastRun, 'Last ran 29 Sep, 22:30');
+    assert.equal(by['1002'].lastRun, 'Last ran 29 Sep 22:30');
     assert.equal(by['1003'].kova, 'Presence and the Away overlay');
-    assert.deepEqual(by['1003'].when, ['Methel comes home']);
+    assert.deepEqual(by['1003'].when, ['Alex comes home']);
     assert.equal(by['1004'].enabled, false);
     assert.equal(by['1004'].kova, 'Light the way');
     assert.match(by['1002'].yaml, /alias: Goodnight/);
@@ -221,7 +221,7 @@ test('HA import: encrypted backups need their key (both SecureTar layouts)', asy
       assert.equal(wrong.statusCode, 400); assert.equal(wrong.json().code, 'wrong-key');
       const ok = await upload(s.app, b, key);
       assert.equal(ok.statusCode, 200, ok.body);
-      assert.equal(ok.json().location.name, 'The Ahmeds');
+      assert.equal(ok.json().location.name, 'The Parkers');
     }
   } finally { await s.done(); }
 });
@@ -240,8 +240,8 @@ test('HA import: switching over from the demo home', async () => {
     assert.ok(!x.started.includes('vesync'), 'VeSync waits for its password');
     assert.equal(s.hub.demo, false);
     assert.ok(!s.hub.reg.adapters.has('virtual'), 'the virtual devices are gone');
-    assert.equal(s.hub.config.get().name, 'The Ahmeds');
-    assert.deepEqual(s.hub.config.get().people.map(p => p.name), ['Methel', 'Brishti']);
+    assert.equal(s.hub.config.get().name, 'The Parkers');
+    assert.deepEqual(s.hub.config.get().people.map(p => p.name), ['Alex', 'Jordan']);
     const saved = JSON.parse(readFileSync(join(s.dir, 'integrations.json'), 'utf8'));
     assert.equal(saved.tuya.devices[0].key, 'aaaaaaaaaaaaaaaa');
     assert.equal(statSync(join(s.dir, 'integrations.json')).mode & 0o777, 0o600);

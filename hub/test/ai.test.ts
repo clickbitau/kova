@@ -78,7 +78,7 @@ test('Local AI: tool call changes a device through the engine, logged, tagged an
   assert.match(sent, /\\"bri\\"/);
   assert.doesNotMatch(sent, /Who's home/);
   assert.doesNotMatch(sent, /Activity, last 7 days/);
-  assert.doesNotMatch(sent, /Methel|Brishti/);
+  assert.doesNotMatch(sent, /Alex|Jordan/);
   for (const c of CAMERAS) assert.ok(!sent.includes(c), `camera ${c} was sent`);
 
   // Logged in Activity: the request itself, and the change with its AI cause.
@@ -113,15 +113,15 @@ test('Local AI: built-in commands never reach the AI', async () => {
 test('Share toggles control the context; cameras are never sent', async () => {
   const fake = await fakeServer([openAiText('ok')]);
   const { hub, app, put, ask } = await setup();
-  await hub.engine.setPresence('brishti', false);
+  await hub.engine.setPresence('jordan', false);
 
   const on = (await put({ engine: 'local', local: { url: fake.url, model: 'm' }, share: { names: true, rooms: true, history: true, presence: true, cameras: true } })).json();
   assert.equal(on.share.cameras, false, 'cameras forced off');
   await ask('make the lounge feel cosy');
   const all = JSON.stringify(fake.received[0].body);
-  assert.match(all, /Who's home: Methel home, Brishti out/);
+  assert.match(all, /Who's home: Alex home, Jordan out/);
   assert.match(all, /Activity, last 7 days/);
-  assert.match(all, /Brishti left home/);
+  assert.match(all, /Jordan left home/);
   for (const c of CAMERAS) assert.ok(!all.includes(c), `camera ${c} was sent`);
   assert.doesNotMatch(all, /Camera|Doorbell/);
 
@@ -130,7 +130,7 @@ test('Share toggles control the context; cameras are never sent', async () => {
   const none = JSON.stringify(fake.received[1].body);
   assert.doesNotMatch(none, /Lamp|Lounge|kitchen_ceiling/);
   assert.doesNotMatch(none, /\\"state\\"/);
-  assert.doesNotMatch(none, /Who's home|Methel|Brishti/);
+  assert.doesNotMatch(none, /Who's home|Alex|Jordan/);
   assert.doesNotMatch(none, /Activity, last 7 days/);
   assert.match(none, /device1/);
   await app.close(); await hub.stop(); await fake.close();

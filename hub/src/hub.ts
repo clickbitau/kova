@@ -1,3 +1,4 @@
+import { useHomeStyle } from './util/locale.ts';
 import { Insights } from './services/insights.ts';
 import type { Screen } from './engine/automation-ideas.ts';
 import { EventEmitter } from 'node:events';
@@ -143,6 +144,8 @@ export class Hub extends EventEmitter<{ changed: [] }> {
     this.store = new Store(opts.dbPath, opts.now);
     this.config = new ConfigStore(this.store, opts.initialConfig);
     migratePrayer(this.config);
+    useHomeStyle(this.config.get());
+    this.config.on('changed', () => useHomeStyle(this.config.get()));
     this.reg = new Registry(this.store, name => {
       const s = this.config.get().sources.find(x => x.name === name);
       // A sound that repeats (or a Helix song): from the hub, which serves it as a seamless loop (api/sound).
@@ -197,7 +200,7 @@ export class Hub extends EventEmitter<{ changed: [] }> {
   }
 
   /**
-   * Zones whose names plainly are rooms ("Theatre", "Office & Guest") are linked to those rooms without asking: the
+   * Zones whose names plainly are rooms ("Study", "Office & Guest") are linked to those rooms without asking: the
    * owner already said which is which by naming them. Each zone name is linked once; changing or removing a link
    * afterwards is the owner's and stays.
    */

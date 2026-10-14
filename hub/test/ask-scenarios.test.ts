@@ -19,7 +19,7 @@ const SCENARIOS: Record<string, Scenario> = {
     rounds: [
       calls(['create_room', { name: 'Theatre', icon: 'theaters' }], ['create_room', { name: 'Entryway', icon: 'door_front' }]),
       calls(['combine_devices', { members: ['combined_bedroom_oled', 'oled_dlna'], room: 'theatre' }], ['update_device', { id: 'lamp', name: 'Entryway lamp', room: 'entryway' }]),
-      say('Made Theatre and Entryway. Bedroom OLED now covers all three entries and is in Theatre; the lamp is now Entryway lamp, in Entryway.'),
+      say('Made Theatre and Entryway. Bedroom TV now covers all three entries and is in Theatre; the lamp is now Entryway lamp, in Entryway.'),
     ],
     check: (h, r) => {
       assert.equal(h.hub.reg.get('combined_bedroom_oled')!.room, 'theatre');

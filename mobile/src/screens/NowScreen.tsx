@@ -6,20 +6,19 @@ import { useHub, useSnap } from '../state/hub';
 import { useSheet } from '../state/sheet';
 import { useNav } from '../navigation';
 import { devs, favourites, isLight, plural, toggleCommand, type Dev } from '../logic/devices';
-import { dayBands } from '../logic/day';
+import { deg } from '../logic/climate';
+import { dayBands, hourMarks, shortDate } from '../logic/day';
 import { alertActions, glanceCards, glanceColumns, insightColor, shownAlerts, waqtCard, type AlertAction } from '../logic/glance';
-import { waqtOf } from '../logic/prayer';
+import { clockAt, clockFormat, waqtOf } from '../logic/prayer';
+import { phoneSettings, phoneSettingsLine } from '../logic/setup';
 import type { Insight } from '../api/types';
 import { Icon } from '../ui/Icon';
-import { Avatar, Button, Card, Empty, HScroll, IconWell, Mark, Notice, NoticeAction, Press, Section, Skeleton } from '../ui/kit';
+import { Avatar, Button, Card, Empty, Group, HScroll, IconWell, Mark, Notice, NoticeAction, Press, Row, Section, Skeleton } from '../ui/kit';
 import { Screen } from '../ui/Screen';
 import { T } from '../ui/Text';
 import { features, meOf } from '../logic/roles';
 import { Appear } from '../ui/motion';
 import { TileGrid, TileSkeleton } from '../ui/Tile';
-
-/** "Wednesday 30 Sept" → "Wed 30 Sep", as in the phone design. */
-const shortDate = (d: string) => d.replace(/^(\w{3})\w*/, '$1').replace(/\bSept\b/, 'Sep');
 
 export function NowScreen() {
   const s = useSnap();
@@ -37,6 +36,8 @@ export function NowScreen() {
   const tap = (d: Dev) => { const c = toggleCommand(d, s.sources); if (c) void send(d.id, c); else sheet.open(d.id); };
   const end = () => api('POST', '/api/overlays/end').then(() => { say(`Back to ${M?.name}`); return true; }).catch(e => { say((e as Error).message, { error: true }); return false; });
   const bands = dayBands(s);
+  // The clock in the home's own style when the hub says how; else the hub's words.
+  const nowClock = s.home.locale || s.home.hour12 != null ? clockAt(s.home.now, s.home.timezone, clockFormat(s.home)) : s.home.clock;
   // The waqt counts down live: the card follows the clock every half minute while prayer times are on.
   const [clock, setClock] = useState(() => Date.now());
   const prayerOn = !!s.prayer?.on;
@@ -46,7 +47,7 @@ export function NowScreen() {
     const t = setInterval(() => setClock(Date.now()), 30_000);
     return () => clearInterval(t);
   }, [prayerOn]);
-  const waqt = waqtCard(waqtOf(s.prayer, clock, s.home.timezone));
+  const waqt = waqtCard(waqtOf(s.prayer, clock, s.home.timezone, clockFormat(s.home)));
   const cards = [...(waqt ? [waqt] : []), ...glanceCards(s.glance)];
   const alerts = s.insights ?? [];
   const [allAlerts, setAllAlerts] = useState(false);
@@ -56,7 +57,8 @@ export function NowScreen() {
   const cardW = Math.floor((width - SP.gutter * 2 - SP[2] * (cols - 1)) / cols) - 1;
   const anyLights = s.devices.some(d => isLight(d) && !d.hidden && !d.archived);
   // What this person's role can do here (logic/roles.ts): a child or a guest doesn't switch modes or see cameras.
-  const can = features(meOf(s));
+  const who = meOf(s);
+  const can = features(who);
 
   return (
     <Screen glow={M?.color} head={
@@ -70,14 +72,17 @@ export function NowScreen() {
         </Press>
       </View>
     }>
+      {s.home.firstRun && who.role === 'owner' ? <SetupCard /> : null}
       <View style={{ gap: SP[2], marginTop: -SP[1] }}>
-        <T v="callout" color={C.stone} tabular>{`${shortDate(s.home.dateLabel)} · ${s.home.clock}${w ? ` · ${w.temp}° ${w.text.toLowerCase()}` : ''}`}</T>
-        <Press onPress={can.modes ? () => nav.navigate('Modes') : undefined} label={can.modes ? `${M?.name} mode. Open modes` : `${M?.name} mode`} style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3], alignSelf: 'flex-start' }}>
-          <Icon name={M?.icon ?? 'routine'} size={38} color={M?.color} fill />
-          <T v="hero">{M?.name ?? ''}</T>
-          {can.modes ? <Icon name="chevron_right" size={26} color={C.stone2} /> : null}
-        </Press>
-        <T v="body" color={C.soft}>{`Until ${s.current.untilLabel}, then ${next?.name ?? ''}`}</T>
+        <T v="callout" color={C.stone} tabular>{`${shortDate(s.home)} · ${nowClock}${w ? ` · ${deg(w.temp)} ${w.text.toLowerCase()}` : ''}`}</T>
+        {M ? (
+          <Press onPress={can.modes ? () => nav.navigate('Modes') : undefined} label={can.modes ? `${M.name} mode. Open modes` : `${M.name} mode`} style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3], alignSelf: 'flex-start' }}>
+            <Icon name={M.icon ?? 'routine'} size={38} color={M.color} fill />
+            <T v="hero">{M.name}</T>
+            {can.modes ? <Icon name="chevron_right" size={26} color={C.stone2} /> : null}
+          </Press>
+        ) : null}
+        {M && next && s.current.untilLabel ? <T v="body" color={C.soft}>{`Until ${s.current.untilLabel}, then ${next.name}`}</T> : null}
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SP[2], marginTop: SP[1] }}>
           {on ? (
             <Press onPress={() => void act('POST', '/api/lights/off', {}, 'Lights off')} label={`${plural(on, 'light')} on. Turn them off`} style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2], height: 36, paddingLeft: 10, paddingRight: 12, borderRadius: R.full, backgroundColor: C.amberTint, borderWidth: 1, borderColor: C.amberLine }}>
@@ -145,7 +150,7 @@ export function NowScreen() {
           <View style={{ position: 'absolute', left: `${(s.home.nowHour / 24) * 100}%`, top: 0, bottom: 0, width: 2, marginLeft: -1, backgroundColor: '#fff', boxShadow: '0px 0px 6px rgba(255,255,255,0.6)' }} />
         </View>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-          {['00', '06', '12', '18', '24'].map(h => <T key={h} mono size={10.5} color={C.stone2}>{h}</T>)}
+          {hourMarks(s.home.hour12).map(h => <T key={h} mono size={10.5} color={C.stone2}>{h}</T>)}
         </View>
       </Card>
 
@@ -232,6 +237,49 @@ export function NowScreen() {
         )) : <Empty compact icon="history" title="Quiet so far" text="What your modes and people do shows up here." />}
       </Section>
     </Screen>
+  );
+}
+
+/**
+ * A brand-new hub's first run, for its owner: a short list of what to set up, each opening its screen, and Done
+ * (which ends the first run on the hub). While the hub doesn't know the home's language and units, one tap sets
+ * them from this phone.
+ */
+function SetupCard() {
+  const s = useSnap();
+  const { act } = useHub();
+  const nav = useNav();
+  const phone = phoneSettings();
+  const loc = s.home.location;
+  const steps: { icon: string; title: string; sub: string; done: boolean; go: () => void }[] = [
+    { icon: 'location_on', title: 'Name and place', sub: 'Name the home and say where it is', done: (!!s.home.name && s.home.name !== 'Home') || !!s.home.address || !!loc?.source, go: () => nav.navigate('Settings') },
+    { icon: 'meeting_room', title: 'Rooms', sub: 'Group your devices by room', done: s.rooms.length > 0, go: () => nav.navigate('Customise') },
+    { icon: 'group', title: 'People', sub: 'Who lives here, and who can use Kova', done: s.people.length > 0, go: () => nav.navigate('People') },
+    { icon: 'devices', title: 'Add a device', sub: 'Connect lights, speakers, cameras', done: s.devices.length > 0, go: () => nav.navigate('IntegrationAdd') },
+  ];
+  return (
+    <Card tint={C.amber} style={{ padding: SP[4], gap: SP[3] }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3] }}>
+        <IconWell icon="home" color={C.amber} size={40} fill />
+        <View style={{ flex: 1, gap: 2 }}>
+          <T v="headline">Set up your home</T>
+          <T v="footnote" color={C.stone}>A few steps, in any order.</T>
+        </View>
+      </View>
+      {!s.home.localeSet ? (
+        <View style={{ gap: SP[2] }}>
+          <Button size="sm" kind="secondary" icon="smartphone" label="Use this phone’s settings" doneLabel="Done" onPress={() => act('PUT', '/api/home', phone, 'Home set to this phone’s language, clock and units')} />
+          <T v="footnote" color={C.stone2}>{phoneSettingsLine(phone)}</T>
+        </View>
+      ) : null}
+      <Group>
+        {steps.map((x, i) => (
+          <Row key={x.title} first={i === 0} icon={x.icon} iconFg={x.done ? C.green : C.amber} title={x.title} sub={x.sub} onPress={x.go}
+            right={x.done ? <Icon name="check_circle" size={20} color={C.green} fill /> : undefined} />
+        ))}
+      </Group>
+      <Button full icon="check" label="Done" onPress={() => act('PUT', '/api/home', { setupDone: true }, 'You’re all set')} />
+    </Card>
   );
 }
 

@@ -5,7 +5,7 @@ import { C, SP, alpha } from '../theme';
 import { useHub, useSnap } from '../state/hub';
 import { useNav } from '../navigation';
 import { devs, ICON, type Dev } from '../logic/devices';
-import { energyView, kwh, parseWatts, wattsNote, type EnergyBar, type EnergyStat } from '../logic/energy';
+import { energySource, energyView, kwh, parseWatts, wattsNote, type EnergyBar, type EnergyStat } from '../logic/energy';
 import { Icon } from '../ui/Icon';
 import { Button, Card, Empty, IconWell, Press, Row, Section, Sheet } from '../ui/kit';
 import { Appear } from '../ui/motion';
@@ -138,7 +138,7 @@ export function EnergyScreen() {
   const s = useSnap();
   const nav = useNav();
   const all = devs(s);
-  const source = s.integrations.find(i => i.id === 'goodwe' || i.id === 'virtual')?.name ?? null;
+  const source = energySource(s);
   const v = energyView(s.energy, s.home.nowHour, source);
   const E = s.energy;
   const [watts, setWatts] = useState<string | null>(null);

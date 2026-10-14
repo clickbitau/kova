@@ -96,7 +96,7 @@ test('a better trigger: the bedroom TV turning off just before you start it', as
   const alt = s.finding.more?.[0];
   assert.ok(alt, 'another way on the same card');
   assert.equal(alt.id, 'learn:auto-trigger:rain_bed:bedroom_tv:false');
-  assert.match(alt.title, /could start when the bedroom oled turns off/);
+  assert.match(alt.title, /could start when the bedroom tv turns off/);
   assert.match(alt.body, /about 5 minutes before you did it/);
   // Not also "when the TV turns off, play Rain sounds": an automation already plays it, even once its time is moved.
   assert.ok(!h.learner.suggestions().some(x => x.kind === 'chain' && x.device === 'master_speaker'));
@@ -249,8 +249,8 @@ test('an automation you undo when the TV is on: only run it when nobody is watch
   h.now(7);
   const s = h.find('auto-condition', 'sounds');
   assert.ok(s);
-  assert.match(s.finding.title, /“Bedtime sounds” could run only when nobody’s watching the bedroom oled/);
-  assert.match(s.finding.body, /On 5 of the 7 days it started the master bed speaker, you stopped it within 20 minutes, each time the bedroom oled was on/);
+  assert.match(s.finding.title, /“Bedtime sounds” could run only when nobody’s watching the bedroom tv/);
+  assert.match(s.finding.body, /On 5 of the 7 days it started the master bed speaker, you stopped it within 20 minutes, each time the bedroom tv was on/);
   assert.equal(s.finding.evidence!.length, 7, 'kept days shown too');
   const undo = h.hub.checker.fix(s.id);
   assert.deepEqual(h.autoOf('sounds').conditions, [{ kind: 'device', device: 'bedroom_tv', is: { on: false } }]);
@@ -305,8 +305,8 @@ test('A then B by hand on most days: suggest “when A, do B”, and undo it', a
   const s = h.find('chain');
   assert.ok(s);
   assert.equal(s.id, 'learn:chain:bedroom_tv:off:office_light:off');
-  assert.match(s.finding.title, /When the bedroom oled turns off, turn off the office ceiling\?/);
-  assert.match(s.finding.body, /On 5 of the 6 days the bedroom oled turned off, you did the office ceiling by hand about 2 minutes later, always between 22:03 and 22:07/);
+  assert.match(s.finding.title, /When the bedroom tv turns off, turn off the office ceiling\?/);
+  assert.match(s.finding.body, /On 5 of the 6 days the bedroom tv turned off, you did the office ceiling by hand about 2 minutes later, always between 22:03 and 22:07/);
   const undo = h.hub.checker.fix(s.id);
   const a = h.hub.config.get().automations!.find(x => x.id === 'learned_bedroom_tv_off_office_light')!;
   assert.deepEqual(a.triggers, [{ kind: 'device', device: 'bedroom_tv', to: { on: false } }]);

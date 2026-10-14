@@ -44,7 +44,7 @@ test('what plays, by name and by choice', () => {
   assert.equal(announceMediaName('clip:c1', names), 'Chime');
   assert.equal(announceMediaName('clip:gone', names), 'a clip (gone)');
   assert.equal(announceMediaName('adhan:short', names), 'Short adhan');
-  assert.equal(announceMediaName('Song: Morning', names), 'Morning (Helix)');
+  assert.equal(announceMediaName('Song: Morning', names), 'Morning (your music)');
   assert.equal(announceMediaName('https://example.com/sounds/bell%20one.mp3', names), 'bell one.mp3');
   assert.equal(announceMediaName('https://radio.example.com/', names), 'radio.example.com');
   assert.equal(announceMediaKey('Song: X'), 'song');
@@ -116,7 +116,7 @@ test('prayer options are hidden while prayer times are off, unless the time alre
   assert.equal(prayers(rhythmChoices(false, { kind: 'sun', event: 'sunset' })), 0);
   assert.equal(prayerOn({ prayer: { on: false } }), false);
   assert.equal(prayerOn({ prayer: { on: true } }), true);
-  assert.equal(prayerOn({}), true, 'an older hub that doesn’t say keeps them');
+  assert.equal(prayerOn({}), false, 'a hub that doesn’t say has them off');
 });
 
 test('clips: a name from the file, and only the kinds and sizes the hub takes', () => {

@@ -3,6 +3,7 @@ import { AppState } from 'react-native';
 import * as Network from 'expo-network';
 import { call, hello, HubError } from '../api/client';
 import type { Command, Snapshot } from '../api/types';
+import { setFahrenheit } from '../logic/climate';
 import { addressesOf, learn, type HubAddress, type Route } from '../logic/addresses';
 import { HubLink, type LinkState, type LinkStatus, type SocketLike } from '../logic/link';
 import type { HubConfig } from '../logic/connect';
@@ -331,6 +332,8 @@ export function HubProvider({ children }: { children: ReactNode }) {
     else void hub.recheck();
   }, [save, hub]);
 
+  // Temperatures are shown in the home's unit; the snapshot says which.
+  setFahrenheit(!!snap?.home.fahrenheit);
   const conn = link.state;
   const addresses = useMemo(() => (cfg ? addressesOf(cfg) : []), [cfg]);
   const value = useMemo<HubCtx>(() => ({ cfg, loading, snap, conn, link, route, addresses, toast, pending, connect, forget, setPerson, setAddresses, api, send, act, say, undo, refresh, signIn }),

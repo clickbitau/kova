@@ -340,7 +340,7 @@ export function CustomiseScreen() {
           </Card>
         ) : <Empty compact icon="group" title="No one yet" text="Add the people who live here, so Kova knows who’s home." />}
         <AddField placeholder="Add someone" label="Add someone" onAdd={n => act('POST', '/api/people', { name: n }, `${n} added`)} />
-        <T v="footnote" color={C.stone2} style={{ paddingHorizontal: 4 }}>Who’s home comes from their phone, the router or Warden.</T>
+        <T v="footnote" color={C.stone2} style={{ paddingHorizontal: 4 }}>Who’s home comes from their phone, the router or a network check.</T>
       </Section>
 
       <Section title="Favourites on Now" caption action={favs.length > 1 ? (favOrdering ? 'Done' : 'Reorder') : undefined} onAction={() => { animateLayout(); setFavOrdering(o => !o); }} gap={SP[2]}>

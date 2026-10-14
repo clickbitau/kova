@@ -1,6 +1,7 @@
 // How a device looks and what tapping it does: the same rules as the phone web app (web/phone.html),
 // kept free of React Native so the tests can run them under plain Node.
 import type { Command, Device, DeviceState, Room, Snapshot } from '../api/types';
+import { deg } from './climate.ts';
 import { isSensor } from './sensors.ts';
 import { WHOLE_HOME, WHOLE_HOME_ICON, WHOLE_HOME_NAME } from './zones.ts';
 
@@ -71,7 +72,7 @@ export function routerPanel(s: Pick<Snapshot, 'devices' | 'insights'>, d: Pick<D
       const warn = x.problem === 'predicted to fail';
       return { name: x.name, badge: x.ok ? 'OK' : PROBLEM[x.problem ?? ''] ?? 'Not OK', color: x.ok ? C.green : warn ? C.amber : C.red, icon: x.ok ? 'check_circle' : warn ? 'warning' : 'power_off' };
     }),
-    temps: (R.sensors ?? []).filter(x => x.kind === 'temp').map(x => ({ name: x.name, value: `${x.value}°`, color: x.value >= 80 ? C.red : x.value >= 65 ? C.amber : '#f1efea' })),
+    temps: (R.sensors ?? []).filter(x => x.kind === 'temp').map(x => ({ name: x.name, value: deg(x.value), color: x.value >= 80 ? C.red : x.value >= 65 ? C.amber : '#f1efea' })),
     fans: (R.sensors ?? []).filter(x => x.kind === 'fan').map(x => `${x.name} · ${x.value} rpm`),
     fanMode: R.fanMode ? `${R.fanMode[0].toUpperCase()}${R.fanMode.slice(1)}${R.fanPercent != null ? ` · ${R.fanPercent}%` : ''}` : '',
   };
@@ -90,7 +91,7 @@ export function stateOf(d: Dev): [string, string] {
   if (d.id === 'warden_internet') return d.online === false ? ['Warden not answering', C.red] : d.on ? ['Internet up', C.green] : ['Internet down', C.red];
   if (isSensor(d)) {
     if (d.online === false) return ['Not responding', C.red];
-    const parts = [d.open != null ? (d.open ? 'Open' : 'Closed') : '', d.motion != null ? (d.motion ? 'Motion' : 'Clear') : '', d.temp != null ? `${d.temp}°` : '', d.humidity != null ? `${Math.round(d.humidity)}%` : '', d.power != null ? `${Math.round(d.power)} W` : ''].filter(Boolean);
+    const parts = [d.open != null ? (d.open ? 'Open' : 'Closed') : '', d.motion != null ? (d.motion ? 'Motion' : 'Clear') : '', d.temp != null ? deg(d.temp) : '', d.humidity != null ? `${Math.round(d.humidity)}%` : '', d.power != null ? `${Math.round(d.power)} W` : ''].filter(Boolean);
     return [parts.slice(0, 2).join(' · ') || 'Reporting', d.open || d.motion ? C.amber : C.green];
   }
   if (d.type === 'camera') return d.online === false ? ['Offline', C.red] : ['Live', C.green];
@@ -111,8 +112,8 @@ export function stateOf(d: Dev): [string, string] {
     return [[d.mode || 'On', d.mode === 'Manual' && d.fanLevel ? `speed ${d.fanLevel}` : '', air ? `air ${air[0].toLowerCase()}` : ''].filter(Boolean).join(' · '), C.blue];
   }
   if (d.type === 'climate') {
-    const m = HVAC.find(h => h[0] === d.hvac), room = d.temp != null ? `${d.room === 'whole_home' ? 'inside' : 'room'} ${d.temp}°` : '';
-    return d.on ? [[m?.[1] ?? 'On', d.target != null ? `${d.target}°` : '', room].filter(Boolean).join(' · '), m?.[3] ?? C.blue] : [['Off', room].filter(Boolean).join(' · '), C.stone];
+    const m = HVAC.find(h => h[0] === d.hvac), room = d.temp != null ? `${d.room === 'whole_home' ? 'inside' : 'room'} ${deg(d.temp)}` : '';
+    return d.on ? [[m?.[1] ?? 'On', d.target != null ? deg(d.target) : '', room].filter(Boolean).join(' · '), m?.[3] ?? C.blue] : [['Off', room].filter(Boolean).join(' · '), C.stone];
   }
   // A soundbar or TV Kova controls but can't stream to: on (and its input) or off, never "Playing".
   if (isPlayer(d) && !has(d, 'media')) return d.on ? [`On${inputName(d) ? ` · ${inputName(d)}` : ''}`, C.blue] : ['Off', C.stone];

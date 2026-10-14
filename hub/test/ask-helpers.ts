@@ -63,7 +63,7 @@ export const lastResults = (body: any): any[] => {
 
 /** Extra entries a real home has: the bedroom TV seen through a second and third integration, a ducted AC, a hidden lamp. */
 export const EXTRA: DeviceInfo[] = [
-  { id: 'oled_cast', name: 'Bedroom OLED (Cast)', room: 'unassigned', type: 'tv', integration: 'Google Cast', address: 'demo.oled_cast', capabilities: ['media', 'volume'], state: { on: false, media: null, vol: 20 } },
+  { id: 'oled_cast', name: 'Bedroom TV (Cast)', room: 'unassigned', type: 'tv', integration: 'Google Cast', address: 'demo.oled_cast', capabilities: ['media', 'volume'], state: { on: false, media: null, vol: 20 } },
   { id: 'oled_dlna', name: 'OLED TV', room: 'unassigned', type: 'tv', integration: 'DLNA', address: 'demo.oled_dlna', capabilities: ['media'], state: { on: false, media: null } },
   { id: 'ducted_ac', name: 'AC', room: 'unassigned', type: 'climate', integration: 'Ducted AC', address: 'demo.ac', capabilities: ['onoff', 'climate', 'zones'],
     state: { on: false, hvac: 'cool', target: 23, temp: 25, zones: [{ n: 1, on: true, open: 100 }, { n: 2, on: false, open: 0 }, { n: 3, on: true, open: 50 }, { n: 4, on: false, open: 0 }] } },
@@ -72,7 +72,7 @@ export const EXTRA: DeviceInfo[] = [
 ];
 
 /**
- * The demo home plus EXTRA: the bedroom TV and its Cast entry already combined as "Bedroom OLED", the old lamp hidden,
+ * The demo home plus EXTRA: the bedroom TV and its Cast entry already combined as "Bedroom TV", the old lamp hidden,
  * the gone plug archived. An Ask engine pointed at `modelUrl` (MiniMax-style cloud, or local).
  */
 export async function askHome(opts: { tweak?: (c: HomeConfig) => void; timeoutMs?: number } = {}) {
@@ -82,7 +82,7 @@ export async function askHome(opts: { tweak?: (c: HomeConfig) => void; timeoutMs
     initialConfig: () => {
       const c = demoConfig();
       c.devices = { ...(c.devices ?? {}), bedroom_tv: { hidden: true }, oled_cast: { hidden: true }, old_lamp: { hidden: true }, gone_plug: { archived: true } };
-      c.combined = [{ id: 'bedroom_oled', name: 'Bedroom OLED', members: ['bedroom_tv', 'oled_cast'], hid: ['bedroom_tv', 'oled_cast'] }];
+      c.combined = [{ id: 'bedroom_oled', name: 'Bedroom TV', members: ['bedroom_tv', 'oled_cast'], hid: ['bedroom_tv', 'oled_cast'] }];
       opts.tweak?.(c);
       return c;
     },

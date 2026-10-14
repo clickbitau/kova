@@ -5,6 +5,7 @@ import { waqtCard } from '../src/logic/glance.ts';
 import type { PrayerView } from '../src/api/types.ts';
 
 const tz = 'UTC';
+const h24 = { locale: 'en-GB', hour12: false };
 const at = (h: number, m: number) => Date.UTC(2026, 9, 7, h, m);
 const p = (over: Partial<PrayerView> = {}): PrayerView => ({
   on: true, method: 'MuslimWorldLeague', methods: [{ id: 'MuslimWorldLeague', label: 'Muslim World League' }], madhab: 'shafi', adjust: {}, adhan: {},
@@ -13,7 +14,7 @@ const p = (over: Partial<PrayerView> = {}): PrayerView => ({
 });
 
 test('waqt: the prayer now, the next with a countdown, and its time on the home’s clock', () => {
-  const w = waqtOf(p(), at(17, 22), tz)!;
+  const w = waqtOf(p(), at(17, 22), tz, h24)!;
   assert.deepEqual(w, { current: 'Asr', next: 'Maghrib', caption: 'Maghrib in 42 min', left: 'in 42 min', at: '18:04', soon: false });
   assert.equal(waqtOf(p(), at(17, 55), tz)!.soon, true);
   assert.equal(waqtOf(p(), at(18, 4), tz)!.caption, 'Maghrib now');
@@ -21,7 +22,7 @@ test('waqt: the prayer now, the next with a countdown, and its time on the home�
   assert.equal(waqtOf(p({ next: undefined }), at(17, 22), tz), null);
   assert.equal(waqtOf(undefined, 0, tz), null);
   // After Isha: tomorrow's Fajr, still counting.
-  const late = waqtOf(p({ current: { prayer: 'isha', at: at(19, 20) }, next: { prayer: 'fajr', at: at(28, 50) } }), at(22, 0), tz)!;
+  const late = waqtOf(p({ current: { prayer: 'isha', at: at(19, 20) }, next: { prayer: 'fajr', at: at(28, 50) } }), at(22, 0), tz, h24)!;
   assert.equal(late.caption, 'Fajr in 6 h 50 min');
   assert.equal(late.at, '04:50');
   const card = waqtCard(w)!;
@@ -34,17 +35,26 @@ test('countdowns round up, so it never says 0 min', () => {
   assert.equal(countdown(at(13, 0), at(12, 0)), 'in 1 h');
   assert.equal(countdown(at(13, 5), at(12, 0)), 'in 1 h 5 min');
   assert.equal(countdown(at(12, 0), at(12, 1)), 'now');
-  assert.equal(clockAt(at(9, 7), 'Asia/Kolkata'), '14:37');
+  assert.equal(clockAt(at(9, 7), 'Asia/Kolkata', h24), '14:37');
+  assert.equal(clockAt(at(9, 7), 'Asia/Kolkata', { locale: 'en-US', hour12: true }), '2:37 PM', 'the home’s 12-hour clock');
+  assert.equal(clockAt(at(0, 5), 'UTC', { locale: 'en-US', hour12: false }), '00:05', 'midnight is 00, not 24');
 });
 
 test('today’s times in order with the next marked; adjustments kept to ±30 min', () => {
-  const t = todayTimes(p(), tz);
+  const t = todayTimes(p(), tz, h24);
   assert.deepEqual(t.map(x => `${x.label} ${x.at}${x.next ? ' next' : ''}`), ['Fajr 04:50', 'Sunrise 06:10', 'Dhuhr 12:05', 'Asr 15:30', 'Maghrib 18:04 next', 'Isha 19:20']);
-  assert.deepEqual(todayTimes(p({ on: false }), tz), []);
+  assert.deepEqual(todayTimes(p({ on: false }), tz, h24), []);
   assert.deepEqual(withAdjust({ fajr: 2 }, 'isha', 45), { fajr: 2, isha: 30 });
   assert.deepEqual(withAdjust({ fajr: 2 }, 'fajr', 0), {});
   assert.equal(adjustSummary({ fajr: 5, isha: -10 }), 'Fajr 5 min later · Isha 10 min earlier');
   assert.equal(adjustSummary({}), 'None');
   assert.equal(prayerSub(p({ madhab: 'hanafi' })), 'Muslim World League · Hanafi Asr');
   assert.match(prayerSub(p({ on: false })), /^Off/);
+});
+
+test('prayer is opt-in: off unless the hub says it is on', async () => {
+  const { prayerOn } = await import('../src/logic/prayer.ts');
+  assert.equal(prayerOn(undefined), false);
+  assert.equal(prayerOn({}), false);
+  assert.equal(prayerOn({ prayer: { on: true } }), true);
 });

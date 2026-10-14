@@ -1,4 +1,5 @@
 import type { Hub } from '../hub.ts';
+import { dateWords, homeHour12, homeLocale } from '../util/locale.ts';
 import type { Device, Mode, Targets } from '../model/types.ts';
 import type { LogEntry } from '../store/db.ts';
 import { clock, localDate, localHour, atLocal, localStamp, stampWords } from '../util/time.ts';
@@ -29,7 +30,7 @@ const DEVICE_EVENT_ICON: Record<string, string> = { ring: 'doorbell', person: 'p
 export function timelineRows(hub: Hub, events: import('../engine/rooms.ts').RoomEvent[]) {
   const cfg = hub.config.get(), tz = cfg.timezone, today = localDate(hub.engine.now(), tz);
   return events.map(e => ({
-    id: e.id, at: e.at, t: localDate(e.at, tz) === today ? clock(e.at, tz) : `${new Date(e.at).toLocaleDateString('en-AU', { weekday: 'short', timeZone: tz })} ${clock(e.at, tz)}`,
+    id: e.id, at: e.at, t: localDate(e.at, tz) === today ? clock(e.at, tz) : `${dateWords(e.at, tz, { weekday: 'short' })} ${clock(e.at, tz)}`,
     room: e.room, roomName: cfg.rooms.find(r => r.id === e.room)?.name ?? null, device: e.device, kind: e.kind, source: e.source, outdoor: e.outdoor, what: e.what,
     icon: e.kind === 'opened' || e.kind === 'closed' ? 'sensor_door' : DEVICE_EVENT_ICON[e.kind] ?? 'videocam',
     frame: hub.security.hasFrame(e.device, e.id) ? `/api/frames/${encodeURIComponent(e.device)}/${e.id}` : null,
@@ -172,7 +173,7 @@ export function snapshot(hub: Hub) {
     return `${room.name} ${d.name.toLowerCase()}${e.what.slice(d.name.length)}`;
   };
   const activity = feed.map(e => ({
-    id: e.id, ts: e.ts, t: localDate(e.ts, tz) === today ? clock(e.ts, tz) : `${new Date(e.ts).toLocaleDateString('en-AU', { weekday: 'short', timeZone: tz })} ${clock(e.ts, tz)}`,
+    id: e.id, ts: e.ts, t: localDate(e.ts, tz) === today ? clock(e.ts, tz) : `${dateWords(e.ts, tz, { weekday: 'short' })} ${clock(e.ts, tz)}`,
     type: e.feed!, icon: feedIcon(e), device: e.device,
     // Who did it, by their account: "Sam turned off Lounge lights".
     what: e.cause.by && ['user', 'assistant', 'overlay'].includes(e.cause.kind) ? byline(e.cause.by.name, withRoom(e), e.cause) : e.what,
@@ -184,8 +185,7 @@ export function snapshot(hub: Hub) {
   return {
     home: {
       name: cfg.name, timezone: tz, now, nowHour: localHour(now, tz), date: today,
-      // en-AU writes September as "Sept"; the design (and every other month) uses three letters.
-      dateLabel: new Date(now).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'short', timeZone: tz }).replace(/\bSept\b/, 'Sep'),
+      dateLabel: dateWords(now, tz, { weekday: 'long', day: 'numeric', month: 'short' }),
       clock: clock(now, tz),
       // Where the home is, for the phone app's arriving and leaving (it watches a circle around this).
       location: cfg.location ? { latitude: cfg.location.latitude, longitude: cfg.location.longitude, ...(cfg.location.radiusM !== undefined ? { radiusM: cfg.location.radiusM } : {}), ...(cfg.location.source ? { source: cfg.location.source } : {}), ...(cfg.location.updatedAt !== undefined ? { updatedAt: cfg.location.updatedAt } : {}), ...(cfg.location.provider ? { provider: cfg.location.provider } : {}) } : { latitude: cfg.latitude, longitude: cfg.longitude },
@@ -195,6 +195,8 @@ export function snapshot(hub: Hub) {
       prayerMethod: cfg.prayerMethod ?? 'MuslimWorldLeague', pauseForDoorbell: cfg.pauseForDoorbell !== false, address: cfg.address ?? null,
       // Whether Kova learns from what people do by hand (engine/learn.ts).
       learnFromYou: cfg.learnFromYou !== false,
+      // How the home writes dates, times and temperatures; and whether its owner still has setup to do.
+      locale: homeLocale(cfg), localeSet: !!cfg.locale, hour12: homeHour12(cfg), fahrenheit: !!cfg.fahrenheit, firstRun: !!cfg.firstRun,
       // Today's sunrise and sunset as local hours, for day strips.
       sun: (() => { const t = SunCalc.getTimes(new Date(now), cfg.latitude, cfg.longitude); const h = (d: Date) => (isNaN(+d) ? null : localHour(+d, tz)); return { rise: h(t.sunrise), set: h(t.sunset) }; })(),
     },

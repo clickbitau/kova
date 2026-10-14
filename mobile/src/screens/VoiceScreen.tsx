@@ -10,6 +10,7 @@ import { Screen } from '../ui/Screen';
 import { T } from '../ui/Text';
 import { canCopy, copy } from '../native/clipboard';
 import { haptic } from '../ui/motion';
+import { deg, fromDisplay, isFahrenheit, toDisplay } from '../logic/climate';
 
 /**
  * Settings → Voice and other apps: the room ACs Kova publishes (one per room a ducted zone serves), the steps to do
@@ -43,12 +44,13 @@ export function VoiceScreen() {
     );
   }
   const set = rc.settings;
-  const step = (key: 'coolTo' | 'heatTo', d: number) => {
-    const r = comfortStep(set, key, d);
+  // A step is half a degree C, or a whole degree F where the home reads F.
+  const step = (key: 'coolTo' | 'heatTo', dir: 1 | -1) => {
+    const r = comfortStep(set, key, isFahrenheit() ? fromDisplay(toDisplay(set[key]) + dir) - set[key] : dir * 0.5);
     if (!r) return;
     if ('error' in r) { say(r.error, { error: true }); return; }
     const v = r.body[key]!;
-    void act('PUT', '/api/room-climate', r.body, `${key === 'coolTo' ? 'Cools' : 'Heats'} to ${v}°`);
+    void act('PUT', '/api/room-climate', r.body, `${key === 'coolTo' ? 'Cools' : 'Heats'} to ${deg(v)}`);
   };
   const season = seasonLine(rc);
   const clash = clashText([...new Set(units.map(d => d.integration).filter(Boolean))]);
@@ -103,10 +105,10 @@ export function VoiceScreen() {
 
       <Group title="Comfort" note={`${season.title}. ${season.text}`}>
         {([['coolTo', 'Cool to', 'ac_unit', C.blue], ['heatTo', 'Heat to', 'local_fire_department', C.amber]] as const).map(([k, label, icon, color], i) => (
-          <Row key={k} first={i === 0} icon={icon} iconFg={color} title={label} sub={`${set[k]}°`}
+          <Row key={k} first={i === 0} icon={icon} iconFg={color} title={label} sub={deg(set[k])}
             right={<View style={{ flexDirection: 'row', gap: SP[2] }}>
-              <IconButton icon="remove" label={`${label}, lower`} size={40} onPress={() => step(k, -0.5)} />
-              <IconButton icon="add" label={`${label}, higher`} size={40} onPress={() => step(k, 0.5)} />
+              <IconButton icon="remove" label={`${label}, lower`} size={40} onPress={() => step(k, -1)} />
+              <IconButton icon="add" label={`${label}, higher`} size={40} onPress={() => step(k, 1)} />
             </View>} />
         ))}
       </Group>

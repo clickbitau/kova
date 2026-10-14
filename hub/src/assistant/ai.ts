@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { dateWords } from '../util/locale.ts';
 import { randomUUID } from 'node:crypto';
 import type { Engine } from '../engine/engine.ts';
 import type { Registry } from '../devices/registry.ts';
@@ -225,7 +226,7 @@ export const TOOLS = [
   },
   {
     name: 'find_music',
-    description: 'Look up the owner\'s own audio in their Helix library by name (a song, album, artist or playlist, e.g. an adhan they added, "Fajr adhan"). Returns the media name to play it by, and for a song or a single the media to use in an announce step (announce). Use it whenever the owner says they added or have something in Helix; never ask them for a name they already gave.',
+    description: 'Look up the owner\'s own audio in their Helix library by name (a song, album, artist or playlist, e.g. a recording they added, "Rain on a tin roof"). Returns the media name to play it by, and for a song or a single the media to use in an announce step (announce). Use it whenever the owner says they added or have something in Helix; never ask them for a name they already gave.',
     parameters: { type: 'object', properties: { name: { type: 'string', description: 'The words the owner used' } }, required: ['name'] },
   },
   {
@@ -248,7 +249,7 @@ export const TOOLS = [
     description: `Create a home automation: "when" (triggers) starts it, every "if" (condition) must hold, then "then" (actions) run in order. It is saved and runs on its own from then on — only use it when the user asks for something ongoing or scheduled, not for a one-off change (use set_devices). Shapes:
 when: {kind:'time', at:'HH:MM' or {kind:'time', at:'HH:MM'} or {kind:'sun', event:'sunrise|sunset|dawn|dusk', offsetMin?:n (minutes, negative = before, e.g. -15)} or {kind:'prayer', prayer:'fajr|sunrise|dhuhr|asr|maghrib|isha', offsetMin?:n}, days?:[0-6, 0=Sunday, empty=every day]} — e.g. 15 minutes before sunset is {kind:'time', at:{kind:'sun', event:'sunset', offsetMin:-15}} | {kind:'device', device:id, to?:{on?, online?, mode?, hvac?, input?, playing?, muted?, motion?, open?}, from?:{...}, forSec?:n} | {kind:'numeric', device:id, field:'temp|target|power|energy|battery|bri|vol|grid|load|humidity|lux|pm25', above?:n, below?:n} (sensors included) | {kind:'event', device:id, event:string} | {kind:'room', room:roomId, event:'person|motion|ring|vehicle|animal|package|sound|opened|closed'} (anything a camera or sensor in that room notices; 'motion' includes a person seen) | {kind:'every', minutes:n} | {kind:'presence', event:'arrives|leaves|first-arrives|last-leaves', person?:id} | {kind:'mode', mode:id} | {kind:'overlay', overlay:id, event:'starts|ends'} | {kind:'hub', event:'start'} | {kind:'once', at:'YYYY-MM-DDTHH:MM' in the home's time} or {kind:'once', inMinutes:n} — ONE time only
 if: {kind:'device', device:id, is:{on?...}} | {kind:'numeric', device:id, field, above?, below?} | {kind:'time', after?/before?:'HH:MM' or a sun/prayer object as above, days?} | {kind:'presence', who:'anyone|no-one|person id', home:boolean} | {kind:'mode', modes:[id]} | {kind:'overlay', overlay?:id, active:boolean} | {kind:'room', room:roomId, active:boolean, withinMin?:n} (a person, motion or a door in that room in the last withinMin minutes, default 10) | {kind:'all|any|not', conditions:[...]}
-then: {kind:'announce', media:'<source name | clip:<id> | adhan:<key> | https URL | Song: <Helix title>>', vol:15, targets:{<speaker id>:{}, …}, pause?:[<player ids to pause, e.g. a Helix box>], restore:true, mediaFor?:{fajr:'<media>'}} — play something over speakers (an announcement, a call to prayer, a chime) and then put each speaker back as it was (volume, and what it was playing, resumed where possible); vol is the level the owner says, each speaker plays it × its own announcement loudness; list EVERY speaker it should play on in targets (or a speaker group); TVs and Helix boxes go in pause, never in targets; leave media out when the user hasn't said which audio and none fits, and ask them | {kind:'set', targets:{deviceId:{on:false, bri:50, ...same fields as set_devices + set}, or 'type:light'|'type:media'|'type:<device type>'|'room:<room id>' to reach EVERY matching device — including devices added later (use "type:light" for "all lights")}} | {kind:'delay', seconds:n} | {kind:'wait', until:condition, timeoutSec?:n, stopOnTimeout?:bool} | {kind:'notify', message:string, title?:string, people?:[ids]} | {kind:'overlay', overlay:id, op:'start|end'} | {kind:'if', conditions:[...], then:[...], else?:[...]} | {kind:'repeat', times:n, actions:[...]} | {kind:'ramp', targets:{same target map as set}, field:'bri'|'vol'|'target', to:number, from?:number, overSec:number, stepSec?:number} — gradual changes like brightness climbing over an hour | {kind:'run', automation:id} | {kind:'stop'}
+then: {kind:'announce', media:'<source name | clip:<id> | adhan:<key> | https URL | Song: <Helix title>>', vol:15, targets:{<speaker id>:{}, …}, pause?:[<player ids to pause, e.g. a TV box playing a film>], restore:true, mediaFor?:{fajr:'<media>'}} — play something over speakers (an announcement, a call to prayer, a chime) and then put each speaker back as it was (volume, and what it was playing, resumed where possible); vol is the level the owner says, each speaker plays it × its own announcement loudness; list EVERY speaker it should play on in targets (or a speaker group); TVs and Helix boxes go in pause, never in targets; leave media out when the user hasn't said which audio and none fits, and ask them | {kind:'set', targets:{deviceId:{on:false, bri:50, ...same fields as set_devices + set}, or 'type:light'|'type:media'|'type:<device type>'|'room:<room id>' to reach EVERY matching device — including devices added later (use "type:light" for "all lights")}} | {kind:'delay', seconds:n} | {kind:'wait', until:condition, timeoutSec?:n, stopOnTimeout?:bool} | {kind:'notify', message:string, title?:string, people?:[ids]} | {kind:'overlay', overlay:id, op:'start|end'} | {kind:'if', conditions:[...], then:[...], else?:[...]} | {kind:'repeat', times:n, actions:[...]} | {kind:'ramp', targets:{same target map as set}, field:'bri'|'vol'|'target', to:number, from?:number, overSec:number, stepSec?:number} — gradual changes like brightness climbing over an hour | {kind:'run', automation:id} | {kind:'stop'}
 runMode: what a second start does while it's still running — single (ignore), restart (start over), queued (run after), parallel (alongside). Default single.
 One-time schedules: anything asked for once at a later time ("turn the AC off at 3pm", "in 20 minutes", "tomorrow at 7 open the blinds", "remind me tonight") is create_automation with only a once trigger — it runs once, then switches itself off. Name it after what it does and when ("AC off at 15:00"). Never use a daily time trigger for a one-off.
 Prefer ONE automation per intent: several triggers plus if/else branches beat overlapping automations. Check the Automations list first — update_automation an existing one rather than adding another.
@@ -1159,11 +1160,11 @@ export class Toolbox {
           if (name === '') return JSON.stringify({ ok: false, error: 'Give it a name' });
           const favourite = typeof args.favourite === 'boolean' ? args.favourite : undefined;
           const hidden = typeof args.hidden === 'boolean' ? args.hidden : undefined;
-          // A ducted AC's zones by number: { "1": "Living", "2": "Theatre" } (an empty name clears one).
+          // A ducted AC's zones by number: { "1": "Living", "2": "Study" } (an empty name clears one).
           let zoneNames: Record<string, string> | undefined;
           const zn = listArg(args.zoneNames);
           if (zn !== undefined && zn !== null) {
-            if (typeof zn !== 'object' || Array.isArray(zn) || Object.keys(zn).some(n => !/^[1-9]\d?$/.test(n))) return JSON.stringify({ ok: false, error: 'zoneNames is { "1": "Living", "2": "Theatre" } by zone number' });
+            if (typeof zn !== 'object' || Array.isArray(zn) || Object.keys(zn).some(n => !/^[1-9]\d?$/.test(n))) return JSON.stringify({ ok: false, error: 'zoneNames is { "1": "Living", "2": "Study" } by zone number' });
             if (!d.capabilities.includes('zones')) return JSON.stringify({ ok: false, error: `${d.name} has no zones` });
             const have = new Set((d.state.zones ?? []).map(z => String(z.n)));
             const bad = Object.keys(zn).filter(n => have.size && !have.has(n));
@@ -1607,7 +1608,7 @@ export function honestReply(text: string, o: AskOutcome, opts: { unfinished?: bo
   if (opts.unfinished) lines.push(o.done.length || o.couldnt.length ? 'I didn’t get to the end of that. Here’s where it stands:' : 'I didn’t get to the end of that, and nothing was changed.');
   else if (problems && !opts.error) lines.push(o.done.length ? 'Not everything worked.' : 'That didn’t work.');
   // The model's own words stay when nothing failed. When something did, only its questions and what it says didn't
-  // happen stay: a summary sentence ("the TV is in Theatre and the AC is combined") can claim what the failure undid,
+  // happen stay: a summary sentence ("the TV is in the study and the AC is combined") can claim what the failure undid,
   // and the hub's Done/Couldn't lists below say it right.
   const sentences = (s: string) => s.replace(OVERCLAIM, '').split(/(?<=[.!?])\s+|\n+/).map(x => x.trim()).filter(Boolean);
   // The names in what failed ("Downlights", "AC", "office_cam"): a sentence of the model's that names one of them, and
@@ -1800,7 +1801,7 @@ export class AiAssistant {
       lines.push(`Activity, last 7 days: ${entries.length} events (${Object.entries(counts).map(([k, n]) => `${k} ${n}`).join(', ') || 'none'}).`);
       // Entries name devices and rooms, so the detail only goes when names are shared.
       if (share.names) {
-        const recent = entries.slice(-25).map(e => `${new Date(e.ts).toLocaleDateString('en-AU', { weekday: 'short', timeZone: tz })} ${clock(e.ts, tz)} ${e.what} (${e.cause.label})`);
+        const recent = entries.slice(-25).map(e => `${dateWords(e.ts, tz, { weekday: 'short' })} ${clock(e.ts, tz)} ${e.what} (${e.cause.label})`);
         if (recent.length) lines.push('Recent activity:', ...recent);
       }
       shared.push('activity history');

@@ -23,7 +23,7 @@ export type Stack = {
   Browsers: undefined;
   /** More → People and access: members, their roles and devices, invites (the owner); or your own account. */
   People: undefined;
-  /** More → Settings: where the home is, its timezone and prayer method, behaviours. */
+  /** More → Settings: where the home is, its timezone, behaviours. */
   Settings: undefined;
   /** Settings → Voice and other apps: room ACs for Google Home, Alexa and Apple Home, comfort, pairing. */
   Voice: undefined;

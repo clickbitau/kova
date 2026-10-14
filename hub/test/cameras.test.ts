@@ -140,7 +140,7 @@ test('alerts: cooldown and de-duplication, stronger covers weaker, quiet hours, 
     // Quiet hours hold back what isn't urgent: with someone home, a person at the door waits; the doorbell doesn't.
     assert.equal((await app.inject({ method: 'PUT', url: '/api/security/settings', payload: { quiet: { from: '22:00', to: '07:00' } } })).statusCode, 200);
     assert.equal((await app.inject({ method: 'PUT', url: '/api/security/settings', payload: { quiet: { from: 'late', to: '07:00' } } })).statusCode, 400);
-    await t.hub.engine.setPresence('methel', true, 'test');
+    await t.hub.engine.setPresence('alex', true, 'test');
     t.clock.t = at(23);
     await t.event('doorbell', 'person');
     assert.equal(t.sent.length, 2, 'quiet hours');
@@ -239,28 +239,28 @@ test('automation ideas from rooms, cameras and sensors: generic by room and kind
 
 test('presence: an indoor camera is only a weak “someone’s still in” hint, never who; outdoor cameras don’t count', async () => {
   const t = await testHub(12);
-  const presence = new Presence(t.hub, { pingHosts: { methel: '10.255.255.1' }, probeTimeoutMs: 50, awayAfterMin: 0, pollSec: 0 });
+  const presence = new Presence(t.hub, { pingHosts: { alex: '10.255.255.1' }, probeTimeoutMs: 50, awayAfterMin: 0, pollSec: 0 });
   presence.start();
   try {
     // The phone drops off the network, but the office camera just saw someone: not away yet.
     t.hub.reg.deviceEvent('office_cam', 'person');
     await presence.poll();
-    assert.equal(t.hub.engine.people.methel.home, true);
-    assert.ok(t.hub.engine.people.methel.evidence!.some(e => e.source === INDOOR && e.kind === 'camera' && e.weight < 0.2));
+    assert.equal(t.hub.engine.people.alex.home, true);
+    assert.ok(t.hub.engine.people.alex.evidence!.some(e => e.source === INDOOR && e.kind === 'camera' && e.weight < 0.2));
     // Twenty minutes later the hint has gone: away.
     t.clock.t = at(12.35);
     await presence.poll();
-    assert.equal(t.hub.engine.people.methel.home, false);
+    assert.equal(t.hub.engine.people.alex.home, false);
     // Now away: a person seen inside doesn't bring anyone home (it can't say who).
     t.hub.reg.deviceEvent('office_cam', 'person');
     await presence.poll();
-    assert.equal(t.hub.engine.people.methel.home, false);
+    assert.equal(t.hub.engine.people.alex.home, false);
     // Outdoor cameras and doorbells don't count at all.
-    await t.hub.engine.setPresence('methel', true, 'test');
+    await t.hub.engine.setPresence('alex', true, 'test');
     t.clock.t = at(13);
     t.hub.reg.deviceEvent('doorbell', 'person');
     await presence.poll();
-    assert.equal(t.hub.engine.people.methel.home, false);
+    assert.equal(t.hub.engine.people.alex.home, false);
   } finally { presence.stop(); await t.hub.stop(); }
 });
 

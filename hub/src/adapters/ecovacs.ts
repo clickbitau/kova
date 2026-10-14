@@ -1,3 +1,4 @@
+import { homeOffsetMinutes } from '../util/locale.ts';
 import { constants, createHash, createPublicKey, publicEncrypt } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -334,7 +335,7 @@ export class EcovacsClient {
     type Resp = { ret?: string; errno?: unknown; error?: string; debug?: string; resp?: { body?: { code?: number; msg?: string; data?: T } } };
     const r = await this.call<Resp>('iot/devmanager.do', () => ({
       cmdName,
-      payload: { header: { pri: '1', ts: String(Date.now()), tzm: 480, ver: '0.0.50' }, body: data ? { data } : {} },
+      payload: { header: { pri: '1', ts: String(Date.now()), tzm: homeOffsetMinutes(), ver: '0.0.50' }, body: data ? { data } : {} },
       payloadType: 'j', td: 'q', toId: dev.did, toRes: dev.resource, toType: dev.class,
     }), () => ({ mid: dev.class, did: dev.did, td: 'q', u: this.session!.userId, cv: '1.67.3', t: 'a', av: '1.3.1' }));
     if (r.ret !== 'ok') {

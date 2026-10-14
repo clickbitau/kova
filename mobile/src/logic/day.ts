@@ -26,3 +26,15 @@ export function dayBands(s: Pick<Snapshot, 'day' | 'modes' | 'home'>): DayBand[]
   }
   return out;
 }
+
+/** A date short, in the home's language: "Wed, Sep 30" or "Wed 30 Sep". Falls back to the hub's own words when it can't. */
+export function shortDate(h: Pick<Snapshot['home'], 'date' | 'dateLabel' | 'locale'>): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(h.date ?? '');
+  if (m) {
+    try { return new Intl.DateTimeFormat(h.locale || undefined, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(Date.UTC(+m[1]!, +m[2]! - 1, +m[3]!, 12))); } catch { /* an engine without this locale */ }
+  }
+  return h.dateLabel;
+}
+
+/** The hour marks under a day strip, as the home writes hours: "06", or "6 AM" with 12-hour clocks. */
+export const hourMarks = (hour12?: boolean): string[] => [0, 6, 12, 18, 24].map(h => !hour12 ? String(h).padStart(2, '0') : h % 24 === 0 ? '12 AM' : h === 12 ? '12 PM' : h > 12 ? `${h - 12} PM` : `${h} AM`);

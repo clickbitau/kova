@@ -7,9 +7,11 @@ import { useHub, useSnap } from '../state/hub';
 import { useNav } from '../navigation';
 import { arriveLeaveOn, startArriveLeave, stopArriveLeave } from '../native/arrive-leave';
 import { forgetPushToken, pushToken, savedPushToken } from '../native/push';
+import { langName, phoneLang, useVoiceLangs, voiceReady } from '../native/voice';
+import { SPEECH_LANGS } from '../logic/speech';
 import { endHomeActivity, liveActivityRunning, liveActivitySupported, startHomeActivity } from '../native/extensions';
 import { Icon } from '../ui/Icon';
-import { Avatar, Button, Card, Empty, Group, IconWell, Press, Row, Section, SwitchRow } from '../ui/kit';
+import { Avatar, Button, Card, Empty, Group, IconWell, Press, Row, Section, Sheet, SwitchRow } from '../ui/kit';
 import { animateLayout } from '../ui/motion';
 import { locationPlan } from '../logic/presence';
 import { meOf, presenceKeyFrom } from '../logic/roles';
@@ -42,11 +44,15 @@ export function ThisPhoneScreen() {
     setAppLock(on);
   };
   const [confirm, setConfirm] = useState(false);
+  // Talking to Ask Kova: this phone's language, and any others added.
+  const { extra: added, setExtra: setAdded } = useVoiceLangs();
+  const [langs, setLangs] = useState(false);
+  const toggleLang = (tag: string) => setAdded(added.includes(tag) ? added.filter(x => x !== tag) : [...added, tag]);
   // Signed in as one of the home's people (household accounts): this phone is theirs, and that's not a choice here.
   const account = meOf(s);
   const signedInAs = account.via === 'session' ? account.personId : null;
   const me = s.people.find(p => p.id === (signedInAs ?? cfg?.personId));
-  // Warden or the router may already know when this person is home: then location is only an extra.
+  // The router or a network check may already know when this person is home: then location is only an extra.
   const plan = locationPlan(me);
   const [extra, setExtra] = useState(false);
 
@@ -169,6 +175,7 @@ export function ThisPhoneScreen() {
         <SwitchRow first icon="notifications" title="Notifications" sub="On this phone" on={push} busy={busy === 'push'} onChange={v => void togglePush(v)} />
         <Row icon="tune" iconFg={C.amber} title="What you’re told about" sub="Each kind, and how often: every time, now and then, or never" onPress={() => nav.navigate('NotifyPrefs')} />
         {lockWith ? <SwitchRow icon="lock" title={`Lock with ${lockWith.replace(/^your /, '').replace(/^./, c => c.toUpperCase())}`} sub={`Kova asks for ${lockWith} when it opens, and after a minute away`} on={appLock} onChange={v => void toggleAppLock(v)} /> : null}
+        {voiceReady ? <Row icon="mic" iconFg={C.blue} title="Speech languages" sub={added.length ? [langName(phoneLang()), ...added.map(langName)].join(', ') : `${langName(phoneLang())}. Add another to talk to Kova in.`} onPress={() => setLangs(true)} /> : null}
         {canLock ? <SwitchRow icon="lock" title="Home on the lock screen" sub="The mode, lights on and what’s next, on the lock screen and in the Dynamic Island" on={lock} onChange={v => void toggleLock(v)} /> : null}
       </Group>
 
@@ -185,6 +192,17 @@ export function ThisPhoneScreen() {
         </>
       )}
       {disclosure}
+      <Sheet open={langs} onClose={() => setLangs(false)} label="Speech languages">
+        <T v="title">Speech languages</T>
+        <T v="footnote" color={C.stone}>{`Kova listens in ${langName(phoneLang())}. Add another and a button in Ask Kova switches between them.`}</T>
+        <Group>
+          {SPEECH_LANGS.map((l, i) => (
+            <Row key={l.tag} first={i === 0} title={l.name} sub={l.tag}
+              right={l.tag === phoneLang() || added.includes(l.tag) ? <Icon name="check" size={20} color={C.amber} /> : undefined}
+              onPress={l.tag === phoneLang() ? undefined : () => toggleLang(l.tag)} />
+          ))}
+        </Group>
+      </Sheet>
     </Screen>
   );
 }

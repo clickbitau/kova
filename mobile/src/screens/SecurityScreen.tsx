@@ -11,6 +11,7 @@ import { Avatar, Card, Empty, ExpandRow, Group, IconWell, Press, PulseDot, Secti
 import { decisionText, EV_WORD, quietText, roomAlertLine, securityStatus } from '../logic/sensors';
 import { isCamera, isSensor } from '../logic/sensors';
 import { Screen } from '../ui/Screen';
+import { features, meOf } from '../logic/roles';
 import { T } from '../ui/Text';
 import { Appear } from '../ui/motion';
 import { liveSupport } from '../logic/live';
@@ -72,7 +73,8 @@ export function SecurityScreen() {
   const frameOf = (id: string) => sec?.recent.find(e => e.device === id && e.frame)?.frame ?? null;
   const cams = Object.values(all).filter(d => d.type === 'camera' && !d.hidden);
   const internet = all.warden_internet;
-  const warden = s.integrations.find(i => i.id === 'warden');
+  // The integration behind the network (the internet device's own, else Warden), for the Network section's name and note.
+  const net = s.integrations.find(i => i.id === internet?.integration) ?? s.integrations.find(i => i.id === 'warden');
   const events = s.activity.filter(a => a.type === 'people' && ['doorbell', 'person', 'person_pin_circle', 'directions_walk'].includes(a.icon)).slice(0, 8);
   // Snapshot images change as events happen: bust the cache every minute.
   const [tick, setTick] = useState(0);
@@ -101,7 +103,7 @@ export function SecurityScreen() {
           ))}
         </View>
       ) : (
-        <Empty compact icon="videocam" title="No cameras yet" text="Link Google Nest to see your doorbell and cameras here." action="Set up" onAction={() => nav.navigate('Integration', { id: 'nest' })} />
+        <Empty compact icon="videocam" title="No cameras yet" text="Add a camera or doorbell to see it here." {...(features(meOf(s)).integrations ? { action: 'Add', onAction: () => nav.navigate('IntegrationAdd') } : {})} />
       )}
 
       <Section title="Today">
@@ -163,15 +165,15 @@ export function SecurityScreen() {
         </Section>
       ) : null}
 
-      {internet || warden ? (
+      {internet || net ? (
         <Section title="Network">
           <Card pad={SP[4]} style={{ gap: SP[2] }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3] }}>
               <IconWell icon="router" color={netBad ? C.red : C.green} size={36} />
-              <T v="headline" style={{ flex: 1, minWidth: 0 }}>{internet ? stateOf(internet)[0] : 'Warden'}</T>
+              <T v="headline" style={{ flex: 1, minWidth: 0 }}>{internet ? stateOf(internet)[0] : net?.name ?? 'Network'}</T>
               {internet ? <PulseDot color={netBad ? C.red : C.green} size={7} /> : null}
             </View>
-            {warden?.note ? <T v="footnote" color={C.stone}>{warden.note}</T> : null}
+            {net?.note ? <T v="footnote" color={C.stone}>{net.note}</T> : null}
           </Card>
         </Section>
       ) : null}

@@ -11,7 +11,8 @@
 //  - if the app was closed, the answer is in the hub's conversation (GET /api/ask/history) and shows when it opens;
 //  - "Can't reach the hub" is only said when nothing answers; anything else says what happened.
 
-import type { AskReply } from '../api/types.ts';
+import type { AskReply, Snapshot } from '../api/types.ts';
+import { has, isLight } from './devices.ts';
 
 export interface AskStep { tool: string; label: string; status: 'working' | 'ok' | 'failed'; note?: string }
 export type EngineKind = 'builtin' | 'local' | 'cloud';
@@ -151,4 +152,24 @@ export function mergeHistory(chat: ChatMsg[], turns: AskTurn[]): ChatMsg[] {
   }
   // On screen in the order they happened; messages without a time (the greeting) stay first.
   return out.map((m, i) => ({ m, i })).sort((a, b) => (a.m.ts ?? 0) - (b.m.ts ?? 0) || a.i - b.i).map(x => x.m);
+}
+
+/**
+ * What to try asking, from the home's own rooms and lights ("Turn off the Kitchen", "Lamp to 30%", "Why is the Porch on?"),
+ * with plain questions to fill in when the home has none of those yet.
+ */
+export function askSuggestions(s: Pick<Snapshot, 'rooms' | 'devices'>): string[] {
+  const shown = s.devices.filter(d => !d.hidden && !d.archived);
+  const lights = shown.filter(isLight);
+  const room = s.rooms.find(r => lights.some(d => d.room === r.id)) ?? s.rooms.find(r => shown.some(d => d.room === r.id));
+  const dim = lights.find(d => d.type === 'dimmer' || has(d, 'brightness'));
+  const lit = lights.find(d => d.state.on);
+  return [
+    'What’s happening tonight?', 'Who’s home?',
+    ...(room ? [`Turn off the ${room.name.toLowerCase()}`] : []),
+    ...(dim ? [`${dim.name} to 30%`] : []),
+    ...(lit ? [`Why is the ${lit.name.toLowerCase()} on?`] : []),
+    ...(room || dim || lit ? [] : ['What’s on?']),
+    'I’m leaving',
+  ];
 }

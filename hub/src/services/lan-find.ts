@@ -7,12 +7,12 @@ import { CastChannel, NS } from '../adapters/cast/channel.ts';
 // directly: the hub's own networks, a network the owner names, and (when Warden is linked) every device
 // Warden sees online.
 
-/** Addresses in a "10.10.30.0/24"-style network (/22 to /30), or a single address. */
+/** Addresses in a "192.168.20.0/24"-style network (/22 to /30), or a single address. */
 export function expandSubnet(subnet: string): string[] {
   const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?:\/(\d{1,2}))?$/.exec(subnet.trim());
-  if (!m) throw new Error(`“${subnet}” isn't a network like 10.10.30.0/24`);
+  if (!m) throw new Error(`“${subnet}” isn't a network like 192.168.20.0/24`);
   const parts = m.slice(1, 5).map(Number);
-  if (parts.some(p => p > 255)) throw new Error(`“${subnet}” isn't a network like 10.10.30.0/24`);
+  if (parts.some(p => p > 255)) throw new Error(`“${subnet}” isn't a network like 192.168.20.0/24`);
   const bits = m[5] ? Number(m[5]) : 32;
   if (bits < 22 || bits > 32) throw new Error('Search a /22 or smaller (up to 1024 addresses)');
   const ip = ((parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]) >>> 0;

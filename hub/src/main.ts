@@ -16,7 +16,8 @@ import { Weather } from './services/weather.ts';
 import { HomeKitBridge } from './bridges/homekit.ts';
 import { MatterBridge } from './bridges/matter-bridge.ts';
 import { AirCastBridge } from './bridges/aircast.ts';
-import { demoConfig, demoDevices, DEMO_SOLAR } from './seed/demo-home.ts';
+import { demoAt, demoConfig, demoDevices } from './seed/demo-home.ts';
+import { newHome, systemZone } from './seed/default-home.ts';
 import type { Adapter } from './adapters/sdk.ts';
 import { Presence } from './services/presence.ts';
 import { HelixLink } from './services/helix-link.ts';
@@ -54,16 +55,18 @@ try {
   else console.error(`Can't write to the data folder ${dataDir} (${(err as Error).message}). It must belong to the user Kova runs as${process.getuid ? ` (uid ${process.getuid()})` : ''}.`);
   process.exit(1);
 }
-// Real devices come from integrations.json (see src/tools/import-ha.ts). Without one, run the demo home.
+// Real devices come from integrations.json (set up in the app, or imported). The demo home (virtual devices, a
+// made-up family) runs only when asked for: KOVA_DEMO=1. A brand-new hub starts as an empty home that setup fills.
 const integrationsFile = resolve(dataDir, 'integrations.json');
 const integrations = loadIntegrations(integrationsFile);
-const demo = env.KOVA_DEMO ? env.KOVA_DEMO !== '0' : !integrations;
+const demo = env.KOVA_DEMO === '1';
 const homeFile = resolve(dataDir, 'home.json');
-const initialConfig = (): HomeConfig => !demo && existsSync(homeFile) ? JSON.parse(readFileSync(homeFile, 'utf8')) as HomeConfig : demoConfig();
+const demoPlace = demoAt(systemZone());
+const initialConfig = (): HomeConfig => demo ? demoConfig(demoPlace.place) : existsSync(homeFile) ? JSON.parse(readFileSync(homeFile, 'utf8')) as HomeConfig : newHome();
 
 const adapters: Adapter[] = integrations ? adaptersFor(integrations, dataDir) : [];
 // The demo home lives a little: its sensors drift and its cameras see things now and then.
-if (demo) adapters.push(new VirtualAdapter(demoDevices(), DEMO_SOLAR, Date.now, { simulate: true }));
+if (demo) adapters.push(new VirtualAdapter(demoDevices(), demoPlace.solar, Date.now, { simulate: true }));
 // KOVA_SONOS=1 is the older switch; Sonos set up under Integrations (or found there) takes its place.
 if (env.KOVA_SONOS === '1' && !integrations?.sonos) adapters.push(new SonosAdapter());
 if (env.KOVA_MATTER === '1' && !integrations?.matter) adapters.push(new MatterAdapter({ storageDir: resolve(dataDir, 'matter') }));

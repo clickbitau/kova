@@ -635,6 +635,14 @@ export interface HomeLocation {
 
 export interface HomeConfig {
   name: string;
+  /** A brand-new hub's home, until its owner has been through setup (name, where it is). */
+  firstRun?: boolean;
+  /** How dates are written (a BCP 47 locale, "en-AU", "en-US"). Unset: a guess from where the home is. */
+  locale?: string;
+  /** 12-hour clocks ("3:30 pm") rather than 24-hour. Unset: the locale's habit. */
+  hour12?: boolean;
+  /** Temperatures shown in °F rather than °C (devices and Kova keep °C inside). */
+  fahrenheit?: boolean;
   /** The home's street address, as the owner chose it in Settings (the location comes from it). */
   address?: string;
   timezone: string;

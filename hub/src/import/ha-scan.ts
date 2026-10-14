@@ -1,4 +1,6 @@
 import { convertHaAutomation } from './ha-automations.ts';
+import { dateWords } from '../util/locale.ts';
+import { clock } from '../util/time.ts';
 import type { Automation } from '../model/types.ts';
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -360,7 +362,7 @@ export class HaImport {
       return {
         id, name: String(a.alias ?? id), icon, kind, at, label: label || String(a.alias ?? '').slice(0, 14),
         when: when.length ? when : ['No trigger'], cond, then: then.length ? then : ['Nothing'],
-        enabled, lastRun: typeof last === 'string' && last ? `Last ran ${new Date(last).toLocaleString('en-AU', { timeZone: tz, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).replace(/\bSept\b/, 'Sep')}` : enabled ? 'Hasn’t run yet' : 'Turned off in Home Assistant',
+        enabled, lastRun: typeof last === 'string' && last ? `Last ran ${`${dateWords(Date.parse(last), tz, { day: 'numeric', month: 'short' })} ${clock(Date.parse(last), tz)}`}` : enabled ? 'Hasn’t run yet' : 'Turned off in Home Assistant',
         kova, yaml: toYaml(a, { lineWidth: 0 }).trimEnd(),
         converted: (this.hub.config.get().automations ?? []).find(x => x.origin?.from === 'home-assistant' && x.origin.id === id)?.id ?? null,
         ...(() => { const c = convertHaAutomation(a, this.lookup(name)); return { notes: c.notes, convertible: !!c.automation }; })(),

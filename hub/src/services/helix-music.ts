@@ -341,7 +341,7 @@ export class HelixMusic {
       const type = kind === 'station' ? '' : `&type=${kind === 'track' ? 'song' : kind}`;
       let pick = await this.get<SiriPick>(`/v1/music/siri?name=${encodeURIComponent(name)}${type}`).catch(() => null);
       if (kind === 'track') {
-        // A song is that song, never Helix's nearest guess: an announcement's "Song: Adhan" once played "Alo R Adhar".
+        // A song is that song, never Helix's nearest guess: an announcement's "Song: <title>" once played a different song with a similar name.
         // Its whole title first (titles carry "(feat. …)"), then other libraries, which Helix's lookup doesn't search.
         const whole = m[2].trim();
         const right = (p: SiriPick | null) => !!p?.id && p.kind === 'track' && (!p.approx || norm(p.title) === norm(name) || norm(p.title) === norm(whole));

@@ -1,3 +1,4 @@
+import { homeZone } from '../util/locale.ts';
 import { createHash } from 'node:crypto';
 import type { Adapter, AdapterContext, AdapterStatus } from './sdk.ts';
 import type { Command, Device, DeviceState } from '../model/types.ts';
@@ -17,7 +18,7 @@ import type { Command, Device, DeviceState } from '../model/types.ts';
 export const VESYNC_HOSTS = { us: 'https://smartapi.vesync.com', eu: 'https://smartapi.vesync.eu' } as const;
 
 // Values the VeSync Android app sends; the API expects them to be present.
-const APP = { acceptLanguage: 'en', appVersion: '5.6.60', phoneBrand: 'Kova', phoneOS: 'Android', timeZone: 'America/New_York', userType: '1' };
+const APP = { acceptLanguage: 'en', appVersion: '5.6.60', phoneBrand: 'Kova', phoneOS: 'Android', userType: '1' };
 const APP_ID = 'eldodkfj';
 const CLIENT = { clientInfo: APP.phoneBrand, clientType: 'vesyncApp', clientVersion: `VeSync ${APP.appVersion}`, osInfo: APP.phoneOS, debugMode: false };
 /** VeSync's answer when the account lives in the other region: retry there with the bizToken it gives. */
@@ -124,7 +125,7 @@ export class VeSyncClient {
   private async post<T>(path: string, body: Record<string, unknown>, auth: boolean): Promise<Envelope<T>> {
     const headers: Record<string, string> = {
       'content-type': 'application/json; charset=UTF-8', 'accept-language': 'en', appVersion: APP.appVersion,
-      tz: APP.timeZone, 'user-agent': 'okhttp/3.12.1',
+      tz: homeZone(), 'user-agent': 'okhttp/3.12.1',
     };
     if (auth) { headers.tk = this.token; headers.accountId = this.accountId; }
     const res = await fetch(`${this.base}${path}`, { method: 'POST', headers, body: JSON.stringify(body), signal: AbortSignal.timeout(this.timeoutMs) });
@@ -134,12 +135,12 @@ export class VeSyncClient {
   }
 
   private common(method: string, auth = true): Record<string, unknown> {
-    return { ...APP, traceId: String(Date.now()), method, ...(auth ? { accountID: this.accountId, token: this.token } : {}) };
+    return { ...APP, timeZone: homeZone(), traceId: String(Date.now()), method, ...(auth ? { accountID: this.accountId, token: this.token } : {}) };
   }
 
   /** Sign in: the password buys an authorization code, which buys the token. */
   async login(): Promise<void> {
-    const base = { acceptLanguage: APP.acceptLanguage, accountID: '', ...CLIENT, terminalId: this.terminalId, timeZone: APP.timeZone, token: '' };
+    const base = { acceptLanguage: APP.acceptLanguage, accountID: '', ...CLIENT, terminalId: this.terminalId, timeZone: homeZone(), token: '' };
     const a = await this.post<{ accountID: string; authorizeCode: string }>('/globalPlatform/api/accountAuth/v1/authByPWDOrOTM', {
       ...base, email: this.email, method: 'authByPWDOrOTM', password: md5(this.password), authProtocolType: 'generic',
       userCountryCode: this.country, appID: APP_ID, sourceAppID: APP_ID, traceId: String(Date.now()),

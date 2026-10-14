@@ -4,8 +4,9 @@
 // (hub/src/engine/automation-check.ts) is what the editor offers: every field a device can be set to, state
 // matches, readings, events, every kind of trigger, condition and step, and one-time schedules.
 import type { Command, Device, Room, RoomStatus } from '../api/types';
+import { deg } from './climate.ts';
 import { isCamera, isSensor } from './sensors.ts';
-import { WHOLE_HOME, WHOLE_HOME_NAME, ZONE_FIELDS, ZONE_PRESETS, zoneCommandWords, zoneTargetOptions, type ZoneCommand } from './zones.ts';
+import { WHOLE_HOME, WHOLE_HOME_NAME, ZONE_FIELDS, zonePresets, zoneCommandWords, zoneTargetOptions, type ZoneCommand } from './zones.ts';
 
 // ------------------------------------------------------------------ shapes --
 
@@ -222,7 +223,7 @@ export const KIND_ICON: Record<string, string> = {
   'action:overlay': 'layers', 'action:announce': 'campaign', 'action:if': 'call_split', 'action:repeat': 'repeat', 'action:run': 'play_arrow', 'action:stop': 'stop',
 };
 
-export const FIELDS = opts<NumericField>([['temp', 'temperature (°C)'], ['target', 'set temperature (°C)'], ['humidity', 'humidity (%)'], ['lux', 'light level (lux)'], ['pm25', 'PM2.5 (µg/m³)'], ['power', 'power (W)'], ['energy', 'energy today (kWh)'], ['grid', 'grid power (W, minus = exporting)'], ['load', 'home power use (W)'], ['battery', 'battery (%)'], ['bri', 'brightness (%)'], ['vol', 'volume (%)']]);
+export const FIELDS = opts<NumericField>([['temp', 'temperature'], ['target', 'set temperature'], ['humidity', 'humidity (%)'], ['lux', 'light level (lux)'], ['pm25', 'PM2.5 (µg/m³)'], ['power', 'power (W)'], ['energy', 'energy today (kWh)'], ['grid', 'grid power (W, minus = exporting)'], ['load', 'home power use (W)'], ['battery', 'battery (%)'], ['bri', 'brightness (%)'], ['vol', 'volume (%)']]);
 const FIELD_WORD: Record<NumericField, string> = { temp: 'temperature', target: 'set temperature', power: 'power', energy: 'energy today', battery: 'battery', bri: 'brightness', vol: 'volume', grid: 'grid power', load: 'home power', humidity: 'humidity', lux: 'light level', pm25: 'PM2.5' };
 export const RAMP_FIELDS = opts<RampField>([['bri', 'Brightness'], ['vol', 'Volume'], ['target', 'Set temperature']]);
 const RAMP_CAP: Record<RampField, string> = { bri: 'brightness', vol: 'volume', target: 'climate' };
@@ -517,10 +518,10 @@ export function firstCommand(t: TargetInfo | Dev | undefined, sources: { name: s
 /** A few common settings as one tap ("Off", "On at 50%", "Play Rain"), for this target. Each replaces the command. */
 export function presets(t: TargetInfo, sources: { name: string }[], music: MusicItem[] = []): [Command, string][] {
   const c = t.caps, out: [Command, string][] = [];
-  if (t.type === 'zone') return ZONE_PRESETS.map(([z, label]) => [z as Command, label]);
+  if (t.type === 'zone') return zonePresets().map(([z, label]) => [z as Command, label]);
   if (t.type === 'internet') return [[{ on: false }, 'Pause internet'], [{ on: true }, 'Allow internet']];
   if (t.type === 'vacuum') return [[{ on: true }, 'Clean'], [{ on: false }, 'Dock']];
-  if (c.has('climate')) out.push([{ on: true, hvac: 'cool', target: 24 }, 'Cool to 24°'], [{ on: true, hvac: 'heat', target: 21 }, 'Heat to 21°']);
+  if (c.has('climate')) out.push([{ on: true, hvac: 'cool', target: 24 }, `Cool to ${deg(24)}`], [{ on: true, hvac: 'heat', target: 21 }, `Heat to ${deg(21)}`]);
   if (c.has('fanMode') && !c.has('climate')) out.push([{ on: true, mode: 'Auto' }, 'Auto'], [{ on: true, mode: 'Sleep' }, 'Sleep']);
   if (c.has('media') || c.has('queue') || c.has('library')) {
     out.push([{ on: false, media: null }, 'Stop']);
@@ -562,7 +563,7 @@ export function commandWords(c: Command, zoneNames: Record<string, string> = {})
       case 'k': p.push(`${v}K`); break;
       case 'color': p.push(v ? `colour ${String(v)}` : 'no colour'); break;
       case 'hvac': p.push(labelOf(HVAC_MODES, String(v)).toLowerCase()); break;
-      case 'target': p.push(`${v}°`); break;
+      case 'target': p.push(deg(Number(v))); break;
       case 'fanSpeed': p.push(`fan ${String(v)}`); break;
       case 'mode': p.push(`${String(v)} mode`); break;
       case 'fanLevel': p.push(`fan level ${v}`); break;
@@ -807,7 +808,7 @@ export const withinProblem = (min: number | undefined) => min != null && !(min >
 
 // ------------------------------------------------------------- rhythms -----
 
-export const RHYTHMS = opts([['time', 'At a time'], ['sun:sunrise', 'Sunrise'], ['sun:sunset', 'Sunset'], ['sun:dawn', 'First light'], ['sun:dusk', 'Dusk'], ['prayer:fajr', 'Fajr'], ['prayer:sunrise', 'Shuruq (prayer sunrise)'], ['prayer:dhuhr', 'Dhuhr'], ['prayer:asr', 'Asr'], ['prayer:maghrib', 'Maghrib'], ['prayer:isha', 'Isha']]);
+export const RHYTHMS = opts([['time', 'At a time'], ['sun:sunrise', 'Sunrise'], ['sun:sunset', 'Sunset'], ['sun:dawn', 'First light'], ['sun:dusk', 'Dusk'], ['prayer:fajr', 'Fajr'], ['prayer:sunrise', 'Sunrise (prayer times)'], ['prayer:dhuhr', 'Dhuhr'], ['prayer:asr', 'Asr'], ['prayer:maghrib', 'Maghrib'], ['prayer:isha', 'Isha']]);
 export const rhythmKey = (r: Rhythm | undefined) => !r || r.kind === 'time' ? 'time' : r.kind === 'sun' ? `sun:${r.event}` : `prayer:${r.prayer}`;
 /** A rhythm from its choice, keeping the clock time or the offset it had. */
 export function rhythmFromKey(k: string, prev?: Rhythm): Rhythm {
@@ -1478,7 +1479,7 @@ export function pauseChoices<D extends Dev>(devices: D[], cur: string[] = []): D
 }
 
 export const SONG_KEY = 'song', URL_KEY = 'url';
-/** Which choice an announcement's media is: a Helix song, a web address, or the value itself (a source, clip or recording). */
+/** Which choice an announcement's media is: a song from the music library, a web address, or the value itself (a source, clip or recording). */
 export function announceMediaKey(v: string | undefined): string {
   if (!v) return '';
   if (v.startsWith('Song: ')) return SONG_KEY;
@@ -1491,12 +1492,12 @@ export function announceMediaFromKey(k: string, prev?: string): string {
   if (k === URL_KEY) return prev && /^https?:\/\//i.test(prev) ? prev : 'https://';
   return k;
 }
-/** What plays, by name: a source as it is, a clip's and a recording's name, "Title (Helix)", a web address's file or host. */
+/** What plays, by name: a source as it is, a clip's and a recording's name, "Title (your music)", a web address's file or host. */
 export function announceMediaName(v: string | undefined, n: { clips?: { id: string; name: string }[]; adhans?: { id: string; title: string }[] }): string {
   if (!v) return '';
   if (v.startsWith('clip:')) return n.clips?.find(c => `clip:${c.id}` === v || c.id === v)?.name ?? 'a clip (gone)';
   if (v.startsWith('adhan:')) return n.adhans?.find(a => a.id === v)?.title ?? v.slice(6).replace(/^./, c => c.toUpperCase());
-  if (v.startsWith('Song: ')) return `${v.slice(6).trim() || '…'} (Helix)`;
+  if (v.startsWith('Song: ')) return `${v.slice(6).trim() || '…'} (your music)`;
   if (/^https?:\/\//i.test(v)) {
     try {
       const u = new URL(v);

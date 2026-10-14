@@ -21,7 +21,7 @@ test('A long ask answers at once with a job; following it shows each step live, 
     calls(['create_room', { name: 'Theatre', icon: 'theaters' }]),
     calls(['combine_devices', { members: ['combined_bedroom_oled', 'oled_dlna'], room: 'theatre' }]),
     calls(['update_device', { id: 'lamp', room: 'front' }]),
-    say('Theatre is set up with the Bedroom OLED, and the lamp is by the Front door.'),
+    say('Theatre is set up with the Bedroom TV, and the lamp is by the Front door.'),
   ], { delayMs: 150 });
   const h = await askHome();
   await h.useModel(model.url);
@@ -43,7 +43,7 @@ test('A long ask answers at once with a job; following it shows each step live, 
   // Steps arrived one by one, worded for the person, with the real names.
   assert.ok(seen.some(s => s.length === 1) && seen.some(s => s.length === 2), JSON.stringify(seen));
   const last = seen[seen.length - 1]!;
-  assert.deepEqual(last, ['Making the room Theatre:ok', 'Combining Bedroom OLED and OLED TV:ok', 'Moving Lamp to Front door:ok']);
+  assert.deepEqual(last, ['Making the room Theatre:ok', 'Combining Bedroom TV and OLED TV:ok', 'Moving Lamp to Front door:ok']);
   assert.equal(done.reply.engine, 'cloud');
   assert.match(done.reply.source, /^MiniMax · sent/);
   assert.match(done.reply.text, /Theatre/);
@@ -111,9 +111,9 @@ test('The owner’s request, as it went wrong: the combined TV gains a member wi
   // "seemed close". Now the first call works (the part and the combined id mean the same device), and the
   // room mismatch is caught.
   const model = await fakeModel([
-    calls(['combine_devices', { members: ['bedroom_tv', 'combined_bedroom_oled', 'oled_dlna'], name: 'Bedroom OLED', room: 'music' }],
+    calls(['combine_devices', { members: ['bedroom_tv', 'combined_bedroom_oled', 'oled_dlna'], name: 'Bedroom TV', room: 'music' }],
       ['update_device', { id: 'lamp', room: 'front' }]),
-    say('All done:\n- Bedroom OLED is now in the Music room\n- The lamp is in the entryway'),
+    say('All done:\n- Bedroom TV is now in the Music room\n- The lamp is in the entryway'),
   ]);
   const h = await askHome();
   await h.useModel(model.url);
@@ -126,7 +126,7 @@ test('The owner’s request, as it went wrong: the combined TV gains a member wi
   assert.equal(h.hub.reg.get('combined_bedroom_oled')!.room, 'music');
   // The model was told what happened, in words.
   const res = lastResults(model.received[1]!.body);
-  assert.match(res[0].result, /Added OLED TV to Bedroom OLED — it now stands for/);
+  assert.match(res[0].result, /Added OLED TV to Bedroom TV — it now stands for/);
   assert.equal(res[1].roomName, 'Front door');
   // The reply said "entryway", but the lamp went to Front door: the hub's summary says so.
   assert.match(r.text, /Moved Lamp to Front door/);
@@ -229,7 +229,7 @@ test('The home context: a combined device stands for its parts; hidden apart; ar
   const devLines = sys.split('\n').filter(l => l.startsWith('{"id"'));
   const tvLine = devLines.find(l => l.includes('"combined_bedroom_oled"'))!;
   assert.match(tvLine, /"combined":true/);
-  assert.match(tvLine, /"parts":\[\{"id":"bedroom_tv","name":"Bedroom OLED","integration":"Samsung TV"\},\{"id":"oled_cast"/);
+  assert.match(tvLine, /"parts":\[\{"id":"bedroom_tv","name":"Bedroom TV","integration":"Samsung TV"\},\{"id":"oled_cast"/);
   // No part is listed as a device of its own.
   assert.ok(!devLines.some(l => l.startsWith('{"id":"bedroom_tv"') || l.startsWith('{"id":"oled_cast"')));
   // Hidden: apart, by name. Archived: nowhere.
@@ -290,8 +290,8 @@ test('Built-in answers: a combined device stands for its parts, hidden ones stay
   const r = await h.ask('what lights are on?');
   assert.match(r.text, /Lounge ceiling/);
   assert.doesNotMatch(r.text, /old lamp/i, 'a hidden light isn’t listed');
-  // "Turn on the bedroom oled": the combined device, not it and its part as well.
-  const t = await h.ask('turn on the bedroom oled');
+  // "Turn on the bedroom tv": the combined device, not it and its part as well.
+  const t = await h.ask('turn on the bedroom tv');
   assert.match(t.text, /1 thing on/);
   // A hidden device is still reached by its exact name.
   const o = await h.ask('turn off the old lamp');

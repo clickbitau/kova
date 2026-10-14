@@ -45,9 +45,9 @@ test('brightness, who is home, tonight, leaving and arriving', async () => {
   assert.equal(dev('lamp').bri, 30);
   assert.deepEqual(hub.assistant.chips(hub.assistant.parse('dim the lounge lamp to 20')), ['Set to 20%', 'Lounge lamp', '1 device']);
 
-  await hub.engine.setPresence('brishti', false);
+  await hub.engine.setPresence('jordan', false);
   const r2 = await hub.assistant.ask('Who’s home?');
-  assert.equal(r2.text, 'Methel is home. Brishti is out.');
+  assert.equal(r2.text, 'Alex is home. Jordan is out.');
 
   const r3 = await hub.assistant.ask("What's happening tonight?");
   assert.equal(r3.source, 'From your modes');

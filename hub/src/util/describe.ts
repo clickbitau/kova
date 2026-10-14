@@ -37,7 +37,7 @@ export function fitCommand(d: Device, cmd: Command): Command {
 export const isLight = (d: Pick<Device, 'type'>) => d.type === 'light' || d.type === 'dimmer';
 export const isPlayer = (d: Pick<Device, 'type'>) => d.type === 'media' || d.type === 'tv';
 
-/** Chip text for a target: "Lamp 78% · 3000K", "Speaker · Tarateel 15%", "Ceiling off". */
+/** Chip text for a target: "Lamp 78% · 3000K", "Speaker · Ocean waves 15%", "Ceiling off". */
 export function targetLabel(d: Device, t: Command): string {
   const head = targetHead(d, t);
   // Whatever the main phrase leaves out, said after it: "Lounge AC cool 23° · fan low, zone 1 closed, eco on".

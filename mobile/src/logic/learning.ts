@@ -32,9 +32,9 @@ export function findingToast(f: Pick<Finding, 'id' | 'learned' | 'done'>, what: 
 export const whyQuestion = (f: Pick<Finding, 'title'>) => `Why do you suggest “${f.title.replace(/\?$/, '')}”?`;
 
 /** Settings → What Kova has learned: each suggestion, where it stands, and what its button does. */
-export function learnedRows(l: Learned | undefined, tz?: string): { id: string; title: string; status: string; tone: 'amber' | 'stone'; action: 'review' | 'restore'; automationId?: string }[] {
+export function learnedRows(l: Learned | undefined, tz?: string, locale?: string): { id: string; title: string; status: string; tone: 'amber' | 'stone'; action: 'review' | 'restore'; automationId?: string }[] {
   return (l?.items ?? []).map(it => {
-    const until = it.status === 'later' && it.until ? new Date(it.until).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', ...(tz ? { timeZone: tz } : {}) }).replace(',', '') : '';
+    const until = it.status === 'later' && it.until ? new Date(it.until).toLocaleDateString(locale ?? 'en-GB', { weekday: 'short', day: 'numeric', month: 'short', ...(tz ? { timeZone: tz } : {}) }).replace(',', '') : '';
     return {
       id: it.id, title: it.title, automationId: it.automationId,
       status: it.status === 'never' ? 'You said not to suggest it' : it.status === 'later' ? `Put off until ${until}` : 'Waiting in Worth a look',

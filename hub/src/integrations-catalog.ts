@@ -117,7 +117,7 @@ export const CATALOG: CatalogItem[] = [
       {
         key: 'devices', label: 'Devices', type: 'list', addLabel: 'Add device', required: true,
         item: [
-          { key: 'host', label: 'IP address', type: 'text', required: true, placeholder: '10.10.30.218' },
+          { key: 'host', label: 'IP address', type: 'text', required: true, placeholder: '192.168.1.60' },
           room(),
           { key: 'name', label: 'Name', type: 'text', placeholder: 'optional; the Tapo name otherwise' },
           optId,
@@ -150,7 +150,7 @@ export const CATALOG: CatalogItem[] = [
       {
         id: 'find', label: 'Find Cast speakers', icon: 'travel_explore', method: 'POST', path: '/api/integrations/cast/find',
         help: 'Asks every address for Cast speakers, displays, TVs and Google speaker groups, including on other networks where they can’t be heard announcing themselves, and adds them. Run it again after changing groups in Google Home.',
-        fields: [{ key: 'subnet', label: 'Also search', type: 'text', placeholder: '10.10.30.0/24', help: 'A network your speakers are on, if it isn’t the hub’s own (another VLAN). With Warden linked, every device it sees online is searched too.' }],
+        fields: [{ key: 'subnet', label: 'Also search', type: 'text', placeholder: '192.168.20.0/24', help: 'A network your speakers are on, if it isn’t the hub’s own (another VLAN). With Warden linked, every device it sees online is searched too.' }],
       },
     ],
   },
@@ -162,7 +162,7 @@ export const CATALOG: CatalogItem[] = [
       {
         id: 'find', label: 'Find Sonos speakers', icon: 'travel_explore', method: 'POST', path: '/api/integrations/sonos/find',
         help: 'Asks every address for Sonos speakers, including on other networks, and adds them.',
-        fields: [{ key: 'subnet', label: 'Also search', type: 'text', placeholder: '10.10.30.0/24', help: 'A network your speakers are on, if it isn’t the hub’s own (another VLAN). With Warden linked, every device it sees online is searched too.' }],
+        fields: [{ key: 'subnet', label: 'Also search', type: 'text', placeholder: '192.168.20.0/24', help: 'A network your speakers are on, if it isn’t the hub’s own (another VLAN). With Warden linked, every device it sees online is searched too.' }],
       },
     ],
   },
@@ -183,14 +183,14 @@ export const CATALOG: CatalogItem[] = [
     fields: [
       { key: 'binary', label: 'aircast program', type: 'text', required: true, placeholder: '/opt/airconnect/aircast-linux-x86_64' },
       { key: 'bind', label: 'Network interface', type: 'text', placeholder: 'optional, e.g. eth0' },
-      { key: 'exclude', label: 'Leave out', type: 'text', multiple: true, placeholder: 'optional: Bedroom Oled' },
+      { key: 'exclude', label: 'Leave out', type: 'text', multiple: true, placeholder: 'optional: Bedroom TV' },
     ],
   },
   {
     id: 'goodwe', name: 'GoodWe solar', icon: 'solar_power', kind: 'Local', apply: 'hot', testable: true,
     description: 'Your inverter over Modbus, for the Energy screen.',
     fields: [
-      { key: 'host', label: 'Inverter IP address', type: 'text', required: true, placeholder: '10.10.30.50' },
+      { key: 'host', label: 'Inverter IP address', type: 'text', required: true, placeholder: '192.168.1.70' },
       { key: 'port', label: 'Port', type: 'number', placeholder: '502' },
       { key: 'unit', label: 'Modbus unit', type: 'number', placeholder: '247' },
       room('Room', false),
@@ -217,7 +217,7 @@ export const CATALOG: CatalogItem[] = [
     fields: [
       { key: 'email', label: 'VeSync email', type: 'text', required: true, placeholder: 'you@example.com' },
       { key: 'password', label: 'Password', type: 'password', required: true },
-      { key: 'region', label: 'Region', type: 'select', options: [{ value: 'us', label: 'US, Australia, Asia' }, { value: 'eu', label: 'Europe' }] },
+      { key: 'region', label: 'Region', type: 'select', options: [{ value: 'us', label: 'Everywhere outside Europe' }, { value: 'eu', label: 'Europe' }] },
       {
         key: 'devices', label: 'Rooms', type: 'list', shape: 'map', mapKey: 'name', addLabel: 'Add purifier',
         help: 'Which room each purifier is in, by its name in the VeSync app.',
@@ -231,7 +231,7 @@ export const CATALOG: CatalogItem[] = [
     fields: [{
       key: 'tvs', label: 'TVs', type: 'list', addLabel: 'Add TV', required: true,
       item: [
-        { key: 'host', label: 'IP address', type: 'text', required: true, placeholder: '10.10.30.40' },
+        { key: 'host', label: 'IP address', type: 'text', required: true, placeholder: '192.168.1.80' },
         { key: 'mac', label: 'MAC address', type: 'text', placeholder: 'for turning it on: a0:d7:f3:11:22:33' },
         room(),
         { key: 'name', label: 'Name', type: 'text', placeholder: 'optional' },
@@ -251,7 +251,7 @@ export const CATALOG: CatalogItem[] = [
     fields: [
       {
         key: 'rooms', label: 'Rooms', type: 'list', shape: 'map', mapKey: 'name', mapValue: 'room', addLabel: 'Put a soundbar in a room',
-        item: [{ key: 'name', label: 'Name in SmartThings', type: 'text', required: true, placeholder: 'Soundbar Q930B' }, room()],
+        item: [{ key: 'name', label: 'Name in SmartThings', type: 'text', required: true, placeholder: 'Living room soundbar' }, room()],
       },
     ],
     actions: [
@@ -283,7 +283,7 @@ export const CATALOG: CatalogItem[] = [
     fields: [
       { key: 'email', label: 'Ecovacs email', type: 'text', required: true, placeholder: 'you@example.com' },
       { key: 'password', label: 'Password', type: 'password', required: true },
-      { key: 'country', label: 'Country', type: 'text', required: true, placeholder: 'au', help: 'The two-letter country your Ecovacs account is in.' },
+      { key: 'country', label: 'Country', type: 'text', required: true, placeholder: 'gb', help: 'The two-letter country your Ecovacs account is in (us, gb, de, au…).' },
       { key: 'verifyCode', label: 'Email code', type: 'text', placeholder: 'only if asked', help: 'The first time Kova signs in, Ecovacs emails you a code to verify it. Enter it here and save.' },
     ],
   },
@@ -330,7 +330,7 @@ export const CATALOG: CatalogItem[] = [
     id: 'warden', name: 'Warden', icon: 'router', kind: 'Local', apply: 'hot', testable: true,
     description: 'Your Warden router, live: internet down, failover, new-device and attack alerts, pause a device’s internet from modes, and who’s home from Warden’s people and their phones.',
     fields: [
-      { key: 'url', label: 'Warden address', type: 'text', required: true, placeholder: 'https://10.10.0.1', help: 'Where you open Warden in a browser.' },
+      { key: 'url', label: 'Warden address', type: 'text', required: true, placeholder: 'https://192.168.1.1', help: 'Where you open Warden in a browser.' },
       { key: 'token', label: 'API token', type: 'password', help: 'Filled in by Pair with Warden below. A token made by signing in, or by hand in Warden → System → API tokens (role Operator), works too.' },
       {
         key: 'devices', label: 'Internet switches', type: 'list', addLabel: 'Add a device',
@@ -362,7 +362,7 @@ export const CATALOG: CatalogItem[] = [
         id: 'link', label: 'Link by signing in', icon: 'link', method: 'POST', path: '/api/integrations/warden/link',
         help: 'Or sign in with a Warden admin account once. Kova makes its own operator token and doesn’t keep the password.',
         fields: [
-          { key: 'url', label: 'Warden address', type: 'text', required: true, placeholder: 'https://10.10.0.1' },
+          { key: 'url', label: 'Warden address', type: 'text', required: true, placeholder: 'https://192.168.1.1' },
           { key: 'username', label: 'Username', type: 'text', required: true },
           { key: 'password', label: 'Password', type: 'password', required: true },
           { key: 'totp', label: 'One-time code', type: 'text', placeholder: 'if you use two-step sign-in' },
@@ -411,7 +411,7 @@ export const CATALOG: CatalogItem[] = [
     id: 'presence', name: 'Presence', icon: 'person_pin_circle', kind: 'Local', apply: 'restart',
     description: 'Who’s home, from Warden’s people and phones on your Wi-Fi (through Warden or OPNsense) and phone automations.',
     fields: [
-      { key: 'opnsense.url', label: 'OPNsense address', type: 'text', placeholder: 'https://10.10.0.1', help: 'Not needed with Warden: Kova reads phones from Warden once it’s linked.' },
+      { key: 'opnsense.url', label: 'OPNsense address', type: 'text', placeholder: 'https://192.168.1.1', help: 'Not needed with Warden: Kova reads phones from Warden once it’s linked.' },
       { key: 'opnsense.key', label: 'OPNsense API key', type: 'password' },
       { key: 'opnsense.secret', label: 'OPNsense API secret', type: 'password' },
       {

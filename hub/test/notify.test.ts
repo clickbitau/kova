@@ -160,15 +160,15 @@ test('Notify: a 404/410 from the push service removes the subscription', { skip:
   const push = await fakePushService();
   const { notifier, done } = await setup(12, { ntfy: undefined });
   try {
-    notifier.subscribe(browserSubscription(`${push.base}/push/live`).subscription, 'methel');
+    notifier.subscribe(browserSubscription(`${push.base}/push/live`).subscription, 'alex');
     notifier.subscribe(browserSubscription(`${push.base}/gone/old-phone`).subscription);
     assert.equal(notifier.subscriptions().length, 2);
     const r = await notifier.notify({ title: 'Hello', body: 'Test' });
     assert.deepEqual(r, { push: 1, ntfy: false, removed: 1, app: 0 });
     assert.deepEqual(notifier.subscriptions().map(s => s.subscription.endpoint), [`${push.base}/push/live`]);
-    // Targeted at someone else: a subscription tied to Methel doesn't get it.
+    // Targeted at someone else: a subscription tied to Alex doesn't get it.
     push.got.length = 0;
-    await notifier.notify({ title: 'For Brishti', body: '…', people: ['brishti'] });
+    await notifier.notify({ title: 'For Jordan', body: '…', people: ['jordan'] });
     assert.equal(push.got.length, 0);
   } finally { await done(); await push.close(); }
 });
@@ -179,10 +179,10 @@ test('Notify: "everyone’s out with lights on" fires once, with a turn-them-off
     for (const id of ['kitchen_ceiling', 'lamp', 'porch']) if (hub.reg.get(id)) await hub.engine.command(id, { on: true });
     const lightsOn = hub.reg.list().filter(d => (d.type === 'light' || d.type === 'dimmer') && d.state.on).length;
     assert.ok(lightsOn > 1);
-    await hub.engine.setPresence('methel', false, 'test');
+    await hub.engine.setPresence('alex', false, 'test');
     await notifier.idle();
-    assert.equal(ntfy.got.length, 0, 'Brishti is still home');
-    await hub.engine.setPresence('brishti', false, 'test');
+    assert.equal(ntfy.got.length, 0, 'Jordan is still home');
+    await hub.engine.setPresence('jordan', false, 'test');
     await notifier.idle();
     const out = ntfy.got.filter(g => /^Everyone’s out/.test(g.json.title));
     assert.equal(out.length, 1);
@@ -191,7 +191,7 @@ test('Notify: "everyone’s out with lights on" fires once, with a turn-them-off
     assert.deepEqual(out[0].json.actions, [{ action: 'view', label: 'Turn them off', url: `https://kova.example.com${LIGHTS_OFF_URL}` }]);
     // More changes while everyone's out don't repeat it.
     await hub.engine.command('dining', { on: true });
-    await hub.engine.setPresence('methel', false, 'test');
+    await hub.engine.setPresence('alex', false, 'test');
     await notifier.idle();
     assert.equal(ntfy.got.filter(g => /^Everyone’s out/.test(g.json.title)).length, 1);
 
@@ -204,9 +204,9 @@ test('Notify: "everyone’s out with lights on" fires once, with a turn-them-off
 
     // Someone comes home (Light the way turns the garage and front lights on) and leaves again:
     // those lights turn themselves off, so there's nothing to tell anyone.
-    await hub.engine.setPresence('methel', true, 'test');
+    await hub.engine.setPresence('alex', true, 'test');
     assert.equal(hub.reg.get('garage_light')!.state.on, true);
-    await hub.engine.setPresence('methel', false, 'test');
+    await hub.engine.setPresence('alex', false, 'test');
     await notifier.idle();
     assert.equal(ntfy.got.filter(g => /^Everyone’s out/.test(g.json.title)).length, 1);
   } finally { await done(); }
@@ -289,7 +289,7 @@ test('Notify API: VAPID key and subscribe', async () => {
     const bad = await app.inject({ method: 'POST', url: '/api/push/subscribe', headers: auth, payload: { subscription: { endpoint: 'http://insecure/x', keys: { p256dh: 'a', auth: 'b' } } } });
     assert.equal(bad.statusCode, 400);
     const sub = browserSubscription('https://web.push.apple.com/abc').subscription;
-    assert.equal((await app.inject({ method: 'POST', url: '/api/push/subscribe', headers: auth, payload: { subscription: sub, personId: 'methel' } })).statusCode, 200);
+    assert.equal((await app.inject({ method: 'POST', url: '/api/push/subscribe', headers: auth, payload: { subscription: sub, personId: 'alex' } })).statusCode, 200);
     // Subscribing again replaces, not duplicates.
     await app.inject({ method: 'POST', url: '/api/push/subscribe', headers: auth, payload: { subscription: sub } });
     assert.equal(notifier.subscriptions().length, 1);

@@ -1,8 +1,12 @@
 // Sensors and what cameras and sensors notice, as the app shows them. Kept free of React Native so the tests can
 // run them under plain Node. The hub decides what a sensor is (a device with nothing to control); these only lay out.
+import { deg, isFahrenheit } from './climate.ts';
 import type { AlertWhen, Device, Room, RoomStatus, SecurityState, SensorReading, SensorView, Snapshot, TimelineEvent } from '../api/types';
 
 const C = { amber: '#f2b14c', blue: '#7cb8f0', green: '#7fd4a0', red: '#ff6b5e', stone: '#a3a09a', stone2: '#6f6d69', violet: '#c9a0f0', yellow: '#dcd27e' };
+
+/** A reading as written: the hub's words, with a temperature in °F where the home reads °F. */
+export const readingText = (r: Pick<SensorReading, 'value' | 'unit' | 'text'>) => isFahrenheit() && typeof r.value === 'number' && /^°C?$/.test(r.unit.trim()) ? deg(r.value) : r.text;
 
 /** A sensor: the hub's kind, or (older hubs) type sensor. */
 export const isSensor = (d: Pick<Device, 'kind' | 'type'>) => d.kind ? d.kind === 'sensor' : d.type === 'sensor';
@@ -46,9 +50,9 @@ export function sensorCard(x: SensorView, now = Date.now()): SensorCard {
   const foot = [main?.changedLabel ? `${moment ? 'Last' : 'Changed'} ${main.changedLabel}` : '', x.seenAt ? `seen ${ago(x.seenAt, now)}` : ''].filter(Boolean).join(' · ');
   const trend = main?.trend ? TREND[main.trend] ?? null : null;
   return {
-    id: x.id, name: x.name, icon: x.icon, color, live, main: main?.text ?? '—', mainColor: live ? color : '#f1efea', trend,
-    sub: rest.map(r => r.text).join(' · ') || x.integration, foot, pills, online: x.online,
-    label: [x.name, main?.text, ...rest.map(r => `${r.label} ${r.text}`), x.battery != null ? `battery ${x.battery}%` : '', x.online ? '' : 'not responding'].filter(Boolean).join(', '),
+    id: x.id, name: x.name, icon: x.icon, color, live, main: main ? readingText(main) : '—', mainColor: live ? color : '#f1efea', trend,
+    sub: rest.map(readingText).join(' · ') || x.integration, foot, pills, online: x.online,
+    label: [x.name, main && readingText(main), ...rest.map(r => `${r.label} ${readingText(r)}`), x.battery != null ? `battery ${x.battery}%` : '', x.online ? '' : 'not responding'].filter(Boolean).join(', '),
   };
 }
 
@@ -57,7 +61,7 @@ export interface SensorGroup { id: string; name: string; icon: string; summary: 
 /** A room's line: temperature, humidity, what last happened. */
 export function roomLine(rs: RoomStatus | undefined, now = Date.now()): string {
   if (!rs) return '';
-  return [rs.temp != null ? `${rs.temp}°` : '', rs.humidity != null ? `${Math.round(rs.humidity)}% humidity` : '', rs.last ? `${(EV_WORD[rs.last.kind] ?? rs.last.kind).toLowerCase()} ${ago(rs.last.at, now)}` : '', rs.outdoor ? 'outside' : ''].filter(Boolean).join(' · ');
+  return [rs.temp != null ? deg(rs.temp) : '', rs.humidity != null ? `${Math.round(rs.humidity)}% humidity` : '', rs.last ? `${(EV_WORD[rs.last.kind] ?? rs.last.kind).toLowerCase()} ${ago(rs.last.at, now)}` : '', rs.outdoor ? 'outside' : ''].filter(Boolean).join(' · ');
 }
 
 /** Sensors by room, in the home's room order (then no room); hidden ones only when asked. */

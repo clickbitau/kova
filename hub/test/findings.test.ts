@@ -21,8 +21,8 @@ test('finds a light that one mode turns on and nothing turns off before night', 
 
 test('replays history: lights switched on for an empty house', async () => {
   const { hub, advance } = await testHub(17);
-  await hub.engine.setPresence('methel', false);
-  await hub.engine.setPresence('brishti', false);
+  await hub.engine.setPresence('alex', false);
+  await hub.engine.setPresence('jordan', false);
   await advance(18.5);
   const f = hub.checker.findings().find(x => x.id === 'empty-house:evening');
   assert.ok(f);

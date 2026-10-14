@@ -20,6 +20,7 @@ import {
   isSpeakerGroup, missingPrayers, pauseChoices, rhythmChoices, targetLevel, targetSpeakers, trimOf, withEveryPrayer, type AnnounceAction, type AnnounceTarget,
 } from '../logic/automations';
 import { prayerOn } from '../logic/prayer';
+import { fromDisplay, isFahrenheit, toDisplay } from '../logic/climate';
 import { CLIP_TYPES, clipFileProblem, clipName } from '../logic/media';
 import { AdhanCredit } from './PrayerTimesScreen';
 import { EV_ICON } from '../logic/sensors';
@@ -145,7 +146,14 @@ function Segs<V extends string>({ value, options, onChange, label }: { value: V 
  * A number with − and + either side. Typing works too; an empty box means "not set" when `optional`.
  * Steps clamp at `min` / `max`.
  */
-function Num({ value, onChange, step = 1, min, max, unit, label, optional }: { value: number | undefined; onChange: (v: number | undefined) => void; step?: number; min?: number; max?: number; unit?: string; label: string; optional?: boolean }) {
+function Num(p: NumProps) {
+  // Temperatures are kept in °C; in a Fahrenheit home they're shown and typed in °F.
+  if (p.unit !== '°C' || !isFahrenheit()) return <NumBox {...p} />;
+  const f = (c?: number) => c == null ? undefined : toDisplay(c);
+  return <NumBox {...p} unit="°F" value={f(p.value)} min={f(p.min)} max={f(p.max)} step={1} onChange={v => p.onChange(v == null ? undefined : fromDisplay(v))} />;
+}
+type NumProps = { value: number | undefined; onChange: (v: number | undefined) => void; step?: number; min?: number; max?: number; unit?: string; label: string; optional?: boolean };
+function NumBox({ value, onChange, step = 1, min, max, unit, label, optional }: NumProps) {
   const [text, setText] = useState(value == null ? '' : String(value));
   const last = useRef(value);
   useEffect(() => { if (value !== last.current) { last.current = value; setText(value == null ? '' : String(value)); } }, [value]);
@@ -593,7 +601,7 @@ function MediaField({ value, info, onChange }: { value: string | null | undefine
     <View style={{ gap: 8 }}>
       <Select label="Play" icon="play_arrow" value={k} options={options} onChange={nk => onChange(mediaFromKey(nk, value))} />
       {k === STATION_KEY ? (
-        <Field label="Station from" note="An artist, album or song: Helix plays more like it.">
+        <Field label="Station from" note="An artist, album or song: your music library plays more like it.">
           <TextBox label="Station from" value={(value ?? '').replace(/^Station: /, '')} placeholder="e.g. Nina Simone" onChange={v => onChange(`Station: ${v}`)} />
         </Field>
       ) : null}
@@ -862,7 +870,7 @@ function AnnounceMedia({ value, onChange, label, same }: { value: string | undef
     <View style={{ gap: 8 }}>
       <Choice label={label} icon={value?.startsWith('adhan:') ? 'mosque' : value?.startsWith('clip:') ? 'graphic_eq' : 'campaign'} text={text} muted={!value && !same}
         onPress={() => pick({ type: 'media', title: label, value, same, onPick: v => onChange(v || undefined) })} />
-      {k === SONG_KEY ? <TextBox label="Song title" value={(value ?? '').slice(6)} placeholder="A song’s title, from Helix" onChange={v => onChange(`Song: ${v}`)} /> : null}
+      {k === SONG_KEY ? <TextBox label="Song title" value={(value ?? '').slice(6)} placeholder="A song’s title, from your music library" onChange={v => onChange(`Song: ${v}`)} /> : null}
       {k === URL_KEY ? <TextBox label="Web address" value={value ?? ''} placeholder="https://… an MP3 or a stream" onChange={v => onChange(v)} /> : null}
       {adhan ? <AdhanCredit a={adhan} /> : null}
     </View>
@@ -1062,7 +1070,7 @@ function MediaSheet({ p, close }: { p: Extract<Picker, { type: 'media' }>; close
       ) : null}
       <View style={{ gap: 2 }}>
         <Label>Something else</Label>
-        {home.music.length ? row(SONG_KEY, 'A song from Helix…', 'music_note') : null}
+        {home.music.length ? row(SONG_KEY, 'A song from your music library…', 'music_note') : null}
         {row(URL_KEY, 'A web address…', 'link', 'An MP3 or a stream on the web')}
       </View>
     </View>

@@ -88,7 +88,8 @@ test('Prayer times: off by default for a new home; on for one that already used 
   };
   const noPrayer = (c: HomeConfig) => { c.modes = c.modes.map(m => m.start.kind === 'prayer' ? { ...m, start: { kind: 'time', at: '05:30' } } : m); c.moments = c.moments.filter(x => x.at.kind !== 'prayer'); };
   assert.equal(await make(noPrayer), false, 'nothing used prayer times: off');
-  assert.equal(await make(() => {}), true, 'the demo home starts a mode at Fajr: on');
+  assert.equal(await make(() => {}), false, 'the demo home uses no prayer times: off');
+  assert.equal(await make(c => { c.modes = c.modes.map(m => m.id === 'dawn' ? { ...m, start: { kind: 'prayer', prayer: 'fajr' } } : m); }), true, 'a mode that starts at Fajr: on');
   assert.equal(await make(c => { noPrayer(c); c.prayerMethod = 'Karachi'; }), true, 'a method chosen: on');
   assert.equal(await make(c => { noPrayer(c); c.automations = [{ id: 'x', name: 'x', enabled: true, mode: 'single', triggers: [{ kind: 'time', at: { kind: 'prayer', prayer: 'isha' } }], conditions: [], actions: [{ kind: 'stop' }] }]; }), true, 'an automation at Isha: on');
   assert.equal(await make(c => { c.prayer = { on: false }; }), false, 'turned off by the owner stays off');

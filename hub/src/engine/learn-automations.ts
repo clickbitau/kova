@@ -1,4 +1,5 @@
 import type { LogEntry } from '../store/db.ts';
+import { dateWords } from '../util/locale.ts';
 import type { Automation, Command, Condition, Device, HomeConfig, NumericField, Rhythm, Targets, Trigger } from '../model/types.ts';
 import { resolveRhythm, rhythmPhrase } from '../rhythms/rhythms.ts';
 import { addDays, clock, localDate, localHour } from '../util/time.ts';
@@ -108,7 +109,7 @@ const ranByHand = (e: LogEntry) => e.cause.kind === 'automation' && /run by hand
 /** "Fri 3 Oct" in the home's timezone. */
 export function dayLabel(date: string, tz: string): string {
   const [y, m, d] = date.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, d, 12)).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).replace(',', '').replace(/\bSept\b/, 'Sep');
+  return dateWords(Date.UTC(y, m - 1, d, 12), 'UTC').replace(',', '');
 }
 
 /** A device report that's only the device catching up with a command, or drifting by a step: not a person. */

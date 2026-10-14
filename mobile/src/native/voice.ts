@@ -1,11 +1,13 @@
 import { requireOptionalNativeModule } from 'expo-modules-core';
+import { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
-import { getItem, setItem } from './storage';
+import { baseOf, SPEECH_LANGS, speechLangs, voiceFor } from '../logic/speech';
+import { getItem, getJson, setItem, setJson } from './storage';
 
 // Talking to Ask Kova, the way Helix's apps do: the phone's own speech recognition (Apple's on iPhone, Google's on
-// Android) turns what's said into words. Recognisers need the language first (none detects it), so there are two to
-// choose: the phone's own language, and Bangla (unless the phone already is). The choice is kept on the phone. Before
-// listening, a language the recogniser doesn't offer (Apple's has no Bangla), or one that failed this session, is
+// Android) turns what's said into words. Recognisers need the language first (none detects it), so it's the phone's
+// own language, plus any the person adds on This phone. The choice and the added languages are kept on the phone.
+// Before listening, a language the recogniser doesn't offer, or one that failed this session, is
 // swapped for the one that last worked, and said. The phone's own language is recognised on the phone where it can be.
 // An answer to a spoken question is read out. A binary without the speech module (app 0.2.x before 0.2.0's store build)
 // hides the microphone.
@@ -23,21 +25,39 @@ export const { useSpeechRecognitionEvent } = rec ?? { useSpeechRecognitionEvent:
 
 /** The phone's own language, as a BCP-47 tag (en-AU, bn-BD, ar-SA…). */
 export const phoneLang = (): string => { try { return Intl.DateTimeFormat().resolvedOptions().locale || 'en-US'; } catch { return 'en-US'; } };
-export const BANGLA = 'bn-BD';
-const base = (tag: string) => tag.toLowerCase().split(/[-_]/)[0]!;
+const base = baseOf;
 
-/** The languages to choose from: the phone's own, and Bangla unless the phone is Bangla already. */
-export const voiceLangs = (): string[] => base(phoneLang()) === 'bn' ? [phoneLang()] : [phoneLang(), BANGLA];
+const EXTRA = 'kova.voiceExtra';
+let extra: string[] = [];
+const watchers = new Set<(l: string[]) => void>();
+const loaded = getJson<string[]>(EXTRA).then(l => { if (Array.isArray(l)) extra = l.filter(x => typeof x === 'string'); });
 
-/** A language's name in a few words: "বাংলা" for Bangla, else the phone's name for it ("English"), else its tag. */
+/** The languages to choose from: the phone's own, and any added. */
+export const voiceLangs = (): string[] => speechLangs(phoneLang(), extra);
+
+/** The languages to choose from, kept current as they're added, and a way to change the added ones. */
+export function useVoiceLangs(): { langs: string[]; extra: string[]; setExtra: (l: string[]) => void } {
+  const [list, setList] = useState(extra);
+  useEffect(() => {
+    watchers.add(setList);
+    void loaded.then(() => setList(extra));
+    return () => { watchers.delete(setList); };
+  }, []);
+  const setExtra = (l: string[]) => { extra = l; void setJson(EXTRA, l.length ? l : null).catch(() => {}); watchers.forEach(w => w(l)); };
+  return { langs: speechLangs(phoneLang(), list), extra: list, setExtra };
+}
+
+/** A language's name in a few words: its own name when the list has it, else the phone's name for it ("English"), else its tag. */
 export function langName(tag: string): string {
-  if (base(tag) === 'bn') return 'বাংলা';
-  try { const n = new Intl.DisplayNames([tag], { type: 'language' }).of(base(tag)); if (n) return n[0]!.toUpperCase() + n.slice(1); } catch { /* an engine without DisplayNames */ }
-  return tag;
+  const own = SPEECH_LANGS.find(l => l.tag.toLowerCase() === tag.toLowerCase());
+  if (own && base(tag) !== base(phoneLang())) return own.name;
+  try { const n = new Intl.DisplayNames([phoneLang()], { type: 'language' }).of(tag); if (n) return n[0]!.toUpperCase() + n.slice(1); } catch { /* an engine without DisplayNames */ }
+  return own?.name ?? tag;
 }
 
 const KEY = 'kova.voiceLang';
 export async function voiceLang(): Promise<string> {
+  await loaded;
   const v = await getItem(KEY).catch(() => null);
   return v && voiceLangs().includes(v) ? v : phoneLang();
 }
@@ -77,11 +97,11 @@ export async function listen(lang: string): Promise<{ lang: string; note?: strin
 
 export function stopListening(): void { rec?.ExpoSpeechRecognitionModule.stop(); }
 
-/** Read an answer out: a Bangla voice for Bangla words, else the language it was asked in. */
+/** Read an answer out: a voice for the script the words are in (Bengali, Arabic, Hindi…), else the language it was asked in. */
 export function speak(text: string, lang: string): void {
   if (!tts || !text) return;
   tts.stop();
-  tts.speak(text.replace(/https?:\/\/\S+/g, ''), { language: /[ঀ-৿]/.test(text) ? BANGLA : base(lang) === 'bn' ? phoneLang() : lang });
+  tts.speak(text.replace(/https?:\/\/\S+/g, ''), { language: voiceFor(text, lang, voiceLangs(), phoneLang()) });
 }
 
 export function quiet(): void { tts?.stop(); }

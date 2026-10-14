@@ -1,5 +1,6 @@
 // The home at a glance, as cards: outside, inside, the air. And how loud each alert is.
 import type { Glance, Insight } from '../api/types';
+import { deg, toDisplay } from './climate.ts';
 import type { Waqt } from './prayer.ts';
 
 /** A card: a short value (a number or a word, so it fits a third of a phone), a line naming it, and the detail. */
@@ -13,15 +14,16 @@ export function glanceCards(g: Glance | undefined): GlanceCard[] {
   const o = g.outside;
   if (o) {
     out.push({
-      key: 'outside', icon: o.icon, color: '#f2b14c', label: 'Outside', value: `${o.temp}°`, caption: o.text,
-      sub: [o.high != null && o.low != null ? `${o.high}° / ${o.low}° today` : '', o.rain ?? '', !o.rain && o.uvMax != null && o.uvMax >= 6 ? `UV ${Math.round(o.uvMax)} at midday` : '', o.wind != null && o.wind >= 30 ? `windy, ${o.wind} km/h` : ''].filter(Boolean).join(' · '),
+      key: 'outside', icon: o.icon, color: '#f2b14c', label: 'Outside', value: deg(o.temp), caption: o.text,
+      sub: [o.high != null && o.low != null ? `${deg(o.high)} / ${deg(o.low)} today` : '', o.rain ?? '', !o.rain && o.uvMax != null && o.uvMax >= 6 ? `UV ${Math.round(o.uvMax)} at midday` : '', o.wind != null && o.wind >= 30 ? `windy, ${o.wind} km/h` : ''].filter(Boolean).join(' · '),
     });
   }
   if (g.inside.length) {
     const ts = g.inside.map(x => x.temp);
+    const lo = Math.round(toDisplay(Math.min(...ts))), hi = Math.round(toDisplay(Math.max(...ts)));
     out.push({
       key: 'inside', icon: 'thermostat', color: '#7cb8f0', label: 'Inside', device: g.inside[0].device,
-      value: ts.length === 1 ? `${ts[0]}°` : Math.round(Math.min(...ts)) === Math.round(Math.max(...ts)) ? `${Math.round(Math.min(...ts))}°` : `${Math.round(Math.min(...ts))}–${Math.round(Math.max(...ts))}°`, caption: g.inside.length === 1 ? g.inside[0].name : `${g.inside.length} rooms`, sub: g.inside.map(x => `${x.name} ${x.temp}°${x.humidity != null ? ` ${x.humidity}%` : ''}`).join(' · '),
+      value: ts.length === 1 ? deg(ts[0]) : lo === hi ? `${lo}°` : `${lo}–${hi}°`, caption: g.inside.length === 1 ? g.inside[0].name : `${g.inside.length} rooms`, sub: g.inside.map(x => `${x.name} ${deg(x.temp)}${x.humidity != null ? ` ${x.humidity}%` : ''}`).join(' · '),
     });
   }
   if (g.air.length) {

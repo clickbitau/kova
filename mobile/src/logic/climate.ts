@@ -1,10 +1,29 @@
-// The air conditioner's dial: its range and the arc it's drawn with. Plain TypeScript, tested under Node.
+// The air conditioner's dial: its range and the arc it's drawn with, and °C or °F for what's shown. Plain TypeScript, tested under Node.
 
 /** The targets an air conditioner takes, in °C. */
 export const TARGET_MIN = 16;
 export const TARGET_MAX = 32;
 
 export const clampTarget = (n: number) => Math.max(TARGET_MIN, Math.min(TARGET_MAX, Math.round(n)));
+
+// Devices and the hub keep °C. Where the home reads °F (home.fahrenheit) only what's shown and typed is converted: the
+// app sets the unit when a snapshot arrives (state/hub.tsx), and everything that writes a temperature goes through here.
+let inF = false;
+export const setFahrenheit = (on: boolean) => { inF = on; };
+export const isFahrenheit = () => inF;
+export const unitLabel = () => inF ? '°F' : '°C';
+/** °C as shown: whole °F where the home uses it, else as it is. */
+export const toDisplay = (c: number) => inF ? Math.round(c * 9 / 5 + 32) : c;
+/** What was read or typed back to °C, to the half degree the devices take. */
+export const fromDisplay = (v: number) => inF ? Math.round((v - 32) * 5 / 9 * 2) / 2 : v;
+/** A temperature for display: "23.5°", or "74°" in a Fahrenheit home. */
+export const deg = (c: number) => `${toDisplay(c)}°`;
+/** A target one step up or down in the unit shown (a whole °C, or a whole °F), kept in the dial's range, in °C. */
+export function stepTarget(c: number, dir: 1 | -1): number {
+  if (!inF) return clampTarget(c + dir);
+  const n = Math.round(fromDisplay(toDisplay(c) + dir) * 2) / 2;
+  return Math.max(TARGET_MIN, Math.min(TARGET_MAX, n));
+}
 
 /**
  * An SVG path for a share (0–1) of a 270° arc that opens at the bottom: it starts at the lower left

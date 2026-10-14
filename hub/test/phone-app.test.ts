@@ -40,8 +40,8 @@ test('Phone app: register for notifications, get them (per person), drop phones 
     const reg = (body: object) => app.inject({ method: 'POST', url: '/api/push/app', payload: body });
     assert.equal((await reg({ token: 'not-a-token' })).statusCode, 400);
     assert.equal((await reg({ token: 'ExponentPushToken[abc]', personId: 'nobody' })).statusCode, 400);
-    assert.equal((await reg({ token: 'ExponentPushToken[methel1]', personId: 'methel', name: 'Methel’s iPhone', platform: 'ios' })).statusCode, 200);
-    assert.equal((await reg({ token: 'ExponentPushToken[brishti1]', personId: 'brishti' })).statusCode, 200);
+    assert.equal((await reg({ token: 'ExponentPushToken[alex1]', personId: 'alex', name: 'Alex’s iPhone', platform: 'ios' })).statusCode, 200);
+    assert.equal((await reg({ token: 'ExponentPushToken[jordan1]', personId: 'jordan' })).statusCode, 200);
     assert.equal((await reg({ token: 'ExponentPushToken[gone1]' })).statusCode, 200);
     assert.equal(notifier.appPhones().length, 3);
 
@@ -49,17 +49,17 @@ test('Phone app: register for notifications, get them (per person), drop phones 
     const r = await notifier.notify({ title: 'Someone’s at the front door', body: 'Doorbell rang.', url: '/phone.html?cam=doorbell', tag: 'ring-doorbell' });
     assert.equal(r.app, 2);
     assert.equal(r.removed, 1, 'the phone Expo says is gone is dropped');
-    assert.deepEqual(expo.got[0].map(m => m.to).sort(), ['ExponentPushToken[brishti1]', 'ExponentPushToken[gone1]', 'ExponentPushToken[methel1]']);
+    assert.deepEqual(expo.got[0].map(m => m.to).sort(), ['ExponentPushToken[alex1]', 'ExponentPushToken[gone1]', 'ExponentPushToken[jordan1]']);
     assert.equal(expo.got[0][0].title, 'Someone’s at the front door');
     assert.equal(expo.got[0][0].data.url, '/phone.html?cam=doorbell');
-    assert.deepEqual(notifier.appPhones().map(a => a.token).sort(), ['ExponentPushToken[brishti1]', 'ExponentPushToken[methel1]']);
+    assert.deepEqual(notifier.appPhones().map(a => a.token).sort(), ['ExponentPushToken[alex1]', 'ExponentPushToken[jordan1]']);
 
     // One person's notification goes to their phone only (and phones with nobody set).
-    await notifier.notify({ title: 'For Methel', body: 'x', people: ['methel'] });
-    assert.deepEqual(expo.got[1].map(m => m.to), ['ExponentPushToken[methel1]']);
+    await notifier.notify({ title: 'For Alex', body: 'x', people: ['alex'] });
+    assert.deepEqual(expo.got[1].map(m => m.to), ['ExponentPushToken[alex1]']);
     assert.match(notifier.status().note ?? '', /2 phones subscribed/);
 
-    assert.deepEqual((await app.inject({ method: 'DELETE', url: '/api/push/app', payload: { token: 'ExponentPushToken[methel1]' } })).json(), { ok: true });
+    assert.deepEqual((await app.inject({ method: 'DELETE', url: '/api/push/app', payload: { token: 'ExponentPushToken[alex1]' } })).json(), { ok: true });
     assert.equal(notifier.appPhones().length, 1);
   } finally {
     await notifier.stop();

@@ -15,7 +15,7 @@ export const groupDeviceId = (g: SpeakerGroup) => `group_${g.id}`;
 
 /**
  * Each member's level for a group volume: the loudest of the balance plays at `vol`, the others at their share of it
- * (Ray at 40 and the kitchen at 20 in the balance: the group at 60 → 60 and 30). Without a balance, the members' levels
+ * (the lounge speaker at 40 and the kitchen at 20 in the balance: the group at 60 → 60 and 30). Without a balance, the members' levels
  * now are the balance. Never above 100; one at 0 in the balance stays at 0.
  */
 export function balancedVols(vol: number, members: { id: string; vol?: number }[], balance?: Record<string, number>): Record<string, number> {

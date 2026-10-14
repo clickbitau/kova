@@ -1,4 +1,4 @@
-// The Media screen: players, speaker groups, sources and Helix music, as the web app does them (web/index.html).
+// The Media screen: players, speaker groups, sources and the music library, as the web app does them (web/index.html).
 // Free of React Native so the tests run it under plain Node.
 import type { Command, MediaSource, SpeakerGroup } from '../api/types';
 import { has, isPlayer, type Dev } from './devices.ts';
@@ -54,10 +54,13 @@ export function memberToggle(m: Dev, P: Dev): { cmd: Command; done: string } | {
   return { cmd: { on: true, media: P.media, shuffle: !!P.shuffle, vol: m.vol ?? 30 }, done: `${m.name} joined ${P.name}` };
 }
 
-/** Helix music on a player: only speakers that play a queue (Google Cast, Sonos, AirPlay, and their groups). */
+/** Is a music library (Helix) paired? Its songs and playlists only exist then. */
+export const musicOn = (s: { integrations?: { id: string }[]; music?: unknown[] }) => !!s.music?.length || !!s.integrations?.some(i => i.id === 'helix');
+
+/** Music from the library on a player: only speakers that play a queue (Google Cast, Sonos, AirPlay, and their groups). */
 export function musicCommand(P: Dev | undefined, item: { name: string; kind: 'all' | 'loved' | 'playlist' }, shuffle: boolean): { cmd: Command; done: string } | { error: string } {
   if (!P) return { error: 'Pick a speaker first' };
-  if (!has(P, 'queue')) return { error: `${P.name} can’t play Helix music (Google Cast, Sonos and AirPlay speakers can)` };
+  if (!has(P, 'queue')) return { error: `${P.name} can’t play your music library (Google Cast, Sonos and AirPlay speakers can)` };
   const sh = item.kind === 'all' || shuffle;
   return { cmd: { on: true, media: item.name, shuffle: sh }, done: `Playing ${item.name}${sh && item.kind !== 'all' ? ' on shuffle' : ''} on ${P.name}` };
 }
@@ -83,7 +86,7 @@ export function streamUrlError(url: string): string | null {
 
 /** The line under a source: where it streams from and whether it repeats. */
 export function sourceSub(s: MediaSource): { text: string; missing: boolean } {
-  if (s.helix) return { text: `${s.helix.title} from Helix · repeats seamlessly`, missing: false };
+  if (s.helix) return { text: `${s.helix.title} from your music library · repeats seamlessly`, missing: false };
   if (!s.url) return { text: 'No stream address yet', missing: true };
   let host = s.url;
   try { host = new URL(s.url).host || s.url; } catch { /* keep it as typed */ }

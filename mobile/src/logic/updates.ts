@@ -47,11 +47,11 @@ export function updateSteps(u: Pick<HubUpdate, 'state' | 'progress' | 'available
 export interface HistoryRow { key: string; icon: string; tone: 'ok' | 'warn' | 'error'; title: string; sub: string }
 
 /** The hub's update history, newest first: what happened, when. Falls back to the last result on older hubs. */
-export function historyRows(u: Pick<HubUpdate, 'history' | 'last'>, now: number, max = 6): HistoryRow[] {
+export function historyRows(u: Pick<HubUpdate, 'history' | 'last'>, now: number, max = 6, locale?: string): HistoryRow[] {
   const list = u.history?.length ? u.history : u.last ? [u.last] : [];
   return [...list].sort((a, b) => b.at - a.at).slice(0, max).map(h => {
     const when = new Date(h.at);
-    const date = `${when.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }).replace(/\bSept\b/, 'Sep')} · ${ago(h.at, now)}`;
+    const date = `${when.toLocaleDateString(locale ?? 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).replace(/\bSept\b/, 'Sep')} · ${ago(h.at, now)}`;
     if (h.result === 'updated') return { key: `${h.at}`, icon: 'check_circle', tone: 'ok', title: `Updated ${h.from} → ${h.to}`, sub: date };
     if (h.result === 'rolled-back') return { key: `${h.at}`, icon: 'sync_problem', tone: 'warn', title: `Went back to ${h.from}`, sub: `The new version didn’t start properly. ${date}` };
     return { key: `${h.at}`, icon: 'error', tone: 'error', title: `Update to ${h.to} failed`, sub: `${h.from} kept running. ${date}` };

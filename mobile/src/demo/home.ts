@@ -238,7 +238,7 @@ export function demoEnergy(devices: Device[], now: number): EnergyToday {
 export interface DemoState {
   name: string;
   pauseForDoorbell: boolean;
-  prayerMethod: string;
+  prayerMethod?: string;
   rooms: Room[];
   devices: Device[];
   people: { id: string; name: string; detail: string; home: boolean; since: number }[];
@@ -289,7 +289,7 @@ export function initialState(now: number): DemoState {
   if (h >= 18 && h < 23) applyTargets(devices, { lounge_tv: { on: true, input: 'tv' } });
   const people = DEMO_PEOPLE.map((p, i) => ({ ...p, home: i === 0 || !(h >= 8.5 && h < 17), since: now - (i === 0 ? 95 : 40) * 60_000 }));
   const st: DemoState = {
-    name: DEMO_HOME_NAME, pauseForDoorbell: true, prayerMethod: 'MuslimWorldLeague', rooms: DEMO_ROOMS.map(r => ({ ...r })), devices, people,
+    name: DEMO_HOME_NAME, pauseForDoorbell: true, rooms: DEMO_ROOMS.map(r => ({ ...r })), devices, people,
     favourites: ['lamp', 'kitchen_island', 'lounge_tv', 'porch'], modeId: mode.id, overlay: null, skipped: [],
     automations: demoAutomations(now), findingsDismissed: [], insightsSnoozed: [], activity: [], nextActivity: 1,
   };

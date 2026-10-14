@@ -74,7 +74,7 @@ export function SpeakerLoudnessScreen() {
             <T v="footnote" color={C.stone2} style={{ paddingHorizontal: 4 }}>100% plays as asked. Announcements use it; music and the volume slider don’t.</T>
           </Section>
         </>
-      ) : <Empty icon="speaker" tone={C.blue} title="No speakers yet" text="Kova finds Google Cast and Sonos speakers by itself. Add others in Integrations." />}
+      ) : <Empty icon="speaker" tone={C.blue} title="No speakers yet" text="Kova finds speakers on your network by itself (Google Cast, Sonos, AirPlay). Add others in Integrations." />}
     </Screen>
   );
 }

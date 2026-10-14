@@ -1,6 +1,6 @@
 // The Energy screen: today's numbers from the snapshot (hub services/energy.ts) turned into what the screen shows.
 // Free of React Native so the tests run it under plain Node.
-import type { EnergyToday } from '../api/types';
+import type { EnergyToday, Snapshot } from '../api/types';
 
 /** Watts the way the screen writes them: 450 W, 2.4 kW, or a dash. Direction is shown elsewhere, so no sign. */
 export const kw = (w: number | null | undefined) => w == null ? '—' : Math.abs(w) >= 1000 ? `${(Math.abs(w) / 1000).toFixed(1)} kW` : `${Math.round(Math.abs(w))} W`;
@@ -30,6 +30,19 @@ export interface EnergyView {
   devices: EnergyDevice[];
   foot: string;
 }
+
+/**
+ * The name of what reports the home's solar or meter: the integration of the device that reports energy (an
+ * inverter or a meter, from any maker), or null when no device does.
+ */
+export function energySource(s: Pick<Snapshot, 'devices' | 'integrations'>): string | null {
+  const reports = (d: { capabilities: string[] }) => (d.capabilities ?? []).includes('energy');
+  const d = s.devices.find(x => reports(x) && (x.capabilities ?? []).includes('power') && !x.archived) ?? s.devices.find(x => reports(x) && !x.archived);
+  return d ? s.integrations.find(i => i.id === d.integration)?.name ?? null : null;
+}
+
+/** Does the home make solar power? An inverter reports it, or today's figures show it. */
+export const hasSolarPower = (s: Pick<Snapshot, 'devices' | 'integrations' | 'energy'>) => !!energySource(s) || !!s.energy && solarSource(s.energy, false);
 
 /** An inverter's figure, or none. The hub reports solar as 0 when there's no inverter at all. */
 const solarSource = (e: EnergyToday, inverter: boolean) => inverter || e.solarKwh > 0 || e.now.solar > 0;

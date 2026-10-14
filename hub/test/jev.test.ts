@@ -92,7 +92,7 @@ test('Jev presence review: explains evidence without changing Kova state', async
   const { hub, clock } = await testHub();
   const jev = new JevAdvisor({ apiKey: 'test-key', baseUrl: fake.url, model: 'jev-test', store: hub.store });
   const app = await buildServer(hub, { webRoot, jev });
-  await hub.engine.setPresence('methel', true, 'Router (Warden)', {
+  await hub.engine.setPresence('alex', true, 'Router (Warden)', {
     confidence: 0.86,
     evidence: [
       { source: 'Router (Warden)', kind: 'warden', home: true, weight: 0.75, reliability: 0.84, at: clock.t - 60_000 },
@@ -100,19 +100,19 @@ test('Jev presence review: explains evidence without changing Kova state', async
     ],
   });
 
-  const r = await app.inject('/api/jev/presence-review?person=methel');
+  const r = await app.inject('/api/jev/presence-review?person=alex');
   assert.equal(r.statusCode, 200);
   const body = r.json();
-  assert.equal(body.people[0].id, 'methel');
+  assert.equal(body.people[0].id, 'alex');
   assert.equal(body.people[0].current.home, true);
   assert.equal(body.people[0].review.state.choice, 'home');
   assert.equal(body.people[0].review.enough.noul, 0.9);
-  assert.equal(hub.engine.people.methel.home, true, 'review is advisory only');
+  assert.equal(hub.engine.people.alex.home, true, 'review is advisory only');
 
   const sent = fake.received[0].body;
   assert.match(sent.state, /Router \(Warden\)/);
   assert.match(sent.state, /Kova app \(location\)/);
-  assert.doesNotMatch(sent.state, /Methel/, 'person names stay local');
+  assert.doesNotMatch(sent.state, /Alex/, 'person names stay local');
 
   await app.close(); await hub.stop(); await fake.close();
 });

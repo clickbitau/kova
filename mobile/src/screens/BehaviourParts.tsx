@@ -9,7 +9,7 @@ import {
 } from '../logic/automations';
 import { prayerOn } from '../logic/prayer';
 import { OFFSETS, offsetWords } from '../logic/modes';
-import { isZoneTarget, zoneCommandWords, ZONE_PRESETS, zoneTargetLabel, zoneTargetOptions, zoneTargetRoom, type ZoneCommand } from '../logic/zones';
+import { isZoneTarget, zoneCommandWords, zonePresets, zoneTargetLabel, zoneTargetOptions, zoneTargetRoom, type ZoneCommand } from '../logic/zones';
 import { Icon } from '../ui/Icon';
 import { Button, Card, HScroll, IconButton, Pill, Press, Row, Sheet } from '../ui/kit';
 import { T } from '../ui/Text';
@@ -182,7 +182,7 @@ function CommandSheet({ device, cur, onPick, onClose }: { device: string | null;
 /** A room's zone target as choices (open, half open, closed, open with the AC cooling or heating), with the current one first. */
 function zoneChoices(cur?: Command): { v: string; label: string }[] {
   const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
-  const l = ZONE_PRESETS.map(([c, label]) => ({ v: commandKey(c as Command), label }));
+  const l = zonePresets().map(([c, label]) => ({ v: commandKey(c as Command), label }));
   if (cur && !l.some(o => o.v === commandKey(cur))) l.unshift({ v: commandKey(cur), label: cap(zoneCommandWords(cur as ZoneCommand)) });
   return l;
 }

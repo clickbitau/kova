@@ -2,6 +2,8 @@
 // zone serves), the bridges' pairing state, the comfortable temperatures Kova chooses with, and the note about the
 // air conditioner maker's own link. Words for the Voice screen and the AC's panel; the hub decides everything.
 
+import { deg } from './climate.ts';
+
 export type HvacMode = 'cool' | 'heat' | 'dry' | 'fan' | 'auto';
 
 export interface RoomAcView {
@@ -34,8 +36,8 @@ const zoneWord = (n: string) => (/zone/i.test(n) ? n : `${n} zone`);
 export function roomAcRow(r: RoomAcView, rooms: { id: string; name: string }[]): { title: string; sub: string; now: string; on: boolean } {
   const shared = [...new Set(r.zones.flatMap(z => z.shared))].map(id => rooms.find(x => x.id === id)?.name).filter((x): x is string => !!x);
   const now = !r.online ? 'Not answering'
-    : r.on ? `On, ${r.hvac ? HV[r.hvac] : 'on'}${r.target != null ? ` to ${r.target}°` : ''}${r.held ? ' · your setting' : ''}`
-      : `Off${r.temp != null ? ` · ${r.temp}° in the room` : ''}`;
+    : r.on ? `On, ${r.hvac ? HV[r.hvac] : 'on'}${r.target != null ? ` to ${deg(r.target)}` : ''}${r.held ? ' · your setting' : ''}`
+      : `Off${r.temp != null ? ` · ${deg(r.temp)} in the room` : ''}`;
   return { title: r.label, sub: [list(r.zones.map(z => zoneWord(z.name))), shared.length ? `shared with ${list(shared)}` : ''].filter(Boolean).join(' · '), now, on: r.on };
 }
 

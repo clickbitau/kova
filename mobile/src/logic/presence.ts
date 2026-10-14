@@ -1,19 +1,19 @@
 // Whether this phone's location is needed for Kova to know its person is home. Plain TypeScript, tested under Node.
 //
-// The hub says what already tells it, per person (`people[].via`: e.g. ['Warden'], ['your router'],
+// The hub says what already tells it, per person (`people[].via`: e.g. ['your router'], ['a network check'],
 // ['a network check']). When something does, location is an optional extra (it notices leaving a little
 // sooner); when nothing does (or an older hub doesn't say), location is how Kova knows.
 
 export interface LocationPlan {
   /** Location is the way this person's coming and going is known. */
   needed: boolean;
-  /** What already tells Kova, joined for a sentence ("Warden and your router"), when something does. */
+  /** What already tells Kova, joined for a sentence ("your router and a network check"), when something does. */
   by: string | null;
   /** The line to show. */
   text: string;
 }
 
-/** "Warden", "Warden and your router", "Warden, your router and a network check". */
+/** "your router", "your router and a network check", "your router, a network check and an app". */
 export function joinNames(names: string[]): string {
   const n = names.filter(Boolean);
   if (n.length <= 1) return n[0] ?? '';

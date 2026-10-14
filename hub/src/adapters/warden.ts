@@ -27,7 +27,7 @@ import { LanHttpError, lanJson, lanStream, trimUrl, type SseEvent } from '../uti
  * old way (signing in once, role operator) keeps working.
  */
 export interface WardenOptions {
-  /** e.g. https://10.10.0.1 or https://router.internal */
+  /** e.g. https://192.168.1.1 or https://router.internal */
   url: string;
   /** Warden API token, from pairing (scoped) or from signing in once (cr_…, role operator). */
   token?: string;
