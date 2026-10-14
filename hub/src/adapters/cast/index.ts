@@ -30,6 +30,8 @@ export interface CastOptions {
   batchMs?: number;
   /** How long an announcement may sit buffering at its start before it's loaded again (default 8 s). */
   unstickMs?: number;
+  /** How long a speaker may take to load an announcement before it's left out (default 10 s). */
+  clipLoadMs?: number;
   /** Plain TCP instead of TLS (tests only). */
   insecure?: boolean;
   /** The ports a moved speaker group is looked for on (default 32000–32999; tests narrow it). */
@@ -123,8 +125,10 @@ class Receiver {
     const transport = await this.receiverApp();
     const r = loop
       ? await this.ch.request(NS.media, transport, {
-        type: 'QUEUE_LOAD', startIndex: 0, repeatMode: 'REPEAT_SINGLE',
-        items: [{ autoplay: true, media: { contentId: url, contentType: contentType(url), streamType: 'BUFFERED', metadata: { metadataType: 0, title } } }],
+        // Two of it, repeating the queue: the speaker fetches the next copy before this one ends and flows into it.
+        // One item on REPEAT_SINGLE ends instead on a Google speaker (FINISHED, hourly) and leaves a gap to restart.
+        type: 'QUEUE_LOAD', startIndex: 0, repeatMode: 'REPEAT_ALL',
+        items: [0, 1].map(() => ({ autoplay: true, preloadTime: 30, media: { contentId: url, contentType: contentType(url), streamType: 'BUFFERED', metadata: { metadataType: 0, title } } })),
       })
       : await this.ch.request(NS.media, transport, {
         type: 'LOAD', autoplay: true,
@@ -143,25 +147,39 @@ class Receiver {
    * volume change only while it plays nothing, so set before, the announcement starts with beeps. A speaker that put
    * its own level back a moment later (a soundbar) is set again once.
    */
-  async playClip(clip: Clip, vols?: { rec: Receiver; level: number }[], onStuck?: () => void): Promise<void> {
+  async playClip(clip: Clip, vols?: { rec: Receiver; level: number }[]): Promise<void> {
+    const loaded = await this.loadClip(clip, vols, !vols?.length);
+    if (vols?.length) await this.startClip(loaded);
+  }
+
+  /**
+   * An announcement loaded and ready (paused unless `autoplay`), at its volumes: started by startClip, so several
+   * speakers loaded one by one start in the same moment.
+   */
+  async loadClip(clip: Clip, vols?: { rec: Receiver; level: number }[], autoplay = false): Promise<{ transport: string; session?: number; clip: Clip; vols?: { rec: Receiver; level: number }[] }> {
     const transport = await this.receiverApp();
     const r = await this.ch.request(NS.media, transport, {
-      type: 'LOAD', autoplay: !vols?.length,
+      type: 'LOAD', autoplay,
       media: { contentId: clip.url, contentType: clip.contentType, streamType: 'BUFFERED', ...(clip.durationMs ? { duration: clip.durationMs / 1000 } : {}), metadata: { metadataType: 0, title: clip.title } },
     });
     if (r.data.type === 'LOAD_FAILED' || r.data.type === 'LOAD_CANCELLED' || r.data.type === 'INVALID_REQUEST') throw new Error(`${this.ep.name} couldn't play ${clip.title}`);
-    if (vols?.length) {
-      await Promise.allSettled(vols.map(v => v.rec.volume(v.level / 100)));
-      const session = (r.data.status as MediaStatus[] | undefined)?.[0]?.mediaSessionId;
-      await this.ch.request(NS.media, transport, { type: 'PLAY', ...(session != null ? { mediaSessionId: session } : {}) });
-      void this.holdVolumes(vols);
-    }
-    void this.unstick(transport, clip, this.unstickMs, onStuck);
+    if (vols?.length) await Promise.allSettled(vols.map(v => v.rec.volume(v.level / 100)));
     this.media = clip.title;
     this.queue = null;
     this.stream = null;
     this.clip = clip.title;
+    this.paused = !autoplay;
+    const session = (r.data.status as MediaStatus[] | undefined)?.[0]?.mediaSessionId;
+    if (autoplay) void this.unstick(transport, clip, this.unstickMs);
+    return { transport, ...(session != null ? { session } : {}), clip, ...(vols?.length ? { vols } : {}) };
+  }
+
+  /** Play what loadClip loaded; one that hasn't got going a few seconds in is loaded again. */
+  async startClip(l: { transport: string; session?: number; clip: Clip; vols?: { rec: Receiver; level: number }[] }): Promise<void> {
+    await this.ch.request(NS.media, l.transport, { type: 'PLAY', ...(l.session != null ? { mediaSessionId: l.session } : {}) });
     this.paused = false;
+    if (l.vols?.length) void this.holdVolumes(l.vols);
+    void this.unstick(l.transport, l.clip, this.unstickMs);
   }
 
   /** Play a queue from `start` (at `position` seconds into that song): the next CAST_WINDOW songs go to the speaker. */
@@ -201,7 +219,7 @@ class Receiver {
       console.warn(`[cast] ${this.ep.name}: ${sm.title} stopped by itself (${st.idleReason})${this.restarts.length < LOOP_RESTARTS ? ', starting it again' : ''}`);
       if (this.restarts.length < LOOP_RESTARTS) {
         this.restarts.push(now);
-        setTimeout(() => { if (this.stream === sm) void this.play(sm.url, sm.title, true).catch(e => console.warn(`[cast] ${this.ep.name}: ${(e as Error).message}`)); }, 2000).unref?.();
+        setTimeout(() => { if (this.stream === sm) void this.play(sm.url, sm.title, true).catch(e => console.warn(`[cast] ${this.ep.name}: ${(e as Error).message}`)); }, 300).unref?.();
       }
       return;
     }
@@ -349,21 +367,18 @@ class Receiver {
    * A clip that hasn't got going a few seconds in (still buffering at the start, or idle with an error) is loaded again,
    * once: a speaker or group that stalls on a file otherwise stays silent for the whole announcement.
    */
-  private async unstick(transport: string, clip: Clip, waitMs = 8000, onStuck?: () => void, again = false): Promise<void> {
+  private async unstick(transport: string, clip: Clip, waitMs = 8000): Promise<void> {
     await new Promise(r => setTimeout(r, waitMs).unref?.());
     if (this.clip !== clip.title) return;
     const m = await this.ch.request(NS.media, transport, { type: 'GET_STATUS' }).catch(() => null);
     const st = (m?.data.status as MediaStatus[] | undefined)?.[0];
     const stuck = !st ? false : (st.playerState === 'BUFFERING' || st.playerState === 'LOADING') && (st.currentTime ?? 0) < 3;
     if (!stuck) return;
-    // Loaded again and still stuck: whoever asked plays it some other way (a group's speakers one by one).
-    if (again) { console.log(`[cast] ${this.ep.name}: ${clip.title} still stuck; playing it another way`); onStuck?.(); return; }
     console.log(`[cast] ${this.ep.name}: ${clip.title} still ${(st!.playerState ?? '').toLowerCase()} after ${waitMs / 1000} s; loading it again`);
     await this.ch.request(NS.media, transport, {
       type: 'LOAD', autoplay: true,
       media: { contentId: clip.url, contentType: clip.contentType, streamType: 'BUFFERED', ...(clip.durationMs ? { duration: clip.durationMs / 1000 } : {}), metadata: { metadataType: 0, title: clip.title } },
     }).catch(e => console.log(`[cast] ${this.ep.name}: loading ${clip.title} again failed: ${(e as Error).message}`));
-    if (onStuck) void this.unstick(transport, clip, waitMs, onStuck, true);
   }
 
   /** Once it plays: each speaker still at the level it was given, else given it again (once). */
@@ -418,6 +433,7 @@ export class CastAdapter implements Adapter {
   private castOf = new Map<string, string>();
 
   constructor(private o: CastOptions = {}) {}
+  private get clipLoadMs(): number { return this.o.clipLoadMs ?? 10_000; }
 
   async start(ctx: AdapterContext): Promise<void> {
     this.ctx = ctx;
@@ -772,43 +788,29 @@ export class CastAdapter implements Adapter {
     return { on: true, media: clip.title, paused: false, track: null, shuffle: false, ...(clip.vol != null ? { vol: clip.vol } : {}) };
   }
 
-  /** An announcement on several speakers: through the Cast group that covers them (in step), the rest on their own. */
+  /**
+   * An announcement on several speakers: each on its own, never through a Cast group (a group is only as good as the
+   * speaker hosting it: a soundbar on its TV input left every Google speaker silent). Each is loaded paused at its own
+   * volume, then all start in the same moment; one that doesn't load in time is left out and said, and never holds up
+   * the rest.
+   */
   async playClipTogether(devices: Device[], clipOf: (d: Device) => Clip): Promise<PromiseSettledResult<void | DeviceState>[]> {
-    const ids = devices.map(d => this.speakerId(d));
-    const parts = ids.length > 1 ? partition(ids, this.castGroups()) : [{ ids }];
-    const out = new Map<string, Promise<void | DeviceState>>();
-    const played = (clip: Clip): DeviceState => ({ on: true, media: clip.title, paused: false, track: null, shuffle: false });
-    for (const part of parts) {
-      const gid = part.native?.id;
-      const first = devices[ids.indexOf(part.ids[0]!)]!;
-      if (gid && this.receivers.get(gid)) {
-        const clip = clipOf(first);
-        // Each member at its own level, set once the group has the clip loaded.
-        const vols = part.ids.flatMap(id => { const v = clipOf(devices[ids.indexOf(id)]!).vol; const rec = this.receivers.get(id); return v != null && rec ? [{ rec, level: v }] : []; });
-        // The group stuck at the start even after loading it again (its host busy elsewhere): each speaker on its own,
-        // but the one hosting the group (it's what's stuck).
-        const g = this.receivers.get(gid)!;
-        const alone = () => {
-          g.clip = null;
-          void g.stop().catch(() => {});
-          for (const id of part.ids) {
-            const rec = this.receivers.get(id), d = devices[ids.indexOf(id)]!;
-            if (!rec || rec.ep.host === g.ep.host) continue;
-            this.viaGroup.delete(id);
-            void this.playClip(d, clipOf(d)).catch(e => console.log(`[cast] ${d.name}: ${(e as Error).message}`));
-          }
-        };
-        const p = (async () => {
-          await g.playClip(clip, vols.length ? vols : undefined, alone);
-          for (const id of part.ids) { this.viaGroup.set(id, gid); this.silenced.delete(id); this.receivers.get(id)!.media = clip.title; this.receivers.get(id)!.clip = clip.title; }
-          return played(clip);
-        })();
-        for (const id of part.ids) { const v = clipOf(devices[ids.indexOf(id)]!).vol; out.set(id, p.then(st => v != null ? { ...st, vol: v } : st)); }
-        continue;
-      }
-      for (const id of part.ids) { const d = devices[ids.indexOf(id)]!; out.set(id, this.playClip(d, clipOf(d))); }
-    }
-    return Promise.allSettled(ids.map(id => out.get(id)!));
+    const loads = await Promise.allSettled(devices.map(async d => {
+      const id = this.speakerId(d), r = this.receivers.get(id);
+      if (!r) throw new Error(`${d.name} isn’t reachable`);
+      this.viaGroup.delete(id);
+      this.silenced.delete(id);
+      const clip = clipOf(d);
+      const loaded = await within(r.loadClip(clip, clip.vol != null ? [{ rec: r, level: clip.vol }] : undefined), this.clipLoadMs, `${d.name} didn’t load it in ${Math.round(this.clipLoadMs / 1000)} s`);
+      return { r, loaded, clip };
+    }));
+    // Together: every PLAY sent at once.
+    return Promise.allSettled(loads.map(async l => {
+      if (l.status === 'rejected') throw l.reason;
+      await l.value.r.startClip(l.value.loaded);
+      const clip = l.value.clip;
+      return { on: true, media: clip.title, paused: false, track: null, shuffle: false, ...(clip.vol != null ? { vol: clip.vol } : {}) } as DeviceState;
+    }));
   }
 
   async restorePlayback(device: Device, snap0: unknown | null): Promise<{ words: string; state?: DeviceState }> {
@@ -897,3 +899,9 @@ export class CastAdapter implements Adapter {
 }
 
 export type { CastMessage };
+
+/** A promise, or an error with `why` once `ms` pass. */
+function within<T>(p: Promise<T>, ms: number, why: string): Promise<T> {
+  let t: NodeJS.Timeout;
+  return Promise.race([p, new Promise<never>((_, no) => { t = setTimeout(() => no(new Error(why)), ms); t.unref?.(); })]).finally(() => clearTimeout(t));
+}

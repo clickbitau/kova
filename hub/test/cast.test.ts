@@ -106,34 +106,40 @@ test('Cast: several speakers playing the same thing use their Cast group (perfec
   }
 });
 
-test('Cast: an announcement on a Cast group’s speakers plays through the group (in step), each at its own volume; put back, the group stops', async () => {
-  const a = fakeCast('Music Room Speaker'), b = fakeCast('Baby Room speaker'), c = fakeCast('Guest Room speaker');
+test('Cast: an announcement plays on each speaker on its own, never through their Cast group: loaded paused at its volume, then all started together; a speaker that doesn’t answer is left out without holding up the rest', async () => {
+  const a = fakeCast('Music Room Speaker'), b = fakeCast('Baby Room speaker'), c = fakeCast('Guest Room speaker'), dead = fakeCast('Soundbar');
   const g = fakeCast('Home Speaker Group', ['aaaa0000-0000-0000-0000-000000000001', 'bbbb0000-0000-0000-0000-000000000002']);
   const ep = async (f: ReturnType<typeof fakeCast>, id: string, model: string) => ({ id, name: f.name, model, host: '127.0.0.1', port: await listen(f) });
   const reg = new Registry(new Store(':memory:'));
   const cast = new CastAdapter({
-    discover: false, insecure: true, pollMs: 0, batchMs: 20,
-    endpoints: [await ep(a, 'aaaa0000000000000000000000000001', 'Nest Audio'), await ep(b, 'bbbb0000000000000000000000000002', 'Nest Audio'), await ep(c, 'cccc0000000000000000000000000003', 'Nest Audio'), await ep(g, 'dddd0000000000000000000000000004', 'Google Cast Group')],
+    discover: false, insecure: true, pollMs: 0, batchMs: 20, clipLoadMs: 1500,
+    endpoints: [await ep(a, 'aaaa0000000000000000000000000001', 'Nest Audio'), await ep(b, 'bbbb0000000000000000000000000002', 'Nest Audio'), await ep(c, 'cccc0000000000000000000000000003', 'Nest Audio'), await ep(dead, 'eeee0000000000000000000000000005', 'Q930B'), await ep(g, 'dddd0000000000000000000000000004', 'Google Cast Group')],
   });
   await reg.addAdapter(cast);
   try {
     const clip = { url: 'http://hub/api/clip/adhan.mp3', title: 'Adhan', contentType: 'audio/mpeg', durationMs: 3000 };
-    const ids = ['cast_aaaa0000000000000000000000000001', 'cast_bbbb0000000000000000000000000002', 'cast_cccc0000000000000000000000000003'];
+    const ids = ['cast_aaaa0000000000000000000000000001', 'cast_bbbb0000000000000000000000000002', 'cast_cccc0000000000000000000000000003', 'cast_eeee0000000000000000000000000005'];
     const snaps = await Promise.all(ids.map(id => reg.snapshotPlayback(id)));
-    const r = await reg.playClips([{ id: ids[0]!, clip, vol: 10 }, { id: ids[1]!, clip, vol: 5 }, { id: ids[2]!, clip, vol: 8 }], { kind: 'automation', label: 'Call to prayer' }, { startWaitMs: 0 });
-    assert.deepEqual(r.map(x => x.status), ['fulfilled', 'fulfilled', 'fulfilled']);
-    // One load on the group for its two speakers; the third on its own.
-    assert.equal(g.log.filter(l => l.type === 'LOAD').length, 1);
-    assert.equal(a.log.filter(l => l.type === 'LOAD').length + b.log.filter(l => l.type === 'LOAD').length, 0);
-    assert.equal(c.log.filter(l => l.type === 'LOAD').length, 1);
+    // The soundbar stops answering (busy on its TV input).
+    dead.st.deaf = true;
+    const t0 = Date.now();
+    const r = await reg.playClips([{ id: ids[0]!, clip, vol: 10 }, { id: ids[1]!, clip, vol: 5 }, { id: ids[2]!, clip, vol: 8 }, { id: ids[3]!, clip, vol: 12 }], { kind: 'automation', label: 'Call to prayer' }, { startWaitMs: 0 });
+    assert.deepEqual(r.map(x => x.status), ['fulfilled', 'fulfilled', 'fulfilled', 'rejected']);
+    assert.ok(Date.now() - t0 < 5000, 'the silent soundbar held nobody up for long');
+    assert.equal(g.loads(), 0, 'nothing through the Cast group');
+    for (const f of [a, b, c]) {
+      const steps = f.log.map(l => l.type).filter(t => ['LOAD', 'SET_VOLUME', 'PLAY'].includes(t));
+      assert.deepEqual(steps, ['LOAD', 'SET_VOLUME', 'PLAY'], `${f.name}: loaded paused, its volume, then played`);
+      assert.equal(f.log.find(l => l.type === 'LOAD')!.data.autoplay, false);
+    }
     assert.deepEqual([a.st.level, b.st.level, c.st.level], [0.1, 0.05, 0.08], 'each at its own volume');
     assert.equal(reg.get(ids[0]!)!.state.media, 'Adhan');
-    // Put back: the group's clip stops.
-    await Promise.all(ids.map((id, i) => reg.restorePlayback(id, snaps[i]!, { kind: 'automation', label: 'Call to prayer' })));
-    assert.equal(g.st.app, null);
+    dead.st.deaf = false;
+    await Promise.all(ids.slice(0, 3).map((id, i) => reg.restorePlayback(id, snaps[i]!, { kind: 'automation', label: 'Call to prayer' })));
+    for (const f of [a, b, c]) assert.equal(f.st.app, null, `${f.name} idle again`);
   } finally {
     await reg.stop();
-    for (const f of [a, b, c, g]) f.server.close();
+    for (const f of [a, b, c, dead, g]) f.server.close();
   }
 });
 
@@ -282,7 +288,8 @@ test('Cast: a recording set to repeat loops on the speaker; a stream plays once'
   try {
     await reg.command(id, { on: true, media: 'Rain' }, { kind: 'user', label: 'You' });
     const q = a.log.find(l => l.type === 'QUEUE_LOAD')!;
-    assert.equal(q.data.repeatMode, 'REPEAT_SINGLE', 'plays again from the start, until stopped');
+    assert.equal(q.data.repeatMode, 'REPEAT_ALL', 'plays again from the start, until stopped');
+    assert.equal((q.data.items as unknown[]).length, 2, 'the next copy is fetched before this one ends: no gap');
     assert.equal((q.data.items as { media: { streamType: string } }[])[0].media.streamType, 'BUFFERED');
     assert.equal(a.st.url, urls.Rain);
     // The speaker drops it by itself (the recording couldn't be fetched again): started again; stopped by a person: not.
