@@ -66,8 +66,8 @@ function queueItem(t: QueueTrack, index: number) {
 }
 
 interface MediaStatus {
-  mediaSessionId?: number; playerState?: string; idleReason?: string; currentItemId?: number; currentTime?: number;
-  media?: { customData?: { kova?: number } }; items?: { itemId: number; customData?: { kova?: number }; media?: { customData?: { kova?: number } } }[];
+  mediaSessionId?: number; playerState?: string; idleReason?: string; currentItemId?: number; currentTime?: number; repeatMode?: string;
+  media?: { contentId?: string; customData?: { kova?: number }; metadata?: { title?: string } }; items?: { itemId: number; customData?: { kova?: number }; media?: { customData?: { kova?: number } } }[];
 }
 
 /** One Cast receiver: a speaker, display, TV or group. */
@@ -118,6 +118,26 @@ class Receiver {
     this.ch.connectTo(app.transportId);
     this.transport = app.transportId;
     return app.transportId;
+  }
+
+  /**
+   * The media player is open but Kova holds nothing for it (Kova restarted while it played, or it's left open a few
+   * minutes after an announcement): what it holds, asked of it. A stream or a recording is taken as Kova's own again,
+   * so it shows by its name, loops, and comes back after an announcement. False when it plays nothing.
+   */
+  async adopt(transport: string): Promise<boolean> {
+    this.ch.connectTo(transport);
+    this.transport = transport;
+    const m = await this.ch.request(NS.media, transport, { type: 'GET_STATUS' });
+    const st = (m.data.status as MediaStatus[] | undefined)?.[0];
+    if (!st?.media?.contentId || !st.playerState || st.playerState === 'IDLE') return false;
+    this.paused = st.playerState === 'PAUSED';
+    // A song of a queue Kova lost: playing, but not something to start again on its own.
+    if (typeof st.media.customData?.kova === 'number') return true;
+    const title = st.media.metadata?.title || 'Casting';
+    this.media = title;
+    this.stream = { url: st.media.contentId, title, loop: st.repeatMode === 'REPEAT_ALL' || st.repeatMode === 'REPEAT_SINGLE' };
+    return true;
   }
 
   /** Play a stream or a recording; `loop` plays a recording again from the start each time it ends. */
@@ -727,6 +747,8 @@ export class CastAdapter implements Adapter {
           playing = !!g.app && !g.app.isIdleScreen;
           if (!playing) this.viaGroup.delete(id);
         }
+        // The media player open with nothing Kova knows of: what it holds (nothing, a few minutes after an announcement).
+        if (playing && !gid && app?.appId === DEFAULT_RECEIVER && !r.media && !r.queue && !r.clip) playing = await r.adopt(app.transportId).catch(() => true);
         if (!playing) { r.media = null; r.queue = null; }
         const src = gid ? this.receivers.get(gid)! : r;
         if (playing) await src.refreshQueue();
@@ -771,6 +793,7 @@ export class CastAdapter implements Adapter {
     const { app } = await src.status();
     if (!app || app.isIdleScreen || this.silenced.has(id)) return null;
     if (app.appId !== DEFAULT_RECEIVER) return { other: true };
+    if (!src.queue && !src.stream && !src.clip && !(await src.adopt(app.transportId).catch(() => false))) return null;
     await src.refreshQueue();
     if (src.queue) return { via: gid, paused: src.paused, queue: { q: src.queue.q, index: src.queue.index, position: src.queue.position } };
     if (src.stream) return { via: gid, paused: src.paused, stream: { ...src.stream } };

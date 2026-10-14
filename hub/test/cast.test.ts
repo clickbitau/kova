@@ -11,7 +11,7 @@ import { encodeMessage, decodeMessage, NS } from '../src/adapters/cast/channel.t
 /** A fake Cast receiver: enough of receiver, media and multizone to drive the adapter. */
 function fakeCast(name: string, members: string[] = []) {
   const log: { ns: string; type: string; data: Record<string, unknown> }[] = [];
-  const st = { app: null as null | { appId: string; sessionId: string; transportId: string }, level: 0.3, muted: false, url: '', paused: false, time: 0, deaf: false };
+  const st = { app: null as null | { appId: string; sessionId: string; transportId: string }, level: 0.3, muted: false, url: '', title: '', repeat: 'REPEAT_OFF', paused: false, time: 0, deaf: false };
   const socks: net.Socket[] = [];
   /** The speaker says its media stopped by itself (a fetch that failed: ERROR), unasked. */
   const idle = (idleReason: string) => { for (const k of socks) k.write(encodeMessage({ source: 'web-1', destination: 'sender-0', namespace: NS.media, data: { type: 'MEDIA_STATUS', requestId: 0, status: [{ mediaSessionId: 7, playerState: 'IDLE', idleReason }] } })); };
@@ -37,13 +37,16 @@ function fakeCast(name: string, members: string[] = []) {
           if (type === 'SET_VOLUME') { const v = m.data.volume as { level?: number; muted?: boolean }; if (v.level != null) st.level = v.level; if (v.muted != null) st.muted = v.muted; }
           reply({ source: 'receiver-0', namespace: NS.receiver, data: status(rid) });
         } else if (m.namespace === NS.media && (type === 'LOAD' || type === 'QUEUE_LOAD')) {
-          st.url = String((type === 'LOAD' ? m.data.media as { contentId: string } : (m.data.items as { media: { contentId: string } }[])[0].media).contentId);
+          const media = (type === 'LOAD' ? m.data.media : (m.data.items as { media: unknown }[])[0]!.media) as { contentId: string; metadata?: { title?: string } };
+          st.url = String(media.contentId);
+          st.title = media.metadata?.title ?? '';
+          st.repeat = String(m.data.repeatMode ?? 'REPEAT_OFF');
           st.paused = false;
           reply({ source: 'web-1', namespace: NS.media, data: { type: 'MEDIA_STATUS', requestId: rid, status: [{ mediaSessionId: 7, playerState: 'PLAYING' }] } });
         } else if (m.namespace === NS.media && (type === 'GET_STATUS' || type === 'PAUSE' || type === 'PLAY' || type === 'SEEK' || type === 'QUEUE_UPDATE')) {
           if (type === 'PAUSE' || type === 'PLAY') { assert.equal(m.data.mediaSessionId, 7); st.paused = type === 'PAUSE'; }
           if (type === 'SEEK') st.time = Number(m.data.currentTime);
-          reply({ source: 'web-1', namespace: NS.media, data: { type: 'MEDIA_STATUS', requestId: rid, status: st.app ? [{ mediaSessionId: 7, playerState: st.paused ? 'PAUSED' : 'PLAYING', currentTime: st.time }] : [] } });
+          reply({ source: 'web-1', namespace: NS.media, data: { type: 'MEDIA_STATUS', requestId: rid, status: st.app ? [{ mediaSessionId: 7, playerState: !st.url ? 'IDLE' : st.paused ? 'PAUSED' : 'PLAYING', currentTime: st.time, repeatMode: st.repeat, ...(st.url ? { media: { contentId: st.url, metadata: { title: st.title } } } : {}) }] : [] } });
         } else if (m.namespace === NS.multizone) {
           reply({ source: 'receiver-0', namespace: NS.multizone, data: { type: 'MULTIZONE_STATUS', requestId: rid, status: { devices: members.map(id => ({ deviceId: id, name: id })) } } });
         }
@@ -304,6 +307,44 @@ test('Cast: a recording set to repeat loops on the speaker; a stream plays once'
     assert.equal(a.st.url, urls.Radio);
   } finally {
     await reg.stop();
+    a.server.close();
+  }
+});
+
+test('Cast: after Kova restarts, what a speaker still plays is Kova’s own again: shown by name, and back after an announcement; a media player left open after one shows as off', async () => {
+  const a = fakeCast('Bedroom Speaker');
+  const urls: Record<string, string> = { Thunderstorm: 'http://hub/api/sound/Thunderstorm' };
+  const endpoints = [{ id: 'aaaa0000000000000000000000000002', name: a.name, model: 'Nest Audio', host: '127.0.0.1', port: await listen(a) }];
+  const id = 'cast_aaaa0000000000000000000000000002';
+  const start = async () => {
+    const reg = new Registry(new Store(':memory:'), n => urls[n]);
+    reg.sourceLoops = n => n === 'Thunderstorm';
+    const cast = new CastAdapter({ discover: false, insecure: true, pollMs: 0, batchMs: 20, endpoints });
+    await reg.addAdapter(cast);
+    return { reg, poll: () => (cast as unknown as { poll(): Promise<void> }).poll() };
+  };
+  let k = await start();
+  try {
+    await k.reg.command(id, { on: true, media: 'Thunderstorm' }, { kind: 'user', label: 'You' });
+    await k.reg.stop();
+    // Kova restarts; the speaker carries on.
+    k = await start();
+    await k.poll();
+    assert.equal(k.reg.get(id)!.state.media, 'Thunderstorm', 'by its name, not “Casting”');
+    const snap = await k.reg.snapshotPlayback(id);
+    await k.reg.playClip(id, { url: 'http://hub/api/clip/adhan.mp3', title: 'Adhan', contentType: 'audio/mpeg', durationMs: 3000 }, 20, { kind: 'automation', label: 'Call to prayer' });
+    const words = await k.reg.restorePlayback(id, snap, { kind: 'automation', label: 'Call to prayer' });
+    assert.equal(words, 'back to Thunderstorm');
+    assert.equal(a.st.url, urls.Thunderstorm);
+    assert.equal(a.st.repeat, 'REPEAT_ALL', 'looping again');
+    // An announcement that ended leaves the media player open a few minutes, holding nothing: off, not “Casting”.
+    a.st.url = '';
+    await k.reg.stop();
+    k = await start();
+    await k.poll();
+    assert.equal(k.reg.get(id)!.state.on, false);
+  } finally {
+    await k.reg.stop();
     a.server.close();
   }
 });
