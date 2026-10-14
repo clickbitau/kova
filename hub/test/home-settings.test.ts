@@ -50,8 +50,8 @@ test('Home settings: rooms, people and the home name', async () => {
   const s = await setup();
   try {
     const call = (method: 'PATCH' | 'PUT' | 'POST' | 'DELETE', url: string, payload?: object) => s.app.inject({ method, url, payload: payload ?? {} });
-    assert.equal((await call('PUT', '/api/home', { name: '  Ahmed   home ' })).statusCode, 200);
-    assert.equal(s.hub.config.get().name, 'Ahmed home');
+    assert.equal((await call('PUT', '/api/home', { name: '  Parker   home ' })).statusCode, 200);
+    assert.equal(s.hub.config.get().name, 'Parker home');
 
     let r = await call('POST', '/api/rooms', { name: 'Hallway', icon: 'stairs' });
     assert.equal(r.json().id, 'hallway');

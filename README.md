@@ -84,6 +84,6 @@ the things cameras and phones would normally do:
 
 ```bash
 curl -X POST localhost:8140/api/devices/doorbell/event -H 'content-type: application/json' -d '{"type":"person"}'
-curl -X POST localhost:8140/api/people/brishti/presence -H 'content-type: application/json' -d '{"home":false}'
+curl -X POST localhost:8140/api/people/jordan/presence -H 'content-type: application/json' -d '{"home":false}'
 curl -X POST localhost:8140/api/devices/dining/physical -H 'content-type: application/json' -d '{"on":true}'   # someone used a wall switch
 ```

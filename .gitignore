@@ -8,3 +8,10 @@ dist/
 /releases/
 /current
 node_modules
+
+# A home's own Home Assistant config, server notes and backups never go in the product repo.
+/homeassistant/
+/configuration.yaml
+/automations.yaml
+/blueprints/
+*.storage/

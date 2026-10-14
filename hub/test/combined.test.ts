@@ -22,7 +22,7 @@ class One implements Adapter {
 
 test('a soundbar reached through two integrations becomes one device: each part of a command goes to the one that can do it', async () => {
   const t = await testHub(12);
-  const bar = new One('smartthings', 'Samsung SmartThings', { id: 'st_bar', name: 'Samsung Soundbar Q930B', capabilities: ['onoff', 'volume', 'mute', 'input', 'sound'], state: { on: false, vol: 12, input: 'tv' } });
+  const bar = new One('smartthings', 'Samsung SmartThings', { id: 'st_bar', name: 'Samsung Soundbar Q990D', capabilities: ['onoff', 'volume', 'mute', 'input', 'sound'], state: { on: false, vol: 12, input: 'tv' } });
   const cast = new One('cast', 'Google Cast', { id: 'cast_bar', name: 'Soundbar', capabilities: ['onoff', 'media', 'volume', 'pause'], state: { on: false, media: null } });
   await t.hub.reg.addAdapter(bar);
   await t.hub.reg.addAdapter(cast);
@@ -31,7 +31,7 @@ test('a soundbar reached through two integrations becomes one device: each part 
     // Suggested, with the integration that switches and picks inputs first.
     let s = (await app.inject({ url: '/api/state' })).json();
     const idea = s.combineIdeas.find((i: { members: string[] }) => i.members.includes('st_bar'));
-    assert.deepEqual([idea.name, idea.members], ['Samsung Soundbar Q930B', ['st_bar', 'cast_bar']]);
+    assert.deepEqual([idea.name, idea.members], ['Samsung Soundbar Q990D', ['st_bar', 'cast_bar']]);
     assert.match(idea.why, /through Samsung SmartThings .* through Google Cast/);
 
     let r = await app.inject({ method: 'POST', url: '/api/combined', payload: { name: idea.name, members: idea.members } });

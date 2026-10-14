@@ -165,7 +165,7 @@ test('backup API: list, make one, download needs auth', async () => {
   // Without a token, downloads only work from this machine.
   const open = await buildServer(hub, { webRoot, backups });
   assert.equal((await open.inject({ url: `/api/backups/${made.backup.name}` })).statusCode, 200);
-  assert.equal((await open.inject({ url: `/api/backups/${made.backup.name}`, remoteAddress: '10.10.10.20' })).statusCode, 403);
+  assert.equal((await open.inject({ url: `/api/backups/${made.backup.name}`, remoteAddress: '192.168.10.20' })).statusCode, 403);
   await open.close();
   await hub.stop();
   rmSync(dataDir, { recursive: true, force: true });

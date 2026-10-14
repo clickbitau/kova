@@ -199,7 +199,7 @@ test('Matter: commission a virtual light, control it, follow changes, reconnect 
 
     // Unreachable device (its packets are dropped, like a bulb switched off at the wall):
     // commands fail with a clear error instead of hanging, and stop() still shuts down cleanly.
-    const deviceIps = ['abcd::14', '10.10.10.20'];
+    const deviceIps = ['abcd::14', '192.168.10.20'];
     sim.router.intercept((packet, route) => { if (!deviceIps.includes(packet.sourceAddress) && !deviceIps.includes(packet.destAddress)) route(packet); });
     await assert.rejects(reg2.command(lampId, { bri: 90 }, { kind: 'user', label: 'You' }), /Matter: .*didn't respond/);
 

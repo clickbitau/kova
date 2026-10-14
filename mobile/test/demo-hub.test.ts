@@ -46,8 +46,10 @@ test('the demo snapshot has every part the screens read, in the real shapes', ()
 
 test('no real home in the demo: generic names only', () => {
   const s = createDemoHub({ now: () => at(12) }).snapshot();
-  const text = JSON.stringify(s);
-  assert.doesNotMatch(text, /Ahmed|Methel|Brishti|Perth/);
+  assert.equal(s.home.name, 'Demo home');
+  assert.deepEqual(s.people.map(p => p.name), ['Alex', 'Sam'], 'made-up people');
+  assert.equal(s.home.timezone, 'UTC', 'nowhere in particular');
+  assert.doesNotMatch(JSON.stringify(s), /\b(10\.10\.|Australia\/)/, 'no real network or place');
 });
 
 test('energy follows the sun and what is on', () => {

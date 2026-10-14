@@ -4,7 +4,7 @@ import { homeState, homeStateKey, widgetModel, widgetSnapshot } from '../src/log
 import type { Snapshot } from '../src/api/types.ts';
 
 const snap = {
-  home: { name: 'The Ahmeds', timezone: 'Australia/Perth', now: 1000, nowHour: 19, date: '2026-09-30', dateLabel: '', clock: '19:00' },
+  home: { name: 'The Parkers', timezone: 'Australia/Perth', now: 1000, nowHour: 19, date: '2026-09-30', dateLabel: '', clock: '19:00' },
   rooms: [],
   favourites: ['lamp', 'speaker'],
   speakerGroups: [],

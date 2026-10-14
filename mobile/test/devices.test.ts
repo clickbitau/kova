@@ -34,9 +34,9 @@ test('status lines and colours match the web app', () => {
 });
 
 test('tapping a tile: lights switch, speakers start the first source, a Helix box pauses, cameras open', () => {
-  const src = [{ name: 'Tarateel' }];
+  const src = [{ name: 'Ocean waves' }];
   assert.deepEqual(toggleCommand(all.lamp, src), { on: false });
-  assert.deepEqual(toggleCommand(all.speaker, src), { on: true, media: 'Tarateel', vol: 20 });
+  assert.deepEqual(toggleCommand(all.speaker, src), { on: true, media: 'Ocean waves', vol: 20 });
   assert.deepEqual(toggleCommand(all.box, src), { paused: false });
   assert.equal(toggleCommand({ ...all.box, on: false } as Dev, src), null, 'nothing playing: open its panel to pick something');
   assert.equal(toggleCommand(all.door, src), null);

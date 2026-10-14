@@ -10,7 +10,7 @@ services:
       - ./data:/data                 # kova.db, integrations.json, home.json, pairings, backups/
       - ./airconnect:/opt/airconnect:ro # put aircast-linux-<cpu> here to bridge AirPlay → Cast
     environment:
-      TZ: Australia/Perth
+      TZ: ${TZ:-Etc/UTC}
       # KOVA_TOKEN: change-me        # require a token on the API (recommended)
       # KOVA_BACKUP_TIME: "03:10"    # nightly backup, home time; "off" to disable
       # KOVA_BACKUP_KEEP: "14"
@@ -22,4 +22,4 @@ services:
     volumes:
       - ./owntone:/config
     environment:
-      TZ: Australia/Perth
+      TZ: ${TZ:-Etc/UTC}

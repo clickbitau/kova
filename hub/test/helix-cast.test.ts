@@ -52,7 +52,7 @@ async function home() {
   const fc = new FakeSpeakers('cast', 'Google Cast', [
     { id: 'kitchen', name: 'Kitchen speaker', room: 'kitchen' }, { id: 'dining', name: 'Dining speaker', room: 'kitchen' }, { id: 'office', name: 'Office speaker', room: 'office' },
   ], { groups: [{ id: 'home', name: 'Home speakers', members: ['kitchen', 'dining'] }], seekLatency: 10 });
-  const fs = new FakeSpeakers('sonos', 'Sonos', [{ id: 'ray', name: 'Ray', room: 'lounge' }], { dynamic: true, seekLatency: 10 });
+  const fs = new FakeSpeakers('sonos', 'Sonos', [{ id: 'ray', name: 'Patio', room: 'lounge' }], { dynamic: true, seekLatency: 10 });
   const dir = mkdtempSync(join(tmpdir(), 'kova-cast-'));
   const hub = new Hub({
     dbPath: ':memory:', dataDir: dir, tickMs: 0,
@@ -91,7 +91,7 @@ test('Helix casting: Helix’s token lists the speakers and groups, plays its qu
     assert.equal(r.statusCode, 200, r.body);
     assert.deepEqual(r.json(), { ok: true, session: 'hx-3f2a9c01d4e5b6a7' });
     await sleep(300);
-    // Every speaker plays it (the group's Cast part as one stream, Ray alongside; the office speaker too).
+    // Every speaker plays it (the group's Cast part as one stream, Patio alongside; the office speaker too).
     const media = h.hub.reg.get('office')!.state.media!;
     assert.match(media, /^Helix · b6a7$/);
     for (const id of ['kitchen', 'dining', 'ray', 'office']) assert.equal(h.hub.reg.get(id)!.state.media, media, id);

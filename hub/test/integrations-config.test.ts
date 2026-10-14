@@ -56,7 +56,7 @@ const SEED = {
   tapo: { username: 'me@example.com', password: 'tapo-pass', authHash: 'aGFzaA==', devices: [] },
   vesync: { email: 'v@example.com', password: 'vesync-pass', region: 'us' },
   nest: { projectId: 'p', clientId: 'c', clientSecret: 'nest-secret', refreshToken: 'nest-refresh', tokenUrl: 'http://127.0.0.1:9/token', pollMs: 0 },
-  presence: { opnsense: { url: 'https://10.10.0.1', key: 'opn-key', secret: 'opn-secret' }, people: { alex: ['aa:bb:cc:dd:ee:ff'] } },
+  presence: { opnsense: { url: 'https://192.168.1.1', key: 'opn-key', secret: 'opn-secret' }, people: { alex: ['aa:bb:cc:dd:ee:ff'] } },
   notify: { ntfy: { topic: 'kova', token: 'ntfy-token' } },
 };
 const SECRET_VALUES = ['abcdefghijklmnop', 'tapo-pass', 'aGFzaA==', 'vesync-pass', 'nest-secret', 'nest-refresh', 'opn-key', 'opn-secret', 'ntfy-token'];

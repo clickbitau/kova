@@ -68,7 +68,7 @@ test('Presence (router): phone appears → home at once; gone → away only afte
     assert.equal(hub.engine.people.alex.home, false);
 
     // Alex's phone joins Wi-Fi (the router shows MACs lower case; config was upper case).
-    opn.arp.push(opn.phone(METHEL_MAC.toLowerCase(), '10.10.30.5'));
+    opn.arp.push(opn.phone(METHEL_MAC.toLowerCase(), '192.168.1.5'));
     await presence.poll();
     assert.equal(hub.engine.people.alex.home, true, 'home immediately');
     assert.equal(lastPresence()?.cause.label, ROUTER);
@@ -82,7 +82,7 @@ test('Presence (router): phone appears → home at once; gone → away only afte
     clock.t += 8 * MIN; await presence.poll();
     assert.equal(hub.engine.people.alex.home, true, 'still home 9 min after it disappeared');
     // It comes back briefly: the clock restarts.
-    opn.arp.push(opn.phone(METHEL_MAC, '10.10.30.5'));
+    opn.arp.push(opn.phone(METHEL_MAC, '192.168.1.5'));
     clock.t += 30_000; await presence.poll();
     opn.arp.length = 0;
     clock.t += 9 * MIN; await presence.poll();
@@ -92,7 +92,7 @@ test('Presence (router): phone appears → home at once; gone → away only afte
     assert.equal(lastPresence()?.what, 'Alex left home');
 
     // An expired ARP entry doesn't count.
-    opn.arp.push({ ...opn.phone(METHEL_MAC, '10.10.30.5'), expired: true });
+    opn.arp.push({ ...opn.phone(METHEL_MAC, '192.168.1.5'), expired: true });
     clock.t += MIN; await presence.poll();
     assert.equal(hub.engine.people.alex.home, false);
   } finally { await done(); }
@@ -101,7 +101,7 @@ test('Presence (router): phone appears → home at once; gone → away only afte
 test('Presence: a phone automation "left" beats the router for 15 minutes; "arrived" wins at once', async () => {
   const { hub, clock, opn, presence, lastPresence, done } = await setup(10);
   try {
-    opn.arp.push(opn.phone(METHEL_MAC, '10.10.30.5'));
+    opn.arp.push(opn.phone(METHEL_MAC, '192.168.1.5'));
     await presence.poll();
     assert.equal(hub.engine.people.alex.home, true);
 
@@ -116,13 +116,13 @@ test('Presence: a phone automation "left" beats the router for 15 minutes; "arri
 
     // Wi-Fi drops as the car leaves, flaps back within the window: still away.
     opn.arp.length = 0; clock.t += MIN; await presence.poll();
-    opn.arp.push(opn.phone(METHEL_MAC, '10.10.30.5')); clock.t += MIN; await presence.poll();
+    opn.arp.push(opn.phone(METHEL_MAC, '192.168.1.5')); clock.t += MIN; await presence.poll();
     assert.equal(hub.engine.people.alex.home, false, 'within 15 min of "left"');
 
     // After the window, a real return is seen by the router.
     opn.arp.length = 0; clock.t += 20 * MIN; await presence.poll();
     assert.equal(hub.engine.people.alex.home, false);
-    opn.arp.push(opn.phone(METHEL_MAC, '10.10.30.5')); clock.t += MIN; await presence.poll();
+    opn.arp.push(opn.phone(METHEL_MAC, '192.168.1.5')); clock.t += MIN; await presence.poll();
     assert.equal(hub.engine.people.alex.home, true, 'back home after the window');
     assert.equal(lastPresence()?.cause.label, ROUTER);
     const learned = hub.store.get<Record<string, Record<string, { reliability: number; correct: number; contradicted: number }>>>('presenceLearning');

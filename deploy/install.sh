@@ -128,7 +128,7 @@ if [[ -n "$SOURCE" ]]; then
   if [[ "$(cd "$SOURCE" && pwd -P)" != "$(cd "$KOVA_DIR" 2>/dev/null && pwd -P || true)" ]]; then
     log "Copying the code from $SOURCE to $KOVA_DIR"
     run install -d -m 0755 "$KOVA_DIR"
-    run_sh "tar -C '$SOURCE' --exclude=./node_modules --exclude=./hub/node_modules --exclude=./data --exclude=./hub/data --exclude=./.claude --exclude=./homeassistant --exclude=./home-assistant-setup.md --exclude=./ct105-lxc.conf --exclude=./docker-containers.txt -cf - . | tar -C '$KOVA_DIR' -xf -"
+    run_sh "tar -C '$SOURCE' --exclude=./node_modules --exclude=./hub/node_modules --exclude=./data --exclude=./hub/data --exclude=./.claude -cf - . | tar -C '$KOVA_DIR' -xf -"
   fi
 elif [[ -f "$KOVA_DIR/package.json" && -d "$KOVA_DIR/hub" ]]; then
   log "Code already in $KOVA_DIR (use deploy/update.sh to update it)"

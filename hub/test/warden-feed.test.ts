@@ -73,7 +73,7 @@ test('Warden: pair with a code approved at /apps, then follow the live feed, dev
     await until('offline', () => t.dev(id).online === false);
     const events: { type: string; data: Record<string, unknown> }[] = [];
     t.hub.reg.on('event', e => events.push({ type: e.type, data: e.data }));
-    w.publish('device.new', { type: 'device.new', device: { id: 'dev_new', macs: ['00:14:78:3a:41:0c'], ips: ['10.10.30.41'], vendor: 'TP-Link', class: 'plug', online: true, paused: false, network: { id: 'iot', name: 'IoT', vlan: 30 } } });
+    w.publish('device.new', { type: 'device.new', device: { id: 'dev_new', macs: ['00:14:78:3a:41:0c'], ips: ['192.168.1.41'], vendor: 'TP-Link', class: 'plug', online: true, paused: false, network: { id: 'iot', name: 'IoT', vlan: 30 } } });
     w.publish('threat.blocked', { incidentId: 'i1', title: 'Blocked a login attack on SSH', body: '40 attempts from 203.0.113.9.', level: 'act', count: 40, device: {}, port: 22, mitigated: true });
     w.publish('wan.failover', { wan: 'wan2', wanName: '5G backup', from: 'wan1', fromName: 'NBN' });
     await until('three events', () => events.length === 3);

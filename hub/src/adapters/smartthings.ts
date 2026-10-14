@@ -6,7 +6,7 @@ import type { Command, Device, DeviceState } from '../model/types.ts';
 
 // Samsung soundbars through SmartThings: power, input, volume, mute, sound mode and night mode.
 //
-// Samsung's local soundbar API (JSON-RPC) only exists on the 2024 "D" models and later; a Q930B (2022) and the
+// Samsung's local soundbar API (JSON-RPC) only exists on the 2024 "D" models and later; a Q990B (2022) and the
 // other A/B/C models are only reachable through Samsung's SmartThings cloud, the way Home Assistant does it.
 // Sound mode and night mode aren't SmartThings capabilities: they go through the soundbar's `execute` capability
 // with Samsung's own resource paths (/sec/networkaudio/soundmode and /advancedaudio).

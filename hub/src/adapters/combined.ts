@@ -193,7 +193,7 @@ export interface CombineIdea { key: string; name: string; members: string[]; why
 /**
  * Devices from different integrations that look like the same thing. Two kinds of evidence:
  *  - `netOf`: the same MAC at each one's address — the router literally sees one physical device.
- *  - players with a distinctive word in common ("Soundbar", a model like "Q930B"), in the same room
+ *  - players with a distinctive word in common ("Soundbar", a model like "Q990D"), in the same room
  *    or not yet in one.
  * The one that switches and picks inputs goes first, the one that plays music after.
  */

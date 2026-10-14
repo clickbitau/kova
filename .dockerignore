@@ -6,10 +6,6 @@ data
 hub/data
 **/*.db
 **/*.db-*
-homeassistant
-home-assistant-setup.md
-ct105-lxc.conf
-docker-containers.txt
 airconnect
 owntone
 hub/test

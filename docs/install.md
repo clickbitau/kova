@@ -17,8 +17,8 @@ On the **Proxmox host**, as root:
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/clickbitau/kova/main/deploy/proxmox/create-kova-lxc.sh
-bash create-kova-lxc.sh --dry-run --ctid 106 --ip 10.10.10.151/24 --gw 10.10.10.1   # look first
-bash create-kova-lxc.sh           --ctid 106 --ip 10.10.10.151/24 --gw 10.10.10.1
+bash create-kova-lxc.sh --dry-run --ctid 106 --ip 192.168.10.151/24 --gw 192.168.10.1   # look first
+bash create-kova-lxc.sh           --ctid 106 --ip 192.168.10.151/24 --gw 192.168.10.1
 ```
 
 (If the repository is private, `git clone` it on the host and run
@@ -30,7 +30,7 @@ It creates an unprivileged Debian 12 container set up like the Home Assistant on
 `vmbr0` tagged VLAN 10, plus IPv6 by SLAAC (`ip6=auto`) and an 8 GB disk on
 `zfs-storage` (or `local-zfs` / `local-lvm`, whichever exists). Every one of those
 is a flag; see `--help`. Then, inside the container, it runs `deploy/install.sh`
-(below), and prints the URL, e.g. `http://10.10.10.151:8140/?token=…`.
+(below), and prints the URL, e.g. `http://192.168.10.151:8140/?token=…`.
 
 Running it again with the same `--ctid` and `--hostname` reuses the container and
 re-runs the installer, which only does what's missing.
@@ -224,8 +224,8 @@ one now, `GET /api/backups/<name>` downloads one. Downloading needs `KOVA_TOKEN`
 to be set, or a request from the machine itself.
 
 ```bash
-curl -fsS -X POST -H "Authorization: Bearer $TOKEN" http://10.10.10.151:8140/api/backups
-curl -fsS -H "Authorization: Bearer $TOKEN" -o kova.tar.gz http://10.10.10.151:8140/api/backups/kova-backup-20261001-031000.tar.gz
+curl -fsS -X POST -H "Authorization: Bearer $TOKEN" http://192.168.10.151:8140/api/backups
+curl -fsS -H "Authorization: Bearer $TOKEN" -o kova.tar.gz http://192.168.10.151:8140/api/backups/kova-backup-20261001-031000.tar.gz
 ```
 
 Copy them off the box too: a Proxmox `vzdump` of the container (Datacenter →

@@ -11,9 +11,9 @@ test('the group editor’s note: perfect sync, a native group with speakers alon
   const natives = [cast('home', ['k', 'd', 'b']), sonos];
   assert.equal(draftSyncNote([dev('k', 'cast')], natives).title, 'Pick at least two speakers');
   assert.equal(draftSyncNote(['k', 'd', 'b'].map(x => dev(x, 'cast')), natives).title, 'Perfect sync');
-  const mixed = draftSyncNote([...['k', 'd', 'b'].map(x => dev(x, 'cast')), dev('ray', 'sonos', 'Ray')], natives);
+  const mixed = draftSyncNote([...['k', 'd', 'b'].map(x => dev(x, 'cast')), dev('ray', 'sonos', 'Patio')], natives);
   assert.equal(mixed.tone, 'blue');
-  assert.match(mixed.text, /“Home speakers” \(a Google Cast group, 3 speakers\) plays in perfect sync\. Ray \(Sonos\) plays alongside/);
+  assert.match(mixed.text, /“Home speakers” \(a Google Cast group, 3 speakers\) plays in perfect sync\. Patio \(Sonos\) plays alongside/);
   assert.match(mixed.text, /not sample-locked/);
   assert.match(draftSyncNote([dev('ray', 'sonos'), dev('era', 'sonos')], natives).text, /Sonos plays 2 speakers as one group/);
   assert.match(draftSyncNote([dev('k', 'cast'), dev('d', 'cast')], natives).text, /Google Home app/);
@@ -42,11 +42,11 @@ test('timing in words: 5 ms steps within ±1000, earlier and later, the start de
   assert.equal(driftWords(15), 'Right now: in time');
   assert.equal(driftWords(-180), 'Right now: 180 ms behind (lined up at the next song)');
   assert.equal(driftWords(null), null);
-  const parts = [{ reference: true, name: 'Home speakers', listenWith: null }, { reference: false, name: 'Ray', listenWith: 'Kitchen speaker' }];
-  assert.match(musicSteps('Whole home', parts)!, /^Play a song on Whole home, then stand between Kitchen speaker and Ray/);
-  assert.match(musicSteps('Whole home', parts)!, /If Ray sounds behind, like an echo after the others, tap Earlier/);
+  const parts = [{ reference: true, name: 'Home speakers', listenWith: null }, { reference: false, name: 'Patio', listenWith: 'Kitchen speaker' }];
+  assert.match(musicSteps('Whole home', parts)!, /^Play a song on Whole home, then stand between Kitchen speaker and Patio/);
+  assert.match(musicSteps('Whole home', parts)!, /If Patio sounds behind, like an echo after the others, tap Earlier/);
   assert.equal(musicSteps('Whole home', [parts[0]!]), null);
-  assert.match(testSteps(parts)!, /one clean tick.*double “tick-tick”: if Ray’s tick comes second, tap Earlier/);
+  assert.match(testSteps(parts)!, /one clean tick.*double “tick-tick”: if Patio’s tick comes second, tap Earlier/);
   assert.equal(testSteps([parts[0]!]), null);
   assert.deepEqual([-50, 10].map(nudgeLabel), ['50 later', '10 earlier']);
   assert.equal(tuneState(null).kind, 'none');
@@ -58,12 +58,12 @@ test('timing in words: 5 ms steps within ±1000, earlier and later, the start de
 });
 
 test('a part’s title and line, and how a group plays', () => {
-  const p = (o: Partial<GroupPart>): GroupPart => ({ key: 'k', kind: 'single', via: 'sonos', name: 'Ray', members: ['ray'], reference: false, offset: 0, latencyMs: null, latencyN: 0, driftMs: null, listenWith: null, ...o });
+  const p = (o: Partial<GroupPart>): GroupPart => ({ key: 'k', kind: 'single', via: 'sonos', name: 'Patio', members: ['ray'], reference: false, offset: 0, latencyMs: null, latencyN: 0, driftMs: null, listenWith: null, ...o });
   const home = p({ key: 'cast:home', kind: 'native', via: 'cast', name: 'Home speakers', members: ['a', 'b', 'c'], reference: true });
   assert.equal(partTitle(home), 'Google Cast group “Home speakers”');
   assert.equal(partSub(home), '3 speakers, in perfect sync · the others follow it');
-  assert.equal(partTitle(p({})), 'Ray (Sonos)');
+  assert.equal(partTitle(p({})), 'Patio (Sonos)');
   assert.equal(partSub(p({})), 'Played alongside');
-  assert.equal(groupHow({ members: ['a', 'b', 'c', 'ray'], parts: [home, p({})] }), '“Home speakers” in perfect sync · Ray alongside');
+  assert.equal(groupHow({ members: ['a', 'b', 'c', 'ray'], parts: [home, p({})] }), '“Home speakers” in perfect sync · Patio alongside');
   assert.equal(groupHow({ members: ['a', 'b'], parts: [home] }), '2 speakers as one stream, in perfect sync');
 });

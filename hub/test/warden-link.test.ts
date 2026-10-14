@@ -21,7 +21,7 @@ async function fakeWarden() {
       if (s.deny) return send(403, { error: "this app's access does not cover that" });
       const path = req.url!.replace(/^\/api\/v1/, '');
       s.got.push({ method: req.method!, path, body });
-      if (path === '/integrations/kova/devices') return send(200, { devices: body, matched: body.map((d: any) => ({ kovaId: d.kovaId, ...(d.ip === '10.10.30.41' ? { deviceId: 'dev_lamp' } : {}) })) });
+      if (path === '/integrations/kova/devices') return send(200, { devices: body, matched: body.map((d: any) => ({ kovaId: d.kovaId, ...(d.ip === '192.168.1.41' ? { deviceId: 'dev_lamp' } : {}) })) });
       if (path === '/integrations/kova/access') return send(200, { waiting: true });
       send(200, { ok: true });
     });
@@ -37,7 +37,7 @@ class Lan implements Adapter {
   got: string[] = [];
   async start(ctx: AdapterContext) {
     ctx.announce([
-      { id: 'lounge_lamp', name: 'Lounge lamp', room: 'lounge', type: 'plug', capabilities: ['onoff'], integration: 'Tapo P100', address: '10.10.30.41', state: { on: true, online: true } },
+      { id: 'lounge_lamp', name: 'Lounge lamp', room: 'lounge', type: 'plug', capabilities: ['onoff'], integration: 'Tapo P100', address: '192.168.1.41', state: { on: true, online: true } },
       { id: 'hallway_plug', name: 'Hallway plug', room: 'lounge', type: 'plug', capabilities: ['onoff'], integration: 'Tapo P110', address: '10.10.0.200', state: { on: true, online: true } },
     ]);
   }
@@ -65,7 +65,7 @@ test('Warden link: Kova shares its devices, people, house mode, hub and plugs, a
     const devs = w.last('/integrations/kova/devices')!.body;
     assert.deepEqual(devs, [
       { kovaId: 'hallway_plug', ip: '10.10.0.200', name: 'Hallway plug', manufacturer: 'Tapo', model: 'Tapo P110', kind: 'plug', room: 'Lounge', controls: [{ protocol: 'tcp', port: 80 }] },
-      { kovaId: 'lounge_lamp', ip: '10.10.30.41', name: 'Lounge lamp', manufacturer: 'Tapo', model: 'Tapo P100', kind: 'plug', room: 'Lounge', controls: [{ protocol: 'tcp', port: 80 }] },
+      { kovaId: 'lounge_lamp', ip: '192.168.1.41', name: 'Lounge lamp', manufacturer: 'Tapo', model: 'Tapo P100', kind: 'plug', room: 'Lounge', controls: [{ protocol: 'tcp', port: 80 }] },
     ]);
     assert.deepEqual(w.last('/integrations/kova/people')!.body, [{ kovaPersonId: 'alex', wardenPersonId: 'person-alex' }]);
     // The plug that feeds the modem; a plug Kova doesn't have is left out.

@@ -385,8 +385,8 @@ test('Helix link: which TV a box is on, and Kova’s address', () => {
   assert.deepEqual(helixScreens([real, laptop, ...parts, one], { 'Helix box': { tv: 'tv_combined' } }).map(s => [s.playerId, s.tvDeviceId]), [['d-1', 'tv_combined'], ['d-2', 'tv_cast']]);
 
   // Kova's address: an IP literal on Helix's network, else a private one, else a tailnet one, else a unique-local IPv6 one.
-  const nets = { eth0: [{ family: 'IPv4', address: '10.10.10.5', internal: false }], docker0: [{ family: 'IPv4', address: '172.17.0.1', internal: false }] } as any;
-  assert.equal(kovaAddress('http://10.10.10.101:8090', 8140, nets), 'http://10.10.10.5:8140');
+  const nets = { eth0: [{ family: 'IPv4', address: '192.168.10.5', internal: false }], docker0: [{ family: 'IPv4', address: '172.17.0.1', internal: false }] } as any;
+  assert.equal(kovaAddress('http://192.168.10.101:8090', 8140, nets), 'http://192.168.10.5:8140');
   assert.equal(kovaAddress('http://helix.local:8090', 8140, { docker0: nets.docker0 }), 'http://172.17.0.1:8140');
   assert.equal(kovaAddress('http://helix.local:8090', 8140, { tailscale0: [{ family: 'IPv4', address: '100.95.1.5', internal: false }] } as any), 'http://100.95.1.5:8140');
   assert.equal(kovaAddress('http://helix.local:8090', 8140, { eth0: [{ family: 'IPv6', address: 'fd12:3456:789a::5', internal: false }] } as any), 'http://[fd12:3456:789a::5]:8140');

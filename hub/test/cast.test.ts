@@ -113,7 +113,7 @@ test('Cast: an announcement plays on each speaker on its own, never through thei
   const reg = new Registry(new Store(':memory:'));
   const cast = new CastAdapter({
     discover: false, insecure: true, pollMs: 0, batchMs: 20, clipLoadMs: 1500,
-    endpoints: [await ep(a, 'aaaa0000000000000000000000000001', 'Nest Audio'), await ep(b, 'bbbb0000000000000000000000000002', 'Nest Audio'), await ep(c, 'cccc0000000000000000000000000003', 'Nest Audio'), await ep(dead, 'eeee0000000000000000000000000005', 'Q930B'), await ep(g, 'dddd0000000000000000000000000004', 'Google Cast Group')],
+    endpoints: [await ep(a, 'aaaa0000000000000000000000000001', 'Nest Audio'), await ep(b, 'bbbb0000000000000000000000000002', 'Nest Audio'), await ep(c, 'cccc0000000000000000000000000003', 'Nest Audio'), await ep(dead, 'eeee0000000000000000000000000005', 'Q990D'), await ep(g, 'dddd0000000000000000000000000004', 'Google Cast Group')],
   });
   await reg.addAdapter(cast);
   try {
@@ -310,9 +310,9 @@ test('Cast: a recording set to repeat loops on the speaker; a stream plays once'
 
 test('Finding speakers on another network: addresses, Cast devices by their info page, and groups on a high port', async () => {
   const { expandSubnet, findCastDevices, findCastGroups } = await import('../src/services/lan-find.ts');
-  assert.equal(expandSubnet('10.10.30.0/24').length, 254);
-  assert.deepEqual(expandSubnet('10.10.30.0/24').slice(0, 2), ['10.10.30.1', '10.10.30.2']);
-  assert.deepEqual(expandSubnet('10.10.30.5'), ['10.10.30.5']);
+  assert.equal(expandSubnet('192.168.1.0/24').length, 254);
+  assert.deepEqual(expandSubnet('192.168.1.0/24').slice(0, 2), ['192.168.1.1', '192.168.1.2']);
+  assert.deepEqual(expandSubnet('192.168.1.5'), ['192.168.1.5']);
   assert.throws(() => expandSubnet('10.0.0.0/16'), /a \/22 or smaller/);
   assert.throws(() => expandSubnet('kitchen'), /isn't a network/);
 

@@ -61,7 +61,7 @@ test('schedule: a queue starts everywhere at one moment: each part asked earlier
   const sch = schedule([{ key: 'cast:home', latencyMs: 1200 }, { key: 'ray', latencyMs: 300 }], { ray: 100 }, 10_000, false, 150);
   assert.equal(sch.startAt, 10_000 + 1200 + 150);
   assert.equal(sch.sends['cast:home'], 10_000 + 150, 'the slowest is asked first');
-  assert.equal(sch.sends.ray, sch.startAt - 100 - 300, 'Ray: +100 ms (earlier) and its own 300 ms delay');
+  assert.equal(sch.sends.ray, sch.startAt - 100 - 300, 'Patio: +100 ms (earlier) and its own 300 ms delay');
   // A part whose delay isn't learned yet counts as the others' middle one.
   const guess = schedule([{ key: 'a', latencyMs: 800 }, { key: 'b' }], {}, 0, false, 0);
   assert.equal(guess.sends.a, guess.sends.b);
@@ -121,7 +121,7 @@ test('offsets: 5 ms steps within ±1000, only for parts played alongside; pruned
   assert.throws(() => cleanOffset(1001), /at most 1000 ms/);
   assert.throws(() => cleanOffset('soon'), /number of milliseconds/);
   assert.throws(() => cleanOffset(NaN), /number/);
-  const parts = [{ key: 'cast:home', reference: true, name: 'Home speakers' }, { key: 'ray', reference: false, name: 'Ray' }] as PlanPart[];
+  const parts = [{ key: 'cast:home', reference: true, name: 'Home speakers' }, { key: 'ray', reference: false, name: 'Patio' }] as PlanPart[];
   assert.deepEqual(mergeOffsets({ old: 30 }, { ray: 502 }, parts), { old: 30, ray: 500 });
   assert.deepEqual(mergeOffsets({ ray: 500 }, { ray: 0 }, parts), {}, '0 clears it');
   assert.throws(() => mergeOffsets({}, { 'cast:home': 100 }, parts), /what the other speakers follow/);
@@ -153,7 +153,7 @@ async function home(o: { castLatency?: Record<string, number>; sonosLatency?: Re
     { id: 'kitchen', name: 'Kitchen speaker', room: 'kitchen' }, { id: 'dining', name: 'Dining speaker', room: 'kitchen' },
     { id: 'bed', name: 'Bedroom speaker', room: 'master' }, { id: 'office', name: 'Office speaker', room: 'office' },
   ], { groups: [{ id: 'home', name: 'Home speakers', members: ['kitchen', 'dining', 'bed'] }], latency: o.castLatency ?? {}, seekLatency: 30, ...(o.castGap ? { gapMs: { home: o.castGap } } : {}) });
-  const fs = new FakeSpeakers('sonos', 'Sonos', [{ id: 'ray', name: 'Ray', room: 'lounge' }], { dynamic: true, latency: o.sonosLatency ?? {}, seekLatency: 30, seekStepMs: o.seekStepMs ?? 1, canHold: o.hold });
+  const fs = new FakeSpeakers('sonos', 'Sonos', [{ id: 'ray', name: 'Patio', room: 'lounge' }], { dynamic: true, latency: o.sonosLatency ?? {}, seekLatency: 30, seekStepMs: o.seekStepMs ?? 1, canHold: o.hold });
   const hub = new Hub({
     dbPath: ':memory:', tickMs: 0,
     initialConfig: () => { const c: HomeConfig = demoConfig(); c.speakerGroups = [{ id: 'whole', name: 'Whole home', members: ['kitchen', 'dining', 'bed', 'ray'] }]; return c; },
@@ -169,7 +169,7 @@ async function home(o: { castLatency?: Record<string, number>; sonosLatency?: Re
   return { hub, fc, fs, close: () => hub.stop() };
 }
 
-test('hybrid playback: the Cast group plays as one stream; Ray joins once it plays, lined up with it, however slow it was', async () => {
+test('hybrid playback: the Cast group plays as one stream; Patio joins once it plays, lined up with it, however slow it was', async () => {
   const h = await home({ castLatency: { home: 300 }, sonosLatency: { ray: 80 } });
   try {
     const plan = h.hub.groupSync.plan(h.hub.config.get().speakerGroups![0]!);
@@ -187,25 +187,25 @@ test('hybrid playback: the Cast group plays as one stream; Ray joins once it pla
     assert.equal(h.hub.reg.get('ray')!.state.media, 'Loved');
     const book = h.hub.groupSync.book;
     assert.ok(Math.abs(book.get('cast:home')! - 300) < 80, `Cast group's delay learned: ${book.get('cast:home')}`);
-    // Ray isn't asked until the Cast group plays, so it can't start before it.
+    // Patio isn't asked until the Cast group plays, so it can't start before it.
     const castAt = h.fc.asked[from]!.at, rayAt = h.fs.asked[fromR]!.at;
-    assert.ok(rayAt - castAt >= 300, `Ray asked ${rayAt - castAt} ms after the Cast group`);
+    assert.ok(rayAt - castAt >= 300, `Patio asked ${rayAt - castAt} ms after the Cast group`);
     let t = Date.now() + 100, c = h.fc.where('kitchen', t)!, r = h.fs.where('ray', t)!;
     assert.equal(c.index, r.index);
-    assert.ok(Math.abs(r.positionMs - c.positionMs) < 60, `Ray ${r.positionMs - c.positionMs} ms from the Cast group`);
-    assert.match(h.hub.groupSync.view('whole')!.log.map(l => l.text).join('\n'), /Home speakers first, then Ray once it plays/);
+    assert.ok(Math.abs(r.positionMs - c.positionMs) < 60, `Patio ${r.positionMs - c.positionMs} ms from the Cast group`);
+    assert.match(h.hub.groupSync.view('whole')!.log.map(l => l.text).join('\n'), /Home speakers first, then Patio once it plays/);
 
-    // A song the Cast group is much slower to start (it fetches and buffers each one) than it learned, with Ray 100 ms
-    // earlier: Ray still waits for it, and plays 100 ms ahead, as tuned.
+    // A song the Cast group is much slower to start (it fetches and buffers each one) than it learned, with Patio 100 ms
+    // earlier: Patio still waits for it, and plays 100 ms ahead, as tuned.
     await h.hub.reg.command('group_whole', { on: false, media: null }, { kind: 'user', label: 'You' });
     h.hub.config.update(c => { c.groupOffsets = { whole: { ray: 100 } }; });
     (h.fc as unknown as { o: { latency: Record<string, number> } }).o.latency.home = 1200;
     const fromC2 = h.fc.asked.length, fromR2 = h.fs.asked.length;
     await h.hub.reg.command('group_whole', { on: true, media: 'Loved' }, { kind: 'user', label: 'You' });
-    assert.ok(h.fs.asked[fromR2]!.at - h.fc.asked[fromC2]!.at >= 1200, 'Ray waited for the slow start');
+    assert.ok(h.fs.asked[fromR2]!.at - h.fc.asked[fromC2]!.at >= 1200, 'Patio waited for the slow start');
     t = Date.now() + 100; c = h.fc.where('kitchen', t)!; r = h.fs.where('ray', t)!;
     assert.equal(c.index, r.index);
-    assert.ok(Math.abs(r.positionMs - c.positionMs - 100) < 60, `Ray ${r.positionMs - c.positionMs} ms ahead`);
+    assert.ok(Math.abs(r.positionMs - c.positionMs - 100) < 60, `Patio ${r.positionMs - c.positionMs} ms ahead`);
     assert.match(h.hub.groupSync.view('whole')!.log.map(l => l.text).join('\n'), /Home speakers started 1\.\d\d s after it was asked/);
   } finally { await h.close(); }
 });
@@ -225,8 +225,8 @@ test('a part asked to play later (−) is asked that much after the main part st
   } finally { await h.close(); }
 });
 
-test('song changes: the Cast group’s gap between songs (different every song) never builds up: Ray waits for it, then joins', async () => {
-  // Gaps of 250, 600, 400… ms between songs; Ray (Sonos) goes straight on by itself, and can wait.
+test('song changes: the Cast group’s gap between songs (different every song) never builds up: Patio waits for it, then joins', async () => {
+  // Gaps of 250, 600, 400… ms between songs; Patio (Sonos) goes straight on by itself, and can wait.
   const gaps = [250, 600, 400, 700, 300];
   const h = await home({ castGap: i => gaps[i % gaps.length]!, hold: true, checkMs: 200 });
   try {
@@ -234,7 +234,7 @@ test('song changes: the Cast group’s gap between songs (different every song) 
     h.hub.config.update(c => { c.groupOffsets = { whole: { ray: 40 } }; });
     await h.hub.reg.command('group_whole', { on: true, media: 'Loved' }, { kind: 'user', label: 'You' });
     // Through four song changes: every 100 ms, where both play the same song (past its first 0.6 s, when a joining
-    // speaker may still be settling), Ray is where the Cast group is, plus its 40 ms.
+    // speaker may still be settling), Patio is where the Cast group is, plus its 40 ms.
     const seen: number[] = [];
     for (let k = 0; k < 75; k++) {
       await sleep(100);
@@ -243,9 +243,9 @@ test('song changes: the Cast group’s gap between songs (different every song) 
     }
     assert.ok(seen.length >= 15, `looked ${seen.length} times`);
     const off = seen.filter(g => Math.abs(g - 40) >= 60);
-    assert.ok(off.length <= seen.length / 10, `Ray out of time ${off.length} of ${seen.length} looks: ${off.join(', ')}\n${h.hub.groupSync.view('whole')!.log.map(l => l.text).join('\n')}`);
-    assert.ok(h.fs.holds.length >= 2, `Ray waited at song ends: ${h.fs.holds.length}`);
-    assert.match(h.hub.groupSync.view('whole')!.log.map(l => l.text).join('\n'), /Next song: Ray waited [\d.]+ s for Home speakers, then joined/);
+    assert.ok(off.length <= seen.length / 10, `Patio out of time ${off.length} of ${seen.length} looks: ${off.join(', ')}\n${h.hub.groupSync.view('whole')!.log.map(l => l.text).join('\n')}`);
+    assert.ok(h.fs.holds.length >= 2, `Patio waited at song ends: ${h.fs.holds.length}`);
+    assert.match(h.hub.groupSync.view('whole')!.log.map(l => l.text).join('\n'), /Next song: Patio waited [\d.]+ s for Home speakers, then joined/);
   } finally { await h.close(); }
 });
 
@@ -260,7 +260,7 @@ test('drift: a small slip is lined up at the next song (on the shared time); a b
     // Within the next song change (1.5 s songs): no move mid-song, then lined up with the next song once it plays.
     await sleep(1800);
     const log = () => h.hub.groupSync.view('whole')!.log.map(l => l.text).join('\n');
-    assert.match(log(), /Next song: Ray lined up with Home speakers \(it was (1|2)\d\d ms ahead\)/);
+    assert.match(log(), /Next song: Patio lined up with Home speakers \(it was (1|2)\d\d ms ahead\)/);
     assert.ok(h.fs.seeks.length > n0, 'lined up');
     assert.ok(h.fs.seeks[n0]!.index >= 1, 'in the next song');
     assert.ok(h.fs.seeks[n0]!.positionMs < 500, 'near its start');
@@ -271,26 +271,26 @@ test('drift: a small slip is lined up at the next song (on the shared time); a b
     h.fs.drift('ray', -650);
     await sleep(350);
     assert.equal(h.fs.seeks.length, n + 1);
-    assert.match(log(), /Ray is 6\d\d ms behind: more than 400 ms, so moved now, mid-song/);
+    assert.match(log(), /Patio is 6\d\d ms behind: more than 400 ms, so moved now, mid-song/);
     t = Date.now() + 50;
     assert.ok(Math.abs(h.fs.where('ray', t)!.positionMs - h.fc.where('kitchen', t)!.positionMs) < 60);
   } finally { await h.close(); }
 });
 
-test('another app casts to one of the Cast group’s speakers: the group’s music is over, so Ray stops too', async () => {
+test('another app casts to one of the Cast group’s speakers: the group’s music is over, so Patio stops too', async () => {
   const h = await home();
   try {
     await h.hub.reg.command('group_whole', { on: true, media: 'Loved' }, { kind: 'user', label: 'You' });
     await sleep(300);
     assert.equal(h.hub.reg.get('ray')!.state.media, 'Loved');
-    // A phone app casts something else to the kitchen speaker: the Cast group ends; Ray carries on alone for now.
+    // A phone app casts something else to the kitchen speaker: the Cast group ends; Patio carries on alone for now.
     h.fc.takeOver(['kitchen'], 'Something else');
     assert.equal(h.hub.reg.get('ray')!.state.on, true);
     await sleep(400);
-    assert.equal(h.hub.reg.get('ray')!.state.on, false, 'Ray stopped');
+    assert.equal(h.hub.reg.get('ray')!.state.on, false, 'Patio stopped');
     assert.equal(h.hub.reg.get('kitchen')!.state.media, 'Something else', 'what the other app plays is left alone');
     assert.equal(h.hub.groupSync.session('whole'), undefined);
-    assert.match(h.hub.groupSync.view('whole')!.log.map(l => l.text).join('\n'), /Home speakers stopped playing Loved .*: stopped Ray too/);
+    assert.match(h.hub.groupSync.view('whole')!.log.map(l => l.text).join('\n'), /Home speakers stopped playing Loved .*: stopped Patio too/);
   } finally { await h.close(); }
 });
 
@@ -308,7 +308,7 @@ test('a speaker of the Cast group drops off: the music carries on without it, on
     for (const id of ['kitchen', 'dining', 'ray']) assert.equal(h.hub.reg.get(id)!.state.media, 'Loved', id);
     assert.ok(h.hub.groupSync.session('whole'), 'kept in time again');
     const t = Date.now(), k = h.fc.where('kitchen', t)!, r = h.fs.where('ray', t)!;
-    assert.ok(k.index >= was && r.index >= was, `carried on from song ${was + 1}: kitchen ${k.index + 1}, Ray ${r.index + 1}`);
+    assert.ok(k.index >= was && r.index >= was, `carried on from song ${was + 1}: kitchen ${k.index + 1}, Patio ${r.index + 1}`);
     assert.equal(h.fc.where('bed', t), null);
   } finally { await h.close(); }
 });
@@ -368,7 +368,7 @@ test('radio: offsets only, never corrected', async () => {
     const from = h.fc.asked.length;
     await h.hub.reg.command('group_whole', { on: true, media: 'Live radio' }, { kind: 'user', label: 'You' });
     const gap = h.fs.asked.at(-1)!.at - h.fc.asked[from]!.at;
-    assert.ok(gap >= 180 && gap < 260, `Ray asked 200 ms later, its start delay not used: ${gap}`);
+    assert.ok(gap >= 180 && gap < 260, `Patio asked 200 ms later, its start delay not used: ${gap}`);
     h.fs.drift('ray', 900);
     await sleep(400);
     assert.equal(h.fs.seeks.length + h.fc.seeks.length, 0);
@@ -401,7 +401,7 @@ test('the sync test: low on every speaker, through the group’s timing, then ea
     assert.deepEqual(put.json().offsets, { ray: 250 });
     assert.ok(put.json().undo);
     await sleep(500);
-    assert.ok(h.fs.seeks.length >= 1, 'Ray moved to its new offset');
+    assert.ok(h.fs.seeks.length >= 1, 'Patio moved to its new offset');
     assert.equal((await app.inject({ method: 'GET', url: '/api/state' })).json().speakerGroups[0].testUntil > Date.now(), true);
     // Stop: everything back.
     const stop = await app.inject({ method: 'DELETE', url: '/api/speaker-groups/whole/sync-test' });
@@ -436,7 +436,7 @@ test('API: offsets are checked, saved per group and member, undoable, and pruned
     await put({ ray: 200 });
     const v = (await app.inject({ method: 'GET', url: '/api/speaker-groups/whole/sync' })).json();
     assert.deepEqual(v.parts.map((p: { key: string; offset: number }) => [p.key, p.offset]), [['cast:home', 0], ['ray', 200]]);
-    // Ray leaves the group: its timing goes too.
+    // Patio leaves the group: its timing goes too.
     await app.inject({ method: 'PUT', url: '/api/speaker-groups/whole', payload: { members: ['kitchen', 'dining', 'bed', 'office'] } });
     assert.equal(h.hub.config.get().groupOffsets?.whole, undefined);
     const st = (await app.inject({ method: 'GET', url: '/api/state' })).json().speakerGroups[0];
@@ -444,30 +444,30 @@ test('API: offsets are checked, saved per group and member, undoable, and pruned
   } finally { await app.close(); await h.close(); }
 });
 
-test('Ask Kova: “Ray is about half a second behind” → +500 ms, said back first; “a bit early”; “sync the speakers” explains', async () => {
+test('Ask Kova: “Patio is about half a second behind” → +500 ms, said back first; “a bit early”; “sync the speakers” explains', async () => {
   const h = await home();
   try {
     const a = h.hub.assistant;
-    let r = await a.ask('Ray is about half a second behind');
-    assert.match(r.text, /Whole home plays Home speakers as one Cast group, in perfect sync, and Ray alongside/);
+    let r = await a.ask('Patio is about half a second behind');
+    assert.match(r.text, /Whole home plays Home speakers as one Cast group, in perfect sync, and Patio alongside/);
     assert.match(r.text, /from 0 ms to \+500 ms\. Shall I\?/);
     const set = r.actions.find(x => x.action.type === 'groupOffset')!;
-    assert.deepEqual(set.action, { type: 'groupOffset', group: 'whole', part: 'ray', ms: 500, done: 'Ray now plays at +500 ms in Whole home. Run the sync test to check it.' });
+    assert.deepEqual(set.action, { type: 'groupOffset', group: 'whole', part: 'ray', ms: 500, done: 'Patio now plays at +500 ms in Whole home. Run the sync test to check it.' });
     assert.equal(h.hub.config.get().groupOffsets?.whole, undefined, 'nothing changes until confirmed');
     const done = await a.act(set.action);
     assert.deepEqual(h.hub.config.get().groupOffsets?.whole, { ray: 500 });
     assert.ok(done.undo);
-    r = await a.ask('Ray is a bit early');
+    r = await a.ask('Patio is a bit early');
     assert.match(r.text, /later by 50 ms, its timing goes from \+500 ms to \+450 ms/);
-    r = await a.ask('Ray is 200 ms late');
+    r = await a.ask('Patio is 200 ms late');
     assert.equal((r.actions[0]!.action as { ms: number }).ms, 700);
-    r = await a.ask('Ray is 0.8 seconds behind');
+    r = await a.ask('Patio is 0.8 seconds behind');
     assert.match(r.text, /\+1000 ms\. That’s as far as it goes/);
-    // A speaker of the Cast group: the others follow it, so Ray moves the other way.
+    // A speaker of the Cast group: the others follow it, so Patio moves the other way.
     r = await a.ask('the kitchen speaker is late');
-    assert.match(r.text, /Ray later by 50 ms/);
+    assert.match(r.text, /Patio later by 50 ms/);
     r = await a.ask('sync the speakers');
-    assert.match(r.text, /Stand between Kitchen speaker and Ray/);
+    assert.match(r.text, /Stand between Kitchen speaker and Patio/);
     assert.equal(r.actions[0]!.action.type, 'tune');
     // Not about timing: left alone.
     assert.notEqual(a.parse('turn off the speakers')?.kind, 'groupSync');
@@ -487,7 +487,7 @@ test('volume: the group’s volume keeps the balance between speakers; the balan
     const put = (payload: object) => app.inject({ method: 'PUT', url: '/api/speaker-groups/whole/balance', payload });
     assert.match((await put({ levels: { lamp: 10 } })).json().error, /isn’t in Whole home/);
     assert.match((await put({ levels: { ray: 120 } })).json().error, /0–100/);
-    // Sounding alike where the owner sits: the Cast speakers at 60, Ray at 30.
+    // Sounding alike where the owner sits: the Cast speakers at 60, Patio at 30.
     const r = await put({ levels: { kitchen: 60, dining: 60, bed: 60, ray: 30 } });
     assert.equal(r.statusCode, 200);
     assert.deepEqual(h.hub.config.get().speakerGroups![0]!.balance, { kitchen: 60, dining: 60, bed: 60, ray: 30 });

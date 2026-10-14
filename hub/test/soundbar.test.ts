@@ -40,7 +40,7 @@ async function fakeSmartThings(o: { audioOnly?: boolean } = {}) {
       if (req.headers.authorization !== `Bearer ${access}`) return send(401, { error: { message: 'token expired' } });
       if (u.pathname === '/v1/devices') {
         return send(200, { items: [
-          { deviceId: '6f1c2d3e-aaaa-bbbb-cccc-1234567890ab', label: 'Soundbar Q930B', name: 'Samsung Soundbar', ocf: { deviceType: 'oic.d.networkaudio', modelNumber: 'HW-Q930B|0000' }, components: [{ id: 'main', capabilities: [{ id: 'switch' }, { id: 'audioVolume' }, { id: 'audioMute' }, { id: o.audioOnly ? 'samsungvd.audioInputSource' : 'mediaInputSource' }, { id: 'execute' }] }] },
+          { deviceId: '6f1c2d3e-aaaa-bbbb-cccc-1234567890ab', label: 'Soundbar Q990D', name: 'Samsung Soundbar', ocf: { deviceType: 'oic.d.networkaudio', modelNumber: 'HW-Q990D|0000' }, components: [{ id: 'main', capabilities: [{ id: 'switch' }, { id: 'audioVolume' }, { id: 'audioMute' }, { id: o.audioOnly ? 'samsungvd.audioInputSource' : 'mediaInputSource' }, { id: 'execute' }] }] },
           { deviceId: 'fridge-1', label: 'Fridge', components: [{ id: 'main', capabilities: [{ id: 'switch' }] }] },
           { deviceId: 'tv-s90d', label: '65" S90D', ocf: { deviceType: 'oic.d.tv', modelNumber: 'QA65S90DAWXXY|20240101' }, components: [{ id: 'main', capabilities: [{ id: 'switch' }, { id: 'samsungvd.mediaInputSource' }, { id: 'tvChannel' }] }] },
         ] });
@@ -86,7 +86,7 @@ test('Samsung soundbar through SmartThings: found on the account, read, and powe
   const st = await fakeSmartThings();
   const dir = mkdtempSync(join(tmpdir(), 'kova-st-'));
   const reg = new Registry(new Store(':memory:'));
-  const adapter = new SmartThingsAdapter({ clientId: 'cid', clientSecret: 'secret', refreshToken: 'r1', storageDir: dir, apiUrl: `${st.url}/v1`, tokenUrl: `${st.url}/oauth/token`, pollSec: 0, settleMs: 100, rooms: { 'Soundbar Q930B': 'lounge' } });
+  const adapter = new SmartThingsAdapter({ clientId: 'cid', clientSecret: 'secret', refreshToken: 'r1', storageDir: dir, apiUrl: `${st.url}/v1`, tokenUrl: `${st.url}/oauth/token`, pollSec: 0, settleMs: 100, rooms: { 'Soundbar Q990D': 'lounge' } });
   try {
     await reg.addAdapter(adapter);
     // Only the soundbar, in its room, with what it can do; its state read back (eARC/optical is "tv").
@@ -95,7 +95,7 @@ test('Samsung soundbar through SmartThings: found on the account, read, and powe
     const id = ids[0];
     const d = reg.get(id)!;
     assert.equal(d.room, 'lounge');
-    assert.equal(d.integration, 'Samsung soundbar · HW-Q930B');
+    assert.equal(d.integration, 'Samsung soundbar · HW-Q990D');
     assert.deepEqual(d.capabilities, ['onoff', 'volume', 'mute', 'input', 'sound']);
     assert.deepEqual({ on: d.state.on, vol: d.state.vol, muted: d.state.muted, input: d.state.input }, { on: false, vol: 12, muted: false, input: 'tv' });
     // The refresh token SmartThings replaced is kept, owner-only, and used next time.
@@ -158,7 +158,7 @@ test('SmartThings linking, inputs and what counts as a soundbar', async () => {
   assert.deepEqual(['tv', 'hdmi1', 'hdmi2', 'bluetooth', 'wifi'].map(toStInput), ['digital', 'HDMI1', 'HDMI2', 'bluetooth', 'wifi']);
   assert.deepEqual(['digital', 'HDMI1', 'HDMI 2', 'D.IN', 'arc', 'BLUETOOTH', 'usb'].map(fromStInput), ['tv', 'hdmi1', 'hdmi2', 'tv', 'tv', 'bluetooth', 'usb']);
   assert.equal(isSoundbar({ deviceId: 'x', label: 'Lounge speaker', components: [{ id: 'main', capabilities: [{ id: 'switch' }] }] }), false);
-  assert.equal(isSoundbar({ deviceId: 'x', label: 'Samsung HW-Q930B', components: [{ id: 'main', capabilities: [{ id: 'audioVolume' }] }] }), true);
+  assert.equal(isSoundbar({ deviceId: 'x', label: 'Samsung HW-Q990D', components: [{ id: 'main', capabilities: [{ id: 'audioVolume' }] }] }), true);
   assert.equal(isSoundbar({ deviceId: 'y', label: 'Living room bar', ocf: { deviceType: 'oic.d.networkaudio' }, components: [{ id: 'main', capabilities: [{ id: 'audioVolume' }] }] }), true);
   // Kova's input names as the bar's own ids, from the ones it lists.
   assert.equal(toBarSource('tv', ['digital', 'HDMI1', 'bluetooth', 'wifi']), 'digital');

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Create a Proxmox LXC for Kova and install it natively (no Docker). Run on the Proxmox host as root.
 #
-#   bash create-kova-lxc.sh --ctid 106 --ip 10.10.10.151/24 --gw 10.10.10.1
+#   bash create-kova-lxc.sh --ctid 106 --ip 192.168.10.151/24 --gw 192.168.10.1
 #   bash create-kova-lxc.sh --dry-run            # print the pct commands, change nothing
 #
 # Defaults mirror the Home Assistant container (CT 105): unprivileged Debian 12,
@@ -42,7 +42,7 @@ Container
   --hostname NAME      (default $HOSTNAME_)
   --bridge BR          (default $BRIDGE)
   --vlan TAG|none      VLAN tag (default $VLAN)
-  --ip CIDR|dhcp       e.g. 10.10.10.151/24 (default $IP)
+  --ip CIDR|dhcp       e.g. 192.168.10.151/24 (default $IP)
   --gw ADDR            gateway, required with a static --ip
   --ip6 auto|dhcp|CIDR|none   (default $IP6; Matter needs IPv6)
   --dns ADDR           nameserver (default: the host's)
@@ -117,7 +117,7 @@ num --cores "$CORES"; num --memory "$MEMORY"; num --swap "$SWAP"; num --disk "$D
 [[ "$VLAN" == none ]] || num --vlan "$VLAN"
 [[ "$HOSTNAME_" =~ ^[A-Za-z0-9][A-Za-z0-9-]{0,62}$ ]] || die "--hostname must be a plain host name"
 if [[ "$IP" != dhcp ]]; then
-  [[ "$IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$ ]] || die "--ip must be dhcp or an address with a prefix, e.g. 10.10.10.151/24"
+  [[ "$IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$ ]] || die "--ip must be dhcp or an address with a prefix, e.g. 192.168.10.151/24"
   [[ -n "$GW" ]] || die "--gw is required with a static --ip"
 fi
 [[ -z "$SSH_KEY" || -r "$SSH_KEY" ]] || die "Can't read --ssh-key $SSH_KEY"
@@ -224,7 +224,7 @@ fi
 log "Getting the code into /opt/kova"
 if [[ -n "$SOURCE" ]]; then
   if [[ $DRY == 1 ]]; then tarball=/tmp/kova-src.tar.gz; else tarball=$(mktemp /tmp/kova-src.XXXXXX.tar.gz); fi
-  run tar -C "$SOURCE" --exclude=./node_modules --exclude=./hub/node_modules --exclude=./data --exclude=./hub/data --exclude=./.git --exclude=./.claude --exclude=./homeassistant --exclude=./home-assistant-setup.md --exclude=./ct105-lxc.conf --exclude=./docker-containers.txt -czf "$tarball" .
+  run tar -C "$SOURCE" --exclude=./node_modules --exclude=./hub/node_modules --exclude=./data --exclude=./hub/data --exclude=./.git --exclude=./.claude -czf "$tarball" .
   run pct push "$CTID" "$tarball" /root/kova-src.tar.gz
   in_ct bash -c 'install -d -m 0755 /opt/kova && tar -C /opt/kova -xzf /root/kova-src.tar.gz && rm -f /root/kova-src.tar.gz'
   run rm -f "$tarball"
