@@ -34,6 +34,10 @@ async function fakeHelix(n = 60, o: { modern?: boolean; profile?: string; locked
   const clock = o.clock ?? Date.now;
   const profile = o.profile ?? 'default';
   const lib = Array.from({ length: n }, (_, i) => track(i + 1));
+  const religious = [
+    track(901, { title: 'Adhan (feat. Abdul Waheed Meerkar)', artist: 'ST Studio, Abdul Waheed Meerkar' }),
+    track(902, { title: 'Fajr Adhan', artist: 'Abdul Waheed Meerkar' }),
+  ];
   const seen: string[] = [];
   const played: { id: string; body: any }[] = [];
   const signed: { id: string; body: any }[] = [];
@@ -90,7 +94,10 @@ async function fakeHelix(n = 60, o: { modern?: boolean; profile?: string; locked
     if (p === '/v1/music/tracks') {
       const q = u.searchParams;
       if (q.get('loved') === '1') return send(200, { tracks: lib.filter(t => t.loved) });
-      if (q.get('ids')) return send(200, { tracks: lib.filter(t => t.id === q.get('ids')) });
+      if (q.get('ids')) return send(200, { tracks: [...lib, ...religious].filter(t => t.id === q.get('ids')) });
+      // Helix's other music libraries, listed by library; its name lookup searches only Music.
+      if (q.get('library') === 'religious') return send(200, { tracks: religious });
+      if (q.get('library')) return send(200, { tracks: [] });
       if (q.get('artist')) return send(200, { tracks: lib.filter(t => t.artist === 'Coke Studio') });
       // Newest first / most played first (the fake: by reverse id, and play counts on the first three songs).
       if (q.get('sort') === 'added') return send(200, { tracks: [...lib].reverse().slice(0, Number(q.get('limit') ?? 200)) });
@@ -100,8 +107,11 @@ async function fakeHelix(n = 60, o: { modern?: boolean; profile?: string; locked
       if (q.get('shuffle') === '1' && o.modern) return send(200, { tracks: [...lib].reverse().slice(off, off + lim), total: lib.length, offset: off, limit: lim, nextOffset: null, seed: 'S1' });
       return send(200, { tracks: lib.slice(off, off + lim) });
     }
+    if (p === '/v1/libraries') return send(200, { libraries: [{ id: 'music', kind: 'music' }, { id: 'tv', kind: 'show' }, { id: 'religious', kind: 'music' }] });
     if (p === '/v1/music/siri') {
       const name = (u.searchParams.get('name') ?? '').toLowerCase();
+      // A name it has no song for: its nearest guess.
+      if (name.includes('adhan')) return send(200, name === 'adhan' ? { kind: 'track', id: lib[1]!.id, title: 'Alo R Adhar', artist: 'Aurthohin', approx: true } : { kind: 'none' });
       if (name.includes('bangla')) return send(200, { kind: 'playlist', id: 'pl1', title: 'Bangla Collection' });
       if (name.includes('loved')) return send(200, { kind: 'loved' });
       if (name.includes('coke studio')) return send(200, { kind: 'artist', id: 'helix:a1', title: 'Coke Studio' });
@@ -811,4 +821,20 @@ test('A Helix song as a looping sound: found by name or id, signed as Helix’s 
     await assert.rejects(m2.loopUrl(old.lib[1]!.id), /didn’t make the loop/);
     assert.match(await m2.songUrl(old.lib[1]!.id), /\/v1\/play\/t2/);
   } finally { await old.close(); }
+});
+
+test('A song by name is that song, never Helix’s nearest guess; songs in Helix’s other libraries (Religious) are found by title', async () => {
+  const h = await fakeHelix(10, { modern: true });
+  const music = new HelixMusic(() => ({ url: h.url, token: TOKEN }), { random: seq() });
+  try {
+    // Helix guesses "Alo R Adhar" for "Adhan"; the adhan is in Religious under its whole title.
+    let q = (await music.queueFor('Song: Adhan (feat. Abdul Waheed Meerkar)', { format: 'flac' }))!;
+    assert.equal(q.tracks[0]!.title, 'Adhan (feat. Abdul Waheed Meerkar)');
+    // Kova's own naming, "Title (Artist)".
+    q = (await music.queueFor('Song: Fajr Adhan (Abdul Waheed Meerkar)', { format: 'flac' }))!;
+    assert.equal(q.tracks[0]!.title, 'Fajr Adhan');
+    // No such song: nothing, rather than another song.
+    assert.equal(await music.queueFor('Song: Adhan'), null);
+    assert.equal((await music.findSong('Fajr Adhan'))?.title, 'Fajr Adhan');
+  } finally { await h.close(); }
 });

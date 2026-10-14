@@ -48,7 +48,9 @@ interface HelixTrack {
   url?: string; hasFile?: boolean; streamable?: boolean; provisional?: boolean; codec?: string; playCount?: number;
 }
 interface Playlist { id: string; title: string; kind?: string; tracks?: number }
-interface SiriPick { kind: 'artist' | 'album' | 'track' | 'playlist' | 'loved' | 'default' | 'none'; id?: string; title?: string; artist?: string }
+interface SiriPick { kind: 'artist' | 'album' | 'track' | 'playlist' | 'loved' | 'default' | 'none'; id?: string; title?: string; artist?: string; /** Helix's nearest guess, not the name asked for. */ approx?: boolean }
+/** A title as compared: case, spacing and quotes aside. */
+const norm = (s: string | undefined) => (s ?? '').toLowerCase().replace(/[’']/g, "'").replace(/\s+/g, ' ').trim();
 
 /** The Media page's four ways into the library. */
 const CHOICES: MusicItem[] = [
@@ -186,7 +188,30 @@ export class HelixMusic {
       return t ? { id: t.id, title: t.title, ...(t.artist ? { artist: t.artist } : {}) } : null;
     }
     const pick = await this.get<SiriPick>(`/v1/music/siri?name=${encodeURIComponent(w)}&type=song`).catch(() => null);
+    const exact = pick?.kind === 'track' && pick.id && (!pick.approx || norm(pick.title) === norm(w));
+    if (exact) return { id: pick.id!, title: pick.title || w, ...(pick.artist ? { artist: pick.artist } : {}) };
+    const t = await this.songByTitle(w);
+    if (t) return { id: t.id, title: t.title, ...(t.artist ? { artist: t.artist } : {}) };
     return pick?.kind === 'track' && pick.id ? { id: pick.id, title: pick.title || w, ...(pick.artist ? { artist: pick.artist } : {}) } : null;
+  }
+
+  /**
+   * A song by its exact title in Helix's other music libraries (Religious, Background sounds…): Helix's name lookup
+   * searches only Music. `title` may carry its artist the way Kova names songs ("Adhan (Abdul Waheed)") or be the whole
+   * title ("Adhan (feat. Abdul Waheed Meerkar)").
+   */
+  private async songByTitle(title: string): Promise<HelixTrack | null> {
+    const libs = ((await this.get<{ libraries?: { id: string; kind?: string }[] }>('/v1/libraries').catch(() => null))?.libraries ?? [])
+      .filter(l => l.kind === 'music' && l.id !== 'music');
+    const paren = / \(([^)]*)\)$/.exec(title.trim());
+    const bare = paren ? title.trim().slice(0, paren.index) : null;
+    for (const l of libs) {
+      const tracks = (await this.get<{ tracks?: HelixTrack[] }>(`/v1/music/tracks?library=${encodeURIComponent(l.id)}&limit=2000`).catch(() => null))?.tracks ?? [];
+      const hit = tracks.find(t => norm(t.title) === norm(title))
+        ?? (bare ? tracks.find(t => norm(t.title) === norm(bare) && norm(t.artist).includes(norm(paren![1]))) : undefined);
+      if (hit) return hit;
+    }
+    return null;
   }
 
   /** Signed looping versions by song id, reused until shortly before they run out. */
@@ -314,7 +339,18 @@ export class HelixMusic {
       const kind = PREFIX[m[1].toLowerCase()];
       const name = m[2].replace(/ \([^)]*\)$/, '');
       const type = kind === 'station' ? '' : `&type=${kind === 'track' ? 'song' : kind}`;
-      const pick = await this.get<SiriPick>(`/v1/music/siri?name=${encodeURIComponent(name)}${type}`).catch(() => null);
+      let pick = await this.get<SiriPick>(`/v1/music/siri?name=${encodeURIComponent(name)}${type}`).catch(() => null);
+      if (kind === 'track') {
+        // A song is that song, never Helix's nearest guess: an announcement's "Song: Adhan" once played "Alo R Adhar".
+        // Its whole title first (titles carry "(feat. …)"), then other libraries, which Helix's lookup doesn't search.
+        const whole = m[2].trim();
+        const right = (p: SiriPick | null) => !!p?.id && p.kind === 'track' && (!p.approx || norm(p.title) === norm(name) || norm(p.title) === norm(whole));
+        if (!right(pick) && whole !== name) { const p2 = await this.get<SiriPick>(`/v1/music/siri?name=${encodeURIComponent(whole)}${type}`).catch(() => null); if (right(p2)) pick = p2; }
+        if (!right(pick)) {
+          const t = await this.songByTitle(whole);
+          pick = t ? { kind: 'track', id: t.id, title: t.title, ...(t.artist ? { artist: t.artist } : {}) } : null;
+        }
+      }
       if (!pick?.id || !['artist', 'album', 'track'].includes(pick.kind)) return null;
       const spec: Spec = { kind, id: pick.id, seedKind: pick.kind as 'artist' | 'album' | 'track', title: pick.title || name };
       this.specs.set(media, spec);
