@@ -47,6 +47,18 @@ export class TuyaConnection extends EventEmitter<{ dps: [Dps, string | undefined
   /** 3.4 and 3.5 negotiate a session key and use the "new" control/query commands. */
   private get modern() { return this.o.version !== '3.3'; }
 
+  get host() { return this.o.host; }
+  /** The device answers somewhere else now (its IP changed): the next connection goes there. */
+  moveTo(host: string): void {
+    if (host === this.o.host) return;
+    this.o = { ...this.o, host };
+    this.backoff = 1000;
+    if (this.sock) { this.sock.destroy(); return; }
+    // Waiting to try the old address again: try the new one now.
+    if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
+    this.scheduleReconnect();
+  }
+
   /** Connect (or reuse the live connection). */
   connect(): Promise<void> {
     if (this.online && this.sock) return Promise.resolve();

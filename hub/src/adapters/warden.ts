@@ -304,6 +304,8 @@ export class WardenAdapter implements Adapter {
   private devIds = new Map<string, string>();
   /** IP → the physical device it currently belongs to, from the last device table. Lets the rest of Kova prove two integrations reached the same hardware. */
   readonly byIp = new Map<string, { mac: string; name?: string }>();
+  /** MAC → the IPs its device has now, and whether it's online (from the same table): finds a device that moved. */
+  readonly byMac = new Map<string, { ips: string[]; online: boolean }>();
   private summary = '';
   /** The router's hardware (BMC). Reads never overlap; one asked for during a read runs right after it. */
   private bmcTimer: NodeJS.Timeout | null = null;
@@ -471,10 +473,12 @@ export class WardenAdapter implements Adapter {
         try {
           const devices = await this.api.devices();
           this.byIp.clear();
+          this.byMac.clear();
           for (const dev of devices) {
             this.onDevice(dev);
             const mac = dev.macs[0] && normMac(dev.macs[0]);
             if (mac) for (const ip of dev.ips) this.byIp.set(ip, { mac, name: deviceLabel(dev) });
+            for (const m of dev.macs) this.byMac.set(normMac(m), { ips: dev.ips, online: dev.online });
           }
           count = devices.filter(d => d.online).length;
         } catch (e) {

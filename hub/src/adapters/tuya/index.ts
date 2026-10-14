@@ -278,7 +278,15 @@ export class TuyaAdapter implements Adapter {
         const sub = this.subs.get(d.id)?.get(cid);
         if (sub) this.onDps(sub, dps);
       });
-      c.on('online', on => { for (const x of [d, ...this.subs.get(d.id)?.values() ?? []]) for (const i of this.idsOf(x)) ctx.report(i, { online: on }); });
+      c.on('online', on => {
+        for (const x of [d, ...this.subs.get(d.id)?.values() ?? []]) for (const i of this.idsOf(x)) ctx.report(i, { online: on });
+        // While it answers, the MAC behind its address is noted, so it can be found again if the address changes.
+        if (on) ctx.network?.seen(d.id, c.host);
+        else this.relocate(d, c);
+      });
+      // A new address already known (it moved while Kova was off): connect there straight away.
+      const now = ctx.network?.where(d.id, d.host);
+      if (now) { ctx.log(`${d.name ?? d.id}: answers at ${now} now (was ${d.host}), found through Warden`); c.moveTo(now); }
       this.conns.set(d.id, c);
     }
     for (const [gw, subs] of this.subs) {
@@ -302,7 +310,7 @@ export class TuyaAdapter implements Adapter {
           if (own || !subs.length) await c.query();
           for (const sub of subs) await c.query(sub.cid).then(dps => { if (Object.keys(dps).length) this.onDps(sub, dps); }).catch(err => ctx.log(`${sub.name ?? sub.id}: ${err.message}`));
         })
-        .catch(err => { ctx.log(`${id}: ${err.message}`); c.scheduleReconnect(); });
+        .catch(err => { ctx.log(`${id}: ${err.message}`); c.scheduleReconnect(); this.relocate(d, c); });
     }
   }
 
@@ -353,7 +361,21 @@ export class TuyaAdapter implements Adapter {
     if (Object.keys(dps).length) await c.set(dps, d.gateway ? d.cid : undefined);
   }
 
-  async stop(): Promise<void> { for (const c of this.conns.values()) c.close(); }
+  async stop(): Promise<void> {
+    if (this.relocator) clearInterval(this.relocator);
+    for (const c of this.conns.values()) c.close();
+  }
+
+  /** Devices not answering are looked for again each minute: Warden may know their new address by then. */
+  private relocator: NodeJS.Timeout | null = null;
+  private relocate(d: TuyaDeviceConfig, c: TuyaConnection): void {
+    const where = this.ctx?.network?.where(d.id, c.host);
+    if (where) { this.ctx!.log(`${d.name ?? d.id}: not answering at ${c.host}; Warden says it's at ${where} now, connecting there`); c.moveTo(where); }
+    this.relocator ??= setInterval(() => {
+      for (const [id, conn] of this.conns) { const dev = this.cfg.get(id); if (dev && !conn.online) { const w = this.ctx?.network?.where(id, conn.host); if (w) { this.ctx!.log(`${dev.name ?? id}: found at ${w} through Warden`); conn.moveTo(w); } } }
+    }, 60_000);
+    this.relocator.unref?.();
+  }
 
   status(): AdapterStatus {
     // A gateway counts as its sub-devices (they're up when it is), plus itself if it has switches of its own.

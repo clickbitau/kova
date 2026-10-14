@@ -44,6 +44,8 @@ function fakeCast() {
         } else if (m.namespace === NS.media) {
           if (type === 'LOAD' || type === 'QUEUE_LOAD') { st.running = true; st.state = 'PLAYING'; st.time = Number(m.data.currentTime ?? 0); st.kova = Number(((m.data.items as { customData: { kova: number } }[] | undefined)?.[0]?.customData.kova) ?? 0); }
           if (type === 'PAUSE') st.state = 'PAUSED';
+          if (type === 'LOAD' && m.data.autoplay === false) st.state = 'PAUSED';
+          if (type === 'PLAY') st.state = 'PLAYING';
           reply('web-1', NS.media, status(rid));
         }
       }
@@ -69,7 +71,18 @@ test('Cast: snapshot the queue and the place in it, play the clip on its own, th
     const snap = await reg.snapshotPlayback(id);
     assert.equal((snap.exact as { queue: { index: number; position: number } }).queue.index, 1);
     assert.equal((snap.exact as { queue: { position: number } }).queue.position, 42);
+    const from = f.log.length;
     await reg.playClip(id, CLIP, 12, CAUSE);
+    // Loaded paused, the volume set while it holds the clip, then played: no volume change on an idle speaker (a
+    // Google speaker beeps at one), and the level is the speaker's state.
+    const steps = f.log.slice(from).map(l => l.type).filter(t => ['LOAD', 'SET_VOLUME', 'PLAY'].includes(t));
+    assert.deepEqual(steps, ['LOAD', 'SET_VOLUME', 'PLAY']);
+    assert.equal(f.log.slice(from).find(l => l.type === 'LOAD')!.data.autoplay, false);
+    assert.equal(reg.get(id)!.state.vol, 12);
+    // A soundbar puts its own level back a moment later: given the announcement's again.
+    f.st.level = 0.19;
+    await new Promise(r => setTimeout(r, 1700));
+    assert.equal(f.st.level, 0.12);
     const load = f.log.filter(l => l.type === 'LOAD').pop()!;
     assert.equal((load.data.media as { contentId: string; streamType: string }).contentId, CLIP.url);
     assert.equal((load.data.media as { streamType: string }).streamType, 'BUFFERED', 'once, not as a live stream');

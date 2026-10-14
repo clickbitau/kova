@@ -37,6 +37,12 @@ export interface AdapterContext {
   retract(deviceIds: string[]): void;
   /** Another running adapter, by id (a Samsung TV asks SmartThings to switch its source). */
   peer(adapterId: string): Adapter | undefined;
+  /**
+   * Finding a device on the network again when its IP changed (the router gave it a new one), through what Warden
+   * knows of every device by its MAC. `seen` notes the MAC behind an address while it works (kept across restarts);
+   * `where` is the address that device has now, when Warden knows a different one. Absent without Warden.
+   */
+  network?: { seen(key: string, ip: string): void; where(key: string, ip?: string): string | null };
   /** Whether Kova has had a device by this id (now, or before a restart), so an adapter can keep an id the home already uses. */
   known?(deviceId: string): boolean;
 }
@@ -61,6 +67,12 @@ export interface Adapter {
   status(): AdapterStatus;
   /** Optional: live camera video over WebRTC, negotiated with the browser through the hub. */
   liveView?: LiveView;
+  /**
+   * Sets a clip's volume itself (Clip.vol), once the clip is loaded and before it plays, rather than Kova setting it
+   * beforehand on an idle speaker: Google speakers beep at a volume change while idle (heard before an announcement),
+   * and a soundbar can put back its own level a moment later. The adapter reports the level it played at as `vol`.
+   */
+  clipVolume?: boolean;
   /** Optional: a robot vacuum's floor map, its areas as shapes (null until the robot has given one). */
   floorMap?(device: Device): RobotMap | null;
   /** Optional: a still image from a camera (e.g. of its latest event). */
@@ -106,7 +118,8 @@ export interface NativeGroup { via: string; id: string; name: string; members: s
 export interface PlaybackPosition { index: number; positionMs: number; at: number; playing: boolean; durationMs?: number; seekStepMs?: number }
 
 /** A short piece of audio for a speaker to play once (an announcement). The URL needs no headers. */
-export interface Clip { url: string; title: string; contentType: string; durationMs?: number }
+/** `vol`: the level to play it at (0–100), for an adapter with `clipVolume`, which sets it itself once the clip is loaded. */
+export interface Clip { url: string; title: string; contentType: string; durationMs?: number; vol?: number }
 
 /** WebRTC signalling for cameras whose cloud or device speaks WebRTC to the browser directly. */
 export interface LiveView {

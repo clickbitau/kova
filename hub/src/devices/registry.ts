@@ -125,6 +125,25 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
     this.store.set('inputLog', this.inputLog);
   }
 
+  /** The MAC behind each device address an adapter uses (`adapter:key` → MAC), learned from Warden while it worked. */
+  private netMacs: Record<string, string> | null = null;
+  private wardenNet() { return this.adapters.get('warden') as unknown as { byIp?: Map<string, { mac: string }>; byMac?: Map<string, { ips: string[]; online: boolean }> } | undefined; }
+  private netSeen(key: string, ip: string): void {
+    const mac = this.wardenNet()?.byIp?.get(ip)?.mac;
+    this.netMacs ??= this.store.get<Record<string, string>>('netMacs') ?? {};
+    if (!mac || this.netMacs[key] === mac) return;
+    this.netMacs[key] = mac;
+    this.store.set('netMacs', this.netMacs);
+  }
+  private netWhere(key: string, ip?: string): string | null {
+    const w = this.wardenNet();
+    this.netMacs ??= this.store.get<Record<string, string>>('netMacs') ?? {};
+    const mac = this.netMacs[key] ?? (ip ? w?.byIp?.get(ip)?.mac : undefined);
+    const now = mac ? w?.byMac?.get(mac) : undefined;
+    const v4 = now?.online ? now.ips.find(x => /^\d+\.\d+\.\d+\.\d+$/.test(x)) : undefined;
+    return v4 && v4 !== ip ? v4 : null;
+  }
+
   async addAdapter(a: Adapter): Promise<void> {
     this.adapters.set(a.id, a);
     const ctx: AdapterContext = {
@@ -137,6 +156,7 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
       queueFor: (media, opts) => this.ownQueues.get(media)?.(opts ?? {}) ?? (this.queues ? this.queues(media, opts ?? {}) : Promise.resolve(null)),
       derive: (id, state) => { const d = this.devices.get(id); if (!d) return; const patch = this.diff(d, state); if (!Object.keys(patch).length) return; d.state = { ...d.state, ...patch }; this.emit('measure'); },
       peer: id => this.adapters.get(id),
+      network: { seen: (key, ip) => this.netSeen(`${a.id}:${key}`, ip), where: (key, ip) => this.netWhere(`${a.id}:${key}`, ip) },
       known: id => this.devices.has(id) || id in this.saved,
       retract: ids => { let n = 0; for (const id of ids) if (this.devices.get(id)?.adapter === a.id) { this.devices.delete(id); n++; } if (n) this.emit('devices'); },
     };
@@ -442,8 +462,11 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
     const together = [...byAdapter].filter(([a, is]) => is.length > 1 && !!this.adapters.get(a)?.playClipTogether);
     const grouped = new Set(together.map(([a]) => a));
     const rest = [...byAdapter].filter(([a]) => !grouped.has(a)).flatMap(([, is]) => is);
-    // The volumes, all at once, before anything plays.
-    await Promise.allSettled(items.map(x => { const d = this.devices.get(x.id); return d?.capabilities.includes('volume') ? this.command(x.id, { vol: x.vol }, cause, { quiet: true }) : Promise.resolve(); }));
+    // The volumes, all at once, before anything plays; an adapter that sets them itself once the clip is loaded gets
+    // them with the clip (Adapter.clipVolume).
+    const own = (i: number) => { const d = this.devices.get(items[i]!.id); return !!(d && this.adapters.get(d.adapter)?.clipVolume); };
+    items = items.map((x, i) => own(i) ? { ...x, clip: { ...x.clip, vol: x.vol } } : x);
+    await Promise.allSettled(items.map((x, i) => { const d = this.devices.get(x.id); return !own(i) && d?.capabilities.includes('volume') ? this.command(x.id, { vol: x.vol }, cause, { quiet: true }) : Promise.resolve(); }));
     for (const [aid, is] of together) {
       const a = this.adapters.get(aid)!;
       const ds = is.map(i => this.devices.get(items[i]!.id)!);
@@ -487,7 +510,8 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
       await this.command(id, { on: true, media: clip.title, ...(o.keepVol ? {} : { vol }), paused: false }, cause, { quiet: true });
       return;
     }
-    if (!o.keepVol && d.capabilities.includes('volume')) await this.command(id, { vol }, cause, { quiet: true });
+    if (a.clipVolume) clip = { ...clip, vol: clip.vol ?? vol };
+    else if (!o.keepVol && d.capabilities.includes('volume')) await this.command(id, { vol }, cause, { quiet: true });
     const did = await a.playClip(d, clip, cause);
     const patch = this.diff(d, { on: true, media: clip.title, paused: false, ...(did ?? {}) });
     if (Object.keys(patch).length) this.apply(d, patch, cause, true);

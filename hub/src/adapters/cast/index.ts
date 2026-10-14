@@ -133,14 +133,25 @@ class Receiver {
     this.clip = null;
   }
 
-  /** Play an announcement once, buffered (not as a live stream), with its title. */
-  async playClip(clip: Clip): Promise<void> {
+  /**
+   * Play an announcement once, buffered (not as a live stream), with its title. With `vols` (this speaker, or a
+   * group's members, each at a level 0–100): loaded paused, the volumes set, then played — a Google speaker beeps at a
+   * volume change only while it plays nothing, so set before, the announcement starts with beeps. A speaker that put
+   * its own level back a moment later (a soundbar) is set again once.
+   */
+  async playClip(clip: Clip, vols?: { rec: Receiver; level: number }[]): Promise<void> {
     const transport = await this.receiverApp();
     const r = await this.ch.request(NS.media, transport, {
-      type: 'LOAD', autoplay: true,
+      type: 'LOAD', autoplay: !vols?.length,
       media: { contentId: clip.url, contentType: clip.contentType, streamType: 'BUFFERED', ...(clip.durationMs ? { duration: clip.durationMs / 1000 } : {}), metadata: { metadataType: 0, title: clip.title } },
     });
     if (r.data.type === 'LOAD_FAILED' || r.data.type === 'LOAD_CANCELLED' || r.data.type === 'INVALID_REQUEST') throw new Error(`${this.ep.name} couldn't play ${clip.title}`);
+    if (vols?.length) {
+      await Promise.allSettled(vols.map(v => v.rec.volume(v.level / 100)));
+      const session = (r.data.status as MediaStatus[] | undefined)?.[0]?.mediaSessionId;
+      await this.ch.request(NS.media, transport, { type: 'PLAY', ...(session != null ? { mediaSessionId: session } : {}) });
+      void this.holdVolumes(vols);
+    }
     this.media = clip.title;
     this.queue = null;
     this.stream = null;
@@ -329,6 +340,18 @@ class Receiver {
     this.clip = null;
   }
 
+  /** Once it plays: each speaker still at the level it was given, else given it again (once). */
+  private async holdVolumes(vols: { rec: Receiver; level: number }[]): Promise<void> {
+    await new Promise(r => setTimeout(r, 1500).unref?.());
+    await Promise.allSettled(vols.map(async v => {
+      const now = (await v.rec.status()).volume.level;
+      if (typeof now === 'number' && Math.abs(now * 100 - v.level) > 1.5) {
+        console.log(`[cast] ${v.rec.ep.name} went to ${Math.round(now * 100)}% by itself during an announcement; back to ${v.level}%`);
+        await v.rec.volume(v.level / 100);
+      }
+    }));
+  }
+
   async volume(level: number, muted?: boolean): Promise<void> {
     await this.ch.connect();
     await this.ch.request(NS.receiver, 'receiver-0', { type: 'SET_VOLUME', volume: muted === undefined ? { level: Math.max(0, Math.min(1, level)) } : { muted } });
@@ -347,6 +370,8 @@ const LOOP_RESTARTS = 6;
 
 export class CastAdapter implements Adapter {
   id = 'cast';
+  /** Sets an announcement's volume itself once the clip is loaded (no beep on an idle Google speaker): see Adapter.clipVolume. */
+  clipVolume = true;
   name = 'Google Cast';
   icon = 'cast';
   kind = 'Local' as const;
@@ -717,8 +742,8 @@ export class CastAdapter implements Adapter {
     if (!r) throw new Error(`${device.name} isn’t reachable`);
     this.viaGroup.delete(id);
     this.silenced.delete(id);
-    await r.playClip(clip);
-    return { on: true, media: clip.title, paused: false, track: null, shuffle: false };
+    await r.playClip(clip, clip.vol != null ? [{ rec: r, level: clip.vol }] : undefined);
+    return { on: true, media: clip.title, paused: false, track: null, shuffle: false, ...(clip.vol != null ? { vol: clip.vol } : {}) };
   }
 
   /** An announcement on several speakers: through the Cast group that covers them (in step), the rest on their own. */
@@ -732,12 +757,14 @@ export class CastAdapter implements Adapter {
       const first = devices[ids.indexOf(part.ids[0]!)]!;
       if (gid && this.receivers.get(gid)) {
         const clip = clipOf(first);
+        // Each member at its own level, set once the group has the clip loaded.
+        const vols = part.ids.flatMap(id => { const v = clipOf(devices[ids.indexOf(id)]!).vol; const rec = this.receivers.get(id); return v != null && rec ? [{ rec, level: v }] : []; });
         const p = (async () => {
-          await this.receivers.get(gid)!.playClip(clip);
+          await this.receivers.get(gid)!.playClip(clip, vols.length ? vols : undefined);
           for (const id of part.ids) { this.viaGroup.set(id, gid); this.silenced.delete(id); this.receivers.get(id)!.media = clip.title; this.receivers.get(id)!.clip = clip.title; }
           return played(clip);
         })();
-        for (const id of part.ids) out.set(id, p);
+        for (const id of part.ids) { const v = clipOf(devices[ids.indexOf(id)]!).vol; out.set(id, p.then(st => v != null ? { ...st, vol: v } : st)); }
         continue;
       }
       for (const id of part.ids) { const d = devices[ids.indexOf(id)]!; out.set(id, this.playClip(d, clipOf(d))); }
