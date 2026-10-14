@@ -220,6 +220,7 @@ notifier.start();
 // Automations' "Notify" steps go to the same phones, and so do camera and sensor alerts.
 hub.engine.automations.notify = n => notifier.notify(n);
 hub.security.notify = n => notifier.notify(n);
+hub.announcer.notify = n => notifier.notify(n);
 // Cloud: Web Push is delivered by Apple's / Google's push service (and ntfy.sh unless self-hosted).
 hub.services.push({ id: 'notify', name: 'Notifications', icon: 'notifications', kind: 'Cloud', status: () => notifier.status() });
 

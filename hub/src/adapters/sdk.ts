@@ -26,6 +26,11 @@ export interface AdapterContext {
   /** Whether a source plays again from the start when it ends (a recording set to loop). */
   sourceLoops?(name: string): boolean;
   /**
+   * A looping sound as one endless stream from the hub (api/sound ?endless): the speaker never reaches an end, so
+   * there's no seam to hear. Absent when the hub can't make one (no ffmpeg) or the sound isn't the hub's.
+   */
+  endlessUrl?(name: string): string | undefined;
+  /**
    * Music by name (Helix: "Shuffle all", "Loved", a playlist, "Station: …") → the tracks to queue, in the order
    * to play them (already shuffled when asked). Null when it isn't music Kova knows. Asked again within a few
    * seconds it answers the same order, so every speaker of a group plays the same queue.

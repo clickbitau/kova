@@ -1,7 +1,9 @@
 import { balancedVols } from '../adapters/groups.ts';
 import type { AnnounceAction, Cause, Device, HomeConfig, PrayerName, Trigger } from '../model/types.ts';
 import type { Clip as PlayClip } from '../adapters/sdk.ts';
-import type { PlaybackSnap, Registry } from '../devices/registry.ts';
+import type { ChangeEvent, PlaybackSnap, Registry } from '../devices/registry.ts';
+import type { Notification } from '../services/notify.ts';
+import type { Store } from '../store/db.ts';
 import type { ConfigStore } from './config.ts';
 import type { Clips } from '../services/clips.ts';
 import { Clips as ClipStore, CHIME_FILE, CHIME_MS } from '../services/clips.ts';
@@ -19,6 +21,8 @@ import { Adhans, builtinAdhan } from '../services/adhans.ts';
 
 export const DEFAULT_ANNOUNCE_LEVEL = 20;
 export const DEFAULT_MAX_SEC = 420;
+/** How long after an announcement Kova looks again at a speaker that didn't go back to what it played. */
+export const CHECK_MS = 10_000;
 /** The media id of the generated chime the Play test uses (not offered as an announcement). */
 export const CHIME_MEDIA = 'kova:chime';
 
@@ -89,6 +93,8 @@ interface Resolved { title: string; contentType: string; durationMs?: number; ur
 export class Announcer {
   /** Speakers in an announcement now: a second one leaves them be (their snapshot is the first's). */
   private busy = new Set<string>();
+  /** The owner's phones, told when a speaker couldn't be put back (set by main). */
+  notify: ((n: Notification) => Promise<unknown>) | null = null;
 
   constructor(private reg: Registry, private config: ConfigStore, private o: {
     clips: Clips; adhans: Adhans;
@@ -98,6 +104,10 @@ export class Announcer {
     now?: () => number;
     /** How long a soundbar gets to change over to Wi-Fi before the clip arrives (default 2.5 s). */
     inputSwitchMs?: number;
+    /** Where it's noted when a speaker couldn't be put back (Activity). */
+    store?: Store;
+    /** How long before a speaker not back is looked at again (default CHECK_MS). */
+    checkMs?: number;
   }) {}
 
   /** A speaker the media plays on reaches it through: its own address (or a combined device's member that plays). */
@@ -274,6 +284,7 @@ export class Announcer {
         if (b.status === 'fulfilled') { said.push(`${name(id)}: ${b.value}`); result.restored.push(id); } else bad.push(`${name(id)}: ${b.reason instanceof Error ? b.reason.message : String(b.reason)}`);
       });
       lines.push({ text: a.restore === false ? 'Volumes back; speakers left idle' : 'Put the speakers back', ok: !bad.length, detail: [...said, ...bad].join('; ') });
+      if (a.restore !== false) this.followUp(list.map(x => x.d.id), snaps, run.cause, what.title);
       for (const id of paused) {
         const d = this.reg.get(id);
         if (!d?.state.on || !d.state.paused) continue;
@@ -289,6 +300,41 @@ export class Announcer {
     }
     return result;
   }
+
+  /**
+   * A speaker that played something before the announcement and doesn't play it now: looked at again a moment later,
+   * put back once more, and if it still isn't, said in Activity and on the owner's phones. One a person (or another
+   * automation) changed since is theirs, and left be.
+   */
+  private followUp(ids: string[], snaps: Map<string, PlaybackSnap>, cause: Cause, title: string): void {
+    const want = new Map<string, string>();
+    for (const id of ids) {
+      const s = snaps.get(id)?.state;
+      if (s?.on && typeof s.media === 'string' && s.media && s.media !== 'Casting' && !this.backOn(id, s.media)) want.set(id, s.media);
+    }
+    if (!want.size) return;
+    const touched = new Set<string>();
+    const mine = (c: Cause) => c.kind === cause.kind && c.id === cause.id;
+    const watch = (e: ChangeEvent) => { if (want.has(e.device.id) && e.cause.kind !== 'device' && !mine(e.cause)) touched.add(e.device.id); };
+    this.reg.on('change', watch);
+    const ms = this.o.checkMs ?? CHECK_MS;
+    const later = (fn: () => Promise<void>) => new Promise<void>(r => { setTimeout(() => { void fn().finally(r); }, ms).unref?.(); });
+    void later(async () => {
+      const again = [...want].filter(([id, media]) => !touched.has(id) && !this.backOn(id, media));
+      await Promise.allSettled(again.map(([id]) => this.reg.restorePlayback(id, snaps.get(id)!, cause)));
+      if (!again.length) return;
+      await later(async () => {
+        this.reg.off('change', watch);
+        const still = again.filter(([id, media]) => !touched.has(id) && !this.backOn(id, media));
+        if (!still.length) return;
+        const words = still.map(([id, media]) => `${this.reg.get(id)?.name ?? id} (${media})`).join(', ');
+        this.o.store?.append({ kind: 'system', device: still.length === 1 ? still[0]![0] : null, feed: 'system', what: `Not back after ${title}: ${words}`, data: { ids: still.map(([id]) => id) }, cause });
+        await this.notify?.({ title: `Not back after ${title}`, body: `${words} didn’t go back to what ${still.length === 1 ? 'it' : 'they'} played. Kova tried twice.`, url: '/phone.html', tag: `not-back-${cause.id ?? 'announce'}` }).catch(() => {});
+      });
+    }).finally(() => this.reg.off('change', watch));
+  }
+
+  private backOn(id: string, media: string): boolean { const s = this.reg.get(id)?.state; return !!s?.on && s.media === media; }
 
   /** "Play test": the chime on one speaker at a level × its loudness, then back as it was. Real time, not the engine's. */
   async test(id: string, level: number, cause: Cause): Promise<{ vol: number; result: AnnounceResult }> {

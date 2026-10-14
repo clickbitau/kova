@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import { createReadStream, statSync } from 'node:fs';
 import http from 'node:http';
 import https from 'node:https';
@@ -85,10 +86,11 @@ export function registerAnnounceRoutes(app: FastifyInstance, hub: Hub, port: () 
   // A sound that repeats, for speakers (no key: they can't send one): its seamless loop (services/loops.ts), or
   // Helix's when Helix makes them; until the loop is made, the sound itself (the speaker repeats it). Only sounds the
   // home has set up this way.
-  app.get<{ Params: { file: string } }>('/api/sound/:file', async (req, reply) => {
+  app.get<{ Params: { file: string }; Querystring: { endless?: string } }>('/api/sound/:file', async (req, reply) => {
     const name = decodeURIComponent(req.params.file).replace(/\.(m4a|aac|flac)$/, '');
     const src = hub.config.get().sources.find(x => x.name === name && hub.viaHub(x));
     if (!src) return reply.code(404).send({ error: 'No such sound' });
+    if (req.query.endless) return endless(req, reply);
     const range = typeof req.headers.range === 'string' ? req.headers.range : undefined;
     try {
       if (src.helix && hub.music?.offersLoops()) {
@@ -104,6 +106,22 @@ export function registerAnnounceRoutes(app: FastifyInstance, hub: Hub, port: () 
       return await proxy(input, range, req, reply);
     } catch (e) { if (!reply.sent) return reply.code(502).send({ error: (e as Error).message }); }
   });
+
+  // The loop as one endless stream (Cast speakers play it this way: one item that never ends, so no seam between
+  // passes). ffmpeg reads the loop above round and round, sample for sample, and sends it on as FLAC; a speaker reads it
+  // at its own pace. Each listener has its own, ended when the speaker hangs up.
+  function endless(req: FastifyRequest<{ Params: { file: string } }>, reply: FastifyReply) {
+    const ff = hub.loops.bin(), base = hub.lanBase();
+    if (!ff || !base) return reply.code(503).send({ error: 'This hub can’t stream sounds endlessly (ffmpeg isn’t installed)' });
+    const child = spawn(ff, ['-v', 'error', '-nostdin', '-stream_loop', '-1', '-i', `${base}/api/sound/${encodeURIComponent(req.params.file)}`, '-map', '0:a:0', '-c:a', 'flac', '-compression_level', '0', '-f', 'flac', 'pipe:1'], { stdio: ['ignore', 'pipe', 'pipe'] });
+    let err = '';
+    child.stderr.on('data', d => { err = (err + String(d)).slice(-300); });
+    child.on('exit', code => { if (code && !req.raw.destroyed) console.warn(`[sound] ${req.params.file} endless stream ended: ${err.trim() || `ffmpeg ${code}`}`); });
+    const stop = () => { if (child.exitCode === null) child.kill('SIGKILL'); };
+    req.raw.on('close', stop);
+    reply.raw.on('close', stop);
+    return reply.type('audio/flac').header('cache-control', 'no-store').send(child.stdout);
+  }
 
   app.get<{ Params: { file: string } }>('/api/clip/:file', async (req, reply) => {
     const f = hub.clips.file(req.params.file) ?? hub.adhans.serve(req.params.file);

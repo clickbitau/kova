@@ -41,6 +41,9 @@ export class Loops {
     return !!this.ffmpeg && !!this.dir;
   }
 
+  /** ffmpeg, when this hub has it (for an endless stream of a loop: api/sound ?endless). */
+  bin(): string | null { return this.available() ? this.ffmpeg! : null; }
+
   key(input: string, spec: LoopSpec = LOOP_DEFAULT): string {
     return createHash('sha256').update(JSON.stringify([input, spec.crossfadeMs, spec.minutes, encoding(spec)])).digest('hex').slice(0, 20);
   }

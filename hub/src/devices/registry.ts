@@ -54,10 +54,14 @@ export function inputChangeBy(cause: Cause): { by: string; person: boolean } {
 /** A readback this soon after Kova asked for an input, still showing another, is the device catching up, not someone changing it. */
 const INPUT_SETTLE_MS = 20_000;
 
+/** How long Kova can have been stopped (a restart, an update) for a looping sound to carry on where it played. */
+const CARRY_ON_MS = 15 * 60_000;
+
 /**
  * Holds every device and its live state. All changes go through here so each
  * one is written to the event log with its cause.
  */
+
 export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [DeviceEvent]; devices: []; measure: []; sent: [SentEvent]; reading: [ChangeEvent]; seen: [Device] }> {
   readonly devices = new Map<string, Device>();
   readonly adapters = new Map<string, Adapter>();
@@ -85,6 +89,8 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
 
   /** Whether a source loops (set by the hub from the home's sources). */
   sourceLoops: (name: string) => boolean = () => false;
+  /** A looping sound as one endless stream from the hub, when it can (set by the hub). */
+  endlessUrl: (name: string) => string | undefined = () => undefined;
 
   /** Announcements playing now, by title → URL: a speaker without its own clip support plays them as a source. */
   private clipSources = new Map<string, string>();
@@ -99,6 +105,30 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
     super();
     this.saved = store.get<Record<string, DeviceState>>('deviceState') ?? {};
     this.inputLog = store.get<Record<string, InputChange>>('inputLog') ?? {};
+    // Kova stopped a moment ago (a restart, an update): what each speaker played then, to carry on with.
+    const stoppedAt = store.get<number>('stoppedAt');
+    if (stoppedAt && Date.now() - stoppedAt < CARRY_ON_MS) {
+      for (const [id, s] of Object.entries(this.saved)) if (s.on && typeof s.media === 'string' && s.media && !s.paused) this.carryOn.set(id, s.media);
+      this.carryOnUntil = Date.now() + CARRY_ON_MS;
+    }
+  }
+
+  /**
+   * Sounds that loop (Thunderstorm) playing when Kova last stopped, by device. A restart ends the hub's stream of one,
+   * so a speaker found idle when it first reports is started again; one found playing it (or anything else) is left be.
+   */
+  private carryOn = new Map<string, string>();
+  private carryOnUntil = 0;
+  private carryOnCheck(id: string, state: DeviceState): void {
+    const media = this.carryOn.get(id);
+    if (media === undefined || !('on' in state)) return;
+    this.carryOn.delete(id);
+    if (state.on !== false || Date.now() > this.carryOnUntil || !this.sourceLoops(media) || !this.srcUrl(media)) return;
+    // Once the report is applied (the speaker shows idle), so the command is a change.
+    setImmediate(() => {
+      void this.command(id, { on: true, media }, { kind: 'system', label: 'Kova', detail: 'carried on after Kova restarted' })
+        .catch(e => console.warn(`[registry] ${id}: couldn’t carry on with ${media}: ${(e as Error).message}`));
+    });
   }
 
   /** The last input change Kova saw on this device: asked for through Kova, or read back from the device. */
@@ -153,6 +183,7 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
       event: (id, type, data = {}) => this.deviceEvent(id, type, data),
       sourceUrl: name => this.srcUrl(name),
       sourceLoops: name => this.sourceLoops(name),
+      endlessUrl: name => this.endlessUrl(name),
       queueFor: (media, opts) => this.ownQueues.get(media)?.(opts ?? {}) ?? (this.queues ? this.queues(media, opts ?? {}) : Promise.resolve(null)),
       derive: (id, state) => { const d = this.devices.get(id); if (!d) return; const patch = this.diff(d, state); if (!Object.keys(patch).length) return; d.state = { ...d.state, ...patch }; this.emit('measure'); },
       peer: id => this.adapters.get(id),
@@ -191,6 +222,7 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
   async stop(): Promise<void> {
     if (this.saveTimer) { clearTimeout(this.saveTimer); this.saveTimer = null; }
     this.flush();
+    this.store.set('stoppedAt', Date.now());
     await Promise.all([...this.adapters.values()].map(a => a.stop().catch(() => {})));
   }
 
@@ -388,6 +420,7 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
     // It spoke, even if nothing changed (a sensor's "last reported").
     this.emit('seen', d);
     this.noteState(d, state);
+    if (this.carryOn.size) this.carryOnCheck(id, state);
     const patch = this.diff(d, state);
     if (!Object.keys(patch).length) return;
     if (typeof patch.input === 'string' && patch.input) this.inputReadBack(d, patch.input);

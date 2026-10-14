@@ -70,6 +70,9 @@ interface MediaStatus {
   media?: { contentId?: string; customData?: { kova?: number }; metadata?: { title?: string } }; items?: { itemId: number; customData?: { kova?: number }; media?: { customData?: { kova?: number } } }[];
 }
 
+/** A stream or recording a speaker plays; a looping one may come as the hub's endless stream of it (`endless`). */
+type Stream = { url: string; title: string; loop: boolean; endless?: string };
+
 /** One Cast receiver: a speaker, display, TV or group. */
 class Receiver {
   readonly ch: CastChannel;
@@ -81,8 +84,11 @@ class Receiver {
   paused = false;
   /** Called when the song changes or the queue ends. */
   onTrack?: () => void;
-  /** The stream or recording it plays (play()), to start it again after an announcement. */
-  stream: { url: string; title: string; loop: boolean } | null = null;
+  /** The stream or recording it plays (play()), to start it again after an announcement; `endless`: the hub's endless stream of it, playing. */
+  stream: Stream | null = null;
+  /** This speaker couldn't play an endless stream: loops go as a repeating queue. */
+  private noEndless = false;
+  private endlessAt = 0;
   /** An announcement clip playing (playClip()): when it finishes, the speaker is idle again. */
   clip: string | null = null;
   /** When a looping sound was last started again after the speaker dropped it (the last hour's). */
@@ -135,14 +141,37 @@ class Receiver {
     // A song of a queue Kova lost: playing, but not something to start again on its own.
     if (typeof st.media.customData?.kova === 'number') return true;
     const title = st.media.metadata?.title || 'Casting';
+    const id = st.media.contentId, endless = /[?&]endless=1\b/.test(id);
     this.media = title;
-    this.stream = { url: st.media.contentId, title, loop: st.repeatMode === 'REPEAT_ALL' || st.repeatMode === 'REPEAT_SINGLE' };
+    this.stream = endless
+      ? { url: id.replace(/[?&]endless=1\b/, ''), title, loop: true, endless: id }
+      : { url: id, title, loop: st.repeatMode === 'REPEAT_ALL' || st.repeatMode === 'REPEAT_SINGLE' };
     return true;
   }
 
-  /** Play a stream or a recording; `loop` plays a recording again from the start each time it ends. */
-  async play(url: string, title: string, loop = false): Promise<void> {
+  /**
+   * Play a stream or a recording; `loop` plays a recording again from the start each time it ends. With `endless` (the
+   * hub's endless stream of the loop) it's one item that never ends: no seam at all. A speaker that can't play that
+   * gets the repeating queue instead, from then on.
+   */
+  async play(url: string, title: string, loop = false, endless?: string): Promise<void> {
     const transport = await this.receiverApp();
+    if (loop && endless && !this.noEndless) {
+      const e = await this.ch.request(NS.media, transport, {
+        type: 'LOAD', autoplay: true,
+        media: { contentId: endless, contentType: 'audio/flac', streamType: 'LIVE', metadata: { metadataType: 0, title } },
+      });
+      if (e.data.type !== 'LOAD_FAILED' && e.data.type !== 'LOAD_CANCELLED' && e.data.type !== 'INVALID_REQUEST') {
+        this.media = title;
+        this.queue = null;
+        this.stream = { url, title, loop, endless };
+        this.clip = null;
+        this.endlessAt = Date.now();
+        return;
+      }
+      console.warn(`[cast] ${this.ep.name}: couldn't play ${title} as an endless stream; repeating it instead`);
+      this.noEndless = true;
+    }
     const r = loop
       ? await this.ch.request(NS.media, transport, {
         // Two of it, repeating the queue: the speaker fetches the next copy before this one ends and flows into it.
@@ -235,11 +264,13 @@ class Receiver {
     const sm = this.stream;
     if (sm?.loop && st?.playerState === 'IDLE' && (st.idleReason === 'ERROR' || st.idleReason === 'FINISHED')) {
       const now = Date.now();
+      // An endless stream this speaker gave up on at once: it can't play one; the repeating queue from now on.
+      if (sm.endless && st.idleReason === 'ERROR' && now - this.endlessAt < 20_000) { this.noEndless = true; console.warn(`[cast] ${this.ep.name}: ${sm.title} as an endless stream failed at once; repeating it instead`); }
       this.restarts = this.restarts.filter(t => now - t < 3600_000);
       console.warn(`[cast] ${this.ep.name}: ${sm.title} stopped by itself (${st.idleReason})${this.restarts.length < LOOP_RESTARTS ? ', starting it again' : ''}`);
       if (this.restarts.length < LOOP_RESTARTS) {
         this.restarts.push(now);
-        setTimeout(() => { if (this.stream === sm) void this.play(sm.url, sm.title, true).catch(e => console.warn(`[cast] ${this.ep.name}: ${(e as Error).message}`)); }, 300).unref?.();
+        setTimeout(() => { if (this.stream === sm) void this.play(sm.url, sm.title, true, sm.endless).catch(e => console.warn(`[cast] ${this.ep.name}: ${(e as Error).message}`)); }, 300).unref?.();
       }
       return;
     }
@@ -632,7 +663,7 @@ export class CastAdapter implements Adapter {
       // Not a radio source: maybe music (Helix), which plays as a queue of songs.
       const queue = url ? null : this.ctx!.queueFor(media, { shuffle: !!ps[0].cmd.shuffle, format: CAST_FORMAT });
       const start = async (r: Receiver) => {
-        if (url) return r.play(url, media, !!this.ctx!.sourceLoops?.(media));
+        if (url) { const loop = !!this.ctx!.sourceLoops?.(media); return r.play(url, media, loop, loop ? this.ctx!.endlessUrl?.(media) : undefined); }
         const q = await queue;
         if (!q) throw new Error(`No stream URL set for “${media}”`);
         await r.playQueue(q);
@@ -844,7 +875,7 @@ export class CastAdapter implements Adapter {
     const via = this.viaGroup.get(id), g = via ? this.receivers.get(via) : undefined;
     if (g?.clip && r.clip === g.clip) { await g.stop().catch(() => {}); g.clip = null; }
     if (r.clip && via) { this.viaGroup.delete(id); r.clip = null; r.media = null; }
-    const snap = snap0 as null | { other?: boolean; via?: string; paused?: boolean; queue?: { q: Queue; index: number; position: number }; stream?: { url: string; title: string; loop: boolean } };
+    const snap = snap0 as null | { other?: boolean; via?: string; paused?: boolean; queue?: { q: Queue; index: number; position: number }; stream?: Stream };
     if (!snap) {
       if (r.clip || r.media) await r.stop().catch(() => {});
       return { words: 'idle again', state: { on: false, media: null, paused: false, track: null, shuffle: false } };
@@ -859,12 +890,13 @@ export class CastAdapter implements Adapter {
     if (!job) {
       job = (async () => {
         if (snap.queue) await target.playQueue(snap.queue.q, snap.queue.index, snap.queue.position);
-        else if (snap.stream) await target.play(snap.stream.url, snap.stream.title, snap.stream.loop);
+        else if (snap.stream) await target.play(snap.stream.url, snap.stream.title, snap.stream.loop, snap.stream.endless);
         if (snap.paused) await target.setPaused(true).catch(() => {});
       })();
       this.restoring.set(key, job);
       const done = () => setTimeout(() => this.restoring.delete(key), 5000).unref?.();
-      job.then(done, done);
+      // One that failed can be tried again at once (Kova's check after an announcement does).
+      job.then(done, () => this.restoring.delete(key));
     }
     await job;
     if (snap.via) { this.viaGroup.set(id, snap.via); r.media = target.media; r.clip = null; }

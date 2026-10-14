@@ -155,6 +155,11 @@ export class Hub extends EventEmitter<{ changed: []; floorplan: [] }> {
     }, () => this.config.get().devices ?? {});
     this.reg.roomName = id => this.config.get().rooms.find(r => r.id === id)?.name ?? id;
     this.reg.sourceLoops = name => { const s = this.config.get().sources.find(x => x.name === name); return !!(s?.loop || s?.helix); };
+    this.reg.endlessUrl = name => {
+      const s = this.config.get().sources.find(x => x.name === name);
+      const url = s && this.viaHub(s) && this.loops?.available() ? this.reg.streamUrl(name) : undefined;
+      return url?.includes('/api/sound/') ? `${url}?endless=1` : undefined;
+    };
     this.config.on('changed', () => this.reg.reapplySettings());
     this.config.on('changed', () => this.prepareLoops());
     this.groups = new SpeakerGroupsAdapter(this.reg, () => this.config.get().speakerGroups ?? []);
@@ -171,7 +176,7 @@ export class Hub extends EventEmitter<{ changed: []; floorplan: [] }> {
     this.clips = new Clips(clipDir);
     this.loops = new Loops(opts.dataDir ? join(opts.dataDir, 'loops') : null);
     this.adhans = new Adhans(clipDir, { fetch: opts.fetch });
-    this.announcer = new Announcer(this.reg, this.config, { clips: this.clips, adhans: this.adhans, base: host => this.lanBase(host), now: () => this.engine.now(), inputSwitchMs: opts.inputSwitchMs });
+    this.announcer = new Announcer(this.reg, this.config, { clips: this.clips, adhans: this.adhans, base: host => this.lanBase(host), now: () => this.engine.now(), inputSwitchMs: opts.inputSwitchMs, store: this.store });
     this.engine.automations.announcer = this.announcer;
     this.checker = new Checker(this.engine, this.store, this.config, () => this.reg.devices, t => this.reg.expandTargets(t));
     this.assistant = new Assistant(this.engine, this.reg, this.config);
