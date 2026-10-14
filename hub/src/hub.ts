@@ -35,6 +35,8 @@ export interface HubOptions {
   now?: () => number;
   /** Tick interval for the engine; 0 disables the timer (tests drive it). */
   tickMs?: number;
+  /** How long a soundbar gets to switch to Wi-Fi before an announcement (default 2.5 s; tests 0). */
+  inputSwitchMs?: number;
   demo?: boolean;
   weather?: Weather;
   /** How often to sample power for the Energy screen; 0 disables it (tests call sample()). */
@@ -166,7 +168,7 @@ export class Hub extends EventEmitter<{ changed: [] }> {
     this.clips = new Clips(clipDir);
     this.loops = new Loops(opts.dataDir ? join(opts.dataDir, 'loops') : null);
     this.adhans = new Adhans(clipDir, { fetch: opts.fetch });
-    this.announcer = new Announcer(this.reg, this.config, { clips: this.clips, adhans: this.adhans, base: host => this.lanBase(host), now: () => this.engine.now() });
+    this.announcer = new Announcer(this.reg, this.config, { clips: this.clips, adhans: this.adhans, base: host => this.lanBase(host), now: () => this.engine.now(), inputSwitchMs: opts.inputSwitchMs });
     this.engine.automations.announcer = this.announcer;
     this.checker = new Checker(this.engine, this.store, this.config, () => this.reg.devices, t => this.reg.expandTargets(t));
     this.assistant = new Assistant(this.engine, this.reg, this.config);

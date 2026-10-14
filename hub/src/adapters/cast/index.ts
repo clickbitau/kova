@@ -143,7 +143,7 @@ class Receiver {
    * volume change only while it plays nothing, so set before, the announcement starts with beeps. A speaker that put
    * its own level back a moment later (a soundbar) is set again once.
    */
-  async playClip(clip: Clip, vols?: { rec: Receiver; level: number }[]): Promise<void> {
+  async playClip(clip: Clip, vols?: { rec: Receiver; level: number }[], onStuck?: () => void): Promise<void> {
     const transport = await this.receiverApp();
     const r = await this.ch.request(NS.media, transport, {
       type: 'LOAD', autoplay: !vols?.length,
@@ -156,7 +156,7 @@ class Receiver {
       await this.ch.request(NS.media, transport, { type: 'PLAY', ...(session != null ? { mediaSessionId: session } : {}) });
       void this.holdVolumes(vols);
     }
-    void this.unstick(transport, clip, this.unstickMs);
+    void this.unstick(transport, clip, this.unstickMs, onStuck);
     this.media = clip.title;
     this.queue = null;
     this.stream = null;
@@ -349,18 +349,21 @@ class Receiver {
    * A clip that hasn't got going a few seconds in (still buffering at the start, or idle with an error) is loaded again,
    * once: a speaker or group that stalls on a file otherwise stays silent for the whole announcement.
    */
-  private async unstick(transport: string, clip: Clip, waitMs = 8000): Promise<void> {
+  private async unstick(transport: string, clip: Clip, waitMs = 8000, onStuck?: () => void, again = false): Promise<void> {
     await new Promise(r => setTimeout(r, waitMs).unref?.());
     if (this.clip !== clip.title) return;
     const m = await this.ch.request(NS.media, transport, { type: 'GET_STATUS' }).catch(() => null);
     const st = (m?.data.status as MediaStatus[] | undefined)?.[0];
-    const stuck = !st ? false : (st.playerState === 'BUFFERING' || st.playerState === 'LOADING') && (st.currentTime ?? 0) < 1;
+    const stuck = !st ? false : (st.playerState === 'BUFFERING' || st.playerState === 'LOADING') && (st.currentTime ?? 0) < 3;
     if (!stuck) return;
+    // Loaded again and still stuck: whoever asked plays it some other way (a group's speakers one by one).
+    if (again) { console.log(`[cast] ${this.ep.name}: ${clip.title} still stuck; playing it another way`); onStuck?.(); return; }
     console.log(`[cast] ${this.ep.name}: ${clip.title} still ${(st!.playerState ?? '').toLowerCase()} after ${waitMs / 1000} s; loading it again`);
     await this.ch.request(NS.media, transport, {
       type: 'LOAD', autoplay: true,
       media: { contentId: clip.url, contentType: clip.contentType, streamType: 'BUFFERED', ...(clip.durationMs ? { duration: clip.durationMs / 1000 } : {}), metadata: { metadataType: 0, title: clip.title } },
     }).catch(e => console.log(`[cast] ${this.ep.name}: loading ${clip.title} again failed: ${(e as Error).message}`));
+    if (onStuck) void this.unstick(transport, clip, waitMs, onStuck, true);
   }
 
   /** Once it plays: each speaker still at the level it was given, else given it again (once). */
@@ -782,8 +785,21 @@ export class CastAdapter implements Adapter {
         const clip = clipOf(first);
         // Each member at its own level, set once the group has the clip loaded.
         const vols = part.ids.flatMap(id => { const v = clipOf(devices[ids.indexOf(id)]!).vol; const rec = this.receivers.get(id); return v != null && rec ? [{ rec, level: v }] : []; });
+        // The group stuck at the start even after loading it again (its host busy elsewhere): each speaker on its own,
+        // but the one hosting the group (it's what's stuck).
+        const g = this.receivers.get(gid)!;
+        const alone = () => {
+          g.clip = null;
+          void g.stop().catch(() => {});
+          for (const id of part.ids) {
+            const rec = this.receivers.get(id), d = devices[ids.indexOf(id)]!;
+            if (!rec || rec.ep.host === g.ep.host) continue;
+            this.viaGroup.delete(id);
+            void this.playClip(d, clipOf(d)).catch(e => console.log(`[cast] ${d.name}: ${(e as Error).message}`));
+          }
+        };
         const p = (async () => {
-          await this.receivers.get(gid)!.playClip(clip, vols.length ? vols : undefined);
+          await g.playClip(clip, vols.length ? vols : undefined, alone);
           for (const id of part.ids) { this.viaGroup.set(id, gid); this.silenced.delete(id); this.receivers.get(id)!.media = clip.title; this.receivers.get(id)!.clip = clip.title; }
           return played(clip);
         })();

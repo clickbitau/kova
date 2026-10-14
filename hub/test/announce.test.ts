@@ -70,7 +70,7 @@ async function announceHub(tweak?: (c: HomeConfig) => void, fail = new Set<strin
       tweak?.(c);
       return c;
     },
-    adapters: [exact, virtual], now: () => clock.t, tickMs: 0, security: { settleMs: 5, frameDelayMs: 5 },
+    adapters: [exact, virtual], now: () => clock.t, tickMs: 0, inputSwitchMs: 0, security: { settleMs: 5, frameDelayMs: 5 },
   });
   await hub.start();
   hub.lanBase = host => `http://10.0.0.2:8140${host ? `#${host}` : ''}`;
@@ -129,6 +129,22 @@ test('Announce: snapshot, calibrated volumes, all at once, wait for the clip, th
     assert.match(back.detail!, /Kitchen speaker: resumed Loved/);
     assert.match(back.detail!, /Plain speaker: Jazz stream again/);
     assert.match(back.detail!, /Idle speaker: off again/);
+  } finally { await h.close(); }
+});
+
+test('Announce: a soundbar on the TV input goes to Wi-Fi for the announcement, and back to the TV after', async () => {
+  // The soundbar: Cast plays (kitchen_spk stands in), a second integration switches its inputs; combined as one.
+  const h = await announceHub(c => { c.combined = [{ id: 'bar', name: 'Soundbar', members: ['kitchen_spk', 'bar_inputs'] }]; });
+  try {
+    await h.virtual['ctx']!.announce([{ id: 'bar_inputs', name: 'Soundbar', room: 'lounge', type: 'media', integration: 'SmartThings', address: 'demo.bar', capabilities: ['onoff', 'volume', 'input'], state: { on: true, input: 'tv', vol: 19 } }]);
+    const a = step({ media: `clip:${h.clip.id}`, targets: { kitchen_spk: {} } });
+    const going = h.hub.engine.automations.runNow(auto([a]), 'test');
+    await h.settle();
+    assert.equal(h.dev('bar_inputs').input, 'wifi', 'off the TV for the announcement');
+    await h.pass(4500);
+    const run = await going;
+    assert.equal(h.dev('bar_inputs').input, 'tv', 'back on the TV input');
+    assert.ok(run!.steps.some(s => s.text === 'Soundbar back on the TV input' && s.ok), run!.steps.map(s => s.text).join(' | '));
   } finally { await h.close(); }
 });
 

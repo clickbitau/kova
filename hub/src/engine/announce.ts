@@ -34,6 +34,9 @@ export function announceVol(level: number, trim = 100): number {
   return Math.max(1, Math.min(100, Math.round(level * (trim > 0 ? trim : 100) / 100)));
 }
 
+/** An input in words: "the TV input", "HDMI 1". */
+const inputWords = (i: string) => i === 'tv' ? 'the TV input' : /^hdmi\d$/.test(i) ? `HDMI ${i.slice(4)}` : i === 'bluetooth' ? 'Bluetooth' : i;
+
 /** The speaker's loudness setting (100 when unset). */
 export const trimOf = (cfg: Pick<HomeConfig, 'devices'>, id: string) => cfg.devices?.[id]?.announceTrim ?? 100;
 
@@ -93,6 +96,8 @@ export class Announcer {
     base: (host?: string) => string | null;
     /** Helix's song → a URL a speaker can fetch, for "Song: <title>". */
     now?: () => number;
+    /** How long a soundbar gets to change over to Wi-Fi before the clip arrives (default 2.5 s). */
+    inputSwitchMs?: number;
   }) {}
 
   /** A speaker the media plays on reaches it through: its own address (or a combined device's member that plays). */
@@ -175,6 +180,27 @@ export class Announcer {
     return { list: [...list.values()], out, failed };
   }
 
+  /**
+   * The speakers that are one half of a combined device whose other half switches inputs (a Samsung soundbar: Cast
+   * plays, SmartThings switches), on an input other than Wi-Fi: switched to Wi-Fi, with what to put back.
+   */
+  private async toWifi(speakers: Device[], cause: Cause, lines: AnnounceLine[]): Promise<{ id: string; input: string; name: string }[]> {
+    const out: { id: string; input: string; name: string }[] = [];
+    for (const d of speakers) {
+      const c = (this.config.get().combined ?? []).find(x => x.members.includes(d.id));
+      const sw = c?.members.map(m => this.reg.get(m)).find(m => m && m.id !== d.id && m.capabilities.includes('input') && m.state.online !== false);
+      const input = sw?.state.input;
+      if (!sw || !input || input === 'wifi') continue;
+      try {
+        await this.reg.command(sw.id, { input: 'wifi' }, cause, { quiet: true });
+        out.push({ id: sw.id, input, name: c!.name });
+      } catch (e) { lines.push({ text: `${c!.name} to Wi-Fi`, ok: false, detail: (e as Error).message }); }
+    }
+    // A moment for it to change over before the clip arrives.
+    if (out.length) await new Promise(r => setTimeout(r, this.o.inputSwitchMs ?? 2500));
+    return out;
+  }
+
   /** Whether this speaker is in an announcement now (an adhan, a doorbell chime). */
   announcing(id: string): boolean { return this.busy.has(id); }
 
@@ -197,6 +223,7 @@ export class Announcer {
     const cfg = this.config.get();
     const snaps = new Map<string, PlaybackSnap>();
     const paused: string[] = [];
+    let inputs: { id: string; input: string; name: string }[] = [];
     try {
       // What each speaker is doing now: what to put back.
       await Promise.all(list.map(async x => { snaps.set(x.d.id, await this.reg.snapshotPlayback(x.d.id)); }));
@@ -206,6 +233,10 @@ export class Announcer {
         if (!d || !d.state.on || d.state.paused) continue;
         try { await this.reg.command(id, { paused: true }, run.cause, { quiet: true }); paused.push(id); } catch (e) { lines.push({ text: `Pause ${d.name}`, ok: false, detail: (e as Error).message }); }
       }
+      // A soundbar on another input (the TV it's playing for) is switched to Wi-Fi first, through the integration that
+      // switches its inputs (the other half of a combined device), and back afterwards. Left to Cast, it doesn't
+      // always leave the TV's input; when it hosts the Cast group, the whole group then sits buffering, silent.
+      inputs = await this.toWifi(list.map(x => x.d), run.cause, lines);
       // Every speaker at its own volume, then all of them start in the same moment.
       const vols = new Map(list.map(x => [x.d.id, announceVol(x.level, trimOf(cfg, x.d.id))]));
       const started = this.o.now?.() ?? Date.now();
@@ -247,6 +278,11 @@ export class Announcer {
         const d = this.reg.get(id);
         if (!d?.state.on || !d.state.paused) continue;
         try { await this.reg.command(id, { paused: false }, run.cause, { quiet: true }); lines.push({ text: `${d.name} carried on`, ok: true }); } catch (e) { lines.push({ text: `${d.name} carried on`, ok: false, detail: (e as Error).message }); }
+      }
+      // Back on the input it was on (the TV), once the speakers are put back.
+      for (const i of inputs) {
+        try { await this.reg.command(i.id, { input: i.input }, run.cause, { quiet: true }); lines.push({ text: `${i.name} back on ${inputWords(i.input)}`, ok: true }); }
+        catch (e) { lines.push({ text: `${i.name} back on ${inputWords(i.input)}`, ok: false, detail: (e as Error).message }); }
       }
       for (const x of list) this.busy.delete(x.d.id);
       this.reg.clipDone(what.title);
