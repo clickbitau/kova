@@ -15,6 +15,7 @@ import { Screen } from '../ui/Screen';
 import { T } from '../ui/Text';
 import { Appear, animateLayout, haptic } from '../ui/motion';
 import { Confirm } from './AutomationEditor';
+import { ByItself } from './ByItself';
 
 // Automations: the home's own rules, each in words (When / Only if / Then) with an on/off switch and how its last
 // run went; Kova's suggestions above, Home Assistant ones to convert below. One-time schedules have their own
@@ -358,6 +359,8 @@ export function AutomationsScreen() {
       ) : null}
 
       {ha && ha.length ? <HaSection list={ha} onConvert={ids => void convert(ids)} /> : null}
+
+      <ByItself />
 
       <Sheet open={!!more} onClose={() => setMore(null)}>
         {more ? (

@@ -87,7 +87,7 @@ export function MoreScreen() {
 
       <Group title={can.settings ? 'Set up' : 'Your account'}>
         <Row first icon="group" iconFg={C.green} title={can.manage ? 'People and access' : 'You'} sub={can.manage ? 'Invite people, roles, their devices' : `${who.name} · ${who.roleLabel}`} onPress={() => nav.navigate('People')} />
-        {can.settings ? <Row icon="settings" iconFg={C.amber} title="Settings" sub={notice ?? 'The home, behaviours, notifications, software update'} subColor={notice ? C.blue : C.stone} badge={!!notice} onPress={() => nav.navigate('Settings')} /> : null}
+        {can.settings ? <Row icon="settings" iconFg={C.amber} title="Settings" sub={notice ?? 'The home, notifications, access, software update'} subColor={notice ? C.blue : C.stone} badge={!!notice} onPress={() => nav.navigate('Settings')} /> : null}
         {can.customise ? <Row icon="home" title="Customise home" sub="Rooms and groups, people, devices, favourites" onPress={() => nav.navigate('Customise')} /> : null}
         {can.integrations ? <Row icon="hub" title="Integrations" sub={bad.length ? `${bad.length} need${bad.length === 1 ? 's' : ''} attention` : `${s.integrations.length} connected`} subColor={bad.length ? C.amber : C.stone} badge={bad.length > 0} onPress={() => nav.navigate('Integrations')} /> : null}
       </Group>

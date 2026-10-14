@@ -5,9 +5,10 @@ import { useHub, useSnap } from '../state/hub';
 import { useNav } from '../navigation';
 import { searchZones, timezones, zoneLabel } from '../logic/settings';
 import { prayerSub } from '../logic/prayer';
-import { Group, Row, Sheet, SwitchRow } from '../ui/kit';
+import { Group, Row, Segmented, Sheet } from '../ui/kit';
 import { cleanName } from '../logic/customise';
-import { findingCall, findingToast, learnedRows } from '../logic/learning';
+import { updateNotice } from '../logic/updates';
+import { useAppUpdate } from '../native/updates';
 import { FieldWithButton } from './DeviceSheet';
 import { SoftwareUpdate } from './SoftwareUpdate';
 import { Screen } from '../ui/Screen';
@@ -15,12 +16,20 @@ import { T } from '../ui/Text';
 import { Icon } from '../ui/Icon';
 import { openPrivacyPolicy } from '../ui/PrivacyLink';
 
-/** More → Settings: the home's name, where it is (its own screen: the map, the address, the circle), its timezone, prayer times when they're on, behaviours, and Software update. */
+type Tab = 'home' | 'alerts' | 'access' | 'system';
+const TABS: { id: Tab; label: string; icon: string }[] = [
+  { id: 'home', label: 'Home', icon: 'home' }, { id: 'alerts', label: 'Alerts', icon: 'notifications' },
+  { id: 'access', label: 'Access', icon: 'key' }, { id: 'system', label: 'System', icon: 'dns' },
+];
+
+/** More → Settings, a tab at a time: the home (name, where it is, timezone, rooms, who's home), notifications, access
+ *  and other apps, and the system (Software update, privacy). What Kova does by itself lives in Automations. */
 export function SettingsScreen() {
   const s = useSnap();
   const nav = useNav();
   const { act } = useHub();
   const [pick, setPick] = useState<'tz' | 'name' | null>(null);
+  const [tab, setTab] = useState<Tab>('home');
   const [nameDraft, setNameDraft] = useState('');
   const [q, setQ] = useState('');
   const loc = s.home.location;
@@ -35,51 +44,44 @@ export function SettingsScreen() {
   };
 
   const zones = searchZones(timezones(s.home.timezone), q);
-  const learned = learnedRows(s.learned, s.home.timezone, s.home.locale);
+  const notice = updateNotice(s.update, useAppUpdate());
   return (
     <Screen title="Settings" over={s.home.name} onBack={() => nav.goBack()}>
-      <Group title="Home">
-        <Row first icon="home" iconFg={C.amber} title="Name" sub={s.home.name} onPress={() => { setNameDraft(s.home.name); setPick('name'); }} />
-        <Row icon="location_on" iconFg={C.amber} title="Where the home is"
-          sub={loc && (loc.latitude || loc.longitude) ? `${s.home.address ? `${s.home.address} · ` : ''}${loc.latitude.toFixed(5)}, ${loc.longitude.toFixed(5)} · ${loc.radiusM ?? 150} m circle` : 'Not set: paste from Google Maps, search the address, or use this phone. Sun and prayer times need it.'}
-          onPress={() => nav.navigate('HomeLocation')} />
-        <Row icon="schedule" iconFg={C.blue} title="Timezone" sub={zoneLabel(s.home.timezone)} onPress={() => { setQ(''); setPick('tz'); }} />
-        {s.prayer?.on ? <Row icon="mosque" iconFg={C.green} title="Prayer times" sub={prayerSub(s.prayer)} onPress={() => nav.navigate('PrayerTimes')} /> : null}
-        <Row icon="meeting_room" title="Rooms, people and devices" sub="Rooms and groups of rooms, people, devices, favourites, archived" onPress={() => nav.navigate('Customise')} />
-      </Group>
-      <Group title="Behaviours">
-        <SwitchRow first icon="doorbell" iconFg={C.amber} title="Pause for the doorbell" sub="When it rings, pause what’s playing on players that can pause"
-          on={s.home.pauseForDoorbell !== false} onChange={v => void put({ pauseForDoorbell: v }, v ? 'The doorbell pauses what’s playing' : 'The doorbell no longer pauses anything')} />
-        <SwitchRow icon="auto_awesome" iconFg={C.amber} title="Learn from what you do" sub="Suggest changes when you keep doing the same thing by hand. Nothing changes until you say so"
-          on={s.home.learnFromYou !== false} onChange={v => void put({ learnFromYou: v }, v ? 'Kova learns from what you do again' : 'Kova no longer learns from what you do')} />
-        <Row icon="routine" title="Modes and Light the way" sub="The home through the day" onPress={() => nav.navigate('Modes')} />
-        <Row icon="account_tree" title="Automations" sub="When something happens, do something" onPress={() => nav.navigate('Automations')} />
-        {s.roomClimate?.rooms.length ? (
-          <Row icon="graphic_eq" iconFg={C.blue} title="Voice and other apps" sub={`${s.roomClimate.rooms.length} room AC${s.roomClimate.rooms.length === 1 ? '' : 's'} for Google Home, Alexa and Apple Home`} onPress={() => nav.navigate('Voice')} />
-        ) : null}
-      </Group>
-      {s.home.learnFromYou !== false ? (
-        <Group title="What Kova has learned" note={learned.length ? 'From what you do by hand. Each shows the days it’s based on, and nothing changes until you apply it.' : 'When you keep doing the same thing by hand on most days, Kova suggests a change in Worth a look, and lists it here.'}>
-          {learned.length ? learned.map((r, i) => (
-            <Row key={r.id} first={i === 0} icon={r.action === 'restore' ? 'history' : 'auto_awesome'} iconFg={r.tone === 'amber' ? C.amber : C.stone} title={r.title}
-              sub={r.action === 'restore' ? `${r.status} · tap to suggest it again` : r.status} subColor={r.tone === 'amber' ? C.amber : C.stone}
-              onPress={() => r.action === 'restore' ? void act('POST', findingCall({ id: r.id }, 'restore'), {}, findingToast({ id: r.id }, 'restore'))
-                : r.automationId ? nav.navigate('AutomationEditor', { id: r.automationId }) : nav.navigate('Modes')} />
-          )) : <Row first icon="auto_awesome" iconFg={C.stone} title="Nothing learned yet" sub="Kova keeps an eye on what you do by hand" />}
+      <Segmented label="Settings sections" value={tab} onChange={id => setTab(id as Tab)} options={TABS.map(o => ({ ...o, label: o.id === 'system' && notice ? `${o.label} •` : o.label }))} />
+      {tab === 'home' ? (
+        <Group title="Home">
+          <Row first icon="home" iconFg={C.amber} title="Name" sub={s.home.name} onPress={() => { setNameDraft(s.home.name); setPick('name'); }} />
+          <Row icon="location_on" iconFg={C.amber} title="Where the home is"
+            sub={loc && (loc.latitude || loc.longitude) ? `${s.home.address ? `${s.home.address} · ` : ''}${loc.latitude.toFixed(5)}, ${loc.longitude.toFixed(5)} · ${loc.radiusM ?? 150} m circle` : 'Not set: paste from Google Maps, search the address, or use this phone. Sun and prayer times need it.'}
+            onPress={() => nav.navigate('HomeLocation')} />
+          <Row icon="schedule" iconFg={C.blue} title="Timezone" sub={zoneLabel(s.home.timezone)} onPress={() => { setQ(''); setPick('tz'); }} />
+          {s.prayer?.on ? <Row icon="mosque" iconFg={C.green} title="Prayer times" sub={prayerSub(s.prayer)} onPress={() => nav.navigate('PrayerTimes')} /> : null}
+          <Row icon="meeting_room" title="Rooms, people and devices" sub="Rooms and groups of rooms, people, devices, favourites, archived" onPress={() => nav.navigate('Customise')} />
+          <Row icon="router" iconFg={C.blue} title="How Kova knows who’s home" sub="Your router, phones, network checks" onPress={() => nav.navigate('Integration', { id: 'presence' })} />
         </Group>
       ) : null}
-      <Group title="Presence, alerts and access">
-        <Row first icon="router" iconFg={C.blue} title="How Kova knows who’s home" sub="Your router, phones, network checks" onPress={() => nav.navigate('Integration', { id: 'presence' })} />
-        <Row icon="notifications" iconFg={C.amber} title="What you’re told about" sub="Each kind of notification, and how often" onPress={() => nav.navigate('NotifyPrefs')} />
-        <Row icon="send" iconFg={C.stone} title="Notification channels" sub="Push and ntfy, off for everyone, send a test" onPress={() => nav.navigate('Integration', { id: 'notify' })} />
-        <Row icon="computer" iconFg={C.blue} title="Sign in a browser" sub="Your home on a computer, and signed-in browsers" onPress={() => nav.navigate('Browsers')} />
-        <Row icon="hub" title="Integrations" sub="What’s connected, and adding more" onPress={() => nav.navigate('Integrations')} />
-      </Group>
-      <Group title="About">
-        <Row first icon="lock" iconFg={C.green} title="Privacy policy" sub="What Kova collects, where it goes, and your choices" onPress={openPrivacyPolicy} right={<Icon name="arrow_outward" size={18} color={C.stone2} />} />
-      </Group>
-
-      <SoftwareUpdate hub={s.update} />
+      {tab === 'alerts' ? (
+        <Group title="Notifications">
+          <Row first icon="notifications" iconFg={C.amber} title="What you’re told about" sub="Each kind of notification, and how often" onPress={() => nav.navigate('NotifyPrefs')} />
+          <Row icon="send" iconFg={C.stone} title="Phone push and ntfy" sub="Turn them on, switch one off for everyone, send a test" onPress={() => nav.navigate('Integration', { id: 'notify' })} />
+        </Group>
+      ) : null}
+      {tab === 'access' ? (
+        <Group title="Access and other apps">
+          <Row first icon="computer" iconFg={C.blue} title="Sign in a browser" sub="Your home on a computer, and signed-in browsers" onPress={() => nav.navigate('Browsers')} />
+          {s.roomClimate?.rooms.length ? (
+            <Row icon="graphic_eq" iconFg={C.blue} title="Voice and other apps" sub={`${s.roomClimate.rooms.length} room AC${s.roomClimate.rooms.length === 1 ? '' : 's'} for Google Home, Alexa and Apple Home`} onPress={() => nav.navigate('Voice')} />
+          ) : null}
+        </Group>
+      ) : null}
+      {tab === 'system' ? (
+        <>
+          <SoftwareUpdate hub={s.update} />
+          <Group title="About">
+            <Row first icon="lock" iconFg={C.green} title="Privacy policy" sub="What Kova collects, where it goes, and your choices" onPress={openPrivacyPolicy} right={<Icon name="arrow_outward" size={18} color={C.stone2} />} />
+          </Group>
+        </>
+      ) : null}
 
       <Sheet open={pick === 'name'} onClose={() => setPick(null)} label="Home name">
         <T v="title">Home name</T>
