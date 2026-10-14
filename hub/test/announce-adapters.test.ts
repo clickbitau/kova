@@ -22,7 +22,7 @@ const CLIP = { url: 'http://10.0.0.2:8140/api/clip/abc.wav', title: 'Chime', con
 /** A Cast speaker that keeps a queue and says where it is in it (currentTime, the item's kova index). */
 function fakeCast() {
   const log: { type: string; data: Record<string, unknown> }[] = [];
-  const st = { appId: 'CC1AD845', running: false, level: 0.3, kova: 0, time: 0, state: 'PLAYING' };
+  const st = { appId: 'CC1AD845', running: false, level: 0.3, kova: 0, time: 0, state: 'PLAYING', stall: false };
   let sock: net.Socket | null = null;
   const status = (rid: unknown) => ({ type: 'MEDIA_STATUS', requestId: rid, status: st.running ? [{ mediaSessionId: 7, playerState: st.state, currentTime: st.time, currentItemId: 1, items: [{ itemId: 1, customData: { kova: st.kova } }] }] : [] });
   const server = net.createServer(s => {
@@ -45,7 +45,7 @@ function fakeCast() {
           if (type === 'LOAD' || type === 'QUEUE_LOAD') { st.running = true; st.state = 'PLAYING'; st.time = Number(m.data.currentTime ?? 0); st.kova = Number(((m.data.items as { customData: { kova: number } }[] | undefined)?.[0]?.customData.kova) ?? 0); }
           if (type === 'PAUSE') st.state = 'PAUSED';
           if (type === 'LOAD' && m.data.autoplay === false) st.state = 'PAUSED';
-          if (type === 'PLAY') st.state = 'PLAYING';
+          if (type === 'PLAY') st.state = st.stall ? 'BUFFERING' : 'PLAYING';
           reply('web-1', NS.media, status(rid));
         }
       }
@@ -112,6 +112,25 @@ test('Cast: snapshot the queue and the place in it, play the clip on its own, th
     await reg.playClip(id, CLIP, 12, CAUSE);
     assert.equal(await reg.restorePlayback(id, { ...idle, state: { on: false, media: null, vol: 30 } }, CAUSE), 'idle again');
     assert.equal(f.st.running, false);
+  } finally { await reg.stop(); f.server.close(); }
+});
+
+test('Cast: an announcement stuck buffering at its start is loaded again, once', async () => {
+  const f = fakeCast();
+  await new Promise<void>(r => f.server.listen(0, '127.0.0.1', r));
+  const reg = new Registry(new Store(':memory:'));
+  const cast = new CastAdapter({ discover: false, insecure: true, pollMs: 0, batchMs: 5, unstickMs: 100, endpoints: [{ id: 'aaaa0000000000000000000000000002', name: 'Kitchen speaker', model: 'Nest Audio', host: '127.0.0.1', port: (f.server.address() as AddressInfo).port }] });
+  await reg.addAdapter(cast);
+  try {
+    f.st.stall = true;
+    await reg.playClip('cast_aaaa0000000000000000000000000002', CLIP, 20, CAUSE);
+    await new Promise(r => setTimeout(r, 400));
+    assert.equal(f.log.filter(l => l.type === 'LOAD').length, 2, 'loaded again');
+    // Playing: left alone.
+    f.st.stall = false;
+    await reg.playClip('cast_aaaa0000000000000000000000000002', CLIP, 20, CAUSE);
+    await new Promise(r => setTimeout(r, 400));
+    assert.equal(f.log.filter(l => l.type === 'LOAD').length, 3);
   } finally { await reg.stop(); f.server.close(); }
 });
 

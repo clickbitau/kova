@@ -205,8 +205,10 @@ export class HelixMusic {
   songUrl(id: string): Promise<string> { return this.loopUrl(id, false); }
 
   async loopUrl(id: string, helixLoop = true): Promise<string> {
-    const ck = `${helixLoop ? 'loop' : 'song'}:${id}`;
-    const format = helixLoop ? 'aac' : 'flac';
+    const ck = `${helixLoop ? 'loop-flac' : 'song'}:${id}`;
+    // Lossless both ways: the original file, or Helix's loop of it as FLAC (CD quality is about 1.2 Mb/s: an hour is
+    // about 540 MB on the home network).
+    const format = 'flac';
     const hit = this.loops.get(ck);
     if (hit && hit.until > this.now) return hit.url;
     const h = this.linked();

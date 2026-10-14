@@ -28,6 +28,8 @@ export interface CastOptions {
   pollMs?: number;
   /** Window in which commands are collected so simultaneous plays can use a group. */
   batchMs?: number;
+  /** How long an announcement may sit buffering at its start before it's loaded again (default 8 s). */
+  unstickMs?: number;
   /** Plain TCP instead of TLS (tests only). */
   insecure?: boolean;
   /** The ports a moved speaker group is looked for on (default 32000–32999; tests narrow it). */
@@ -38,7 +40,7 @@ export interface CastOptions {
 interface Pending { device: Device; cmd: Command; resolve: (did?: DeviceState) => void; reject: (e: Error) => void }
 
 const isGroupModel = (md: string) => /cast group/i.test(md);
-const contentType = (url: string) => /\.m3u8(\?|$)/i.test(url) ? 'application/x-mpegURL' : /\.aac(\?|$)/i.test(url) ? 'audio/aac' : /\.(mp4|m4a)(\?|$)/i.test(url) ? 'audio/mp4' : 'audio/mpeg';
+const contentType = (url: string) => /\.m3u8(\?|$)/i.test(url) ? 'application/x-mpegURL' : /\.flac(\?|$)/i.test(url) ? 'audio/flac' : /\.aac(\?|$)/i.test(url) ? 'audio/aac' : /\.(mp4|m4a)(\?|$)/i.test(url) ? 'audio/mp4' : 'audio/mpeg';
 
 /** Every Cast speaker, display and group plays FLAC (up to 96 kHz / 24-bit), so Helix's songs go as they are, untranscoded. */
 export const CAST_FORMAT = 'flac' as const;
@@ -84,7 +86,9 @@ class Receiver {
   /** When a looping sound was last started again after the speaker dropped it (the last hour's). */
   private restarts: number[] = [];
 
+  private unstickMs: number;
   constructor(readonly ep: CastEndpoint, o: CastOptions) {
+    this.unstickMs = o.unstickMs ?? 8000;
     this.ch = new CastChannel({ host: ep.host, port: ep.port, insecure: o.insecure, timeoutMs: o.timeoutMs });
     this.ch.on('message', m => {
       if (m.namespace === NS.media && m.data.type === 'MEDIA_STATUS') this.onStatus((m.data.status as MediaStatus[] | undefined)?.[0]);
@@ -152,6 +156,7 @@ class Receiver {
       await this.ch.request(NS.media, transport, { type: 'PLAY', ...(session != null ? { mediaSessionId: session } : {}) });
       void this.holdVolumes(vols);
     }
+    void this.unstick(transport, clip, this.unstickMs);
     this.media = clip.title;
     this.queue = null;
     this.stream = null;
@@ -338,6 +343,24 @@ class Receiver {
     this.queue = null;
     this.stream = null;
     this.clip = null;
+  }
+
+  /**
+   * A clip that hasn't got going a few seconds in (still buffering at the start, or idle with an error) is loaded again,
+   * once: a speaker or group that stalls on a file otherwise stays silent for the whole announcement.
+   */
+  private async unstick(transport: string, clip: Clip, waitMs = 8000): Promise<void> {
+    await new Promise(r => setTimeout(r, waitMs).unref?.());
+    if (this.clip !== clip.title) return;
+    const m = await this.ch.request(NS.media, transport, { type: 'GET_STATUS' }).catch(() => null);
+    const st = (m?.data.status as MediaStatus[] | undefined)?.[0];
+    const stuck = !st ? false : (st.playerState === 'BUFFERING' || st.playerState === 'LOADING') && (st.currentTime ?? 0) < 1;
+    if (!stuck) return;
+    console.log(`[cast] ${this.ep.name}: ${clip.title} still ${(st!.playerState ?? '').toLowerCase()} after ${waitMs / 1000} s; loading it again`);
+    await this.ch.request(NS.media, transport, {
+      type: 'LOAD', autoplay: true,
+      media: { contentId: clip.url, contentType: clip.contentType, streamType: 'BUFFERED', ...(clip.durationMs ? { duration: clip.durationMs / 1000 } : {}), metadata: { metadataType: 0, title: clip.title } },
+    }).catch(e => console.log(`[cast] ${this.ep.name}: loading ${clip.title} again failed: ${(e as Error).message}`));
   }
 
   /** Once it plays: each speaker still at the level it was given, else given it again (once). */

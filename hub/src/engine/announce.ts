@@ -126,7 +126,9 @@ export class Announcer {
     }
     if (/^https?:\/\/\S+$/i.test(media)) return { title: 'Announcement', contentType: typeOf(media), url: () => media };
     if (/^song: /i.test(media)) {
-      const q = await this.reg.queues?.(media, { format: 'aac' }).catch(() => null);
+      // As music plays (Cast plays FLAC untranscoded, Sonos too): Helix's "aac" is a bare AAC stream with no length in
+      // it, which a Cast group can sit on buffering for minutes (the adhan once didn't play on any Google speaker).
+      const q = await this.reg.queues?.(media, { format: 'flac' }).catch(() => null);
       const t = q?.tracks[0];
       if (!q || !t) throw new Error(`Helix has no song “${media.slice(6)}”`);
       await q.prepare?.(0, 1);

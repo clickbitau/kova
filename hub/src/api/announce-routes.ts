@@ -10,6 +10,7 @@ import { applyPrayer, prayerView, type PrayerPatch } from '../services/prayer.ts
 import { DEFAULT_ANNOUNCE_LEVEL } from '../engine/announce.ts';
 import { kovaAddress } from '../services/helix-link.ts';
 import { NotLooped } from '../services/helix-music.ts';
+import { loopType } from '../services/loops.ts';
 import type { Automation } from '../model/types.ts';
 
 // Announcements' routes: clips (upload, list, rename, remove), the files speakers fetch, "Play test", and prayer times.
@@ -85,7 +86,7 @@ export function registerAnnounceRoutes(app: FastifyInstance, hub: Hub, port: () 
   // Helix's when Helix makes them; until the loop is made, the sound itself (the speaker repeats it). Only sounds the
   // home has set up this way.
   app.get<{ Params: { file: string } }>('/api/sound/:file', async (req, reply) => {
-    const name = decodeURIComponent(req.params.file).replace(/\.(m4a|aac)$/, '');
+    const name = decodeURIComponent(req.params.file).replace(/\.(m4a|aac|flac)$/, '');
     const src = hub.config.get().sources.find(x => x.name === name && hub.viaHub(x));
     if (!src) return reply.code(404).send({ error: 'No such sound' });
     const range = typeof req.headers.range === 'string' ? req.headers.range : undefined;
@@ -95,10 +96,11 @@ export function registerAnnounceRoutes(app: FastifyInstance, hub: Hub, port: () 
         if (url) return await proxy(url, range, req, reply);
       }
       const stable = src.helix?.id ?? src.url!;
-      const made = hub.loops.ready(hub.loops.key(stable));
-      if (made) return await sendFile(made, 'audio/mp4', range, reply);
+      const spec = hub.loopSpec(src);
+      const made = hub.loops.ready(hub.loops.key(stable, spec));
+      if (made) return await sendFile(made, loopType(made), range, reply);
       const input = src.helix ? await hub.music!.songUrl(src.helix.id) : src.url!;
-      if (hub.loops.available() && !hub.loops.problem(hub.loops.key(stable))) void hub.loops.make(input, stable).catch(e => console.warn(`[loops] ${src.name}: ${(e as Error).message}`));
+      if (hub.loops.available() && !hub.loops.problem(hub.loops.key(stable, spec))) void hub.loops.make(input, stable, spec).catch(e => console.warn(`[loops] ${src.name}: ${(e as Error).message}`));
       return await proxy(input, range, req, reply);
     } catch (e) { if (!reply.sent) return reply.code(502).send({ error: (e as Error).message }); }
   });

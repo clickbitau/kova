@@ -12,14 +12,17 @@ import { join } from 'node:path';
  * With ffmpeg on the hub (the installer adds it). Without, `available()` is false and sounds repeat as they are.
  * Made files are kept in <data>/loops by what they're made from, and dropped when no sound uses them.
  */
-export interface LoopSpec { crossfadeMs: number; minutes: number }
+/** `lossless`: the loop is FLAC (for a lossless original, a Helix song), else AAC at 256 kb/s. */
+export interface LoopSpec { crossfadeMs: number; minutes: number; lossless?: boolean }
 export const LOOP_DEFAULT: LoopSpec = { crossfadeMs: 8000, minutes: 60 };
 /** A pass longer than this isn't repeated inside the file: it's long enough by itself. */
 const MAX_UNIT_S = 600;
 const SAMPLE_RATE = 48000;
-/** How a loop is encoded: AAC at 256 kb/s (a sound played for hours, often from a lossless original). In the key, so
- *  loops made before a change are made again. */
-const ENCODING = 'aac256';
+/** How a loop is encoded: FLAC when the original is lossless (nothing lost, about 1.2 Mb/s for CD quality), else AAC at
+ *  256 kb/s (the original is already lossy: an MP3 recording). In the key, so loops made before a change are made again. */
+const encoding = (spec: LoopSpec) => spec.lossless ? 'flac' : 'aac256';
+/** A made loop's file type, by its name. */
+export const loopType = (file: string) => file.endsWith('.flac') ? 'audio/flac' : 'audio/mp4';
 
 export class Loops {
   private ffmpeg: string | null | undefined;
@@ -39,13 +42,14 @@ export class Loops {
   }
 
   key(input: string, spec: LoopSpec = LOOP_DEFAULT): string {
-    return createHash('sha256').update(JSON.stringify([input, spec.crossfadeMs, spec.minutes, ENCODING])).digest('hex').slice(0, 20);
+    return createHash('sha256').update(JSON.stringify([input, spec.crossfadeMs, spec.minutes, encoding(spec)])).digest('hex').slice(0, 20);
   }
 
   /** The made file for this input, if it's ready. */
   ready(key: string): string | null {
-    const f = this.dir ? join(this.dir, `${key}.m4a`) : null;
-    return f && existsSync(f) && statSync(f).size > 0 ? f : null;
+    if (!this.dir) return null;
+    for (const ext of ['m4a', 'flac']) { const f = join(this.dir, `${key}.${ext}`); if (existsSync(f) && statSync(f).size > 0) return f; }
+    return null;
   }
 
   /** Why the last try for this one failed, within the last 10 minutes (not tried again until then). */
@@ -79,7 +83,7 @@ export class Loops {
   prune(keep: Set<string>): void {
     if (!this.dir || !existsSync(this.dir)) return;
     for (const f of readdirSync(this.dir)) {
-      const k = f.replace(/\.(m4a(\.part)?|(pass|raw)\.(wav|flac))$/, '');
+      const k = f.replace(/\.(m4a(\.part)?|flac(\.part)?|(pass|raw)\.(wav|flac))$/, '');
       if (!keep.has(k) && !this.making.has(k)) rmSync(join(this.dir, f), { force: true });
     }
   }
@@ -99,10 +103,11 @@ export class Loops {
     // Only as much of the recording as the loop uses: a 10-hour rain file is cut at the length asked for (plus the
     // crossfade), and that much is made seamless. Working files are FLAC, about half of plain samples.
     const cap = spec.minutes * 60 + spec.crossfadeMs / 1000 + 1;
-    const need = 2 * cap * SAMPLE_RATE * 4 * 0.6 + 250e6;
+    // The working files, and the loop itself when it's lossless (about 1.2 Mb/s).
+    const need = 2 * cap * SAMPLE_RATE * 4 * 0.6 + 250e6 + (spec.lossless ? cap * 160_000 : 0);
     const free = (() => { try { const f = statfsSync(this.dir!); return f.bavail * f.bsize; } catch { return Infinity; } })();
     if (free < need + 500e6) throw new Error(`Not enough room on the hub to make it (${Math.round(free / 1e6)} MB free, ${Math.round((need + 500e6) / 1e6)} MB needed)`);
-    const out = join(this.dir!, `${key}.m4a`), part = `${out}.part`, raw = join(this.dir!, `${key}.raw.flac`), pass = join(this.dir!, `${key}.pass.flac`);
+    const out = join(this.dir!, `${key}.${spec.lossless ? 'flac' : 'm4a'}`), part = `${out}.part`, raw = join(this.dir!, `${key}.raw.flac`), pass = join(this.dir!, `${key}.pass.flac`);
     // A live stream never ends: refused before an hour of it is recorded.
     if (!(await this.ends(input))) throw new Error('It isn’t a recording with a length (a live stream can’t be looped)');
     try {
@@ -141,7 +146,8 @@ export class Loops {
     ].join(';');
     rmSync(part, { force: true });
     await this.run(ff, ['-v', 'error', '-y', '-i', raw, '-filter_complex', graph, '-map', '[out]', '-c:a', 'flac', '-f', 'flac', pass], 15 * 60_000);
-    await this.run(ff, ['-v', 'error', '-y', '-stream_loop', String(n - 1), '-i', pass, '-c:a', 'aac', '-b:a', '256k', '-movflags', '+faststart', '-f', 'mp4', part], 15 * 60_000);
+    const enc = spec.lossless ? ['-c:a', 'flac', '-compression_level', '5', '-f', 'flac'] : ['-c:a', 'aac', '-b:a', '256k', '-movflags', '+faststart', '-f', 'mp4'];
+    await this.run(ff, ['-v', 'error', '-y', '-stream_loop', String(n - 1), '-i', pass, ...enc, part], 15 * 60_000);
     renameSync(part, out);
     return out;
   }

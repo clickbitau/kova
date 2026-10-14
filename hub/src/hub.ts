@@ -22,7 +22,7 @@ import { suggestZoneRooms } from './util/zones.ts';
 import { Maps, type MapsOptions } from './services/maps.ts';
 import { RoomClimate, outsideFrom } from './engine/room-climate.ts';
 import { join } from 'node:path';
-import { Loops } from './services/loops.ts';
+import { Loops, LOOP_DEFAULT, type LoopSpec } from './services/loops.ts';
 import { Clips } from './services/clips.ts';
 import { Adhans, builtinAdhan } from './services/adhans.ts';
 import { Announcer, CHIME_MEDIA } from './engine/announce.ts';
@@ -144,7 +144,8 @@ export class Hub extends EventEmitter<{ changed: [] }> {
     this.reg = new Registry(this.store, name => {
       const s = this.config.get().sources.find(x => x.name === name);
       // A sound that repeats (or a Helix song): from the hub, which serves it as a seamless loop (api/sound).
-      if (s && this.viaHub(s)) { const base = this.lanBase(); return base ? `${base}/api/sound/${encodeURIComponent(s.name)}.m4a` : s.url; }
+      // A Helix song plays lossless (its loop is FLAC, from the original); other sounds as AAC.
+      if (s && this.viaHub(s)) { const base = this.lanBase(); return base ? `${base}/api/sound/${encodeURIComponent(s.name)}.${s.helix ? 'flac' : 'm4a'}` : s.url; }
       return s?.url;
     }, () => this.config.get().devices ?? {});
     this.reg.roomName = id => this.config.get().rooms.find(r => r.id === id)?.name ?? id;
@@ -239,6 +240,8 @@ export class Hub extends EventEmitter<{ changed: [] }> {
   }
 
   /** Whether speakers get this sound from the hub: a Helix song, or a recording that repeats when the hub makes loops. */
+  /** How a sound's loop is made: lossless for a Helix song (from its original file), AAC for a recording off the web. */
+  loopSpec(s: MediaSource): LoopSpec { return { ...LOOP_DEFAULT, lossless: !!s.helix }; }
   viaHub(s: MediaSource): boolean { return !!s.helix || (!!s.loop && !!s.url && !!this.loops?.available()); }
 
   /**
@@ -262,12 +265,12 @@ export class Hub extends EventEmitter<{ changed: [] }> {
             if (ok) continue;
           }
           const stable = s.helix?.id ?? s.url!;
-          const key = this.loops.key(stable);
+          const key = this.loops.key(stable, this.loopSpec(s));
           keep.add(key);
           if (this.loops.ready(key) || this.loops.problem(key)) continue;
           try {
             const input = s.helix ? await this.music?.songUrl(s.helix.id) : s.url;
-            if (input) await this.loops.make(input, stable);
+            if (input) await this.loops.make(input, stable, this.loopSpec(s));
           } catch (e) { console.warn(`[loops] ${s.name}: ${(e as Error).message}`); }
         }
         this.loops.prune(keep);
