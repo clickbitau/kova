@@ -3,7 +3,7 @@ import type { Hub } from '../hub.ts';
 import { dateWords, homeHour12, homeLocale } from '../util/locale.ts';
 import type { Device, Mode, Targets } from '../model/types.ts';
 import type { LogEntry } from '../store/db.ts';
-import { clock, localDate, localHour, atLocal, localStamp, stampWords } from '../util/time.ts';
+import { clock, localDate, localHour, atLocal, localStamp, stampWords, pastWords } from '../util/time.ts';
 import { isLight, pseudoLabel, targetLabel } from '../util/describe.ts';
 import { rhythmLabel } from '../rhythms/rhythms.ts';
 import { automationIdeas } from '../engine/automation-ideas.ts';
@@ -126,7 +126,7 @@ export function snapshot(hub: Hub) {
     conditionLabels: a.conditions.map(c => condWords(c, words)),
     actionLabels: a.actions.map(x => actionWords(x, words, tgt)),
   });
-  const runSummary = (r?: import('../model/types.ts').AutomationRun) => r ? { at: r.at, atLabel: clock(r.at, cfg.timezone), result: r.result, why: r.why, detail: r.detail ?? null } : null;
+  const runSummary = (r?: import('../model/types.ts').AutomationRun) => r ? { at: r.at, atLabel: pastWords(r.at, now, cfg.timezone), result: r.result, why: r.why, detail: r.detail ?? null } : null;
 
   const modes = cfg.modes.map((m: Mode, i) => {
     const next = cfg.modes[(i + 1) % cfg.modes.length];

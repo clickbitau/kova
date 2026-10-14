@@ -96,6 +96,17 @@ export function stampAt(stamp: string, tz: string): number | null {
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+/** When something happened, as a list shows it: "15:30" today, "yesterday at 15:30", "Mon 12 Oct at 15:30" before. */
+export function pastWords(ms: number, now: number, tz: string): string {
+  const day = localDate(ms, tz), today = localDate(now, tz);
+  if (day === today) return clock(ms, tz);
+  const at = clock(ms, tz);
+  if (day === addDays(today, -1)) return `yesterday at ${at}`;
+  const [y, mo, d] = day.split('-').map(Number);
+  const wd = WEEKDAYS[new Date(Date.UTC(y!, mo! - 1, d!)).getUTCDay()];
+  return `${wd} ${d} ${MONTHS[mo! - 1]}${y !== Number(today.slice(0, 4)) ? ` ${y}` : ''} at ${at}`;
+}
+
 /** A local date and time in words, near `now`: "today at 15:30", "tomorrow at 07:00", "Thu 15 Oct at 09:00". */
 export function stampWords(stamp: string, now: number, tz: string): string {
   const m = LOCAL_STAMP.exec(stamp);

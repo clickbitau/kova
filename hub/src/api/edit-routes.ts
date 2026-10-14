@@ -4,6 +4,7 @@ import type { Hub } from '../hub.ts';
 import type { Automation, Command, HomeConfig, MediaSource, OverlayEnd, Rhythm, Targets } from '../model/types.ts';
 import { resolveRhythm, rhythmPhrase } from '../rhythms/rhythms.ts';
 import { localDate } from '../util/time.ts';
+import { currentActor } from '../services/actor.ts';
 import { checkAutomation } from '../engine/automation-check.ts';
 import { isOneTime, nextOnce, upgradeAutomation } from '../engine/automations.ts';
 const autoUpgrade = (a: object) => upgradeAutomation(a as Record<string, unknown>);
@@ -20,6 +21,14 @@ type Err = { error: string };
 
 export function registerEditRoutes(app: FastifyInstance, hub: Hub): void {
   const edit = (fn: (c: HomeConfig) => void) => ({ undo: hub.engine.registerUndo(hub.config.update(fn)) });
+  /** An automation switched on or off goes in Activity, with who did it: "why did it (not) run?" has an answer. */
+  const toldOnOff = (a: Automation, on: boolean) => {
+    const who = currentActor();
+    hub.store.append({
+      kind: 'system', device: null, feed: 'system', what: `Automation “${a.name}” switched ${on ? 'on' : 'off'}`, data: { automation: a.id, enabled: on },
+      cause: { kind: 'user', label: 'You', ...(who ? { by: { id: who.personId, name: who.name } } : {}) },
+    });
+  };
   const bad = (reply: { code: (n: number) => { send: (b: Err) => unknown } }, e: unknown) =>
     reply.code(400).send({ error: e instanceof Error ? e.message : String(e) });
 
@@ -257,7 +266,10 @@ export function registerEditRoutes(app: FastifyInstance, hub: Hub): void {
     if (!autos().some(a => a.id === req.params.id)) return reply.code(404).send({ error: 'unknown automation' });
     try {
       const a = checkAutomation(req.body, checkCtx(req.params.id));
-      return edit(c => { const l = c.automations!; l[l.findIndex(x => x.id === req.params.id)] = { id: req.params.id, ...a }; });
+      const was = autos().find(x => x.id === req.params.id)!.enabled !== false;
+      const r = edit(c => { const l = c.automations!; l[l.findIndex(x => x.id === req.params.id)] = { id: req.params.id, ...a }; });
+      if ((a.enabled !== false) !== was) toldOnOff({ id: req.params.id, ...a }, a.enabled !== false);
+      return r;
     } catch (e) { return bad(reply, e); }
   });
   // On or off without sending the whole thing.
@@ -269,7 +281,9 @@ export function registerEditRoutes(app: FastifyInstance, hub: Hub): void {
     if (req.body.enabled && isOneTime(cur) && nextOnce({ ...cur, enabled: true }, hub.config.get().timezone, hub.engine.now()) == null) {
       return reply.code(400).send({ error: 'That time has passed: choose a later one' });
     }
-    return edit(c => { const x = c.automations!.find(y => y.id === req.params.id)!; Object.assign(x, autoUpgrade(x), { enabled: req.body.enabled! }); });
+    const r = edit(c => { const x = c.automations!.find(y => y.id === req.params.id)!; Object.assign(x, autoUpgrade(x), { enabled: req.body.enabled! }); });
+    if ((cur.enabled !== false) !== req.body.enabled) toldOnOff(cur, req.body.enabled);
+    return r;
   });
   // Clear away one-time schedules that have run (or were missed).
   app.post('/api/automations/clear-done', async () => {

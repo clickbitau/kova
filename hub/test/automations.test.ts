@@ -501,3 +501,23 @@ test('Conditions on who changed an input: the last change Kova saw, and the inpu
   assert.equal(matchText({ on: true, input: 'hdmi2', inputByPerson: false }), 'on HDMI 2 and not switched by anyone');
   assert.equal(matchText({ on: true, inputBy: 'helix-auto' }), 'on and switched by Helix');
 });
+
+test('switched off: said in Activity, and a run from days ago shows its day, not just a time', async () => {
+  const h = await setup(21);
+  try {
+    const id = await h.add({ name: 'Lamp when dark', triggers: [{ kind: 'time', at: { kind: 'time', at: '21:30' } }], actions: [{ kind: 'set', targets: { lamp: { on: true } } }] });
+    await h.later(30 * 60);
+    const label = () => (h.app.inject({ url: '/api/state' })).then(r => r.json().automations.find((x: { id: string }) => x.id === id).lastRun.atLabel as string);
+    assert.equal(await label(), '21:30');
+    assert.equal((await h.app.inject({ method: 'PATCH', url: `/api/automations/${id}`, payload: { enabled: false } })).statusCode, 200);
+    const said = h.hub.store.query({ kinds: ['system'] }).filter(e => e.data.automation === id);
+    assert.deepEqual(said.map(e => e.what), ['Automation “Lamp when dark” switched off']);
+    // Saved again off: nothing more to say.
+    await h.app.inject({ method: 'PATCH', url: `/api/automations/${id}`, payload: { enabled: false } });
+    assert.equal(h.hub.store.query({ kinds: ['system'] }).filter(e => e.data.automation === id).length, 1);
+    await h.later(24 * 3600);
+    assert.equal(await label(), 'yesterday at 21:30');
+    await h.later(2 * 24 * 3600);
+    assert.equal(await label(), 'Wed 30 Sep at 21:30');
+  } finally { await h.close(); }
+});
