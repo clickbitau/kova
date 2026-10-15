@@ -127,8 +127,11 @@ export function spots(plan: FloorPlan, devices: { id: string; room: string }[]):
     // A grid about as wide as the room is, kept off the walls.
     const cols = Math.max(1, Math.min(ids.length, Math.round(Math.sqrt(ids.length * (b.w / Math.max(0.5, b.h))))));
     const rows = Math.ceil(ids.length / cols);
-    const gx = Math.min(1, (b.w * 0.7) / cols), gy = Math.min(1, (b.h * 0.7) / rows);
-    const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+    const gx = Math.min(1, (b.w * 0.7) / cols);
+    // Under the room's name (drawn in its top corner, about 2.6 × a 55th of the plan's longer side): never on it.
+    const band = Math.min(b.h * 0.35, (Math.max(plan.widthM, plan.heightM) / 55) * 2.6);
+    const cx = b.x + b.w / 2, cy = b.y + band + (b.h - band) / 2;
+    const gy = Math.min(1, ((b.h - band) * 0.8) / rows);
     ids.forEach((id, i) => {
       const c = i % cols, r = Math.floor(i / cols);
       let x = cx + (c - (cols - 1) / 2) * gx, y = cy + (r - (rows - 1) / 2) * gy;
