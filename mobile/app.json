@@ -2,8 +2,8 @@
   "expo": {
     "name": "Kova",
     "slug": "kova",
-    "version": "0.4.0",
-    "runtimeVersion": "kova-mobile-0.4",
+    "version": "0.5.0",
+    "runtimeVersion": "kova-mobile-0.5",
     "updates": {
       "enabled": true,
       "url": "https://updates.invalid/api/app/manifest",
@@ -13,7 +13,7 @@
     },
     "scheme": "kova",
     "orientation": "portrait",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "automatic",
     "backgroundColor": "#0e0f10",
     "icon": "./assets/images/icon.png",
     "ios": {
@@ -103,10 +103,14 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/splash-icon-light.png",
           "imageWidth": 120,
           "resizeMode": "contain",
-          "backgroundColor": "#0e0f10"
+          "backgroundColor": "#f5f3ee",
+          "dark": {
+            "image": "./assets/images/splash-icon.png",
+            "backgroundColor": "#0e0f10"
+          }
         }
       ],
       [
