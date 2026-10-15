@@ -296,7 +296,11 @@ export async function wardenConnect(code: WardenConnectCode, o: { pollMs?: numbe
     const ask = () => lanJson<{ pairId?: string; pollSecret?: string; pollUrl?: string }>(`${url}/api/v1/apps/pair`, { ...pin, method: 'POST', body: { name: 'Kova', scopes: WARDEN_SCOPES, invite: code.invite } });
     let r: Awaited<ReturnType<typeof ask>>;
     try { r = await ask(); } catch (e) {
-      if (e instanceof LanHttpError) throw new Error(e.status === 404 ? 'This Warden can’t take connection codes yet. Update it, or use Pair with Warden.' : `Warden didn’t take the code: ${e.message}`);
+      if (e instanceof LanHttpError) {
+        // Warden's own words are meant for people ("This code was already used"): shown as they are.
+        const said = (e.body as { message?: unknown } | undefined)?.message;
+        throw new Error(e.status === 404 ? 'This Warden can’t take connection codes yet. Update it, or use Pair with Warden.' : typeof said === 'string' && said.trim() ? said.trim() : `Warden didn’t take the code: ${e.message}`);
+      }
       // Lost on the way: once more (Warden gives the same answer to the same invite for a short while).
       try { r = await ask(); } catch (e2) { throw new Error(`Warden didn’t take the code: ${e2 instanceof Error ? e2.message : String(e2)}`); }
     }

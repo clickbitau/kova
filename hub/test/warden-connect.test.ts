@@ -64,7 +64,7 @@ test('Warden connection code: the first address that is this Warden takes it, Ko
     const posts = w.s.seen.filter(x => x.startsWith('POST /api/v1/apps/pair')).length;
     r = await connect(codeOf(good));
     assert.equal(r.statusCode, 400);
-    assert.match(r.json().error, /already used/);
+    assert.equal(r.json().error, 'This code was already used', 'Warden’s words, as they are');
     assert.equal(w.s.seen.filter(x => x.startsWith('POST /api/v1/apps/pair')).length, posts + 1);
 
     // Warden's link lands on Integrations → Warden; the code stays in the fragment, which never reaches the hub.
