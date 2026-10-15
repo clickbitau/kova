@@ -84,3 +84,34 @@ new version; otherwise it switches back, restores the backup and records the ver
 
 Boxes installed from git before this keep updating from git until a licence is added (the migration path);
 `deploy/update.sh` refuses to run once a box is on releases.
+
+## Running the hub as a DockBit app
+
+The repo's `Dockerfile` is the whole hub: Node, ffmpeg (for seamless repeating sounds), the hub, the web pages and the
+phone app's over-the-air updates (`ota/`). It runs as uid 1000 and writes only to `/data`.
+
+- **Data.** A box's `/var/lib/kova` copies into `/data` as it is, owned by uid 1000. Every path is relative to
+  `KOVA_DATA`, except one: the AirPlay bridge's program path, which `integrations.json` holds (`aircast.binary`, e.g.
+  `/opt/airconnect/aircast-linux-x86_64-static`). Mount that folder read-only at the same path, or change the path.
+  Leave `update/status.json` behind, or keep it: with `KOVA_UPDATES_BY` set, the hub ignores it.
+- **Updates.** Set `KOVA_UPDATES_BY=DockBit`. The hub then offers no Check or Update. Settings → Software update says
+  updates come from DockBit. The box's own updater (systemd `kova-update*` units, `/opt/kova/releases`) isn't used.
+- **Environment.**
+  - Set in the image: `KOVA_DATA=/data`, `KOVA_PORT=8140`, `NODE_ENV=production`.
+  - From the box's `kova.env`: `KOVA_TOKEN` and `KOVA_MATTER`.
+  - Optional, when the box had them: `KOVA_UPDATE_URL`, `KOVA_UPDATE_CHANNEL`, `KOVA_PRODUCT`,
+    `KOVA_LOCATION_PROXY_URL`, `KOVA_GOOGLE_MAPS_API_KEY`, `KOVA_BACKUP_TIME`, `KOVA_BACKUP_KEEP`, `KOVA_BACKUP_DIR`,
+    `KOVA_HOMEKIT_PORT`, `KOVA_MATTER_BRIDGE_PORT`, `KOVA_SONOS_HOSTS` and `TZ`.
+- **Network.** The hub must be on the home's LAN, with multicast:
+  - mDNS (Cast, HomeKit, `_kova._tcp`, Warden),
+  - SSDP (Sonos, TVs),
+  - Matter over IPv6, which needs IPv6 link-local.
+
+  Either network gives this: host networking, or a macvlan on the LAN with IPv6 enabled. With a macvlan, keep the
+  box's MAC and IP, because the router (Warden), phones and saved pairings know the hub by them. A macvlan container
+  can't be reached from its own Docker host, so health checks have to run inside the container (the image's
+  HEALTHCHECK does). The phone app's remote address (Tailscale) needs Tailscale in the container's network, for
+  example a sidecar sharing its network namespace.
+- **Health.** `GET /api/health` on 8140 needs no token and says nothing about the home: `{ ok, version, uptimeS }`.
+- **Not part of the hub.** OwnTone (the compose file's second service) is optional, and unused unless an OwnTone
+  integration is set up. Chromium isn't used by the hub.

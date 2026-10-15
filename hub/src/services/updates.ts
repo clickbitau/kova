@@ -24,6 +24,12 @@ import { localDate, localHour } from '../util/time.ts';
 export interface UpdateStatus {
   /** The updater is installed and has run at least once. */
   updater: boolean;
+  /**
+   * Who updates Kova on this hub when it isn't the hub's own updater (KOVA_UPDATES_BY: a container platform that
+   * deploys each new version, such as DockBit). Then nothing is offered here, and Software update says where updates
+   * come from. Null for a hub that updates itself.
+   */
+  managedBy: string | null;
   state: 'idle' | 'checking' | 'updating' | 'requested';
   /** Where updates come from: ClickBit's release catalog, or (while boxes move over) git. */
   source: 'release' | 'git' | null;
@@ -103,7 +109,7 @@ export class Updates {
 
   readonly catalog: Catalog;
 
-  constructor(private hub: Hub, private o: { dataDir: string; notify?: Notify; now?: () => number; everyMs?: number; catalog?: { url?: string; channel?: string; product?: string; fetch?: typeof fetch; pubkey?: string } }) {
+  constructor(private hub: Hub, private o: { dataDir: string; managedBy?: string; notify?: Notify; now?: () => number; everyMs?: number; catalog?: { url?: string; channel?: string; product?: string; fetch?: typeof fetch; pubkey?: string } }) {
     this.dir = join(o.dataDir, 'update');
     this.catalog = new Catalog({ ...o.catalog, version: KOVA_VERSION, dir: this.dir, hubIdFile: join(o.dataDir, 'hub-id'), now: o.now });
   }
@@ -126,6 +132,8 @@ export class Updates {
   private get now() { return this.o.now?.() ?? Date.now(); }
 
   private raw(): Raw | null {
+    // Updated from outside: an updater's status left in the data (a hub moved into a container) isn't this hub's.
+    if (this.o.managedBy) return null;
     try { return JSON.parse(readFileSync(join(this.dir, 'status.json'), 'utf8')) as Raw; } catch { return null; }
   }
 
@@ -170,6 +178,7 @@ export class Updates {
     if (updating) { try { log = readFileSync(join(this.dir, 'last-update.log'), 'utf8').slice(-20_000); } catch { /* not yet */ } }
     return {
       updater: !!r?.updater,
+      managedBy: this.o.managedBy || null,
       state: req ? 'requested' : (r?.state === 'checking' || r?.state === 'updating' ? r.state : 'idle'),
       source: r?.source === 'release' || r?.source === 'git' ? r.source : null,
       note: r?.soft ?? null,
@@ -189,6 +198,7 @@ export class Updates {
   /** Ask the updater (root, outside the hub) to look for a newer Kova, or to update. */
   request(what: 'check' | 'apply'): UpdateStatus {
     const st = this.status();
+    if (st.managedBy) throw new Error(`Kova on this hub is updated by ${st.managedBy}: each new version comes from there`);
     if (!st.updater && !existsSync(this.dir)) throw new Error('The updater isn’t installed on this box: run deploy/update.sh once (it installs it)');
     if (st.state === 'updating') throw new Error('Kova is already updating');
     if (what === 'apply' && !st.available) throw new Error('Kova is up to date');

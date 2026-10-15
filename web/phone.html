@@ -639,7 +639,7 @@ const updUi=(H,self)=>{const u=H.update;if(!u)return{show:false};const a=u.avail
   const go=(what,done)=>api('POST','/api/update/'+what).then(()=>self.toast(done)).catch(x=>self.err(x));
   const title=u.state==='updating'?`Updating Kova to ${a?a.version:'the new version'}…`:u.state==='requested'?'Asked the box…':a?`Kova ${a.version} is available`:`Kova ${u.current.version} is up to date`;
   const last=l?(l.result==='updated'?`Updated ${l.from} → ${l.to} ${when(l.at)}`:l.result==='rolled-back'?`The update to a newer version didn’t start, so Kova went back to ${l.from} ${when(l.at)}`:`The last update failed ${when(l.at)}`):'';
-  const sub=!u.updater?'Updates need the updater on the box: run deploy/update.sh there once.':[a?`You have ${u.current.version}. ${a.behind} change${a.behind===1?'':'s'}.`:`Checked ${when(u.checkedAt)}.`,u.checkError?`Couldn’t check: ${u.checkError}`:'',u.note||'',last].filter(Boolean).join(' ');
+  const sub=u.managedBy?`Updates come from ${u.managedBy}: each new Kova arrives from there.`:!u.updater?'Updates need the updater on the box: run deploy/update.sh there once.':[a?`You have ${u.current.version}. ${a.behind} change${a.behind===1?'':'s'}.`:`Checked ${when(u.checkedAt)}.`,u.checkError?`Couldn’t check: ${u.checkError}`:'',u.note||'',last].filter(Boolean).join(' ');
   // Releases come from ClickBit's catalog with the hub's licence (services/release-client.ts).
   const lic=u.licence||{},showKey=u.source!=='git'||!!lic.installed;
   const keyLabel=lic.activated?`Licence ${lic.key||''}${lic.edition?' · '+lic.edition:''}`:lic.installed?'Licence key refused: change it':'Add licence key';

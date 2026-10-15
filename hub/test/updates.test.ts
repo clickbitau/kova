@@ -184,3 +184,26 @@ test('progress while it updates: the step from the updater’s log, the restart 
     assert.equal(u.status().progress, null);
   } finally { u.stop(); await t.hub.stop(); }
 });
+
+test('Hub updates: a hub updated from outside (a container platform) offers nothing, says who updates it, and ignores an updater status it was moved with', async () => {
+  const t = await testHub(12);
+  const dataDir = mkdtempSync(join(tmpdir(), 'kova-upd-'));
+  const said: { title: string }[] = [];
+  const u = new Updates(t.hub, { dataDir, managedBy: 'DockBit', notify: async n => { said.push(n); }, now: () => t.clock.t, everyMs: 0 });
+  t.hub.updates = u;
+  const app = await buildServer(t.hub, { webRoot });
+  try {
+    // Moved from a box with the updater: its status (a newer Kova waiting) came along in the data.
+    writeStatus(dataDir, { updater: 1, state: 'idle', checkedAt: 1000, current: { version: KOVA_VERSION }, available: { version: '9.9.9', commit: 'b', behind: 1, changes: ['x'] } });
+    const st = (await app.inject({ method: 'GET', url: '/api/update' })).json();
+    assert.deepEqual({ by: st.managedBy, updater: st.updater, available: st.available, version: st.current.version }, { by: 'DockBit', updater: false, available: null, version: KOVA_VERSION });
+    for (const what of ['check', 'apply']) {
+      const r = await app.inject({ method: 'POST', url: `/api/update/${what}` });
+      assert.equal(r.statusCode, 400);
+      assert.match(r.json().error, /updated by DockBit/);
+    }
+    assert.ok(!existsSync(join(dataDir, 'update', 'request')), 'nothing asked of an updater that isn’t there');
+    u.tick();
+    assert.equal(said.length, 0, 'no “a new Kova is out” from the old status');
+  } finally { await app.close(); await t.hub.stop(); }
+});

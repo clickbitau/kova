@@ -211,6 +211,8 @@ const notifier = new Notifier(hub, integrations?.notify ?? {}, { dataDir });
 // Updating the hub itself, through the updater on the box (deploy/updater.sh): what's new, the Update button, overnight updates.
 hub.updates = new Updates(hub, {
   dataDir, notify: n => notifier.notify(n),
+  // A hub in a container (DockBit) is updated by the platform that deploys it: KOVA_UPDATES_BY names it.
+  managedBy: env.KOVA_UPDATES_BY?.trim() || undefined,
   // ClickBit's release catalog (the defaults are production); the root updater reads the same from kova.env.
   catalog: { url: env.KOVA_UPDATE_URL || undefined, channel: env.KOVA_UPDATE_CHANNEL || undefined, product: env.KOVA_PRODUCT || env.CLICKBIT_PRODUCT_ID || undefined },
 });

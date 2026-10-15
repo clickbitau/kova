@@ -375,6 +375,8 @@ export const errorLines = (msg: string) => msg.split(/\.\s+(?=[A-Z“"])/).map(s
 
 export interface HubUpdate {
   updater: boolean;
+  /** Who updates Kova on this hub instead of its own updater (a container platform; hubs from 0.7.119). */
+  managedBy?: string | null;
   state: 'idle' | 'checking' | 'updating' | 'requested';
   source: 'release' | 'git' | null;
   note: string | null;
@@ -401,11 +403,12 @@ const ago = (t: number | null, now: number) => {
 export function describeHubUpdate(u: HubUpdate, now: number) {
   const a = u.available, l = u.last, busy = u.state !== 'idle';
   const title = u.state === 'updating' ? `Updating Kova to ${a?.version ?? 'the new version'}…` : u.state === 'requested' ? 'Asked the hub to update…'
-    : a ? `Kova ${a.version} is available` : `Kova ${u.current.version} is up to date`;
+    : a ? `Kova ${a.version} is available` : u.managedBy ? `Kova ${u.current.version}` : `Kova ${u.current.version} is up to date`;
   const last = l ? (l.result === 'updated' ? `Updated ${l.from} → ${l.to} ${ago(l.at, now)}.` : l.result === 'rolled-back' ? `An update didn’t start, so Kova went back to ${l.from} ${ago(l.at, now)}.` : `The last update failed ${ago(l.at, now)}.`) : '';
   const lic = u.licence;
   const showKey = !!lic && (u.source !== 'git' || lic.installed);
-  const sub = !u.updater ? 'Updates need the updater on the hub: run deploy/update.sh there once.'
+  const sub = u.managedBy ? `Updates come from ${u.managedBy}: each new Kova arrives from there.${last ? ` ${last}` : ''}`
+    : !u.updater ? 'Updates need the updater on the hub: run deploy/update.sh there once.'
     : [a ? `You have ${u.current.version}. ${a.behind} change${a.behind === 1 ? '' : 's'}.` : `Checked ${ago(u.checkedAt, now)}.`, u.checkError ? `Couldn’t check: ${u.checkError}` : '', u.note ?? '', last,
       showKey && !lic!.activated && lic!.hubId ? `Hub ID ${lic!.hubId} (for the licence).` : '', lic?.error && lic.installed ? `Licence: ${lic.error}` : ''].filter(Boolean).join(' ');
   return {

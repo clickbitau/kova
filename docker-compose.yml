@@ -14,6 +14,7 @@ services:
       # KOVA_TOKEN: change-me        # require a token on the API (recommended)
       # KOVA_BACKUP_TIME: "03:10"    # nightly backup, home time; "off" to disable
       # KOVA_BACKUP_KEEP: "14"
+      # KOVA_UPDATES_BY: DockBit     # who deploys new versions: Settings → Software update says so, and offers no Update
 
   owntone:
     image: lscr.io/linuxserver/daapd:latest   # OwnTone

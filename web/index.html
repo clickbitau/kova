@@ -1520,8 +1520,8 @@ const updUi=(H,self)=>{const u=H.update;if(!u)return{show:false};const a=u.avail
   const when=t=>{if(!t)return'never';const m=Math.round((Date.now()-t)/60000);return m<1?'just now':m<60?`${m} min ago`:m<1440?`${Math.round(m/60)} h ago`:`${Math.round(m/1440)} d ago`};
   const day=t=>fmtT(t,{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
   const go=(what,done)=>api('POST','/api/update/'+what).then(()=>self.toast(done)).catch(x=>self.err(x));
-  const title=st==='updating'?`Updating Kova to ${a?a.version:'the new version'}…`:st==='requested'?'Asked the box to start…':st==='checking'?'Looking for a newer Kova…':a?`Kova ${a.version} is available`:!u.updater?`Kova ${cur}`:`Kova ${cur} is up to date`;
-  const sub=!u.updater?'Updates need the updater on the box: run deploy/update.sh there once.':a?`You have ${cur}. ${a.behind} change${a.behind===1?'':'s'} since.`:`You have the latest Kova. Checked ${when(u.checkedAt)}.`;
+  const title=st==='updating'?`Updating Kova to ${a?a.version:'the new version'}…`:st==='requested'?'Asked the box to start…':st==='checking'?'Looking for a newer Kova…':a?`Kova ${a.version} is available`:!u.updater||u.managedBy?`Kova ${cur}`:`Kova ${cur} is up to date`;
+  const sub=u.managedBy?`Updates come from ${u.managedBy}: each new Kova arrives from there.`:!u.updater?'Updates need the updater on the box: run deploy/update.sh there once.':a?`You have ${cur}. ${a.behind} change${a.behind===1?'':'s'} since.`:`You have the latest Kova. Checked ${when(u.checkedAt)}.`;
   // Releases come from ClickBit's catalog with the hub's licence (services/release-client.ts).
   const lic=u.licence||{},showKey=u.source!=='git'||!!lic.installed;
   const keyLabel=lic.activated?`Licence ${lic.key||''}${lic.edition?' · '+lic.edition:''}`:lic.installed?'Licence key refused: change it':'Add licence key';
@@ -1540,7 +1540,7 @@ const updUi=(H,self)=>{const u=H.update;if(!u)return{show:false};const a=u.avail
   const older=!!self.state.updOlder;
   const setAuto=(b,done)=>api('PUT','/api/update/settings',b).then(()=>self.toast(done)).catch(x=>self.err(x));
   return{show:true,title,sub,busy,installing:st==='updating'||st==='requested',checking:st==='checking',steps,stepLine,stepPct:`${Math.round(Math.max(0.04,(step+0.5)/STEPS.length)*100)}%`,stepFg:P&&P.rollingBack?'var(--k-amber)':'var(--k-blue)',busyText:st==='updating'?'Kova backs itself up, updates and restarts. This page reconnects by itself; if the new version doesn’t start, Kova goes back to this one with its data.':st==='requested'?'Waiting for the box to pick it up (a few seconds).':'Looking for a newer Kova…',
-    icon:busy?'downloading':a?'system_update':!u.updater?'info':'verified',iconFg:a||busy?'var(--k-blue)':!u.updater?'var(--k-amber)':'var(--k-green)',iconBg:a||busy?'rgba(124,184,240,0.16)':!u.updater?'rgba(242,177,76,0.14)':'rgba(127,212,160,0.14)',
+    icon:busy?'downloading':a?'system_update':!u.updater&&!u.managedBy?'info':'verified',iconFg:a||busy?'var(--k-blue)':!u.updater&&!u.managedBy?'var(--k-amber)':'var(--k-green)',iconBg:a||busy?'rgba(124,184,240,0.16)':!u.updater&&!u.managedBy?'rgba(242,177,76,0.14)':'rgba(127,212,160,0.14)',
     changes:a?a.changes.map(c=>({c})):[],hasChanges:!!(a&&a.changes.length),notesTitle:a?`What’s new in ${a.version}`:'',
     canUpdate:!!a&&!busy&&u.updater,update:()=>self.openBx({kind:'confirm',title:`Update to Kova ${a&&a.version}?`,confirm:{text:'Kova makes a backup, updates and restarts: about a minute without the app, while your devices keep working. If the new version doesn’t start, it goes back to this one by itself.',yes:'Update now',safe:true,run:()=>{self.setState({bx:null});go('apply','Updating: Kova restarts in a minute, then reconnects')}}}),
     canCheck:!busy&&u.updater,check:()=>go('check','Looking for a newer Kova'),
