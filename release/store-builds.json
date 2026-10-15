@@ -57,7 +57,16 @@
         "date": "2026-10-08"
       }
     ],
-    "kova-mobile-0.5": []
+    "kova-mobile-0.5": [
+      {
+        "build": 8,
+        "platform": "ios",
+        "channel": "testflight",
+        "version": "0.5.0",
+        "fingerprint": "b48135481a8e068fc9992cfee59ed93c046600c3d23b88f63eb6c7f07d9ac178",
+        "date": "2026-10-15"
+      }
+    ]
   },
   "approved": {
     "mobile": []
