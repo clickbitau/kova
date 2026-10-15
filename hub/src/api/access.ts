@@ -248,6 +248,7 @@ export const ROUTES: Record<string, Rule> = {
   'POST /api/integrations/warden/link': r('owner'),
   'POST /api/integrations/warden/pair': r('owner'),
   'GET /api/integrations/warden/pair': r('owner'),
+  'POST /api/integrations/warden/connect': r('owner'),
   'GET /api/integrations/warden/clients': r('owner'),
   'POST /api/integrations/cast/find': r('owner'),
   'POST /api/integrations/sonos/find': r('owner'),

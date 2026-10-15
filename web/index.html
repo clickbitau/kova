@@ -11,7 +11,7 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" href="./assets/logo/kova-favicon.svg">
 <link rel="apple-touch-icon" href="./assets/logo/kova-app-icon.svg">
-<script>(function(){var t="";try{var u=new URL(location.href);t=u.searchParams.get("token")||localStorage.getItem("kova_token")||"";if(u.searchParams.get("token"))localStorage.setItem("kova_token",t)}catch(e){}
+<script>(function(){var t="";/* Warden's connect link (#wardenconnect=…): kept in this tab only, through signing in, and out of the address bar. */try{var w=/[#&]wardenconnect=([^&]+)/.exec(location.hash);if(w){sessionStorage.setItem("kova_wardenconnect",decodeURIComponent(w[1]));history.replaceState(null,"",location.pathname+location.search)}}catch(e){}try{var u=new URL(location.href);t=u.searchParams.get("token")||localStorage.getItem("kova_token")||"";if(u.searchParams.get("token"))localStorage.setItem("kova_token",t)}catch(e){}
 /* Not signed in, or the key stopped working: the sign-in page. A hub with no key set lets everyone in, so try first. */
 window.__kovaSignIn=function(){fetch("/api/state",{headers:t?{authorization:"Bearer "+t}:{}}).then(function(r){if(r.status===401)location.replace("/signin.html"+(t?"?expired=1":""))}).catch(function(){})};
 document.write('<script src="/api/boot.js'+(t?"?token="+encodeURIComponent(t):"")+'" onerror="__kovaSignIn()"><\/script>')})();</script>
@@ -1632,7 +1632,7 @@ const PUSH_UI={insecure:['Notifications need HTTPS','Open Kova over https:// to 
 
 class Component extends DCLogic {
   state={hub:useHome(BOOT),conn:!!window.KOVA_BOOT,screen:this.props.startScreen??'home',room:null,drawer:null,tab:'simple',nameDraft:null,advanced:(this.props.depth??'Simple')==='Advanced',sel:'sunset',toast:null,undo:null,merging:false,merged:false,done:{},linked:{},q:'',camSel:null,push:pushBase(),mediaSel:null,actF:'all',inboxDone:{},iq:'',intF:'All',draft:'',chat:[{from:'kova',text:`Hi. ${BOOT.devices.filter(d=>isLight(d)&&d.state.on).length} lights are on and the home is in ${(BOOT.modes.find(m=>m.id===BOOT.current.modeId)||BOOT.modes[0]).name}. What do you need?`}],preview:null,pv:null,modeSel:null,igCat:null,igCfg:null,igPick:false,ig:null,igLoadErr:null,imp:null,impAutos:[],impFile:null,impKey:'',impPath:'',impBusy:null,impPct:0,impErr:null,impNeedKey:false,impNew:false,showCode:false};
-  componentDidMount(){this.loadAsk();this.connect();this._igLoad=this.loadInteg();this.loadImport();this.pushCheck();this.deepLink();this.autoKeys();
+  componentDidMount(){this.loadAsk();this.connect();this._igLoad=this.loadInteg();this.loadImport();this.pushCheck();this.deepLink();this.wardenConnectAsk();this.autoKeys();
     // The prayer card on Now counts down: redraw it every 30 s while it shows.
     this._tick=setInterval(()=>{const st=this.state;if(st.screen==='home'&&prayerOn(st.hub)&&!document.hidden)this.setState({tick:Date.now()})},30000)}
   // ---- announcements: Speaker loudness, Prayer times and Clips open as a panel from the right ({kind, back}) ----
@@ -1750,6 +1750,14 @@ class Component extends DCLogic {
       const reg=await swReady;const {publicKey}=await api('GET','/api/push/vapid');
       const sub=(await reg.pushManager.getSubscription())||await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64u(publicKey)});
       await api('POST','/api/push/subscribe',{subscription:sub.toJSON()});this.setState({push:'on'});this.toast('Notifications are on')}catch(e){this.err(e)}}
+  // Warden's "Connect" (Apps → Kova found on your network) brings a one-time code: asked once, nothing done without Connect.
+  wardenConnectAsk(){let code=null;try{code=sessionStorage.getItem('kova_wardenconnect');sessionStorage.removeItem('kova_wardenconnect')}catch(e){}if(!code)return;
+    let n='';try{const b=code.replace(/^\s*wardenconnect:1:/,'').replace(/-/g,'+').replace(/_/g,'/');n=String(JSON.parse(decodeURIComponent(escape(atob(b)))).n||'').trim()}catch(e){}
+    const C={text:`Kova gets what Warden’s admin chose for it, such as devices, who’s home and network alerts. It replaces any link Kova has with Warden now.`,yes:'Connect',safe:true,run:async()=>{
+      this.bxSet({confirm:{...C,yes:'Connecting…',run:()=>{}},err:null});
+      try{const r=await api('POST','/api/integrations/warden/connect',{code});this.setState({bx:null});this.toast(`Connected: ${r.linked}`);this.loadInteg()}
+      catch(e){this.bxSet({err:e.message||String(e),confirm:C})}}};
+    this.setState({screen:'integrations'});this.openBx({kind:'confirm',kicker:'Warden',title:`Connect to Warden${n?' · '+n:''}?`,confirm:C})}
   // Links from notifications and old phone links (/phone.html?cam=… forwards here), e.g. "Turn them off" on "Everyone's out".
   deepLink(){try{const u=new URL(location.href);const d=u.searchParams.get('do'),cam=u.searchParams.get('cam'),page=u.searchParams.get('page'),setup=u.searchParams.get('setup'),add=u.searchParams.get('add');if(!d&&!cam&&!page&&!setup&&!add)return;
     ['do','cam','page','setup','add'].forEach(k=>u.searchParams.delete(k));history.replaceState(null,'',u.pathname+u.search+u.hash);
@@ -3113,7 +3121,10 @@ class Component extends DCLogic {
       steps:[step(named,'edit_location_alt','Name and address','Sunrise, sunset, the weather and arriving home come from where it is','settings:home'),
         step(H.rooms.length>0,'meeting_room','Rooms',H.rooms.length?plural(H.rooms.length,'room'):'Living room, kitchen, bedrooms…','settings:home'),
         step(devs>0,'add_circle','Your devices',devs?plural(devs,'device'):'Lights, speakers, TVs and more: most are found by themselves','integrations'),
-        step(H.people.length>0,'group','People',H.people.length?H.people.map(p=>p.name).join(', '):'Who lives here, for who’s home and their own sign-in','settings:people')],
+        step(H.people.length>0,'group','People',H.people.length?H.people.map(p=>p.name).join(', '):'Who lives here, for who’s home and their own sign-in','settings:people'),
+        // A Warden router on the network: connect with its pairing code (approved in Warden → Apps).
+        ...(H.home.wardenFound?[{...step(false,'router',`Connect to Warden · ${H.home.wardenFound.name}`,'Your router: who’s home, network alerts and pausing a device’s internet','integrations'),
+          go:()=>{const url=H.home.wardenFound.url;this.setState({screen:'integrations'});Promise.resolve(this.state.igCat?null:this.loadInteg()).then(()=>{this.openInteg('warden');this.igActSet('pair','url',url)})}}]:[])],
       askLocal:!H.home.localeSet,localLabel:`Use this browser’s settings (${langName(lang)}, ${h12?'12':'24'}-hour, °${F?'F':'C'})`,
       useLocal:()=>api('PUT','/api/home',{locale:lang,hour12:h12,fahrenheit:F,...(tz?{timezone:tz}:{})}).then(r=>this.toast('Dates, clock and temperatures set',this.undoFn(r.undo))).catch(e=>this.err(e)),
       finishLabel:'Finish setup',finish:()=>api('PUT','/api/home',{setupDone:true}).then(()=>this.toast('All set. Settings has all of it whenever you want to change something.')).catch(e=>this.err(e))};

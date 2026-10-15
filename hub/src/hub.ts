@@ -111,6 +111,8 @@ export class Hub extends EventEmitter<{ changed: []; floorplan: [] }> {
   readonly announcer: Announcer;
   /** The hub's address as a speaker at `host` reaches it ("http://10.0.0.2:8140"); set by the API server. */
   lanBase: (host?: string) => string | null = () => null;
+  /** Wardens heard on the network (`_warden._tcp`), for a new hub's first steps. */
+  wardensSeen: { name: string; url: string }[] = [];
 
   /** What's wrong with an announcement's media, or null when it can play (for the automation checker). */
   mediaProblem(m: string): string | null {

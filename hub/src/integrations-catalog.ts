@@ -331,7 +331,7 @@ export const CATALOG: CatalogItem[] = [
     description: 'Your Warden router, live: internet down, failover, new-device and attack alerts, pause a device’s internet from modes, and who’s home from Warden’s people and their phones.',
     fields: [
       { key: 'url', label: 'Warden address', type: 'text', required: true, placeholder: 'https://192.168.1.1', help: 'Where you open Warden in a browser.' },
-      { key: 'token', label: 'API token', type: 'password', help: 'Filled in by Pair with Warden below. A token made by signing in, or by hand in Warden → System → API tokens (role Operator), works too.' },
+      { key: 'token', label: 'API token', type: 'password', help: 'Filled in by Connect or Pair with Warden below. A token made by signing in, or by hand in Warden → System → API tokens (role Operator), works too.' },
       {
         key: 'devices', label: 'Internet switches', type: 'list', addLabel: 'Add a device',
         help: 'Devices whose internet Kova can pause, e.g. a child’s tablet at bedtime. “Devices on your network” below lists them.',
@@ -353,6 +353,11 @@ export const CATALOG: CatalogItem[] = [
       },
     ],
     actions: [
+      {
+        id: 'connect', label: 'Connect with a code from Warden', icon: 'key', method: 'POST', path: '/api/integrations/warden/connect',
+        help: 'In Warden open Apps → Connect an app, tick what Kova may do, and copy the connection code here. It works wherever Kova runs, as long as it can reach Warden (at home, or on the same Tailscale network).',
+        fields: [{ key: 'code', label: 'Connection code', type: 'text', required: true, placeholder: 'wardenconnect:1:…' }],
+      },
       {
         id: 'pair', label: 'Pair with Warden', icon: 'add_link', method: 'POST', path: '/api/integrations/warden/pair',
         help: 'Kova shows a code. Open Warden’s /apps page (System → Accounts → Apps), check the code matches and approve Kova. Kova only gets what it needs: devices, pausing, events, discovery, people, the network’s health, and sharing its own devices, presence, house mode and plugs.',

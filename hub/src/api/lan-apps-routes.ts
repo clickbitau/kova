@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { IntegrationsManager } from '../integrations-store.ts';
-import { Warden, deviceLabel, linkWarden, normMac, wardenPairPoll, wardenPairStart, type WardenDevice } from '../adapters/warden.ts';
+import { Warden, deviceLabel, linkWarden, normMac, parseWardenConnect, wardenConnect, wardenPairPoll, wardenPairStart, type WardenDevice } from '../adapters/warden.ts';
 import { LanHttpError } from '../util/lan-http.ts';
 import { findHelixServers, helixPairPoll, helixPairStart } from '../adapters/helix.ts';
 import { trimUrl } from '../util/lan-http.ts';
@@ -23,6 +23,8 @@ export interface LanAppsOptions {
   helixFindPort?: number;
   /** Tests poll Warden pairing faster. */
   wardenPollMs?: number;
+  /** Tests: how long one Warden address gets to answer a connection code. */
+  wardenConnectTimeoutMs?: number;
   /** Tests: the addresses Find searches instead of the hub's networks and Warden's devices, and the group port range. */
   findHosts?: string[];
   castGroupPorts?: { from: number; to: number };
@@ -90,6 +92,22 @@ export function registerLanAppRoutes(app: FastifyInstance, o: LanAppsOptions): v
         code: s.code,
         next: `In Warden open ${s.url}/apps (System → Accounts → Apps), check it shows ${s.code}, and approve Kova. Kova finishes by itself.`,
       };
+    } catch (e) { return bad(reply, msg(e)); }
+  });
+
+  // A connection code from Warden (Apps → Connect an app): works from any network Warden can be reached on, approved
+  // already by the admin who made it. Pasted under Integrations → Warden, or brought by Warden's link to Kova.
+  app.post<{ Body: { code?: string } }>('/api/integrations/warden/connect', async (req, reply) => {
+    if (!o.integrations) return bad(reply, 'In-app setup isn’t available on this hub');
+    try {
+      const code = parseWardenConnect(String(req.body?.code ?? ''));
+      const c = await wardenConnect(code, { pollMs: o.wardenPollMs, timeoutMs: o.wardenConnectTimeoutMs });
+      const prev = o.integrations.raw('warden');
+      // A new Warden (or the same one with a new key): what was pinned for the old one goes.
+      const applied = await o.integrations.update('warden', { ...prev, url: c.url, token: c.token, publicKeySha256: c.publicKeySha256, fingerprint: undefined, scopes: c.scopes });
+      if (wpair) wpair = null;
+      reply.header('cache-control', 'no-store');
+      return { linked: `Warden${c.siteName ? ` (${c.siteName})` : ''} at ${c.url}`, status: applied.status?.note ?? 'Connected' };
     } catch (e) { return bad(reply, msg(e)); }
   });
 

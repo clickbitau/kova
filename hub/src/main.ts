@@ -30,6 +30,7 @@ import { JevAdvisor } from './services/jev.ts';
 import { Backups, parseBackupTime } from './services/backup.ts';
 import { acquireLock, LockedError, type HeldLock } from './util/lock.ts';
 import { KOVA_VERSION } from './version.ts';
+import { announceKova } from './services/mdns-announce.ts';
 import { Agent, setGlobalDispatcher } from 'undici';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -257,6 +258,9 @@ await app.listen({ port: Number(env.KOVA_PORT ?? 8140), host: env.KOVA_HOST ?? '
 const addr = app.server.address();
 const port = typeof addr === 'object' && addr ? addr.port : Number(env.KOVA_PORT ?? 8140);
 console.log(`Kova ${KOVA_VERSION} hub listening on http://localhost:${port}${demo ? ' (demo home)' : ''}`);
+// Found on the home's network as _kova._tcp (Warden lists it to connect). KOVA_MDNS=0 keeps it quiet.
+const mdnsKova = env.KOVA_MDNS === '0' ? null : announceKova({ id: () => hub.updates?.catalog.hubId(), name: () => hub.config.get().name || 'Kova', version: KOVA_VERSION, port: () => port,
+  onWarden: w => { if (!hub.wardensSeen.some(x => x.url === w.url)) { hub.wardensSeen.push(w); hub.emit('changed'); } } });
 
 // Stop cleanly: no new requests, bridges down, a backup in progress finished, device
 // state flushed, the database closed (which checkpoints its WAL), then the lock released.
@@ -272,6 +276,7 @@ const shutdown = async (signal: string) => {
     try { await fn(); } catch (err) { console.error(`Stopping ${name} failed:`, err); }
   };
   presence.stop();
+  mdnsKova?.stop();
   helixLink.stop();
   hub.updates?.stop();
   screenNotices.stop();

@@ -241,6 +241,89 @@ export async function linkWarden(url: string, username: string, password: string
   }
 }
 
+// A connection code: Warden's admin ticks what Kova may do and Warden makes a one-time code, good from any network
+// (Kova in the cloud too): `wardenconnect:1:<base64url JSON>` with the addresses to try in order (its tailnet name
+// first when it has one), its gateway id and key to pin, the invite, and the scopes granted.
+
+export interface WardenConnectCode { urls: string[]; id: string; name?: string; key: string; invite: string; scopes: string[] }
+
+/** A key's SHA-256 as Kova pins them (hex in pairs), whether Warden wrote it in hex or in base64. */
+const keyHex = (k: string): string => {
+  const t = k.trim();
+  const hex = t.replace(/[^0-9a-f]/gi, '');
+  const raw = /^[0-9a-f:]+$/i.test(t) && hex.length === 64 ? Buffer.from(hex, 'hex') : Buffer.from(t.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+  if (raw.length !== 32) throw new Error('This connection code’s key isn’t one Kova can check. Make a new code in Warden.');
+  return raw.toString('hex').toUpperCase().match(/../g)!.join(':');
+};
+
+/** Read a connection code. Throws in plain words when it isn't one. */
+export function parseWardenConnect(text: string): WardenConnectCode {
+  const m = /wardenconnect:1:([A-Za-z0-9_-]+)/.exec(String(text ?? '').trim());
+  if (!m) throw new Error('That isn’t a Warden connection code. In Warden open Apps → Connect an app, and copy the code it shows.');
+  let j: { v?: number; u?: unknown; id?: unknown; n?: unknown; pk?: unknown; i?: unknown; s?: unknown; sc?: unknown };
+  try { j = JSON.parse(Buffer.from(m[1]!, 'base64url').toString('utf8')); } catch { j = {}; }
+  const urls = Array.isArray(j.u) ? j.u.filter((x): x is string => typeof x === 'string' && /^https?:\/\//.test(x)).map(trimUrl) : [];
+  if (j.v !== 1 || !urls.length || typeof j.id !== 'string' || typeof j.pk !== 'string' || typeof j.i !== 'string' || typeof j.s !== 'string') {
+    throw new Error('This connection code is incomplete. Copy all of it, or make a new one in Warden.');
+  }
+  return {
+    urls, id: j.id, name: typeof j.n === 'string' && j.n.trim() ? j.n.trim() : undefined, key: keyHex(j.pk), invite: `${j.i}.${j.s}`,
+    scopes: Array.isArray(j.sc) ? j.sc.filter((x): x is string => typeof x === 'string') : [],
+  };
+}
+
+/** What a connection code gives Kova to keep. */
+export interface WardenConnected { url: string; token: string; publicKeySha256: string; scopes?: string[]; siteName?: string }
+
+export const UNREACHABLE = 'Kova can’t reach this Warden from where it runs. Put both on the same Tailscale network, or run Kova at home.';
+
+/**
+ * Redeem a connection code: the first of its addresses that answers as this Warden (its key, its id) takes the invite,
+ * and the token comes on the first poll. Another address is tried only when one doesn't answer as this Warden: once
+ * Warden has had the invite, a refusal is final (it may be used up).
+ */
+export async function wardenConnect(code: WardenConnectCode, o: { pollMs?: number; timeoutMs?: number } = {}): Promise<WardenConnected> {
+  const pin = { publicKeySha256: code.key };
+  const tried: string[] = [];
+  for (const url of code.urls) {
+    let site: string | undefined;
+    try {
+      const d = await lanJson<{ product?: string; gatewayId?: string; siteName?: string }>(`${url}/.well-known/wardenos-gateway`, { ...pin, timeoutMs: o.timeoutMs ?? 6000 });
+      if (d.json?.product !== 'WardenOS' || d.json.gatewayId !== code.id) { tried.push(`${url}: another router`); continue; }
+      site = d.json.siteName;
+    } catch (e) { tried.push(`${url}: ${e instanceof Error ? e.message : String(e)}`); continue; }
+    // This is the Warden: hand it the invite. Asked for what Kova uses; Warden gives what its admin ticked of that.
+    const ask = () => lanJson<{ pairId?: string; pollSecret?: string; pollUrl?: string }>(`${url}/api/v1/apps/pair`, { ...pin, method: 'POST', body: { name: 'Kova', scopes: WARDEN_SCOPES, invite: code.invite } });
+    let r: Awaited<ReturnType<typeof ask>>;
+    try { r = await ask(); } catch (e) {
+      if (e instanceof LanHttpError) throw new Error(e.status === 404 ? 'This Warden can’t take connection codes yet. Update it, or use Pair with Warden.' : `Warden didn’t take the code: ${e.message}`);
+      // Lost on the way: once more (Warden gives the same answer to the same invite for a short while).
+      try { r = await ask(); } catch (e2) { throw new Error(`Warden didn’t take the code: ${e2 instanceof Error ? e2.message : String(e2)}`); }
+    }
+    const { pairId, pollSecret } = r.json ?? {};
+    if (!pairId || !pollSecret) throw new Error('Warden didn’t answer the way Kova expects. Update Warden, or use Pair with Warden.');
+    const pollPath = r.json.pollUrl && r.json.pollUrl.startsWith('/') ? r.json.pollUrl : `/api/v1/apps/pair/${encodeURIComponent(pairId)}`;
+    // Approved already (the admin made the code); a few polls in case Warden takes a moment.
+    for (let i = 0; i < 10; i++) {
+      if (i) await new Promise(res => setTimeout(res, o.pollMs ?? 1500));
+      let p: WardenPairPoll;
+      try { p = (await lanJson<WardenPairPoll>(`${url}${pollPath}`, { ...pin, headers: { 'x-pair-secret': pollSecret } })).json; } catch (e) {
+        if (e instanceof LanHttpError) throw new Error(`Warden didn’t hand over Kova’s token: ${e.message}`);
+        continue;
+      }
+      if (p.status === 'approved' && 'token' in p && p.token) {
+        return { url, token: p.token, publicKeySha256: code.key, scopes: Array.isArray(p.scopes) ? p.scopes.filter(x => typeof x === 'string') : undefined, siteName: site ?? code.name };
+      }
+      if (p.status === 'approved') throw new Error('Warden already handed this code’s token out. Make a new code.');
+      if (p.status === 'denied' || p.status === 'expired') throw new Error(p.status === 'denied' ? 'Warden turned the code down.' : 'The code ran out. Make a new one in Warden.');
+    }
+    throw new Error('Warden took the code but hasn’t handed over Kova’s token. Try again in a minute.');
+  }
+  const err = new Error(UNREACHABLE) as Error & { tried?: string[] };
+  err.tried = tried;
+  throw err;
+}
+
 // ------------------------------------------------------------ adapter --
 
 const RECENT_MS = 5 * 60_000;

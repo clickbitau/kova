@@ -2,6 +2,7 @@ import https from 'node:https';
 import type { ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { execFileSync } from 'node:child_process';
+import { X509Certificate, createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -39,8 +40,13 @@ export async function fakeWarden() {
     /** The most BMC reads in flight at once. */
     bmcMaxOpen: 0,
     bmcOpen: 0,
+    /** Connection codes (Apps → Connect an app): the invite "id.secret", the scopes its admin ticked, and whether it's used. */
+    invites: new Map<string, { sc: string[]; used: boolean }>(),
   };
-  const server = https.createServer(selfSigned('warden.test'), (req, res) => {
+  const pem = selfSigned('warden.test');
+  /** The certificate's key as Warden reports it (publicKeySha256: hex SHA-256 of the SubjectPublicKeyInfo). */
+  const key = createHash('sha256').update(new X509Certificate(pem.cert).publicKey.export({ type: 'spki', format: 'der' })).digest('hex');
+  const server = https.createServer(pem, (req, res) => {
     const chunks: Buffer[] = [];
     req.on('data', c => chunks.push(c));
     req.on('end', () => {
@@ -49,9 +55,16 @@ export async function fakeWarden() {
       const u = new URL(req.url!, 'https://x');
       const send = (code: number, j?: unknown) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(j === undefined ? '' : JSON.stringify(j)); };
       s.seen.push(`${req.method} ${u.pathname}${raw ? ' ' + raw : ''}`);
-      if (u.pathname === '/.well-known/wardenos-gateway') return send(200, { product: 'WardenOS', siteName: 'Alex Home', version: s.version });
+      if (u.pathname === '/.well-known/wardenos-gateway') return send(200, { product: 'WardenOS', siteName: 'Alex Home', version: s.version, gatewayId: 'gw_test', publicKeySha256: key });
       if (u.pathname === '/api/v1/apps/pair' && req.method === 'POST') {
-        s.pair.scopes = body.scopes;
+        if (body.invite !== undefined) {
+          // A connection code: approved at once by the admin who made it, for what they ticked.
+          const inv = s.invites.get(body.invite);
+          if (!inv) return send(403, { message: 'This code isn’t valid. Make a new one in Warden.' });
+          if (inv.used) return send(403, { message: 'This code was already used' });
+          inv.used = true;
+          s.pair = { status: 'approved', collected: false, scopes: body.scopes?.length ? body.scopes.filter((x: string) => inv.sc.includes(x)) : inv.sc };
+        } else s.pair.scopes = body.scopes;
         return send(201, { pairId: 'pr1', code: 'BM5632', pollSecret: 'ps', expiresAt: new Date(Date.now() + 600_000).toISOString(), pollUrl: '/api/v1/apps/pair/pr1' });
       }
       if (u.pathname === '/api/v1/apps/pair/pr1') {
@@ -98,6 +111,6 @@ export async function fakeWarden() {
     for (const st of s.streams) st.res.write(`id: ${id}\nevent: ${type}\ndata: ${JSON.stringify({ id, seq: s.seq, type, at: new Date().toISOString(), data })}\n\n`);
   };
   const drop = () => { for (const st of s.streams.splice(0)) st.res.end(); };
-  return { url, s, TOKEN, tablet, phone, publish, drop, close: () => new Promise<void>(r => { drop(); server.closeAllConnections(); server.close(() => r()); }) };
+  return { url, s, key, TOKEN, tablet, phone, publish, drop, close: () => new Promise<void>(r => { drop(); server.closeAllConnections(); server.close(() => r()); }) };
 }
 

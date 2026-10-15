@@ -91,7 +91,7 @@ export interface ServerOptions {
   /** In-app setup of integrations.json. Without it the setup routes answer 503. */
   integrations?: IntegrationsManager;
   /** Tests: where to look for Helix Server. */
-  lanApps?: { helixFindHosts?: string[]; helixFindPort?: number; wardenPollMs?: number };
+  lanApps?: { helixFindHosts?: string[]; helixFindPort?: number; wardenPollMs?: number; wardenConnectTimeoutMs?: number };
   /** Import from Home Assistant (backup upload or config folder). */
   haImport?: HaImport;
   /** Nightly backups; when absent the backup endpoints answer 404. */
@@ -129,6 +129,9 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
   apiRoutes.set(app, routes);
   await app.register(fastifyWebsocket);
   await app.register(fastifyStatic, { root: opts.webRoot, index: ['index.html'] });
+  // Where Warden's connect link lands (the _kova._tcp TXT path): the app on Integrations → Warden. Browsers keep the
+  // #wardenconnect=… fragment through the redirect, so the code never reaches a server log.
+  app.get('/integrations/warden', async (_req, reply) => reply.redirect('/?setup=warden', 302));
 
   // For Docker / systemd health checks. Unauthenticated on purpose, so it says nothing about the home.
   const startedAt = Date.now();

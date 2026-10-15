@@ -198,6 +198,8 @@ export function snapshot(hub: Hub) {
       learnFromYou: cfg.learnFromYou !== false,
       // How the home writes dates, times and temperatures; and whether its owner still has setup to do.
       locale: homeLocale(cfg), localeSet: !!cfg.locale, hour12: homeHour12(cfg), fahrenheit: !!cfg.fahrenheit, firstRun: !!cfg.firstRun,
+      // A Warden on the network, while the hub is new and not linked to one: its first steps offer to connect.
+      wardenFound: cfg.firstRun && !reg.adapters.has('warden') ? hub.wardensSeen[0] ?? null : null,
       // Today's sunrise and sunset as local hours, for day strips.
       sun: (() => { const t = SunCalc.getTimes(new Date(now), cfg.latitude, cfg.longitude); const h = (d: Date) => (isNaN(+d) ? null : localHour(+d, tz)); return { rise: h(t.sunrise), set: h(t.sunset) }; })(),
     },
