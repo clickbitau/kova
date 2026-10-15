@@ -8,7 +8,7 @@ services:
     stop_grace_period: 30s          # time for a clean shutdown (device state flushed, DB closed)
     volumes:
       - ./data:/data                 # kova.db, integrations.json, home.json, pairings, backups/
-      - ./airconnect:/opt/airconnect:ro # put aircast-linux-<cpu> here to bridge AirPlay → Cast
+      # aircast (AirPlay → Cast) ships in the image at /opt/airconnect/aircast-linux-<cpu>-static.
     environment:
       TZ: ${TZ:-Etc/UTC}
       # KOVA_TOKEN: change-me        # require a token on the API (recommended)

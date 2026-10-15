@@ -208,9 +208,13 @@ them off the machine.
 Every night (03:10 in the home's timezone by default) Kova writes
 `/var/lib/kova/backups/kova-backup-YYYYMMDD-HHMMSS.tar.gz`: a consistent snapshot
 of `kova.db` (SQLite's online backup API, so the hub keeps running), plus
-`integrations.json`, `home.json` and the pairing folders (`homekit`,
-`homekit-controller`, `matter`, `matter-bridge`, `samsungtv`, `push`, aircast's
-config). It keeps the newest 14. The Activity feed shows *Nightly backup finished
+`integrations.json`, `home.json`, the pairing folders (`homekit`,
+`homekit-controller`, `matter`, `matter-bridge`, `samsungtv`, `push`, `clips`,
+aircast's config), the cloud sign-ins (`connectlife`, `ecovacs`, `smartthings`,
+`helix`), the floor plan and photos (`photos`), `archive`, and the hub's
+identity (`hub-id`, `update/licence.json`, `helix-link.json`, `tls-keys.json`).
+Restored on another machine, it is the same hub: same licence, same pairings.
+Repeating sounds (`loops`) are made again by themselves. It keeps the newest 14. The Activity feed shows *Nightly backup finished
 · 61 MB*, and Integrations has a **Backups** row with the last backup's status.
 
 | Setting (`kova.env`) | Default | |

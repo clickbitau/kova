@@ -35,6 +35,19 @@ async function homeOnDisk() {
   writeFileSync(join(dataDir, 'aircast', 'aircast.xml'), '<aircast/>');
   writeFileSync(join(dataDir, 'aircast', 'aircast.log'), 'noise');
   symlinkSync('/etc/passwd', join(dataDir, 'homekit', 'link'));
+  // The hub's identity, cloud sign-ins, the floor plan, and the updater's folder.
+  writeFileSync(join(dataDir, 'hub-id'), 'hub-abc\n');
+  writeFileSync(join(dataDir, 'helix-link.json'), '{"key":"k"}');
+  writeFileSync(join(dataDir, 'tls-keys.json'), '{}');
+  mkdirSync(join(dataDir, 'smartthings'));
+  writeFileSync(join(dataDir, 'smartthings', 'token.json'), '{"t":1}');
+  mkdirSync(join(dataDir, 'photos'));
+  writeFileSync(join(dataDir, 'photos', 'floorplan-1.jpg'), 'jpeg');
+  mkdirSync(join(dataDir, 'loops'));
+  writeFileSync(join(dataDir, 'loops', 'rain.m4a'), 'audio');
+  mkdirSync(join(dataDir, 'update'));
+  writeFileSync(join(dataDir, 'update', 'licence.json'), '{"key":"CR1-x"}');
+  writeFileSync(join(dataDir, 'update', 'status.json'), '{"state":"idle"}');
   const clock = { t: at(12) };
   const hub = new Hub({ dbPath: join(dataDir, 'kova.db'), initialConfig: demoConfig, adapters: [new VirtualAdapter(demoDevices())], now: () => clock.t, tickMs: 0 });
   await hub.start();
@@ -70,6 +83,9 @@ test('backup: one tar.gz with a consistent database, the config and pairing fold
   assert.ok(entries.has('aircast/aircast.xml'));
   assert.ok(!entries.has('aircast/aircast.log'), 'only aircast config');
   assert.ok(!entries.has('homekit/link'), 'symlinks are skipped');
+  for (const f of ['hub-id', 'helix-link.json', 'tls-keys.json', 'smartthings/token.json', 'photos/floorplan-1.jpg', 'update/licence.json']) assert.ok(entries.has(f), `${f} is backed up`);
+  assert.ok(!entries.has('update/status.json'), 'only the licence from the updater');
+  assert.ok(!entries.has('loops/rain.m4a'), 'loops are made again by themselves');
   assert.equal(JSON.parse(entries.get('manifest.json')!.toString()).version, '9.9.9');
 
   // The database copy opens on its own and has the same rows as the live one.
@@ -185,6 +201,8 @@ test('restore CLI: refuses while the hub holds the lock, then restores into a fr
   writeFileSync(join(target, 'integrations.json'), '{"old":true}');
   mkdirSync(join(target, 'samsungtv'));
   writeFileSync(join(target, 'samsungtv', 'tokens.json'), '{}');
+  mkdirSync(join(target, 'update'));
+  writeFileSync(join(target, 'update', 'status.json'), '{"state":"new hub"}');
 
   // A running hub (this process, heartbeat fresh) holds the folder.
   writeFileSync(join(target, LOCK_FILE), JSON.stringify({ pid: process.pid, host: hostname(), startedAt: Date.now(), what: 'hub' }));
@@ -202,6 +220,12 @@ test('restore CLI: refuses while the hub holds the lock, then restores into a fr
   assert.equal(readFileSync(join(target, 'homekit', 'kova-bridge.json'), 'utf8'), '{"pincode":"123-45-678"}');
   assert.equal(readFileSync(join(target, 'matter', 'node-1', 'fabric'), 'utf8'), 'fabric-bytes');
   assert.ok(!existsSync(join(target, 'samsungtv')), 'folders not in the backup are moved aside too');
+  // The same hub: its identity, licence, sign-ins and floor plan came along.
+  assert.equal(readFileSync(join(target, 'hub-id'), 'utf8'), 'hub-abc\n');
+  assert.equal(readFileSync(join(target, 'update', 'licence.json'), 'utf8'), '{"key":"CR1-x"}');
+  assert.equal(readFileSync(join(target, 'smartthings', 'token.json'), 'utf8'), '{"t":1}');
+  assert.equal(readFileSync(join(target, 'photos', 'floorplan-1.jpg'), 'utf8'), 'jpeg');
+  assert.equal(readFileSync(join(target, 'update', 'status.json'), 'utf8'), '{"state":"new hub"}', 'the updater keeps its own status');
   assert.ok(!existsSync(join(target, LOCK_FILE)), 'restore released its lock');
   const aside = readdirSync(target).find(n => n.startsWith('.pre-restore-'))!;
   assert.equal(readFileSync(join(target, aside, 'integrations.json'), 'utf8'), '{"old":true}');
@@ -218,6 +242,25 @@ test('restore CLI: refuses while the hub holds the lock, then restores into a fr
   rmSync(target, { recursive: true, force: true });
 });
 
+test('restore: an older backup leaves alone what it never held', async () => {
+  const { dataDir, hub, clock } = await homeOnDisk();
+  rmSync(join(dataDir, 'smartthings'), { recursive: true });
+  rmSync(join(dataDir, 'hub-id'));
+  const b = new Backups({ db: hub.store.db, dataDir, timezone: () => TZ, now: () => clock.t });
+  const info = await b.run('manual');
+  await hub.stop();
+  const target = tmp();
+  writeFileSync(join(target, 'hub-id'), 'this-hub\n');
+  mkdirSync(join(target, 'smartthings'));
+  writeFileSync(join(target, 'smartthings', 'token.json'), '{"signed":"in"}');
+  await restoreBackup(join(b.dir, info.name), target);
+  assert.equal(readFileSync(join(target, 'hub-id'), 'utf8'), 'this-hub\n');
+  assert.equal(readFileSync(join(target, 'smartthings', 'token.json'), 'utf8'), '{"signed":"in"}');
+  assert.equal(readFileSync(join(target, 'photos', 'floorplan-1.jpg'), 'utf8'), 'jpeg');
+  rmSync(dataDir, { recursive: true, force: true });
+  rmSync(target, { recursive: true, force: true });
+});
+
 test('restore: refuses archives that aren\'t Kova backups or reach outside the data folder', async () => {
   const target = tmp();
   writeFileSync(join(target, 'home.json'), '{"keep":1}');
@@ -230,6 +273,7 @@ test('restore: refuses archives that aren\'t Kova backups or reach outside the d
   };
   await assert.rejects(restoreBackup(await make('../evil'), target), /unsafe path/);
   await assert.rejects(restoreBackup(await make('etc/passwd'), target), /Unexpected item/);
+  await assert.rejects(restoreBackup(await make('update/status.json'), target), /Unexpected item/);
   await assert.rejects(restoreBackup(await make('home.json'), target), /no kova\.db/);
   assert.equal(readFileSync(join(target, 'home.json'), 'utf8'), '{"keep":1}');
   assert.ok(!existsSync(join(target, '..', 'evil')));

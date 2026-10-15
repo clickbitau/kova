@@ -90,10 +90,27 @@ Boxes installed from git before this keep updating from git until a licence is a
 The repo's `Dockerfile` is the whole hub: Node, ffmpeg (for seamless repeating sounds), the hub, the web pages and the
 phone app's over-the-air updates (`ota/`). It runs as uid 1000 and writes only to `/data`.
 
-- **Data.** A box's `/var/lib/kova` copies into `/data` as it is, owned by uid 1000. Every path is relative to
-  `KOVA_DATA`, except one: the AirPlay bridge's program path, which `integrations.json` holds (`aircast.binary`, e.g.
-  `/opt/airconnect/aircast-linux-x86_64-static`). Mount that folder read-only at the same path, or change the path.
+- **Data.** Either copy a box's `/var/lib/kova` into `/data` as it is, owned by uid 1000, or restore one of its
+  backups (below). Every path is relative to `KOVA_DATA`, except the AirPlay bridge's program, which
+  `integrations.json` names (`aircast.binary`). The image ships it at the path a box uses,
+  `/opt/airconnect/aircast-linux-<cpu>-static`, so nothing needs mounting.
   Leave `update/status.json` behind, or keep it: with `KOVA_UPDATES_BY` set, the hub ignores it.
+- **Moving a hub with its own backup.** A backup holds everything the hub can't make again (`docs/install.md` →
+  Backups), the hub's ID and licence included. On the old hub:
+  1. `POST /api/backups` with the owner's token makes one now. It answers `{ backup: { name } }`.
+  2. `GET /api/backups/<name>` downloads it. Treat the file like a password.
+  3. Stop the old hub, so nothing changes after the backup.
+
+  Into the new, stopped app's empty volume:
+  `docker run --rm -v <volume>:/data -v <dir>:/in:ro <image> node --import tsx src/tools/restore.ts /in/<name>`.
+  It refuses while a hub is using the folder. Restore is not offered in the app on purpose: it replaces the running
+  hub's data, so it runs with the hub stopped.
+- **Remote access.** The phone keeps every address the hub reports (`GET /api/connect/addresses`) and refreshes the
+  list whenever it connects. The remote one is the hub's public URL (`KOVA_REMOTE_URL`, or the notification
+  settings' public URL), a Tailscale name such as `https://kova.<tailnet>.ts.net` served by `tailscale serve`, never a
+  `100.x` address. A new Tailscale node keeps working with no change in Kova or on phones if it takes the same name:
+  remove the old node from the tailnet first (or carry its state), or Tailscale names the new one `kova-1`. If the
+  name changes, update the public URL; each phone picks it up the next time it connects at home.
 - **Updates.** Set `KOVA_UPDATES_BY=DockBit`. The hub then offers no Check or Update. Settings → Software update says
   updates come from DockBit. The box's own updater (systemd `kova-update*` units, `/opt/kova/releases`) isn't used.
 - **Environment.**

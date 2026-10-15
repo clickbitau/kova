@@ -16,13 +16,25 @@ import type { NewLogEntry } from '../store/db.ts';
 /**
  * Backups of everything a home can't get back by itself: the database (event
  * log, config, device state, assistant settings), integrations.json (device
- * keys), home.json and every pairing folder. One `.tar.gz` per backup in
- * `<KOVA_DATA>/backups/`, owner-only, newest N kept.
+ * keys), home.json, every pairing folder, the cloud sign-ins, the floor plan
+ * and the hub's identity (hub-id and its licence). Restored onto a new machine,
+ * it is the same hub. One `.tar.gz` per backup in `<KOVA_DATA>/backups/`,
+ * owner-only, newest N kept. Left out on purpose: backups/ itself, loops/ and
+ * frames/ (made again by themselves), and the updater's status and logs.
  */
 
 /** Folders under KOVA_DATA that hold pairings and fabrics (losing them means re-pairing devices), and the owner's announcement clips. */
 export const PAIRING_DIRS = ['homekit', 'homekit-controller', 'matter', 'matter-bridge', 'samsungtv', 'push', 'clips'] as const;
-export const DATA_FILES = ['integrations.json', 'home.json'] as const;
+/** Cloud sign-ins and other state that would otherwise mean signing in or setting up again. */
+export const STATE_DIRS = ['connectlife', 'ecovacs', 'smartthings', 'helix', 'photos', 'archive'] as const;
+/**
+ * The hub's identity: hub-id (its licence is issued for it), the key Helix uses to reach it, and the keys of
+ * the home-network certificates phones already trust.
+ */
+export const DATA_FILES = ['integrations.json', 'home.json', 'hub-id', 'helix-link.json', 'tls-keys.json'] as const;
+/** The updater's folder: only the licence is backed up, and a restore puts back only that file. */
+const UPDATE_DIR = 'update';
+const UPDATE_KEPT = ['licence.json'];
 /** aircast's folder also holds logs; only its config is backed up. */
 const AIRCAST_DIR = 'aircast';
 const DB = 'kova.db';
@@ -30,8 +42,11 @@ const MANIFEST = 'manifest.json';
 const FORMAT = 1;
 
 /** Everything a restore may replace in the data folder. */
-const RESTORABLE = new Set<string>([DB, ...DATA_FILES, ...PAIRING_DIRS, AIRCAST_DIR]);
-const REPLACED = [DB, `${DB}-wal`, `${DB}-shm`, ...DATA_FILES, ...PAIRING_DIRS, AIRCAST_DIR];
+const RESTORABLE = new Set<string>([DB, ...DATA_FILES, ...PAIRING_DIRS, ...STATE_DIRS, AIRCAST_DIR, UPDATE_DIR]);
+/** Always replaced, even when the backup doesn't have them (every backup has always covered these). */
+const REPLACED = [DB, `${DB}-wal`, `${DB}-shm`, 'integrations.json', 'home.json', ...PAIRING_DIRS, AIRCAST_DIR];
+/** Replaced only when the backup has them, so restoring an older backup doesn't take away what it never held. */
+const REPLACED_IF_IN = [...DATA_FILES, ...STATE_DIRS].filter(n => !REPLACED.includes(n));
 
 export const BACKUP_NAME = /^kova-backup-\d{8}-\d{6}(?:-\d+)?\.tar\.gz$/;
 
@@ -134,14 +149,17 @@ export async function createBackup(o: CreateBackupOptions): Promise<BackupInfo &
       walk(o.dataDir, f, entries);
       if (entries.length > before) included.push(f);
     }
-    for (const d of PAIRING_DIRS) {
+    for (const d of [...PAIRING_DIRS, ...STATE_DIRS]) {
       const before = entries.length;
       walk(o.dataDir, d, entries);
       if (entries.length > before) included.push(d);
     }
-    const before = entries.length;
+    let before = entries.length;
     walk(o.dataDir, AIRCAST_DIR, entries, rel => rel.endsWith('.xml'));
     if (entries.length > before) included.push(AIRCAST_DIR);
+    before = entries.length;
+    walk(o.dataDir, UPDATE_DIR, entries, rel => UPDATE_KEPT.some(f => rel === `${UPDATE_DIR}/${f}`));
+    if (entries.length > before) included.push(UPDATE_DIR);
 
     const manifest = Buffer.from(JSON.stringify({ format: FORMAT, app: 'kova', version: o.version ?? null, createdAt: new Date(now).toISOString(), reason: o.reason ?? null, contents: included }, null, 2) + '\n');
     entries.unshift({ name: MANIFEST, type: 'file', mode: 0o600, mtimeMs: now, data: manifest });
@@ -308,6 +326,7 @@ function safeName(name: string): string {
   if (parts.some(p => p === '' || p === '.' || p === '..')) throw new Error(`Refusing unsafe path in backup: ${JSON.stringify(name)}`);
   if (parts[0] !== MANIFEST && !RESTORABLE.has(parts[0])) throw new Error(`Unexpected item in backup: ${JSON.stringify(parts[0])}`);
   if ((parts[0] === MANIFEST || parts[0] === DB || (DATA_FILES as readonly string[]).includes(parts[0])) && parts.length > 1) throw new Error(`Unexpected item in backup: ${JSON.stringify(name)}`);
+  if (parts[0] === UPDATE_DIR && parts.length > 1 && (parts.length > 2 || !UPDATE_KEPT.includes(parts[1]))) throw new Error(`Unexpected item in backup: ${JSON.stringify(name)}`);
   return name;
 }
 
@@ -362,14 +381,19 @@ export async function restoreBackup(archive: string, dataDir: string, opts: { fo
     const movedOut: string[] = [];
     const movedIn: string[] = [];
     const incoming = readdirSync(stage);
+    // The updater's folder keeps its status and logs: only the files a backup holds go in (update/licence.json).
+    const inUpdate = incoming.includes(UPDATE_DIR) ? readdirSync(join(stage, UPDATE_DIR)).map(f => `${UPDATE_DIR}/${f}`) : [];
+    const swapIn = [...incoming.filter(n => n !== UPDATE_DIR), ...inUpdate];
+    const swapOut = [...REPLACED, ...REPLACED_IF_IN.filter(n => incoming.includes(n)), ...inUpdate];
     try {
-      for (const n of REPLACED) {
+      for (const n of swapOut) {
         if (!existsSync(join(dataDir, n))) continue;
-        if (!movedOut.length) mkdirSync(aside, { mode: 0o700 });
+        mkdirSync(dirname(join(aside, n)), { recursive: true, mode: 0o700 });
         renameSync(join(dataDir, n), join(aside, n));
         movedOut.push(n);
       }
-      for (const n of incoming) {
+      if (inUpdate.length) mkdirSync(join(dataDir, UPDATE_DIR), { recursive: true, mode: 0o700 });
+      for (const n of swapIn) {
         renameSync(join(stage, n), join(dataDir, n));
         movedIn.push(n);
       }
