@@ -94,6 +94,45 @@ test('Cast: an announcement plays on each speaker on its own, never through thei
   }
 });
 
+test('Cast: an announcement on several speakers stays together: a speaker that started late joins where the rest are, and one that drifts is moved back in step', async () => {
+  const a = fakeCast('Kitchen Speaker'), b = fakeCast('Bedroom Speaker'), bar = fakeCast('Soundbar');
+  const ep = async (f: ReturnType<typeof fakeCast>, id: string, model: string) => ({ id, name: f.name, model, host: '127.0.0.1', port: await listen(f) });
+  const reg = new Registry(new Store(':memory:'));
+  const cast = new CastAdapter({
+    discover: false, insecure: true, pollMs: 0, batchMs: 20, clipReadyMs: 300, unstickMs: 400, syncChecksMs: [700, 1100],
+    endpoints: [await ep(a, 'aaaa0000000000000000000000000001', 'Nest Audio'), await ep(b, 'bbbb0000000000000000000000000002', 'Nest Audio'), await ep(bar, 'eeee0000000000000000000000000005', 'Q930B')],
+  });
+  await reg.addAdapter(cast);
+  try {
+    const clip = { url: 'http://hub/api/clip/adhan.mp3', title: 'Adhan', contentType: 'audio/mpeg', durationMs: 200_000 };
+    const ids = ['cast_aaaa0000000000000000000000000001', 'cast_bbbb0000000000000000000000000002', 'cast_eeee0000000000000000000000000005'];
+    // The soundbar is slow to fetch the file (it was on its TV input).
+    bar.st.buffering = true;
+    const r = await reg.playClips(ids.map(id => ({ id, clip, vol: 20 })), { kind: 'automation', label: 'Call to prayer' }, { startWaitMs: 0 });
+    assert.deepEqual(r.map(x => x.status), ['fulfilled', 'fulfilled', 'fulfilled']);
+    // Still stuck when checked: loaded again where the others are, not from the start.
+    await new Promise(res => setTimeout(res, 600));
+    const again = bar.log.filter(l => l.type === 'LOAD')[1];
+    assert.ok(again, 'the soundbar was loaded again');
+    assert.equal(again!.data.autoplay, true);
+    assert.ok(Number(again!.data.currentTime) > 0.2, `it joined ${again!.data.currentTime} s in, with the others`);
+    bar.st.buffering = false;
+    // The speakers say where they are: the kitchen and the soundbar together, the bedroom 4 s behind.
+    const since = Date.now();
+    a.st.time = 5; bar.st.time = 5; b.st.time = 1;
+    await new Promise(res => setTimeout(res, 800));
+    const seek = b.log.find(l => l.type === 'SEEK');
+    assert.ok(seek, 'the bedroom speaker was moved back in step');
+    const elapsed = (Date.now() - since) / 1000;
+    assert.ok(Math.abs(Number(seek!.data.currentTime) - 5) < 0.5 + elapsed, `to where the others are (${seek!.data.currentTime} s)`);
+    assert.equal(seek!.data.resumeState, 'PLAYBACK_START');
+    assert.ok(!a.log.some(l => l.type === 'SEEK') && !bar.log.some(l => l.type === 'SEEK'), 'the ones in step are left alone');
+  } finally {
+    await reg.stop();
+    for (const f of [a, b, bar]) f.server.close();
+  }
+});
+
 test('Cast: a group that stopped answering is stopped speaker by speaker', async () => {
   const a = fakeCast('Music Room Speaker'), b = fakeCast('Baby Room speaker');
   const g = fakeCast('Home Speaker Group', ['aaaa0000-0000-0000-0000-000000000001', 'bbbb0000-0000-0000-0000-000000000002']);

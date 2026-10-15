@@ -32,6 +32,10 @@ export interface CastOptions {
   unstickMs?: number;
   /** How long a speaker may take to load an announcement before it's left out (default 10 s). */
   clipLoadMs?: number;
+  /** How long speakers loading an announcement together are given to hold the file before all start (default 4 s). */
+  clipReadyMs?: number;
+  /** When, after an announcement on several speakers starts, they're checked to be together (ms; tests shorten it). */
+  syncChecksMs?: number[];
   /** Plain TCP instead of TLS (tests only). */
   insecure?: boolean;
   /** The ports a moved speaker group is looked for on (default 32000–32999; tests narrow it). */
@@ -91,6 +95,8 @@ class Receiver {
   private endlessAt = 0;
   /** An announcement clip playing (playClip()): when it finishes, the speaker is idle again. */
   clip: string | null = null;
+  /** An announcement played together with other speakers: the moment its start was (or would have been) heard. */
+  together: number | null = null;
   /** When a looping sound was last started again after the speaker dropped it (the last hour's). */
   private restarts: number[] = [];
 
@@ -218,17 +224,43 @@ class Receiver {
     this.stream = null;
     this.clip = clip.title;
     this.paused = !autoplay;
+    this.together = null;
     const session = (r.data.status as MediaStatus[] | undefined)?.[0]?.mediaSessionId;
     if (autoplay) void this.unstick(transport, clip, this.unstickMs);
     return { transport, ...(session != null ? { session } : {}), clip, ...(vols?.length ? { vols } : {}) };
   }
 
   /** Play what loadClip loaded; one that hasn't got going a few seconds in is loaded again. */
-  async startClip(l: { transport: string; session?: number; clip: Clip; vols?: { rec: Receiver; level: number }[] }): Promise<void> {
+  async startClip(l: { transport: string; session?: number; clip: Clip; vols?: { rec: Receiver; level: number }[] }, together?: number): Promise<void> {
     await this.ch.request(NS.media, l.transport, { type: 'PLAY', ...(l.session != null ? { mediaSessionId: l.session } : {}) });
     this.paused = false;
+    this.together = together ?? null;
     if (l.vols?.length) void this.holdVolumes(l.vols);
     void this.unstick(l.transport, l.clip, this.unstickMs);
+  }
+
+  /** Loaded and waiting to start (the speaker holds the file, paused), by `until`; false if it's still fetching it. */
+  async clipReady(transport: string, until: number): Promise<boolean> {
+    for (;;) {
+      const st = await this.clipNow(transport);
+      if (st && (st.state === 'PAUSED' || st.state === 'PLAYING')) return true;
+      if (Date.now() >= until) return false;
+      await new Promise(r => setTimeout(r, 200).unref?.());
+    }
+  }
+
+  /** Where the announcement is: its session, state and seconds in, as of `at` (half the round trip ago). */
+  async clipNow(transport: string): Promise<{ session?: number; state: string; pos: number; at: number } | null> {
+    const t = Date.now();
+    const m = await this.ch.request(NS.media, transport, { type: 'GET_STATUS' }).catch(() => null);
+    const st = (m?.data.status as MediaStatus[] | undefined)?.[0];
+    if (!st?.playerState) return null;
+    return { ...(st.mediaSessionId != null ? { session: st.mediaSessionId } : {}), state: st.playerState, pos: st.currentTime ?? 0, at: (t + Date.now()) / 2 };
+  }
+
+  /** The announcement moved to `sec` seconds in, playing. */
+  async seekClip(transport: string, session: number | undefined, sec: number): Promise<void> {
+    await this.ch.request(NS.media, transport, { type: 'SEEK', currentTime: Math.max(0, sec), resumeState: 'PLAYBACK_START', ...(session != null ? { mediaSessionId: session } : {}) });
   }
 
   /** Play a queue from `start` (at `position` seconds into that song): the next CAST_WINDOW songs go to the speaker. */
@@ -425,9 +457,11 @@ class Receiver {
     const st = (m?.data.status as MediaStatus[] | undefined)?.[0];
     const stuck = !st ? false : (st.playerState === 'BUFFERING' || st.playerState === 'LOADING') && (st.currentTime ?? 0) < 3;
     if (!stuck) return;
-    console.log(`[cast] ${this.ep.name}: ${clip.title} still ${(st!.playerState ?? '').toLowerCase()} after ${waitMs / 1000} s; loading it again`);
+    // Played with other speakers: it joins where they are, not from the start (a soundbar seconds behind the rest).
+    const join = this.together != null ? Math.max(0, (Date.now() - this.together) / 1000) : 0;
+    console.log(`[cast] ${this.ep.name}: ${clip.title} still ${(st!.playerState ?? '').toLowerCase()} after ${waitMs / 1000} s; loading it again${join ? ` ${Math.round(join)} s in, with the others` : ''}`);
     await this.ch.request(NS.media, transport, {
-      type: 'LOAD', autoplay: true,
+      type: 'LOAD', autoplay: true, ...(join ? { currentTime: join } : {}),
       media: { contentId: clip.url, contentType: clip.contentType, streamType: 'BUFFERED', ...(clip.durationMs ? { duration: clip.durationMs / 1000 } : {}), metadata: { metadataType: 0, title: clip.title } },
     }).catch(e => console.log(`[cast] ${this.ep.name}: loading ${clip.title} again failed: ${(e as Error).message}`));
   }
@@ -456,6 +490,9 @@ class Receiver {
     return devs.map(d => d.deviceId.replace(/-/g, '').toLowerCase());
   }
 }
+
+/** How far apart (seconds) speakers on one announcement may drift before one is moved back in step. */
+const SYNC_SLACK_S = 0.6;
 
 /** How many times an hour a looping sound the speaker dropped is started again. */
 const LOOP_RESTARTS = 6;
@@ -858,14 +895,50 @@ export class CastAdapter implements Adapter {
       const loaded = await within(r.loadClip(clip, clip.vol != null ? [{ rec: r, level: clip.vol }] : undefined), this.clipLoadMs, `${d.name} didn’t load it in ${Math.round(this.clipLoadMs / 1000)} s`);
       return { r, loaded, clip };
     }));
-    // Together: every PLAY sent at once.
+    // Each holding the file before any starts (one still fetching it would start late), for a few seconds at most.
+    const ready = Date.now() + this.clipReadyMs;
+    await Promise.allSettled(loads.map(l => l.status === 'fulfilled' ? l.value.r.clipReady(l.value.loaded.transport, ready) : null));
+    // Together: every PLAY sent at once; then kept together while it plays.
+    const t0 = Date.now() + 150;
+    const playing = loads.flatMap(l => l.status === 'fulfilled' ? [l.value] : []);
+    if (playing.length > 1) void this.keepTogether(playing.map(p => ({ r: p.r, transport: p.loaded.transport, title: p.clip.title })), t0);
     return Promise.allSettled(loads.map(async l => {
       if (l.status === 'rejected') throw l.reason;
-      await l.value.r.startClip(l.value.loaded);
+      await l.value.r.startClip(l.value.loaded, t0);
       const clip = l.value.clip;
       return { on: true, media: clip.title, paused: false, track: null, shuffle: false, ...(clip.vol != null ? { vol: clip.vol } : {}) } as DeviceState;
     }));
   }
+
+  /**
+   * Speakers playing one announcement, kept together: a few seconds in and then now and then, each says how far in it
+   * is; one more than SYNC_SLACK_S off the rest (most of them, the median) is moved to where they are. A speaker that
+   * started late (still fetching, or loaded again) catches up; one that ran ahead waits for them.
+   */
+  private async keepTogether(list: { r: Receiver; transport: string; title: string }[], t0: number): Promise<void> {
+    const moves = new Map<Receiver, number>();
+    for (const after of this.syncChecksMs) {
+      await new Promise(r => setTimeout(r, Math.max(0, t0 + after - Date.now())).unref?.());
+      const live = list.filter(x => x.r.clip === x.title);
+      if (live.length < 2) return;
+      const now = await Promise.all(live.map(async x => ({ x, s: await x.r.clipNow(x.transport) })));
+      // How far each is ahead of the wall clock since the start: alike for speakers in step.
+      const ahead = now.filter(n => n.s?.state === 'PLAYING').map(n => ({ ...n, off: n.s!.pos - (n.s!.at - t0) / 1000 }));
+      if (ahead.length < 2) continue;
+      const offs = ahead.map(a => a.off).sort((a, b) => a - b);
+      // With an even count, the later of the middle two: a speaker that started late is the usual one out.
+      const mid = offs[Math.floor(offs.length / 2)]!;
+      await Promise.allSettled(ahead.filter(a => Math.abs(a.off - mid) > SYNC_SLACK_S && (moves.get(a.x.r) ?? 0) < 3).map(async a => {
+        moves.set(a.x.r, (moves.get(a.x.r) ?? 0) + 1);
+        const to = mid + (Date.now() - t0) / 1000;
+        console.log(`[cast] ${a.x.r.ep.name} was ${Math.abs(a.off - mid).toFixed(1)} s ${a.off < mid ? 'behind' : 'ahead of'} the other speakers on ${a.x.title}; moved to ${to.toFixed(1)} s`);
+        await a.x.r.seekClip(a.x.transport, a.s?.session, to);
+      }));
+    }
+  }
+
+  private get clipReadyMs(): number { return this.o.clipReadyMs ?? 4000; }
+  private get syncChecksMs(): number[] { return this.o.syncChecksMs ?? [3000, 8000, 15_000, 30_000, 60_000, 120_000, 180_000, 240_000]; }
 
   async restorePlayback(device: Device, snap0: unknown | null): Promise<{ words: string; state?: DeviceState }> {
     const id = this.speakerId(device);

@@ -6,7 +6,7 @@ import { encodeMessage, decodeMessage, NS } from '../src/adapters/cast/channel.t
 /** A fake Cast receiver: enough of receiver, media and multizone to drive the adapter. */
 export function fakeCast(name: string, members: string[] = []) {
   const log: { ns: string; type: string; data: Record<string, unknown> }[] = [];
-  const st = { app: null as null | { appId: string; sessionId: string; transportId: string }, level: 0.3, muted: false, url: '', title: '', repeat: 'REPEAT_OFF', paused: false, time: 0, deaf: false, refuse: null as RegExp | null };
+  const st = { app: null as null | { appId: string; sessionId: string; transportId: string }, level: 0.3, muted: false, url: '', title: '', repeat: 'REPEAT_OFF', paused: false, time: 0, deaf: false, refuse: null as RegExp | null, buffering: false };
   const socks: net.Socket[] = [];
   /** The speaker says its media stopped by itself (a fetch that failed: ERROR), unasked. */
   const idle = (idleReason: string) => { for (const k of socks) k.write(encodeMessage({ source: 'web-1', destination: 'sender-0', namespace: NS.media, data: { type: 'MEDIA_STATUS', requestId: 0, status: [{ mediaSessionId: 7, playerState: 'IDLE', idleReason }] } })); };
@@ -38,12 +38,13 @@ export function fakeCast(name: string, members: string[] = []) {
           st.url = String(media.contentId);
           st.title = media.metadata?.title ?? '';
           st.repeat = String(m.data.repeatMode ?? 'REPEAT_OFF');
-          st.paused = false;
-          reply({ source: 'web-1', namespace: NS.media, data: { type: 'MEDIA_STATUS', requestId: rid, status: [{ mediaSessionId: 7, playerState: 'PLAYING' }] } });
+          st.paused = m.data.autoplay === false;
+          st.time = Number(m.data.currentTime ?? 0);
+          reply({ source: 'web-1', namespace: NS.media, data: { type: 'MEDIA_STATUS', requestId: rid, status: [{ mediaSessionId: 7, playerState: st.paused ? 'PAUSED' : 'PLAYING' }] } });
         } else if (m.namespace === NS.media && (type === 'GET_STATUS' || type === 'PAUSE' || type === 'PLAY' || type === 'SEEK' || type === 'QUEUE_UPDATE')) {
           if (type === 'PAUSE' || type === 'PLAY') { assert.equal(m.data.mediaSessionId, 7); st.paused = type === 'PAUSE'; }
           if (type === 'SEEK') st.time = Number(m.data.currentTime);
-          reply({ source: 'web-1', namespace: NS.media, data: { type: 'MEDIA_STATUS', requestId: rid, status: st.app ? [{ mediaSessionId: 7, playerState: !st.url ? 'IDLE' : st.paused ? 'PAUSED' : 'PLAYING', currentTime: st.time, repeatMode: st.repeat, ...(st.url ? { media: { contentId: st.url, metadata: { title: st.title } } } : {}) }] : [] } });
+          reply({ source: 'web-1', namespace: NS.media, data: { type: 'MEDIA_STATUS', requestId: rid, status: st.app ? [{ mediaSessionId: 7, playerState: !st.url ? 'IDLE' : st.buffering ? 'BUFFERING' : st.paused ? 'PAUSED' : 'PLAYING', currentTime: st.time, repeatMode: st.repeat, ...(st.url ? { media: { contentId: st.url, metadata: { title: st.title } } } : {}) }] : [] } });
         } else if (m.namespace === NS.multizone) {
           reply({ source: 'receiver-0', namespace: NS.multizone, data: { type: 'MULTIZONE_STATUS', requestId: rid, status: { devices: members.map(id => ({ deviceId: id, name: id })) } } });
         }
