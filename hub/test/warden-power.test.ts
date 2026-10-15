@@ -220,7 +220,7 @@ test('Warden: a power supply fails and recovers: events, Activity, the alert and
     const watts = await t.hub.assistant.ask('How much power is the router using?');
     assert.match(watts.text, /drawing 268 W/);
     const ctx = new AiAssistant(t.hub.engine, t.hub.reg, t.hub.config, t.hub.store).buildContext({ names: true, rooms: true, history: false, presence: false, cameras: false, security: false });
-    const line = ctx.text.split('\n').find(l => l.includes(`"${ROUTER_ID}"`))!;
+    const line = ctx.text.split('\n').find(l => l.startsWith('{') && l.includes(`"${ROUTER_ID}"`))!;
     assert.match(line, /"watts":268/);
     assert.match(line, /"Power supply 1: no input power"/);
     assert.match(line, /"redundancy":"lost"/);

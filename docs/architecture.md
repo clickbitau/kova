@@ -209,6 +209,14 @@ of its conditions), **then** (steps in order). Kept in the home's config (`autom
   a prayer rhythm or a non-default method. While off, prayer options, the waqt card and the recordings don't show and
   Ask Kova can't use prayer times; existing prayer schedules keep running.
 
+### Ask Kova (`hub/src/assistant/`)
+
+The chat assistant, run by the built-in parser or by an AI engine the owner chooses. The hub, not the model, holds
+every engine to the same rules: it changes only what was asked (automation details are path edits, and a rewrite that
+swaps the audio or drops speakers is refused), "no" changes nothing, a claimed change without a tool is removed, and
+the reply ends with the hub's own list of what changed. See [ask-kova.md](ask-kova.md) for how it works, the rules, and
+how to add a tool and test it against a replayed conversation.
+
 ### Teach, test, trust (`findings.ts`)
 
 * **Static check**: walks the day's modes and flags a bright light that one mode

@@ -5,13 +5,13 @@ import type { Engine } from '../engine/engine.ts';
 import type { Registry } from '../devices/registry.ts';
 import type { ConfigStore } from '../engine/config.ts';
 import type { Store } from '../store/db.ts';
-import { ROOM_ICONS, UNASSIGNED_ROOM, WHOLE_HOME, type Automation, type Cause, type Command, type Device, type Targets } from '../model/types.ts';
+import { ROOM_ICONS, UNASSIGNED_ROOM, WHOLE_HOME, type Automation, type Cause, type Command, type Condition, type Device, type Targets, type Trigger } from '../model/types.ts';
 import { FIELD_CAP, isPlayer, pseudoLabel, targetLabel } from '../util/describe.ts';
 import { cleanZoneCommand, ZONE_FIELDS, zonesServing, type ZoneCommand } from '../util/zones.ts';
 import { cleanRobotSet, robotContext } from '../util/robot.ts';
 import { hardwareSummary, hasHardware } from '../util/hardware.ts';
 import { announceWithoutMedia, CheckError, checkAutomation } from '../engine/automation-check.ts';
-import { canAnnounce, isSpeakerGroup, trimOf } from '../engine/announce.ts';
+import { canAnnounce, isSpeakerGroup, mediaWords, trimOf } from '../engine/announce.ts';
 import { BUILTIN_ADHANS, adhanCredit } from '../services/adhans.ts';
 import { actionWords, condWords, nextOnce, triggerWords } from '../engine/automations.ts';
 import { slug } from '../tools/import-ha.ts';
@@ -20,6 +20,7 @@ import { isCamera, isSensor, readingsOf } from '../util/sensors.ts';
 import { ROOM_EVENT_TEXT } from '../engine/automations.ts';
 import { norm, type AskReply } from './assistant.ts';
 import type { JevAdvisor } from '../services/jev.ts';
+import { applyEdits, changeWords, DECLINED, unasked, type AutoDef } from './auto-edit.ts';
 import { AccessDenied, ROLE_LABEL, allows, canDevice, canRoom, currentActor, demandTargets, needs, scoped, type Perm } from '../services/actor.ts';
 
 // Optional AI engines for Ask Kova. They only ever see requests the built-in
@@ -258,6 +259,8 @@ Only use device, person, mode and overlay ids from the home context; never inven
       type: 'object',
       properties: {
         name: { type: 'string' },
+        from: { type: 'string', description: 'An automation id to copy: the new one starts as an exact copy of its when/if/then (then edit, or when/if/then, change it). Use it to split one automation in two ("all prayers louder except Fajr"): copy, edit the copy, then edit the original.' },
+        edit: { type: 'object', description: 'With from: path → new value on the copy, as in update_automation.' },
         description: { type: 'string' },
         when: { type: 'array', items: { type: 'object' } },
         if: { type: 'array', items: { type: 'object' } },
@@ -265,16 +268,17 @@ Only use device, person, mode and overlay ids from the home context; never inven
         runMode: { type: 'string', enum: ['single', 'restart', 'queued', 'parallel'] },
         enabled: { type: 'boolean' },
       },
-      required: ['name', 'when', 'then'],
+      required: ['name'],
     },
   },
   {
     name: 'update_automation',
-    description: `Change an existing automation (ids in the Automations list): rename, enable/disable, or replace its when/if/then — given parts replace those lists wholesale, omitted parts stay. Same shapes as create_automation. Prefer this over creating a second automation that overlaps an existing one.`,
+    description: `Change an existing automation (ids in the Automations list). To change a detail — a volume, a time, one speaker, one setting — use edit: only the paths you name change and everything else stays exactly as it is (the Automations list shows each automation's exact when/if/then to read paths from). when/if/then replace those whole lists, so send them only to rebuild an automation, copying every part you aren't changing. name renames it, enabled switches it on or off. The result lists every change it made: check each against what the owner asked, and put back anything they didn't ask for. Prefer this over creating a second automation that overlaps an existing one.`,
     parameters: {
       type: 'object',
       properties: {
         id: { type: 'string' },
+        edit: { type: 'object', description: 'Path → new value, e.g. {"then.0.vol": 30, "then.0.targets.kitchen_speaker": {}, "then.0.targets.soundbar.vol": 18, "when.1": null}. Paths go through when/if/then; numbers are places in a list (counted from 0); null removes; one past the end of a list adds.' },
         name: { type: 'string' },
         description: { type: 'string' },
         when: { type: 'array', items: { type: 'object' } },
@@ -448,6 +452,14 @@ const ENUMS: Record<string, readonly string[]> = {
 };
 
 /** Automation ids look like the editor's: name_slug + 4 random chars. */
+/** An automation as the model reads and writes it. */
+const defOf = (a: Pick<Automation, 'triggers' | 'conditions' | 'actions'>): AutoDef => ({ when: a.triggers as unknown[], if: a.conditions as unknown[], then: a.actions as unknown[] });
+/** The edit argument: path → value (some models send it as a JSON string). */
+function editArg(v: unknown): Record<string, unknown> {
+  const o = typeof v === 'string' ? (() => { try { return JSON.parse(v) as unknown; } catch { return null; } })() : v;
+  if (!o || typeof o !== 'object' || Array.isArray(o)) throw new Error('edit is an object of path → new value, e.g. {"then.0.vol": 30}');
+  return o as Record<string, unknown>;
+}
 const autoSlug = (name: string) => `${name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 40) || 'automation'}_${randomUUID().slice(0, 4)}`;
 
 /** MiniMax-style reasoning blocks must never reach the reply text. */
@@ -632,6 +644,12 @@ export class Toolbox {
   readonly undos: string[] = [];
   /** What the person asked, for the checks that hold the model to their words. */
   question = '';
+  /** What they said this time and in the turns just before it ("yes" means what was asked before). */
+  said = '';
+  /** They turned down what they were just asked ("No"): nothing is changed this turn. */
+  declined = false;
+  /** What each automation change did, in the owner's words, for the reply ("Volume 20% → 30%"). */
+  readonly changeNotes: { name: string; changes: string[]; made?: boolean }[] = [];
   /** Tool names called, in order (for the request log). */
   readonly called: string[] = [];
   /** Each call with args and outcome — enough to see why the AI struggled. */
@@ -656,6 +674,16 @@ export class Toolbox {
   /** The checker's context for an automation the model sends: real devices, the home, and what announcements can play. */
   private checkCtx() {
     return { device: (id: string) => this.ai.reg.get(id), cfg: this.ai.config.get(), now: this.ai.engine.now(), media: (m: string) => this.ai.mediaProblem?.(m) ?? null };
+  }
+
+  /** What changed between two versions of an automation, in the owner's words. */
+  private changeWords(before: AutoDef, after: AutoDef): string[] {
+    const w = { reg: this.ai.reg, cfg: this.ai.config.get(), now: this.ai.engine.now() };
+    return changeWords(before, after, {
+      name: id => this.ai.reg.get(id)?.name ?? pseudoLabel(id, w.cfg.rooms, {}) ?? id,
+      clipName: id => this.ai.clipName?.(id) ?? undefined,
+      when: t => triggerWords(t as Trigger, w), if: c => condWords(c as Condition, w),
+    });
   }
 
   /** Prayer times are off: an automation the model sends mustn't start on one (existing ones keep running). */
@@ -785,6 +813,11 @@ export class Toolbox {
   async run(name: string, input: unknown): Promise<string> {
     this.called.push(name);
     const args = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
+    // "No" to a question is never a go-ahead: whatever the model makes of it, nothing changes this turn. Not a
+    // failure either — nothing was asked for — so it isn't reported as one.
+    if (this.declined && MUTATING.has(name) && name !== 'remember' && name !== 'forget') {
+      return JSON.stringify({ ok: false, error: 'The owner just said no to what you asked. Change nothing now: say you’ve left it as it is, and ask in one short question what they would like instead.' });
+    }
     const { doing, what } = this.describe(name, args);
     const step: AskStep = { tool: name, label: doing, status: 'working' };
     this.steps.push(step);
@@ -1053,11 +1086,19 @@ export class Toolbox {
         case 'create_automation': {
           try {
             const cfg = this.ai.config.get();
-            const off = this.prayerOff([args.when, args.if, args.then]);
-            if (off) return JSON.stringify({ ok: false, error: off });
+            const off = this.prayerOff([args.when, args.if, args.then, args.edit]);
+            const src = args.from !== undefined ? (cfg.automations ?? []).find(x => x.id === String(args.from)) : undefined;
+            if (args.from !== undefined && !src) return JSON.stringify({ ok: false, error: `No automation ${String(args.from)} to copy — use an id from the Automations list` });
+            if (off && !(src && JSON.stringify(src).includes('"prayer"'))) return JSON.stringify({ ok: false, error: off });
+            let def: AutoDef = { when: listArg(args.when) as unknown[] ?? (src ? src.triggers : undefined) as unknown[], if: listArg(args.if) as unknown[] ?? (src ? src.conditions : []), then: listArg(args.then) as unknown[] ?? (src ? src.actions : undefined) as unknown[] };
+            if (args.edit !== undefined) {
+              if (!src) return JSON.stringify({ ok: false, error: 'edit goes with from (the automation to copy); for a new automation send when and then' });
+              def = applyEdits({ when: def.when ?? [], if: def.if ?? [], then: def.then ?? [] }, editArg(args.edit));
+            }
             const a = checkAutomation(
-              { name: args.name, description: args.description, triggers: listArg(args.when), conditions: listArg(args.if), actions: forMe(listArg(args.then)), mode: args.runMode, enabled: args.enabled },
+              { name: args.name, description: args.description, triggers: def.when, conditions: def.if, actions: forMe(def.then), mode: args.runMode ?? src?.mode, enabled: args.enabled },
               this.checkCtx());
+            if (src) this.changeNotes.push({ name: a.name, made: true, changes: [`A copy of “${src.name}”`, ...this.changeWords(defOf(src), defOf(a))] });
             const id = autoSlug(a.name);
             const undo = this.ai.config.update(c => { (c.automations ??= []).push({ id, ...a }); });
             this.undos.push(this.ai.engine.registerUndo(undo));
@@ -1085,17 +1126,32 @@ export class Toolbox {
             const id = String(args.id ?? '');
             const cur = (cfg.automations ?? []).find(a => a.id === id);
             if (!cur) return JSON.stringify({ ok: false, error: `No automation ${id} — use an id from the Automations list` });
-            const off = this.prayerOff([args.when, args.if, args.then]);
+            const off = this.prayerOff([args.when, args.if, args.then, args.edit]);
             if (off && !JSON.stringify([cur.triggers, cur.conditions, cur.actions]).includes('"prayer"')) return JSON.stringify({ ok: false, error: off });
+            // Whole lists replace; edits change only the paths they name, on top.
+            let def: AutoDef = { when: (listArg(args.when) as unknown[]) ?? cur.triggers, if: (listArg(args.if) as unknown[]) ?? cur.conditions, then: (forMe(listArg(args.then)) as unknown[]) ?? cur.actions };
+            if (args.edit !== undefined) def = applyEdits(def, editArg(args.edit));
+            const before = defOf(cur);
+            // A change the owner's words don't account for (their recording swapped, speakers dropped) goes back to
+            // the model to fix, before anything is saved.
+            const slips = unasked(before, def, this.said || this.question, id2 => this.ai.reg.get(id2)?.name ?? id2, m => mediaWords(m, cid => this.ai.clipName?.(cid) ?? undefined));
+            if (slips.length) return JSON.stringify({ ok: false, error: `Not saved. ${slips.join(' ')} Change only what was asked — use edit with just those paths.` });
             const a = checkAutomation(
               {
                 name: args.name ?? cur.name, description: args.description ?? cur.description,
-                triggers: listArg(args.when) ?? cur.triggers, conditions: listArg(args.if) ?? cur.conditions,
-                actions: forMe(listArg(args.then)) ?? cur.actions, mode: args.runMode ?? cur.mode,
+                triggers: def.when, conditions: def.if,
+                actions: forMe(def.then), mode: args.runMode ?? cur.mode,
                 // An announcement given its audio now switches on (it was kept off waiting for it), unless asked otherwise.
-                enabled: args.enabled ?? (cur.enabled || (announceWithoutMedia(cur.actions) && args.then !== undefined)),
+                enabled: args.enabled ?? (cur.enabled || (announceWithoutMedia(cur.actions) && (args.then !== undefined || args.edit !== undefined))),
               },
               this.checkCtx());
+            const changes = this.changeWords(before, defOf(a));
+            if (args.name !== undefined && args.name !== cur.name) changes.unshift(`Renamed from “${cur.name}”`);
+            if (a.enabled !== cur.enabled) changes.push(a.enabled ? 'Switched on' : 'Switched off');
+            if ((a.description ?? '') !== (cur.description ?? '')) changes.push('Description changed');
+            if (a.mode !== cur.mode) changes.push(`A second start while it runs: ${cur.mode} → ${a.mode}`);
+            if (!changes.length) return JSON.stringify({ ok: false, error: 'That changes nothing in this automation — it already is that way. Read its exact when/if/then in the Automations list and edit the paths that need to change.' });
+            this.changeNotes.push({ name: a.name, changes });
             const undo = this.ai.config.update(c => {
               const i = (c.automations ?? []).findIndex(x => x.id === id);
               if (i >= 0) c.automations![i] = { ...c.automations![i]!, ...a };
@@ -1108,8 +1164,8 @@ export class Toolbox {
             const w = { reg: this.ai.reg, cfg, now: this.ai.engine.now(), clipName: (cid: string) => this.ai.clipName?.(cid) };
             const tgt = (tid: string, cmd: object) => { const d = this.ai.reg.get(tid); return d ? targetLabel(d, cmd as Command) : (pseudoLabel(tid, this.ai.config.get().rooms, cmd) ?? tid); };
             const words = { when: a.triggers.map(t => triggerWords(t, w)), if: a.conditions.map(c => condWords(c, w)), then: a.actions.map(x => actionWords(x, w, tgt)) };
-            this.done(`Changed the automation “${a.name}”${a.enabled ? '' : ' (it’s off)'}: when ${words.when.join(' or ')}${words.if.length ? `, if ${words.if.join(' and ')}` : ''}, ${words.then.join('; ')}`, [`auto:${id}`, `auto:${norm(a.name)}`]);
-            return JSON.stringify({ ok: true, id, name: a.name, ...words });
+            this.done(`Changed the automation “${a.name}”${a.enabled ? '' : ' (it’s off)'}: ${changes.join('; ')}`, [`auto:${id}`, `auto:${norm(a.name)}`]);
+            return JSON.stringify({ ok: true, id, name: a.name, changed: changes, ...words, check: 'These are all the changes made. If any is something the owner didn’t ask for, put it back with another edit before you reply.' });
           } catch (e) { return JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e), ...(e instanceof CheckError && e.fix ? { sendInstead: e.fix } : {}) }); }
         }
         case 'delete_automation': {
@@ -1562,6 +1618,8 @@ When a tool call fails because of how it was written (an unknown kind, a bad tim
 A request about a group ("the light automations that start at sunset", "all the bedroom lights") means every match: find them all in the home context, change each one (one call each), then name each in the reply.
 Tool results are the truth: each has ok, and when it worked a "result" saying what changed, with real names. Report only what results confirmed. If any call returned ok:false, say plainly what didn't happen and why — never say "all done", "done" or "everything's set" unless every part worked. Don't claim a change you didn't make with a tool.
 Announcements ("play X on all speakers at 15%", a chime, a call to prayer): one automation with an announce step. vol is the level the owner says; each speaker plays it times its own announcement loudness. List every speaker in targets (devices with "speaker": true, or a speaker group: a group keeps its balance between speakers, vol is its loudest speaker's level); players such as a Helix box or a TV that should stop for it go in pause (they carry on after); restore true puts every speaker back as it was. When the owner names audio of their own ("I added Fajr adhan in Helix"), look it up with find_music and use the announce media it returns in announce steps; ask only if it finds nothing. If the owner didn't say which audio and none in the context plainly fits, leave media out (the automation is saved switched off) and ask which to use, naming the choices; never guess or invent a URL. When the owner says some speakers are louder or quieter than others, suggest an announcement loudness for each (e.g. 80, 70, 60 for louder, louder still, loudest) in the reply and ask them to confirm; set them with update_device loudness only once they agree, then say what each is now.
+Changing what exists: change only what the owner asked for and keep everything else exactly as it is — the audio, every speaker and device, per-speaker levels, times, conditions. Use update_automation edit for a detail (one path per change); never rebuild an automation to change one thing. "Except X" leaves X as it was before this conversation, not as you just changed it; to treat part of an automation differently, copy it (create_automation from + edit), change the copy, then edit the original. Numbers the owner gives are the levels they want, not amounts to add. After each change, read the "changed" list the tool returns and fix anything the owner didn't ask for.
+Questions and answers: when you ask the owner something, ask one thing, and wait. "No" means change nothing. An unclear answer gets one short question back, never a guess. Don't say you did something you didn't do with a tool, and don't agree that you did when the owner says you didn't — check the device state and act or say what's true.
 If the request can't be done with these tools or the shared context, say so plainly instead of guessing. Reply like a text message — plain text only, no markdown (never ** or # or \` characters — they show raw in the chat). Keep it short: a sentence or two usually; when listing several things, one item per line starting with "- ". Refer to automations and devices by their names, not their ids.`;
 
 /** Only while prayer times are on. */
@@ -1579,6 +1637,9 @@ const FOLLOW_UP = /^\s*(yes|yeah|yep|yup|no|nope|ok|okay|sure|please|do it|go ah
 /** A reply that says it changed something ("Done", "Master Bed zone set to 19°", "Turned the lamp off"). */
 const CLAIMED = /^\s*(all )?done\b|\b(set to|turned (on|off)|switched (on|off)|now (heating|cooling|on|off)|opened|closed|is now)\b/i;
 
+/** A request that asks about something rather than for a change. */
+const QUESTION = /^\s*(what|which|who|why|when|where|how|is|are|was|were|do|does|did|can|could|has|have|will|would|should|tell me|show me|list)\b/i;
+
 /** "All done", "Done.", "Everything's set" at the start of a reply. */
 const OVERCLAIM = /^\s*(all done|done|all set|all sorted|sorted|everything('s| is)? (done|set|sorted|taken care of))\b[\s.!:,;—–-]*/i;
 
@@ -1588,7 +1649,7 @@ const OVERCLAIM = /^\s*(all done|done|all set|all sorted|sorted|everything('s| i
  * the reply leads with what didn't work and the hub's own "Done: … / Couldn't: …" summary follows. A room the tools
  * used that the reply never names (it said "entryway" when the lamp went to Front door) gets the summary too.
  */
-export function honestReply(text: string, o: AskOutcome, opts: { unfinished?: boolean; error?: string; rooms?: string[]; changed?: boolean } = {}): { text: string; flagged: boolean } {
+export function honestReply(text: string, o: AskOutcome, opts: { unfinished?: boolean; error?: string; rooms?: string[]; changed?: boolean; command?: boolean } = {}): { text: string; flagged: boolean } {
   const body0 = text.trim();
   const said = norm(body0);
   const roomMiss = (opts.rooms ?? []).filter(r => !said.includes(norm(r)));
@@ -1597,9 +1658,13 @@ export function honestReply(text: string, o: AskOutcome, opts: { unfinished?: bo
   const problems = !owned && (o.couldnt.length > 0 || !!opts.unfinished || !!opts.error);
   if (!problems && !roomMiss.length) {
     // "Done." with nothing done: no tool changed anything, so it can't be.
-    if (!opts.changed && OVERCLAIM.test(body0) && /^\s*(all )?done\b/i.test(body0)) {
-      const rest = body0.replace(OVERCLAIM, '').trim();
-      return { text: `I didn’t change anything.${rest ? ` ${cap(rest)}` : ''}`, flagged: true };
+    // A sentence saying something changed ("Master Bed zone set to 19°", "I did set it to 5%") is untrue when no
+    // tool changed anything: only the questions and what didn't happen are kept.
+    const iDid = /\b(i did|i have|i[’']ve|i) (set|turned|changed|switched|made|created|updated|moved|opened|closed|dimmed)\b/i;
+    if (!opts.changed && (OVERCLAIM.test(body0) || iDid.test(body0) || (opts.command && CLAIMED.test(body0)))) {
+      const keep = body0.replace(OVERCLAIM, '').split(/(?<=[.!?])\s+|\n+/).map(x => x.trim()).filter(Boolean)
+        .filter(x => /\?$/.test(x) || (!CLAIMED.test(x) && !iDid.test(x) && !/^(you[’']re right|sorry|i apologi[sz]e)\b/i.test(x)));
+      return { text: [`I didn’t change anything.`, ...keep.map(cap)].join(' '), flagged: true };
     }
     return { text: body0, flagged: false };
   }
@@ -1621,6 +1686,23 @@ export function honestReply(text: string, o: AskOutcome, opts: { unfinished?: bo
   if (o.done.length) summary.push(`Done:\n${o.done.map(x => `- ${x}`).join('\n')}`);
   if (o.couldnt.length) summary.push(`Couldn’t:\n${o.couldnt.map(x => `- ${x}`).join('\n')}`);
   return { text: [lines.join('\n\n'), ...summary].filter(Boolean).join('\n\n'), flagged: true };
+}
+
+/** The reply, then what changed in each automation ("What changed in “Call to prayer”: Volume 20% → 30%"). */
+export function withChanges(text: string, notes: { name: string; changes: string[]; made?: boolean }[]): string {
+  if (!notes.length) return text;
+  // Automations changed the same way are said once ("Changed in “A” and “B”: …").
+  const groups = new Map<string, { names: string[]; changes: string[]; made?: boolean }>();
+  for (const n of notes.filter(x => x.changes.length)) {
+    const k = `${n.made ? 1 : 0}${JSON.stringify(n.changes)}`;
+    const g = groups.get(k);
+    if (g) g.names.push(n.name); else groups.set(k, { names: [n.name], changes: n.changes, made: n.made });
+  }
+  const parts = [...groups.values()].map(g => {
+    const head = `${g.made ? 'Made' : 'Changed in'} ${andList(g.names.map(x => `“${x}”`))}`;
+    return g.changes.length === 1 ? `${head}: ${g.changes[0]![0]!.toLowerCase()}${g.changes[0]!.slice(1)}.` : `${head}:\n${g.changes.map(c => `- ${c}`).join('\n')}`;
+  });
+  return [text, ...parts].filter(Boolean).join('\n\n');
 }
 
 export interface AiOptions {
@@ -1692,7 +1774,8 @@ export class AiAssistant {
     if (autos.length) {
       const w = { reg: this.reg, cfg };
       const tgt = (tid: string, cmd: object) => { const d = this.reg.get(tid); return d ? targetLabel(d, cmd as Command) : (pseudoLabel(tid, cfg.rooms, cmd) ?? tid); };
-      lines.push('Automations — change these with update_automation or delete_automation instead of adding overlapping ones:', ...autos.map(a => `- ${a.id} "${a.name}"${a.enabled ? '' : ' (off)'}: when ${a.triggers.map(t => triggerWords(t, w)).join(' or ') || 'nothing'}${a.conditions.length ? ` | if ${a.conditions.map(c => condWords(c, w)).join(' and ')}` : ''} | ${a.actions.map(x => actionWords(x, w, tgt)).join('; ') || 'nothing'}`));
+      // Each in words, and (when names are shared, so ids say nothing new) exactly as stored: what edit paths go through.
+      lines.push(`Automations — change these with update_automation (edit for a detail) or delete_automation instead of adding overlapping ones${share.names ? '; "exact" is each one as saved, the paths edit goes through' : ''}:`, ...autos.map(a => `- ${a.id} "${a.name}"${a.enabled ? '' : ' (off)'}: when ${a.triggers.map(t => triggerWords(t, w)).join(' or ') || 'nothing'}${a.conditions.length ? ` | if ${a.conditions.map(c => condWords(c, w)).join(' and ')}` : ''} | ${a.actions.map(x => actionWords(x, w, tgt)).join('; ') || 'nothing'}${share.names ? `\n  exact: ${JSON.stringify(defOf(a))}` : ''}`));
     }
 
     if (share.names) lines.push(`Rooms: ${cfg.rooms.filter(r => !scoped(asker) || canRoom(asker, r.id)).map(r => `${r.id} (${r.name})`).join(', ')}. A device with room "${UNASSIGNED_ROOM}" isn't in a room yet (the app lists it under Unsorted).`);
@@ -1769,7 +1852,7 @@ export class AiAssistant {
     if (cfg.prayer?.on) {
       lines.push(`Prayer times are on (method ${cfg.prayerMethod ?? 'MuslimWorldLeague'}${cfg.prayer.madhab === 'hanafi' ? ', Hanafi Asr' : ''}). Call-to-prayer recordings Kova offers for announcements: ${BUILTIN_ADHANS.map(a => `${a.id} (${adhanCredit(a)}, ${Math.round(a.durationMs / 1000)} s)`).join('; ')}.`);
       const ad = cfg.prayer.adhan;
-      lines.push(ad?.media ? `The owner's chosen call to prayer: ${ad.media}${ad.fajr ? `; for Fajr: ${ad.fajr}` : ''}.` : 'The owner hasn’t chosen a call to prayer yet.');
+      lines.push(ad?.media ? `The owner's chosen call to prayer, for a new call-to-prayer automation: ${ad.media}${ad.fajr ? `; for Fajr: ${ad.fajr}` : ''}. An automation that already plays something keeps it unless the owner asks to change it.` : 'The owner hasn’t chosen a call to prayer yet.');
     } else lines.push('Prayer times are off in this home (Integrations → Prayer times): don’t use prayer times.');
     if (share.names) shared.push('device and room names');
     if (share.rooms) shared.push('device states');
@@ -1929,6 +2012,12 @@ export class AiAssistant {
       });
       tools = new Toolbox(this, ctx, opts.onSteps);
       tools.question = q;
+      // "Yes", "the second one", "except Fajr" mean what was said just before: the checks read those turns too.
+      const recent = history.slice(-4);
+      tools.said = [...recent.map(t => t.text), q].join('\n');
+      // "No" to a question just asked: nothing changes this turn, whatever the model makes of it.
+      const lastAsked = [...history].reverse().find(t => t.role === 'assistant');
+      tools.declined = DECLINED.test(q) && !!lastAsked && /\?/.test(lastAsked.text);
       const key = norm(q);
       let result: EngineResult;
       try {
@@ -1945,8 +2034,9 @@ export class AiAssistant {
         return { text: out, source, actions: [], understood: false, engine: kind, undo: this.undoFor(tools.undos) };
       }
       // The hub's check on the model's words: only what the tools confirmed (re-read now) is claimed.
-      const checked = honestReply(cleanReply(result.text), tools.outcome(), { unfinished: result.unfinished, rooms: tools.roomsUsed(), changed: tools.changedAnything });
-      const text = checked.text;
+      const checked = honestReply(cleanReply(result.text), tools.outcome(), { unfinished: result.unfinished, rooms: tools.roomsUsed(), changed: tools.changedAnything, command: !/\?\s*$/.test(q) && !QUESTION.test(q) });
+      // What each automation change did, in the hub's words — not the model's — so a slip can't hide in a summary.
+      const text = withChanges(checked.text, tools.changeNotes);
       this.logRequest(e.label, q, text, tools.called, !checked.flagged, tools.calls);
       // A clean run that changed something becomes a learned phrase: next time it replays without the AI.
       // Undoing the AI's work drops the phrase — the user said it was wrong.

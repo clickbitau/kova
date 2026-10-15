@@ -92,7 +92,8 @@ test('Regression: “start the sunset light automations 15 min before sunset” 
   // Not a light, and not at sunset: left alone.
   assert.deepEqual(autos.find(a => a.id === 'blinds_sunset_ef56')!.triggers, [{ kind: 'time', at: { kind: 'sun', event: 'sunset' } }]);
   assert.deepEqual(autos.find(a => a.id === 'garden_sunrise_gh78')!.triggers, [{ kind: 'time', at: { kind: 'sun', event: 'sunrise' } }]);
-  assert.equal(r.text, 'These now start 15 minutes before sunset:\n- Porch light at sunset\n- Lounge glow at sunset');
+  // The hub says what changed in each, in its own words, after the model's.
+  assert.equal(r.text, 'These now start 15 minutes before sunset:\n- Porch light at sunset\n- Lounge glow at sunset\n\nChanged in “Porch light at sunset” and “Lounge glow at sunset”: starts at 15 min before sunset instead of at sunset.');
   assert.doesNotMatch(r.text, /format|kind|trigger/i, 'no jargon reached the owner');
   await h.close(); await model.close();
 });
@@ -113,7 +114,7 @@ test('A shape the hub can’t read: the error says what to send, the model corre
   await h.useModel(model.url);
   const r = await h.ask('make the porch sunset automation start a quarter hour earlier');
   assert.deepEqual(h.hub.config.get().automations!.find(a => a.id === 'porch_on_sunset_ab12')!.triggers, [SUNSET_15]);
-  assert.equal(r.text, 'Porch light at sunset now starts 15 minutes before sunset.', 'the fixed failure is not reported');
+  assert.equal(r.text, 'Porch light at sunset now starts 15 minutes before sunset.\n\nChanged in “Porch light at sunset”: starts at 15 min before sunset instead of at sunset.', 'the fixed failure is not reported');
   // The system prompt forbids format questions.
   assert.match(model.received[0]!.body.messages[0].content, /Never ask the user about formats, ids, schemas or tool shapes/);
   await h.close(); await model.close();
