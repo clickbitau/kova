@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { View, useWindowDimensions } from 'react-native';
+import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, R, SP, alpha, ink } from '../theme';
 import { useHub, useSnap } from '../state/hub';
@@ -15,6 +15,7 @@ import type { Insight } from '../api/types';
 import { Icon } from '../ui/Icon';
 import { Avatar, Button, Card, Empty, Group, HScroll, IconWell, Mark, Notice, NoticeAction, Press, Row, Section, Skeleton } from '../ui/kit';
 import { Screen } from '../ui/Screen';
+import { basis, useLayout } from '../ui/layout';
 import { T } from '../ui/Text';
 import { features, meOf } from '../logic/roles';
 import { Appear } from '../ui/motion';
@@ -52,9 +53,10 @@ export function NowScreen() {
   const alerts = s.insights ?? [];
   const [allAlerts, setAllAlerts] = useState(false);
   const { shown, more } = shownAlerts(alerts, allAlerts);
-  const { width, fontScale } = useWindowDimensions();
-  const cols = glanceColumns(width, fontScale, cards.length);
-  const cardW = Math.floor((width - SP.gutter * 2 - SP[2] * (cols - 1)) / cols) - 1;
+  const { content, fontScale, columns } = useLayout();
+  const cols = glanceColumns(content + SP.gutter * 2, fontScale, cards.length);
+  const cardW = Math.floor((content - SP[2] * (cols - 1)) / cols) - 1;
+  const overlayW = basis(columns(230, { least: 2, most: 3 }));
   const anyLights = s.devices.some(d => isLight(d) && !d.hidden && !d.archived);
   // What this person's role can do here (logic/roles.ts): a child or a guest doesn't switch modes or see cameras.
   const who = meOf(s);
@@ -195,7 +197,7 @@ export function NowScreen() {
             {s.overlays.map((o, i) => {
               const a = ov?.id === o.id;
               return (
-                <Appear key={o.id} index={i} style={{ flexBasis: '47%', flexGrow: 1 }}>
+                <Appear key={o.id} index={i} style={{ flexBasis: overlayW, flexGrow: 1 }}>
                   <Press give="soft" selected={a} label={a ? `${o.name} is on. End it` : `Switch to ${o.name}`}
                     onPress={() => a ? void end() : void act('POST', `/api/overlays/${encodeURIComponent(o.id)}/start`, {}, `${o.name} is on`)}
                     style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3], padding: SP[3], borderRadius: R.lg, backgroundColor: a ? C.amberTint : C.card, borderWidth: 1, borderColor: a ? C.amberLine : C.edge, borderTopColor: a ? C.amberLine : C.edgeTop }}>

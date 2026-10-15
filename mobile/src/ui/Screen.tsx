@@ -10,6 +10,8 @@ import { Icon } from './Icon';
 import { IconButton, Press, PulseDot } from './kit';
 import { haptic, spring, tween, useReducedMotion } from './motion';
 import { T } from './Text';
+import { useLayout } from './layout';
+import { RAIL_W } from '../logic/layout';
 
 /** The mode glow: a radial gradient in the mode colour behind the top-left of the screen. */
 export function Glow({ color, opacity = 0.22 }: { color: string; opacity?: number }) {
@@ -118,6 +120,10 @@ export function Screen({ children, title, over, onBack, right, glow, onRefresh, 
   const ref = useRef<ScrollView>(null);
   useScrollToTop(ref);
   const top = insets.top + (onBack ? BAR : SP[4]);
+  // A tablet: the page stops growing (a page opened from a tab, narrower, for reading) and sits in the middle.
+  const { content, rail, width } = useLayout(!!onBack);
+  // The compact bar's back button and title line up with the page, not the screen's edge.
+  const edge = Math.max(SP[3], (width - (rail && !onBack ? RAIL_W : 0) - content) / 2 - 6);
   const bar = y.interpolate({ inputRange: title || onBack ? [24, 64] : [0, 16], outputRange: [0, 1], extrapolate: 'clamp' });
   return (
     <View style={{ flex: 1, backgroundColor: C.page, overflow: 'hidden' }}>
@@ -126,7 +132,7 @@ export function Screen({ children, title, over, onBack, right, glow, onRefresh, 
         ref={ref}
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y } } }], { useNativeDriver: true })}
         scrollEventThrottle={16}
-        contentContainerStyle={{ paddingTop: top, paddingHorizontal: SP.gutter, paddingBottom: SP[10], gap }}
+        contentContainerStyle={{ paddingTop: top, paddingHorizontal: SP.gutter, paddingBottom: SP[10], gap, width: '100%', maxWidth: content + SP.gutter * 2, alignSelf: 'center' }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         automaticallyAdjustKeyboardInsets
@@ -153,7 +159,7 @@ export function Screen({ children, title, over, onBack, right, glow, onRefresh, 
       <View pointerEvents="box-none" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top + (onBack || title ? BAR : 0) }}>
         <Animated.View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: C.glass, borderBottomWidth: 1, borderBottomColor: C.hairline, opacity: bar }} />
         {!onBack && !title ? null : (
-          <View pointerEvents="box-none" style={{ position: 'absolute', top: insets.top, left: 0, right: 0, height: BAR, flexDirection: 'row', alignItems: 'center', paddingHorizontal: SP[3] }}>
+          <View pointerEvents="box-none" style={{ position: 'absolute', top: insets.top, left: 0, right: 0, height: BAR, flexDirection: 'row', alignItems: 'center', paddingHorizontal: edge }}>
             {onBack ? <IconButton icon="arrow_back" label="Back" onPress={onBack} size={38} /> : null}
             <Animated.View pointerEvents="none" style={{ position: 'absolute', left: 64, right: 64, alignItems: 'center', opacity: bar, transform: [{ translateY: bar.interpolate({ inputRange: [0, 1], outputRange: [6, 0] }) }] }}>
               <T v="headline" size={16} numberOfLines={1}>{title ?? ''}</T>

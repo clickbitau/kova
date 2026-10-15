@@ -7,6 +7,7 @@ import { AnimatedIcon, Icon } from './Icon';
 import { Press, Skeleton, Spinner } from './kit';
 import { Appear, reducedMotion, shake, spring, useStateValue } from './motion';
 import { T } from './Text';
+import { useLayout } from './layout';
 
 /** A device's level, for the bar along the bottom of its tile: a dimmer's brightness, while it's on. */
 export const levelOf = (d: Dev): number | null => d.on && isLight(d) && d.type === 'dimmer' && d.bri != null ? Math.max(0.04, Math.min(1, d.bri / 100)) : null;
@@ -82,16 +83,20 @@ export function Tile({ d, onToggle, onOpen }: { d: Dev; onToggle: () => void; on
   );
 }
 
-/** Tiles two to a row (an odd last tile keeps half the width). Rows fade up one after another when they appear. */
+/**
+ * Tiles two to a row on a phone, up to four on a tablet (a short last row keeps each tile's width). Rows fade up one
+ * after another when they appear.
+ */
 export function TileGrid({ items, onToggle, onOpen }: { items: Dev[]; onToggle: (d: Dev) => void; onOpen: (d: Dev) => void }) {
+  const n = useLayout().columns(170, { least: 2 });
   const rows: Dev[][] = [];
-  for (let i = 0; i < items.length; i += 2) rows.push(items.slice(i, i + 2));
+  for (let i = 0; i < items.length; i += n) rows.push(items.slice(i, i + n));
   return (
     <View style={{ gap: SP[2] + 2 }}>
       {rows.map((r, i) => (
-        <Appear key={r[0].id} index={i} style={{ flexDirection: 'row', gap: SP[2] + 2 }}>
+        <Appear key={i} index={i} style={{ flexDirection: 'row', gap: SP[2] + 2 }}>
           {r.map(d => <Tile key={d.id} d={d} onToggle={() => onToggle(d)} onOpen={() => onOpen(d)} />)}
-          {r.length === 1 ? <View style={{ flex: 1 }} /> : null}
+          {Array.from({ length: n - r.length }, (_, k) => <View key={k} style={{ flex: 1 }} />)}
         </Appear>
       ))}
     </View>
@@ -100,12 +105,12 @@ export function TileGrid({ items, onToggle, onOpen }: { items: Dev[]; onToggle: 
 
 /** The tiles' shape while the home loads. */
 export function TileSkeleton({ rows = 2 }: { rows?: number }) {
+  const n = useLayout().columns(170, { least: 2 });
   return (
     <View style={{ gap: SP[2] + 2 }}>
       {Array.from({ length: rows }, (_, i) => (
         <View key={i} style={{ flexDirection: 'row', gap: SP[2] + 2 }}>
-          <Skeleton h={118} r={R.lg + 2} style={{ flex: 1 }} />
-          <Skeleton h={118} r={R.lg + 2} style={{ flex: 1 }} />
+          {Array.from({ length: n }, (_, k) => <Skeleton key={k} h={118} r={R.lg + 2} style={{ flex: 1 }} />)}
         </View>
       ))}
     </View>

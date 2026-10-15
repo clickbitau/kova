@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { RAIL_AT, SHEET_MAX } from '../logic/layout';
 import { Animated, Modal, PanResponder, Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type AccessibilityRole, type Insets, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -376,7 +377,9 @@ const rubber = (d: number, limit = 56) => limit * (1 - 1 / (d * 0.55 / limit + 1
  */
 export function Sheet({ open, onClose, children, label = 'Panel' }: { open: boolean; onClose: () => void; children: ReactNode; label?: string }) {
   const insets = useSafeAreaInsets();
-  const { height: screenH } = useWindowDimensions();
+  const { height: screenH, width: screenW } = useWindowDimensions();
+  // A tablet: the sheet rises in the middle, at a phone sheet's width, not across the whole screen.
+  const side = screenW >= RAIL_AT ? Math.max(0, (screenW - SHEET_MAX) / 2) : 0;
   const reduced = useReducedMotion();
   const [h, setH] = useState(screenH);
   const y = useRef(new Animated.Value(screenH)).current;
@@ -431,7 +434,7 @@ export function Sheet({ open, onClose, children, label = 'Panel' }: { open: bool
         <Pressable style={{ flex: 1 }} onPress={onClose} accessibilityRole="button" accessibilityLabel={`Close ${label}`} />
       </Animated.View>
       <Animated.View onLayout={e => setH(e.nativeEvent.layout.height)} accessibilityViewIsModal
-        style={{ position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: '92%', borderTopLeftRadius: R.sheet, borderTopRightRadius: R.sheet, backgroundColor: C.sheet, borderWidth: 1, borderBottomWidth: 0, borderColor: C.edgeTop, boxShadow: SHADOW.sheet, opacity: fade, transform: [{ translateY: y }] }}>
+        style={{ position: 'absolute', left: side, right: side, bottom: 0, maxHeight: '92%', borderTopLeftRadius: R.sheet, borderTopRightRadius: R.sheet, backgroundColor: C.sheet, borderWidth: 1, borderBottomWidth: 0, borderColor: C.edgeTop, boxShadow: SHADOW.sheet, opacity: fade, transform: [{ translateY: y }] }}>
         <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: '100%', height: 120, backgroundColor: C.sheet }} />
         <View {...drag.panHandlers}>
           <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel={`Close ${label}`} accessibilityHint="Or swipe down" style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 14 }}>

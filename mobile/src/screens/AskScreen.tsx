@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Animated, AppState, KeyboardAvoidingView, Platform, ScrollView, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRoute, useScrollToTop } from '@react-navigation/native';
@@ -15,6 +15,8 @@ import { T } from '../ui/Text';
 import { Appear, haptic, useLoop, useStateValue } from '../ui/motion';
 import { langName, listen, markFailed, markWorked, quiet, setVoiceLang, speak, stopListening, useSpeechRecognitionEvent, useVoiceLangs, voiceLang, voiceReady } from '../native/voice';
 import { listeningWord } from '../logic/speech';
+import { RAIL_W } from '../logic/layout';
+import { useLayout } from '../ui/layout';
 
 type Msg = ChatMsg;
 
@@ -53,6 +55,11 @@ function Typing() {
 }
 
 /** Ask Kova: the built-in assistant on the hub (optional AI on top). What it understood shows as chips while you type. */
+/** Suggestions in a row: sideways scrolling on a phone, wrapping on a tablet. */
+const Wrap = ({ rail, children }: { rail: boolean; children: ReactNode }) => rail
+  ? <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>{children}</View>
+  : <HScroll>{children}</HScroll>;
+
 export function AskScreen() {
   const s = useSnap();
   const { api, undo, say } = useHub();
@@ -73,6 +80,9 @@ export function AskScreen() {
   const [focus, setFocus] = useState(false);
   const scroll = useRef<ScrollView>(null);
   useScrollToTop(scroll);
+  // A tablet: the conversation keeps a readable width, in the middle (the header and the box line up with it).
+  const { content, rail, width } = useLayout(true);
+  const pad = rail ? Math.max(SP.gutter, (width - RAIL_W - content) / 2) : SP.gutter;
   const ready = !!text.trim();
   const can = useStateValue(ready);
 
@@ -214,7 +224,7 @@ export function AskScreen() {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: C.page }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={{ paddingTop: insets.top + SP[3], paddingHorizontal: SP.gutter, paddingBottom: SP[3], gap: SP[2], borderBottomWidth: 1, borderBottomColor: C.hairline }}>
+      <View style={{ paddingTop: insets.top + SP[3], paddingHorizontal: pad, paddingBottom: SP[3], gap: SP[2], borderBottomWidth: 1, borderBottomColor: C.hairline }}>
         <ConnBanner />
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[3] }}>
           <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: C.amber, alignItems: 'center', justifyContent: 'center' }}>
@@ -231,7 +241,7 @@ export function AskScreen() {
       </View>
 
       <ScrollView ref={scroll} onContentSizeChange={() => scroll.current?.scrollToEnd({ animated: true })}
-        contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end', paddingTop: SP[4], paddingHorizontal: SP.gutter, paddingBottom: SP[4], gap: SP[3] }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end', paddingTop: SP[4], paddingHorizontal: pad, paddingBottom: SP[4], gap: SP[3] }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         {chat.map(m => {
           const you = m.from === 'you';
           return (
@@ -260,7 +270,7 @@ export function AskScreen() {
 
       <View style={{ paddingTop: SP[2], paddingBottom: SP[2] + 2, gap: SP[2], borderTopWidth: 1, borderTopColor: C.hairline, backgroundColor: C.page }}>
         {chips.length ? (
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, paddingHorizontal: SP.gutter }} accessibilityLabel={`Understood: ${chips.join(', ')}`}>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, paddingHorizontal: pad }} accessibilityLabel={`Understood: ${chips.join(', ')}`}>
             <Icon name="check_circle" size={15} color={C.green} fill />
             {chips.map(c => (
               <View key={c} style={{ paddingVertical: 4, paddingHorizontal: 9, borderRadius: R.xs, backgroundColor: C.greenTint }}>
@@ -269,8 +279,9 @@ export function AskScreen() {
             ))}
           </View>
         ) : !text ? (
-          <View style={{ paddingHorizontal: SP.gutter }}>
-            <HScroll>
+          <View style={{ paddingHorizontal: pad }}>
+            {/* A tablet has room: the suggestions wrap instead of scrolling sideways. */}
+            <Wrap rail={rail}>
               {voiceReady && langs.length > 1 ? (
                 <Press onPress={switchLang} label={`Talking in ${langName(lang)}: tap to change`} style={{ height: 34, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, borderRadius: R.full, backgroundColor: C.card, borderWidth: 1, borderColor: C.line }}>
                   <Icon name="mic" size={15} color={C.stone} />
@@ -282,10 +293,10 @@ export function AskScreen() {
                   <T v="label" size={12.5} weight={600} color={C.bone2}>{q}</T>
                 </Press>
               ))}
-            </HScroll>
+            </Wrap>
           </View>
         ) : null}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2], paddingHorizontal: SP[3] }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: SP[2], paddingHorizontal: pad - 6 }}>
           <TextInput value={text} onChangeText={setText} placeholder={listening ? (listeningWord(hearing.current)) : 'Ask or tell Kova…'} placeholderTextColor={C.stone2} returnKeyType="send" onSubmitEditing={() => void ask(text)}
             onFocus={() => setFocus(true)} onBlur={() => setFocus(false)} accessibilityLabel="Ask or tell Kova"
             style={{ flex: 1, minWidth: 0, height: 48, paddingHorizontal: SP[4], borderRadius: 24, backgroundColor: C.card, borderWidth: 1, borderColor: focus ? C.amberLine : C.line, color: C.bone, fontFamily: F[500], fontSize: 16 }} />

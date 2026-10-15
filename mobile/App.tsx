@@ -52,6 +52,7 @@ import { DeviceSheet } from './src/screens/DeviceSheet';
 import { Button, Empty, Mark, ToastHost } from './src/ui/kit';
 import { NowSkeleton } from './src/screens/NowScreen';
 import { AppLock } from './src/ui/AppLock';
+import { useLayout } from './src/ui/layout';
 
 const Stack = createNativeStackNavigator<StackParams>();
 /** Built at render, from the colours in use. */
@@ -92,6 +93,8 @@ function Home({ light }: { light: boolean }) {
   const { cfg, loading, snap, conn, toast, undo, api, say } = useHub();
   const { demo } = useDemo();
   const insets = useSafeAreaInsets();
+  // A tablet has no tab bar at the bottom (the rail is at the side): the toast sits lower.
+  const { rail } = useLayout();
   const nav = useRef<NavigationContainerRef<StackParams>>(null);
   // An invite link opened from outside (kova://join, or the join page): joining takes over until done or put off.
   const [join, clearJoin] = useJoinLink();
@@ -163,7 +166,7 @@ function Home({ light }: { light: boolean }) {
         <DeviceSheet />
       </NavigationContainer>
       </CrashBoundary>
-      <ToastHost toast={toast} onUndo={t => t.undo && void undo(t.undo)} bottom={insets.bottom + 96} />
+      <ToastHost toast={toast} onUndo={t => t.undo && void undo(t.undo)} bottom={insets.bottom + (rail ? 24 : 96)} />
     </SheetProvider>
   );
 }

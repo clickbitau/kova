@@ -13,12 +13,14 @@ import { AskScreen } from './screens/AskScreen';
 import { SecurityScreen } from './screens/SecurityScreen';
 import { MoreScreen } from './screens/MoreScreen';
 import { meOf, tabsFor } from './logic/roles';
+import { RAIL_W } from './logic/layout';
+import { useLayout } from './ui/layout';
 
 const ALL_TABS: [string, string, string][] = [['Now', 'Now', 'home'], ['Devices', 'Devices', 'lightbulb'], ['Ask', 'Ask', 'graphic_eq'], ['Security', 'Security', 'shield'], ['More', 'More', 'apps']];
 const Tab = createBottomTabNavigator();
 
 /** One tab: its icon fills in amber and pops when chosen. Ask is a raised amber button in the middle. */
-function TabButton({ name, label, icon, active, badge, onPress }: { name: string; label: string; icon: string; active: boolean; badge?: string; onPress: () => void }) {
+function TabButton({ name, label, icon, active, badge, onPress, rail }: { name: string; label: string; icon: string; active: boolean; badge?: string; onPress: () => void; rail?: boolean }) {
   const s = useRef(new Animated.Value(1)).current;
   const first = useRef(true);
   const rm = useReducedMotion();
@@ -32,12 +34,13 @@ function TabButton({ name, label, icon, active, badge, onPress }: { name: string
   return (
     <Pressable onPress={onPress} accessibilityRole="tab" accessibilityLabel={badge ? `${label}, ${badge}` : label} accessibilityState={{ selected: active }}
       onPressIn={() => spring(s, 0.9, 'press').start()} onPressOut={() => spring(s, 1, 'press').start()}
-      style={{ flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'flex-end', gap: 3 }}>
-      <Animated.View style={{ width: centre ? 52 : 44, height: centre ? 52 : 30, borderRadius: centre ? 26 : 15, marginTop: centre ? -24 : 0, backgroundColor: centre ? C.amber : 'transparent', alignItems: 'center', justifyContent: 'center', boxShadow: centre ? SHADOW.fab : undefined, borderWidth: centre ? 3 : 0, borderColor: C.nav, transform: [{ scale: s }] }}>
+      style={rail ? { minHeight: 64, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', gap: 4 } : { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'flex-end', gap: 3 }}>
+      <Animated.View style={{ width: centre ? 52 : rail ? 56 : 44, height: centre ? 52 : rail ? 34 : 30, borderRadius: centre ? 26 : 17, marginTop: centre && !rail ? -24 : 0,
+        ...(rail && active && !centre ? { backgroundColor: alpha(C.amber, 0.13) } : {}), ...(centre || !rail || !active ? { backgroundColor: centre ? C.amber : 'transparent' } : {}), alignItems: 'center', justifyContent: 'center', boxShadow: centre ? SHADOW.fab : undefined, borderWidth: centre ? 3 : 0, borderColor: C.nav, transform: [{ scale: s }] }}>
         <Icon name={icon} size={centre ? 25 : 23} fill={active || centre} color={centre ? C.onAmber : active ? C.amber : C.stone2} />
         {badge ? <View style={{ position: 'absolute', top: 1, right: 8, width: 9, height: 9, borderRadius: 5, backgroundColor: C.amber, borderWidth: 2, borderColor: C.nav }} /> : null}
       </Animated.View>
-      <T v="micro" size={11} color={active ? C.bone : C.stone2}>{label}</T>
+      <T v="micro" size={rail ? 12 : 11} color={active ? C.bone : C.stone2}>{label}</T>
     </Pressable>
   );
 }
@@ -46,13 +49,42 @@ function TabButton({ name, label, icon, active, badge, onPress }: { name: string
  * The tab bar: a soft amber lozenge slides under the chosen tab on a spring; the icon fills and pops.
  * Tapping the tab you're on scrolls it back to the top (each Screen listens).
  */
-function Bar({ state, navigation }: BottomTabBarProps) {
-  const insets = useSafeAreaInsets();
+function Bar(p: BottomTabBarProps) {
+  return useLayout().rail ? <Rail {...p} /> : <BottomBar {...p} />;
+}
+
+/** The tabs this person can use, and whether More needs a look. */
+function useTabs() {
   const s = useSnap();
   // Only the tabs this person's role can use (a child or a guest has no Security: no cameras or history).
   const allowed = tabsFor(meOf(s));
-  const TABS = ALL_TABS.filter(t => allowed.includes(t[0] as never));
-  const moreDot = s.findings.length > 0 || s.integrations.some(i => !i.ok);
+  return { TABS: ALL_TABS.filter(t => allowed.includes(t[0] as never)), moreDot: s.findings.length > 0 || s.integrations.some(i => !i.ok) };
+}
+
+/** A tab pressed: to it (a tap on the one you're on scrolls it to the top; each Screen listens). */
+const pressTab = ({ state, navigation }: BottomTabBarProps, name: string, i: number) => {
+  const active = state.index === i;
+  const e = navigation.emit({ type: 'tabPress', target: state.routes[i].key, canPreventDefault: true });
+  if (!active) haptic.select();
+  if (!active && !e.defaultPrevented) navigation.navigate(name);
+};
+
+/** On a tablet: the tabs down the left side, Ask in amber among them. */
+function Rail(p: BottomTabBarProps) {
+  const insets = useSafeAreaInsets();
+  const { TABS, moreDot } = useTabs();
+  return (
+    <View accessibilityRole="tablist" style={{ width: RAIL_W + insets.left, paddingLeft: insets.left, paddingTop: insets.top + 28, paddingBottom: Math.max(insets.bottom, 16), alignItems: 'center', gap: 6, backgroundColor: C.navGlass, borderRightWidth: 1, borderRightColor: C.edge }}>
+      {TABS.map(([name, label, icon], i) => (
+        <TabButton key={name} rail name={name} label={label} icon={icon} active={p.state.index === i} badge={name === 'More' && moreDot ? 'needs a look' : undefined} onPress={() => pressTab(p, name, i)} />
+      ))}
+    </View>
+  );
+}
+
+function BottomBar({ state, navigation, ...rest }: BottomTabBarProps) {
+  const insets = useSafeAreaInsets();
+  const { TABS, moreDot } = useTabs();
   const [w, setW] = useState(0);
   const x = useRef(new Animated.Value(state.index)).current;
   const first = useRef(true);
@@ -73,11 +105,7 @@ function Bar({ state, navigation }: BottomTabBarProps) {
         const active = state.index === i;
         return (
           <TabButton key={name} name={name} label={label} icon={icon} active={active} badge={name === 'More' && moreDot ? 'needs a look' : undefined}
-            onPress={() => {
-              const e = navigation.emit({ type: 'tabPress', target: state.routes[i].key, canPreventDefault: true });
-              if (!active) haptic.select();
-              if (!active && !e.defaultPrevented) navigation.navigate(name);
-            }} />
+            onPress={() => pressTab({ state, navigation, ...rest }, name, i)} />
         );
       })}
     </View>
@@ -88,8 +116,9 @@ export function Tabs() {
   // Tabs cross-fade (nothing slides with reduced motion).
   const reduced = useReducedMotion();
   const security = tabsFor(meOf(useSnap())).includes('Security');
+  const { rail } = useLayout();
   return (
-    <Tab.Navigator tabBar={p => <Bar {...p} />} screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: C.page }, animation: reduced ? 'none' : 'fade' }}>
+    <Tab.Navigator tabBar={p => <Bar {...p} />} screenOptions={{ headerShown: false, tabBarPosition: rail ? 'left' : 'bottom', sceneStyle: { backgroundColor: C.page }, animation: reduced ? 'none' : 'fade' }}>
       <Tab.Screen name="Now" component={NowScreen} />
       <Tab.Screen name="Devices" component={DevicesScreen} />
       <Tab.Screen name="Ask" component={AskScreen} />

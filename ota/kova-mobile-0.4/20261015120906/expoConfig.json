@@ -1,7 +1,7 @@
 {
   "name": "Kova",
   "slug": "kova",
-  "version": "0.4.7",
+  "version": "0.4.9",
   "runtimeVersion": "kova-mobile-0.4",
   "updates": {
     "enabled": true,
@@ -187,6 +187,14 @@
     },
     "kovaHistory": [
       {
+        "version": "0.4.9",
+        "title": "Tablets: a side rail instead of the tab bar, and pages that use the width"
+      },
+      {
+        "version": "0.4.8",
+        "title": "Light mode, and the floor plan"
+      },
+      {
         "version": "0.4.7",
         "title": "Alerts: Remind me in 30 min, or Got it"
       },
@@ -197,14 +205,6 @@
       {
         "version": "0.4.5",
         "title": "Kova for every home: first-run setup, your own date style, clock and °C or °F, speech in any language"
-      },
-      {
-        "version": "0.4.4",
-        "title": "Robot vacuums: clean rooms on its map, how it cleans, base station, upkeep and settings"
-      },
-      {
-        "version": "0.4.3",
-        "title": "Photos for people"
       }
     ]
   },

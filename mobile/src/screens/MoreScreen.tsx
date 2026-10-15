@@ -16,12 +16,14 @@ import { features, meOf } from '../logic/roles';
 import { hasSolarPower } from '../logic/energy';
 import { useDemo } from '../state/demo';
 import { openPrivacyPolicy } from '../ui/PrivacyLink';
+import { Columns, useLayout } from '../ui/layout';
 
 export function MoreScreen() {
   const s = useSnap();
   const autos = automationsOf(s);
   const { cfg, conn, route } = useHub();
   const nav = useNav();
+  const { rail } = useLayout();
   const mode = s.modes.find(m => m.id === s.current.modeId);
   const bad = s.integrations.filter(i => !i.ok);
   const players = s.devices.filter(d => (d.type === 'media' || d.type === 'tv') && d.state.on).length;
@@ -74,34 +76,39 @@ export function MoreScreen() {
       </Card>}
 
 
-      <Group title="Your home">
-        {[
-          can.modes && <Row key="modes" icon="routine" iconFg={C.amber} title="Modes" sub={`${s.modes.length} modes · now ${mode?.name ?? ''}${s.findings.length ? ` · ${s.findings.length} to look at` : ''}`} subColor={s.findings.length ? C.amber : C.stone} badge={s.findings.length > 0} onPress={() => nav.navigate('Modes')} />,
-          can.automations && <Row key="autos" icon="account_tree" iconFg={C.amber} title="Automations" sub={autos.length ? `${autos.length} · ${autos.filter(a => a.enabled).length} on` : 'When something happens, do something'} onPress={() => nav.navigate('Automations')} />,
-          can.activity && <Row key="activity" icon="history" iconFg={C.blue} title="Activity" sub={can.modes ? 'Everything that happened, and why' : 'What happened with your devices'} onPress={() => nav.navigate('Activity')} />,
-          can.sensors && <Row key="sensors" icon="sensors" iconFg={C.green} title="Sensors" sub={s.sensors?.length ? `${s.sensors.length} · temperature, motion, doors and more` : 'Temperature, motion and door sensors'} onPress={() => nav.navigate('Sensors')} />,
-          can.energy && <Row key="energy" icon="solar_power" iconFg={C.amber} title="Energy" sub={hasSolarPower(s) ? 'Solar, use and the grid today' : 'Power use today'} onPress={() => nav.navigate('Energy')} />,
-          <Row key="media" icon="speaker_group" iconFg={C.blue} title="Media" sub={players ? `${players} playing` : 'Speakers, TVs and speaker groups'} onPress={() => nav.navigate('Media')} />,
-        ].filter((r): r is ReactElement<{ first?: boolean }> => !!r).map((r, i) => (i === 0 ? cloneElement(r, { first: true }) : r))}
-      </Group>
+      <Columns two={rail}>
+        <View style={{ gap: SP[6] }}>
+          <Group title="Your home">
+            {[
+              can.modes && <Row key="modes" icon="routine" iconFg={C.amber} title="Modes" sub={`${s.modes.length} modes · now ${mode?.name ?? ''}${s.findings.length ? ` · ${s.findings.length} to look at` : ''}`} subColor={s.findings.length ? C.amber : C.stone} badge={s.findings.length > 0} onPress={() => nav.navigate('Modes')} />,
+              can.automations && <Row key="autos" icon="account_tree" iconFg={C.amber} title="Automations" sub={autos.length ? `${autos.length} · ${autos.filter(a => a.enabled).length} on` : 'When something happens, do something'} onPress={() => nav.navigate('Automations')} />,
+              can.activity && <Row key="activity" icon="history" iconFg={C.blue} title="Activity" sub={can.modes ? 'Everything that happened, and why' : 'What happened with your devices'} onPress={() => nav.navigate('Activity')} />,
+              can.sensors && <Row key="sensors" icon="sensors" iconFg={C.green} title="Sensors" sub={s.sensors?.length ? `${s.sensors.length} · temperature, motion, doors and more` : 'Temperature, motion and door sensors'} onPress={() => nav.navigate('Sensors')} />,
+              can.energy && <Row key="energy" icon="solar_power" iconFg={C.amber} title="Energy" sub={hasSolarPower(s) ? 'Solar, use and the grid today' : 'Power use today'} onPress={() => nav.navigate('Energy')} />,
+              <Row key="media" icon="speaker_group" iconFg={C.blue} title="Media" sub={players ? `${players} playing` : 'Speakers, TVs and speaker groups'} onPress={() => nav.navigate('Media')} />,
+            ].filter((r): r is ReactElement<{ first?: boolean }> => !!r).map((r, i) => (i === 0 ? cloneElement(r, { first: true }) : r))}
+          </Group>
+        </View>
+        <View style={{ gap: SP[6] }}>
+          <Group title={can.settings ? 'Set up' : 'Your account'}>
+            <Row first icon="group" iconFg={C.green} title={can.manage ? 'People and access' : 'You'} sub={can.manage ? 'Invite people, roles, their devices' : `${who.name} · ${who.roleLabel}`} onPress={() => nav.navigate('People')} />
+            {can.settings ? <Row icon="settings" iconFg={C.amber} title="Settings" sub={notice ?? 'The home, notifications, access, software update'} subColor={notice ? C.blue : C.stone} badge={!!notice} onPress={() => nav.navigate('Settings')} /> : null}
+            {can.customise ? <Row icon="home" title="Customise home" sub="Rooms and groups, people, devices, favourites" onPress={() => nav.navigate('Customise')} /> : null}
+            {can.integrations ? <Row icon="hub" title="Integrations" sub={bad.length ? `${bad.length} need${bad.length === 1 ? 's' : ''} attention` : `${s.integrations.length} connected`} subColor={bad.length ? C.amber : C.stone} badge={bad.length > 0} onPress={() => nav.navigate('Integrations')} /> : null}
+          </Group>
 
-      <Group title={can.settings ? 'Set up' : 'Your account'}>
-        <Row first icon="group" iconFg={C.green} title={can.manage ? 'People and access' : 'You'} sub={can.manage ? 'Invite people, roles, their devices' : `${who.name} · ${who.roleLabel}`} onPress={() => nav.navigate('People')} />
-        {can.settings ? <Row icon="settings" iconFg={C.amber} title="Settings" sub={notice ?? 'The home, notifications, access, software update'} subColor={notice ? C.blue : C.stone} badge={!!notice} onPress={() => nav.navigate('Settings')} /> : null}
-        {can.customise ? <Row icon="home" title="Customise home" sub="Rooms and groups, people, devices, favourites" onPress={() => nav.navigate('Customise')} /> : null}
-        {can.integrations ? <Row icon="hub" title="Integrations" sub={bad.length ? `${bad.length} need${bad.length === 1 ? 's' : ''} attention` : `${s.integrations.length} connected`} subColor={bad.length ? C.amber : C.stone} badge={bad.length > 0} onPress={() => nav.navigate('Integrations')} /> : null}
-      </Group>
+          <Group title="This phone">
+            <Row first icon="phone_iphone" iconFg={C.green} title={me ? `${me.name}’s phone` : 'This phone'} sub="Arriving and leaving, notifications, the hub it talks to" onPress={() => nav.navigate('ThisPhone')} />
+            <Row icon="computer" iconFg={C.blue} title="Sign in a browser" sub="Type the code your Kova address shows on a computer" onPress={() => nav.navigate('Browsers')} />
+            {demo ? null : <Row icon="link_off" iconFg={C.red} title={sure ? 'Tap again to sign out' : 'Sign out'} sub="Sign in again as someone else, or to another hub" onPress={() => void signOut()} />}
+          </Group>
 
-      <Group title="This phone">
-        <Row first icon="phone_iphone" iconFg={C.green} title={me ? `${me.name}’s phone` : 'This phone'} sub="Arriving and leaving, notifications, the hub it talks to" onPress={() => nav.navigate('ThisPhone')} />
-        <Row icon="computer" iconFg={C.blue} title="Sign in a browser" sub="Type the code your Kova address shows on a computer" onPress={() => nav.navigate('Browsers')} />
-        {demo ? null : <Row icon="link_off" iconFg={C.red} title={sure ? 'Tap again to sign out' : 'Sign out'} sub="Sign in again as someone else, or to another hub" onPress={() => void signOut()} />}
-      </Group>
-
-      <Group title="About">
-        <Row first icon="lock" iconFg={C.green} title="Privacy policy" sub="What Kova collects, where it goes, and your choices" onPress={openPrivacyPolicy} right={<Icon name="arrow_outward" size={18} color={C.stone2} />} />
-        <Row icon="info" title={`Kova ${running.version}`} sub="Made by ClickBIT" />
-      </Group>
+          <Group title="About">
+            <Row first icon="lock" iconFg={C.green} title="Privacy policy" sub="What Kova collects, where it goes, and your choices" onPress={openPrivacyPolicy} right={<Icon name="arrow_outward" size={18} color={C.stone2} />} />
+            <Row icon="info" title={`Kova ${running.version}`} sub="Made by ClickBIT" />
+          </Group>
+        </View>
+      </Columns>
 
       <View style={{ alignItems: 'center', gap: SP[2], paddingTop: SP[2] }}>
         <Mark size={22} ink={C.stone2} />
