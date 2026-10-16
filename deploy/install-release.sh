@@ -65,6 +65,9 @@ if [[ "$prev" == "releases/$version" ]]; then die "Kova $version is the one runn
 rm -rf "$dest"; mv "$stage" "$dest"
 
 log "Backing up $DATA_DIR"
+# Anything a root shell or tool left in the data folder goes back to kova: the hub (and this backup, run as kova)
+# can't read a root-owned 0600 file.
+find "$DATA_DIR" -xdev ! -user kova -exec chown -h kova:kova {} + 2>/dev/null || true
 backup=""
 if [[ -f "$DATA_DIR/kova.db" ]]; then
   bdir=$(sed -n 's/^KOVA_BACKUP_DIR=//p' "$ENV_FILE" 2>/dev/null | tail -n1 || true)

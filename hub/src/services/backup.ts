@@ -1,7 +1,7 @@
 import * as sqlite from 'node:sqlite';
 import { DatabaseSync } from 'node:sqlite';
 import {
-  chmodSync, chownSync, createReadStream, createWriteStream, existsSync, lstatSync, mkdirSync, mkdtempSync,
+  chmodSync, chownSync, closeSync, constants, createReadStream, openSync, createWriteStream, existsSync, lstatSync, mkdirSync, mkdtempSync,
   readdirSync, renameSync, rmSync, statSync, writeFileSync,
 } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -100,15 +100,26 @@ async function snapshotDb(db: DatabaseSync, dest: string): Promise<void> {
   } finally { copy.close(); }
 }
 
-function walk(root: string, rel: string, out: TarSource[], filter: (name: string) => boolean = () => true): void {
+/** Whether this process can open a file for reading (a file left behind by root, say, it can't). */
+export function canRead(path: string): boolean {
+  try { closeSync(openSync(path, constants.O_RDONLY)); return true; } catch { return false; }
+}
+
+interface Walk { out: TarSource[]; skipped: string[]; readable: (path: string) => boolean }
+
+/** A file or folder this process can't read is left out and named in `skipped`, rather than failing the backup. */
+function walk(root: string, rel: string, w: Walk, filter: (name: string) => boolean = () => true): void {
   const abs = join(root, rel);
   let st;
   try { st = lstatSync(abs); } catch { return; }
   if (st.isDirectory()) {
-    out.push({ name: rel, type: 'dir', mode: 0o700, mtimeMs: st.mtimeMs });
-    for (const n of readdirSync(abs).sort()) walk(root, `${rel}/${n}`, out, filter);
+    let names: string[];
+    try { names = readdirSync(abs).sort(); } catch { w.skipped.push(rel); return; }
+    w.out.push({ name: rel, type: 'dir', mode: 0o700, mtimeMs: st.mtimeMs });
+    for (const n of names) walk(root, `${rel}/${n}`, w, filter);
   } else if (st.isFile() && filter(rel)) {
-    out.push({ name: rel, type: 'file', mode: 0o600, mtimeMs: st.mtimeMs, path: abs, size: st.size });
+    if (!w.readable(abs)) { w.skipped.push(rel); return; }
+    w.out.push({ name: rel, type: 'file', mode: 0o600, mtimeMs: st.mtimeMs, path: abs, size: st.size });
   }
   // Symlinks, sockets and the like are left out on purpose.
 }
@@ -124,10 +135,12 @@ export interface CreateBackupOptions {
   timezone?: string;
   version?: string;
   reason?: string;
+  /** Whether a file can be read; for tests (root reads everything). */
+  readable?: (path: string) => boolean;
 }
 
 /** Make one backup and return it. Doesn't prune. */
-export async function createBackup(o: CreateBackupOptions): Promise<BackupInfo & { path: string }> {
+export async function createBackup(o: CreateBackupOptions): Promise<BackupInfo & { path: string; skipped: string[] }> {
   const dir = o.dir ?? join(o.dataDir, 'backups');
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   chmodSync(dir, 0o700);
@@ -141,27 +154,28 @@ export async function createBackup(o: CreateBackupOptions): Promise<BackupInfo &
     await snapshotDb(o.db, dbCopy);
 
     const entries: TarSource[] = [];
+    const w: Walk = { out: entries, skipped: [], readable: o.readable ?? canRead };
     const included: string[] = [DB];
     const dbSt = statSync(dbCopy);
     entries.push({ name: DB, type: 'file', mode: 0o600, mtimeMs: dbSt.mtimeMs, path: dbCopy, size: dbSt.size });
     for (const f of DATA_FILES) {
       const before = entries.length;
-      walk(o.dataDir, f, entries);
+      walk(o.dataDir, f, w);
       if (entries.length > before) included.push(f);
     }
     for (const d of [...PAIRING_DIRS, ...STATE_DIRS]) {
       const before = entries.length;
-      walk(o.dataDir, d, entries);
+      walk(o.dataDir, d, w);
       if (entries.length > before) included.push(d);
     }
     let before = entries.length;
-    walk(o.dataDir, AIRCAST_DIR, entries, rel => rel.endsWith('.xml'));
+    walk(o.dataDir, AIRCAST_DIR, w, rel => rel.endsWith('.xml'));
     if (entries.length > before) included.push(AIRCAST_DIR);
     before = entries.length;
-    walk(o.dataDir, UPDATE_DIR, entries, rel => UPDATE_KEPT.some(f => rel === `${UPDATE_DIR}/${f}`));
+    walk(o.dataDir, UPDATE_DIR, w, rel => UPDATE_KEPT.some(f => rel === `${UPDATE_DIR}/${f}`));
     if (entries.length > before) included.push(UPDATE_DIR);
 
-    const manifest = Buffer.from(JSON.stringify({ format: FORMAT, app: 'kova', version: o.version ?? null, createdAt: new Date(now).toISOString(), reason: o.reason ?? null, contents: included }, null, 2) + '\n');
+    const manifest = Buffer.from(JSON.stringify({ format: FORMAT, app: 'kova', version: o.version ?? null, createdAt: new Date(now).toISOString(), reason: o.reason ?? null, contents: included, ...(w.skipped.length ? { skipped: w.skipped } : {}) }, null, 2) + '\n');
     entries.unshift({ name: MANIFEST, type: 'file', mode: 0o600, mtimeMs: now, data: manifest });
 
     await pipeline(Readable.from(tarStream(entries)), createGzip({ level: 6 }), createWriteStream(partial, { mode: 0o600 }));
@@ -169,7 +183,7 @@ export async function createBackup(o: CreateBackupOptions): Promise<BackupInfo &
     const final = join(dir, name);
     renameSync(partial, final);
     const st = statSync(final);
-    return { name, size: st.size, ts: Math.floor(st.mtimeMs), path: final };
+    return { name, size: st.size, ts: Math.floor(st.mtimeMs), path: final, skipped: w.skipped };
   } finally {
     rmSync(stage, { recursive: true, force: true });
     rmSync(partial, { force: true });
@@ -210,6 +224,14 @@ export interface BackupsOptions {
   onChange?: () => void;
   /** How often to check whether the nightly backup is due. */
   checkMs?: number;
+  /** Whether a file can be read; for tests. */
+  readable?: (path: string) => boolean;
+}
+
+/** "tls-keys.json", "a, b and c", "a, b and 3 more". */
+function listWords(items: string[]): string {
+  const shown = items.length > 3 ? [...items.slice(0, 2), `${items.length - 2} more`] : items;
+  return shown.length > 1 ? `${shown.slice(0, -1).join(', ')} and ${shown[shown.length - 1]}` : shown[0];
 }
 
 /** The nightly schedule, retention and status for the Integrations screen. */
@@ -219,6 +241,8 @@ export class Backups {
   private timer: NodeJS.Timeout | null = null;
   private running: Promise<BackupInfo> | null = null;
   private lastError: { ts: number; error: string } | null = null;
+  /** What the last backup couldn't read (and so left out). */
+  private lastSkipped: string[] = [];
   nextAt: number | null = null;
 
   constructor(private o: BackupsOptions) {
@@ -264,13 +288,14 @@ export class Backups {
       const started = this.now();
       try {
         this.o.beforeBackup?.();
-        const b = await createBackup({ db: this.o.db, dataDir: this.o.dataDir, dir: this.dir, now: started, timezone: this.o.timezone(), version: this.o.version, reason });
+        const b = await createBackup({ db: this.o.db, dataDir: this.o.dataDir, dir: this.dir, now: started, timezone: this.o.timezone(), version: this.o.version, reason, readable: this.o.readable });
         const pruned = pruneBackups(this.dir, this.keep);
         this.lastError = null;
+        this.lastSkipped = b.skipped;
         this.o.log?.({
           kind: 'system', device: null, feed: 'system',
-          what: `${reason === 'nightly' ? 'Nightly backup' : 'Backup'} finished · ${formatSize(b.size)}`,
-          data: { backup: b.name, size: b.size, pruned }, cause: { kind: 'system', label: 'Kova system' },
+          what: `${reason === 'nightly' ? 'Nightly backup' : 'Backup'} finished · ${formatSize(b.size)}${b.skipped.length ? ` · couldn’t read ${listWords(b.skipped)}` : ''}`,
+          data: { backup: b.name, size: b.size, pruned, ...(b.skipped.length ? { skipped: b.skipped } : {}) }, cause: { kind: 'system', label: 'Kova system' },
         });
         return { name: b.name, size: b.size, ts: b.ts };
       } catch (err) {
@@ -306,7 +331,9 @@ export class Backups {
     const sched = this.nextAt === null ? 'nightly backups off' : `next ${when(this.nextAt)}`;
     if (!last) return { ok: true, note: `No backup yet · ${sched}` };
     const stale = this.nextAt !== null && this.now() - last.ts > 36 * 3600_000;
-    return { ok: !stale, note: `Last backup ${when(last.ts)} · ${formatSize(last.size)} · keeping ${this.keep} · ${sched}` };
+    // Something the hub can't read (a file root left behind, say) is missing from the backup: say so, so it gets fixed.
+    const missing = this.lastSkipped.length ? ` · couldn’t read ${listWords(this.lastSkipped)}, so it’s not in the backup` : '';
+    return { ok: !stale && !missing, note: `Last backup ${when(last.ts)} · ${formatSize(last.size)}${missing} · keeping ${this.keep} · ${sched}` };
   }
 }
 

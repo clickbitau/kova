@@ -30,6 +30,7 @@ try {
   const b = await createBackup({ db, dataDir, dir, timezone, version: KOVA_VERSION, reason: 'cli' });
   const pruned = pruneBackups(dirname(b.path), Number(process.env.KOVA_BACKUP_KEEP ?? 14) || 14);
   console.log(`${b.path} (${formatSize(b.size)})${pruned.length ? ` · removed ${pruned.length} old backup(s)` : ''}`);
+  if (b.skipped.length) console.error(`Couldn't read, so left out: ${b.skipped.join(', ')} (owned by another user? chown them to the hub's user).`);
 } catch (err) {
   console.error(`Backup failed: ${err instanceof Error ? err.message : String(err)}`);
   process.exitCode = 1;

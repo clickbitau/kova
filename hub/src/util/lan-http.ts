@@ -2,7 +2,7 @@ import http from 'node:http';
 import https from 'node:https';
 import type { PeerCertificate, TLSSocket } from 'node:tls';
 import { X509Certificate, createHash } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, chownSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
 /** How to reach an app on the home network (Warden, Helix). */
@@ -60,6 +60,8 @@ function learn(fingerprint: string, key: string): void {
     mkdirSync(dirname(keyFile()), { recursive: true });
     writeFileSync(keyFile(), JSON.stringify(k, null, 2) + '\n', { mode: 0o600 });
     chmodSync(keyFile(), 0o600);
+    // Written by a tool run as root: give it to whoever owns the data folder, or the hub can't read it.
+    if (process.getuid?.() === 0) { const { uid, gid } = statSync(dirname(keyFile())); if (uid !== 0) chownSync(keyFile(), uid, gid); }
   } catch { /* read-only data folder: keep it in memory */ }
 }
 /** For tests: forget what was learned (and read the file again next time). */

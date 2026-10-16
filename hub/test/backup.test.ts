@@ -115,6 +115,24 @@ test('backup: one tar.gz with a consistent database, the config and pairing fold
   rmSync(out, { recursive: true, force: true });
 });
 
+test('backup: a file the hub can\'t read is left out and named, not a failed backup', async () => {
+  const { dataDir, hub, clock } = await homeOnDisk();
+  // As on a box where a root shell left tls-keys.json owned by root, 0600 (root itself reads everything, so pretend).
+  const unreadable = join(dataDir, 'tls-keys.json');
+  const b = new Backups({ db: hub.store.db, dataDir, timezone: () => TZ, now: () => clock.t, log: e => hub.store.append(e), readable: p => p !== unreadable });
+  const info = await b.run('manual');
+  const entries = await entriesOf(join(b.dir, info.name));
+  assert.ok(!entries.has('tls-keys.json'));
+  assert.ok(entries.has('hub-id') && entries.has('kova.db') && entries.has('update/licence.json'), 'everything else is in it');
+  assert.deepEqual(JSON.parse(entries.get('manifest.json')!.toString()).skipped, ['tls-keys.json']);
+  assert.equal(hub.store.feed(1)[0].what, `Backup finished · ${formatSize(info.size)} · couldn’t read tls-keys.json`);
+  const st = b.status();
+  assert.equal(st.ok, false, 'shown as needing attention');
+  assert.match(st.note, /couldn’t read tls-keys\.json, so it’s not in the backup/);
+  await hub.stop();
+  rmSync(dataDir, { recursive: true, force: true });
+});
+
 test('backup: keeps only the newest N', async () => {
   const { dataDir, hub, clock } = await homeOnDisk();
   const b = new Backups({ db: hub.store.db, dataDir, keep: 3, timezone: () => TZ, now: () => clock.t });
