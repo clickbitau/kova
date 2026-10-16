@@ -2,8 +2,12 @@
   "//": "The Kova app's version (docs/VERSIONING.md). store: the X.Y.0 a store binary on this train carries (app.json version). version: what runs, store or over the air (X.Y.Z, PATCH only). train: the native runtime (app.json runtimeVersion). history: newest first; an over-the-air release adds an entry.",
   "train": "kova-mobile-0.5",
   "store": "0.5.0",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "history": [
+    {
+      "version": "0.5.1",
+      "title": "Updates managed by DockBit are described correctly in the app"
+    },
     {
       "version": "0.5.0",
       "title": "Follows your phone's light or dark setting, and a layout made for tablets"
