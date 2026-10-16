@@ -6,7 +6,7 @@ import { encodeMessage, decodeMessage, NS } from '../src/adapters/cast/channel.t
 /** A fake Cast receiver: enough of receiver, media and multizone to drive the adapter. */
 export function fakeCast(name: string, members: string[] = []) {
   const log: { ns: string; type: string; data: Record<string, unknown> }[] = [];
-  const st = { app: null as null | { appId: string; sessionId: string; transportId: string }, level: 0.3, muted: false, url: '', title: '', repeat: 'REPEAT_OFF', paused: false, time: 0, deaf: false, refuse: null as RegExp | null, buffering: false };
+  const st = { app: null as null | { appId: string; sessionId: string; transportId: string }, level: 0.3, muted: false, url: '', title: '', repeat: 'REPEAT_OFF', paused: false, time: 0, deaf: false, refuse: null as RegExp | null, buffering: false, loading: false, loadDelayMs: 0 };
   const socks: net.Socket[] = [];
   /** The speaker says its media stopped by itself (a fetch that failed: ERROR), unasked. */
   const idle = (idleReason: string) => { for (const k of socks) k.write(encodeMessage({ source: 'web-1', destination: 'sender-0', namespace: NS.media, data: { type: 'MEDIA_STATUS', requestId: 0, status: [{ mediaSessionId: 7, playerState: 'IDLE', idleReason }] } })); };
@@ -40,7 +40,9 @@ export function fakeCast(name: string, members: string[] = []) {
           st.repeat = String(m.data.repeatMode ?? 'REPEAT_OFF');
           st.paused = m.data.autoplay === false;
           st.time = Number(m.data.currentTime ?? 0);
-          reply({ source: 'web-1', namespace: NS.media, data: { type: 'MEDIA_STATUS', requestId: rid, status: [{ mediaSessionId: 7, playerState: st.paused ? 'PAUSED' : 'PLAYING' }] } });
+          // `loading`: a speaker that takes what it's given but never gets it going (it can't fetch the URL).
+          const answer = () => reply({ source: 'web-1', namespace: NS.media, data: { type: 'MEDIA_STATUS', requestId: rid, status: [{ mediaSessionId: 7, playerState: st.loading ? 'BUFFERING' : st.paused ? 'PAUSED' : 'PLAYING' }] } });
+          if (st.loadDelayMs) setTimeout(answer, st.loadDelayMs); else answer();
         } else if (m.namespace === NS.media && (type === 'GET_STATUS' || type === 'PAUSE' || type === 'PLAY' || type === 'SEEK' || type === 'QUEUE_UPDATE')) {
           if (type === 'PAUSE' || type === 'PLAY') { assert.equal(m.data.mediaSessionId, 7); st.paused = type === 'PAUSE'; }
           if (type === 'SEEK') st.time = Number(m.data.currentTime);

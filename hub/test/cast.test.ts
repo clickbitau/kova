@@ -420,3 +420,58 @@ test('Cast: a group plus a speaker outside it, at once: the Cast group plays as 
     for (const f of [a, b, c, g]) f.server.close();
   }
 });
+
+test('Cast: an endless stream a speaker never got going falls back to the repeating queue, however long it took to give up', async () => {
+  const spk = fakeCast('Bedroom Speaker');
+  const reg = new Registry(new Store(':memory:'), n => (n === 'Rain' ? 'http://10.0.0.2:8140/api/sound/Rain.m4a' : undefined));
+  reg.sourceLoops = () => true;
+  reg.endlessUrl = n => `http://10.0.0.2:8140/api/sound/${n}.m4a?endless=1`;
+  const cast = new CastAdapter({ discover: false, insecure: true, pollMs: 0, batchMs: 20, timeoutMs: 400, endpoints: [{ id: 'eeee0000000000000000000000000005', name: spk.name, model: 'Nest Audio', host: '127.0.0.1', port: await listen(spk) }] });
+  await reg.addAdapter(cast);
+  const ID = 'cast_eeee0000000000000000000000000005';
+  const loads = () => spk.log.filter(l => l.type === 'LOAD' || l.type === 'QUEUE_LOAD');
+  const wait = (ms: number) => new Promise(r => setTimeout(r, ms));
+  const realNow = Date.now;
+  try {
+    // Played, then dropped minutes later (the hub restarted): it can play one, so the endless stream again.
+    await reg.command(ID, { on: true, media: 'Rain' }, { kind: 'user', label: 'Kauser' });
+    assert.match(String((loads().at(-1)!.data.media as { contentId: string }).contentId), /endless=1$/);
+    const t0 = realNow();
+    Date.now = () => t0 + 240_000;
+    spk.idle('ERROR');
+    await wait(500);
+    assert.equal(loads().at(-1)!.type, 'LOAD');
+    assert.match(String((loads().at(-1)!.data.media as { contentId: string }).contentId), /endless=1$/);
+
+    // Loaded but never playing, and given up on 4 minutes later: the repeating queue from now on.
+    Date.now = realNow;
+    spk.st.loading = true;
+    await reg.command(ID, { on: true, media: 'Rain' }, { kind: 'user', label: 'Kauser' });
+    const t1 = realNow();
+    Date.now = () => t1 + 240_000;
+    spk.idle('ERROR');
+    await wait(500);
+    assert.equal(loads().at(-1)!.type, 'QUEUE_LOAD');
+    assert.equal(loads().at(-1)!.data.repeatMode, 'REPEAT_ALL');
+  } finally {
+    Date.now = realNow;
+    await cast.stop();
+    spk.server.close();
+  }
+});
+
+test('Cast: a speaker slow to answer a load (it fetches the start first) has longer than other requests', async () => {
+  const spk = fakeCast('Bedroom Speaker');
+  const reg = new Registry(new Store(':memory:'), n => (n === 'Radio' ? 'https://stream.example/radio.mp3' : undefined));
+  const cast = new CastAdapter({ discover: false, insecure: true, pollMs: 0, batchMs: 20, timeoutMs: 300, endpoints: [{ id: 'ffff0000000000000000000000000006', name: spk.name, model: 'Nest Audio', host: '127.0.0.1', port: await listen(spk) }] });
+  await reg.addAdapter(cast);
+  try {
+    spk.st.loadDelayMs = 600; // twice the request timeout, within a load's
+    await reg.command('cast_ffff0000000000000000000000000006', { on: true, media: 'Radio' }, { kind: 'user', label: 'Kauser' });
+    assert.equal(spk.st.url, 'https://stream.example/radio.mp3');
+    assert.equal(reg.get('cast_ffff0000000000000000000000000006')!.state.media, 'Radio');
+  } finally {
+    await cast.stop();
+    spk.server.close();
+  }
+});
