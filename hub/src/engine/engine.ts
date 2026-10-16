@@ -287,9 +287,13 @@ export class Engine extends EventEmitter<{ changed: [] }> {
     const title = typeof e.data?.title === 'string' && e.data.title && /started$/.test(e.type) ? ` ${e.data.title}` : '';
     // A router power supply: "Router: Power supply 1 has no input power". Events marked quiet ride along with one
     // that's already logged (power-supply-failed with its power-supply-changed).
-    const what = /^power-supply-/.test(e.type) && typeof e.data?.title === 'string' && e.data.title ? `${e.device.name}: ${e.data.title}` : `${e.device.name} ${labels[e.type] ?? e.type}${title}`;
+    // A speaker that dropped what it was playing by itself: which sound, from where, and whether Kova tries again.
+    const failed = e.type === 'playback-failed'
+      ? `${e.device.name} couldn’t play ${String(e.data?.title ?? 'it')}${e.data?.from ? ` from ${String(e.data.from)}` : ''} (${String(e.data?.reason ?? 'error').toLowerCase()})${e.data?.retrying ? ', trying again' : ', gave up'}`
+      : null;
+    const what = failed ?? (/^power-supply-/.test(e.type) && typeof e.data?.title === 'string' && e.data.title ? `${e.device.name}: ${e.data.title}` : `${e.device.name} ${labels[e.type] ?? e.type}${title}`);
     const entry = e.data?.quiet === true ? null : this.store.append({
-      kind: 'device_event', device: e.device.id, feed: 'people', what,
+      kind: 'device_event', device: e.device.id, feed: failed ? 'device' : 'people', what,
       data: { type: e.type, ...e.data }, cause: { kind: 'device', label: e.device.integration },
     });
     // A camera's person, motion or ring is something happening in its room.

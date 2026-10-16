@@ -88,6 +88,8 @@ class Receiver {
   paused = false;
   /** Called when the song changes or the queue ends. */
   onTrack?: () => void;
+  /** Called when the speaker drops what it was given by itself (it couldn't fetch or play it): for Activity. */
+  onProblem?: (p: { title: string; reason: string; from: string; endless: boolean; retrying: boolean }) => void;
   /** The stream or recording it plays (play()), to start it again after an announcement; `endless`: the hub's endless stream of it, playing. */
   stream: Stream | null = null;
   /** This speaker couldn't play an endless stream: loops go as a repeating queue. */
@@ -304,6 +306,9 @@ class Receiver {
       // one they can't fetch): it can't play one; the repeating queue from now on.
       if (sm.endless && st.idleReason === 'ERROR' && (now - this.endlessAt < 20_000 || !this.endlessPlayed)) { this.noEndless = true; console.warn(`[cast] ${this.ep.name}: ${sm.title} as an endless stream failed without playing; repeating it instead`); }
       this.restarts = this.restarts.filter(t => now - t < 3600_000);
+      let from = '';
+      try { from = new URL(sm.endless ?? sm.url).host; } catch { /* not a URL */ }
+      this.onProblem?.({ title: sm.title, reason: String(st.idleReason), from, endless: !!sm.endless, retrying: this.restarts.length < LOOP_RESTARTS });
       console.warn(`[cast] ${this.ep.name}: ${sm.title} stopped by itself (${st.idleReason})${this.restarts.length < LOOP_RESTARTS ? ', starting it again' : ''}`);
       if (this.restarts.length < LOOP_RESTARTS) {
         this.restarts.push(now);
@@ -544,6 +549,7 @@ export class CastAdapter implements Adapter {
     existing?.ch.close();
     const r = new Receiver(ep, this.o);
     r.onTrack = () => this.reportTrack(ep.id);
+    r.onProblem = p => this.ctx?.event(this.kovaId(ep.id), 'playback-failed', p);
     this.receivers.set(ep.id, r);
     if (ep.group) { this.groups.set(ep.id, new Set()); return; }
     const tv = /tv|oled|qled|s90|bravia/i.test(`${ep.name} ${ep.model}`) && !/nest|audio|hub/i.test(ep.model);

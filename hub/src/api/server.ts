@@ -769,6 +769,7 @@ export async function buildServer(hub: Hub, opts: ServerOptions): Promise<Fastif
   const ai = new AiAssistant(hub.engine, hub.reg, hub.config, hub.store, { ...opts.ai, jev });
   ai.music = () => hub.music?.cached() ?? [];
   ai.findMusic = words => hub.music ? hub.music.find(words) : Promise.resolve(null);
+  ai.soundUrl = name => hub.reg.streamUrl(name);
   ai.clips = () => hub.clips.all();
   ai.clipName = id => hub.clips.get(id)?.name;
   ai.mediaProblem = m => hub.mediaProblem(m);

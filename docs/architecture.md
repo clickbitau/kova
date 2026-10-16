@@ -780,10 +780,17 @@ groups, alerts, Ask Kova's notes), **owner**.
 | `PATCH /api/devices/:id/settings`, favourites, rooms, groups, speaker groups, combined devices, sources, `PUT /api/security/settings`, `PUT /api/room-climate`, insights snooze, `GET /api/maps/static`, `POST /api/push/test`, Ask Kova memory, `PATCH /api/me` | home |
 | members, invites, `/api/me/claim`, people (`POST/PUT/DELETE /api/people…`), `/api/presence/setup`, `/api/app-link` (it holds the master key), `PUT /api/home`, geocoding and maps settings, Ask Kova settings, requests and learned phrases, `/api/devices/:id/event`, `/physical`, `/api/room-climate/pairing`, Jev decide/gate/presence review, updates, backups, Home Assistant import, every `/api/integrations/…` | owner |
 
-Ask Kova's AI tools: `set_devices` control (and per device); `explain_device`, `list_schedule`, `review_action`
-view; `start_overlay`, `end_overlay` modes; automations automate; `remember`, `forget`, rooms, device settings,
+Ask Kova's AI tools: `set_devices` control (and per device); `explain_device`, `automation_runs`, `diagnose_automation`,
+`list_schedule`, `review_action` view; `start_overlay`, `end_overlay` modes; automations automate; `remember`, `forget`, rooms, device settings,
 combine and separate home. The built-in parser refuses "who's home" without people, room events without cameras,
 door contacts without history, starting an overlay without modes, and learning a group without home.
+
+Diagnosing: `automation_runs` gives an automation's last runs (what started it, the result, each step); its steps'
+words only when names are shared. `diagnose_automation` adds what went wrong on the devices it changes and, for each
+sound it plays, the address speakers fetch it from. A speaker that drops what it plays by itself (Cast: IDLE with
+ERROR) logs a `playback-failed` device event ("Bedroom Speaker couldn't play Thunderstorm from 10.0.19.6:8140 (error),
+gave up"), in the activity feed under devices; `explain_device` returns the last one, and the device's recent changes
+only when activity history is shared.
 
 Tests: `hub/test/accounts.test.ts` (invites, rate limits, migration, the matrix for each role on the routes that
 matter, every route on the allow-list, scoped snapshots, guest expiry, undo, identity in Activity, managing

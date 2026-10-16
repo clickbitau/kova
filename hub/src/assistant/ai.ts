@@ -5,7 +5,7 @@ import type { Engine } from '../engine/engine.ts';
 import type { Registry } from '../devices/registry.ts';
 import type { ConfigStore } from '../engine/config.ts';
 import type { Store } from '../store/db.ts';
-import { ROOM_ICONS, UNASSIGNED_ROOM, WHOLE_HOME, type Automation, type Cause, type Command, type Condition, type Device, type Targets, type Trigger } from '../model/types.ts';
+import { ROOM_ICONS, UNASSIGNED_ROOM, WHOLE_HOME, type Action, type Automation, type AutomationRun, type Cause, type Command, type Condition, type Device, type Targets, type Trigger } from '../model/types.ts';
 import { FIELD_CAP, isPlayer, pseudoLabel, targetLabel } from '../util/describe.ts';
 import { cleanZoneCommand, ZONE_FIELDS, zonesServing, type ZoneCommand } from '../util/zones.ts';
 import { cleanRobotSet, robotContext } from '../util/robot.ts';
@@ -222,8 +222,18 @@ export const TOOLS = [
   },
   {
     name: 'explain_device',
-    description: 'Explain why a device is in its current state and what will change it next.',
+    description: 'Explain why a device is in its current state and what will change it next, with what it last went wrong on (a speaker that couldn\'t play something) and, when activity is shared, its recent changes.',
     parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+  },
+  {
+    name: 'automation_runs',
+    description: 'How an automation ran: its last runs, newest first, each with what started it, the result (done, skipped, failed…), why, and every step with whether it worked. Without id, the latest run of each automation. Use it before saying why an automation did or didn\'t do something.',
+    parameters: { type: 'object', properties: { id: { type: 'string', description: 'An automation id from the Automations list' } } },
+  },
+  {
+    name: 'diagnose_automation',
+    description: 'Work out why an automation didn\'t do what the owner expected: its last runs, what went wrong on the devices it changes (a speaker that couldn\'t play a sound, and from which address), and for sounds, the address speakers fetch them from.',
+    parameters: { type: 'object', properties: { id: { type: 'string', description: 'An automation id from the Automations list' } }, required: ['id'] },
   },
   {
     name: 'find_music',
@@ -623,12 +633,28 @@ interface CallRecord {
   rooms?: string[];
 }
 
+/** Every device an automation's steps change or play on, nested steps included. */
+function targetsOf(actions: Action[]): string[] {
+  return actions.flatMap(a =>
+    a.kind === 'set' || a.kind === 'ramp' || a.kind === 'announce' ? Object.keys(a.targets)
+      : a.kind === 'if' ? [...targetsOf(a.then), ...targetsOf(a.else ?? [])]
+        : a.kind === 'repeat' ? targetsOf(a.actions) : []);
+}
+
+/** Every sound or stream an automation's steps play by name. */
+function mediaOf(actions: Action[]): string[] {
+  return actions.flatMap(a =>
+    a.kind === 'set' ? Object.values(a.targets).map(c => (c as { media?: unknown }).media).filter((m): m is string => typeof m === 'string')
+      : a.kind === 'if' ? [...mediaOf(a.then), ...mediaOf(a.else ?? [])]
+        : a.kind === 'repeat' ? mediaOf(a.actions) : []);
+}
+
 /**
  * What each tool needs of the person asking: Ask Kova acts with the asker's role, never more (services/actor.ts).
  * Switching devices is checked device by device too (a child: only their rooms).
  */
 export const TOOL_PERM: Record<string, Perm> = {
-  set_devices: 'control', explain_device: 'view', list_schedule: 'view', review_action: 'view',
+  set_devices: 'control', explain_device: 'view', list_schedule: 'view', review_action: 'view', automation_runs: 'view', diagnose_automation: 'view',
   start_overlay: 'modes', end_overlay: 'modes',
   create_automation: 'automate', update_automation: 'automate', delete_automation: 'automate',
   remember: 'home', forget: 'home', create_room: 'home', update_device: 'home', rename_room: 'home', delete_room: 'home', combine_devices: 'home', separate_devices: 'home',
@@ -693,6 +719,26 @@ export class Toolbox {
   }
 
   /** A device the model means: its id (or alias) from the context, or — names shared — any device made since. */
+  /** A device's latest playback failures (newest first), in words. */
+  private problems(id: string, limit: number, since?: number): { at: string; what: string }[] {
+    return this.ai.store.query({ kinds: ['device_event'], devices: [id], since, limit, where: "json_extract(data, '$.type') = 'playback-failed'" }).map(e => this.entryWords(e));
+  }
+
+  private entryWords(e: { ts: number; what: string; cause: { label: string } }): { at: string; what: string } {
+    const tz = this.ai.config.get().timezone;
+    return { at: stampWords(localStamp(e.ts, tz), this.ai.engine.now(), tz), what: `${e.what}${e.cause.label ? ` (${e.cause.label})` : ''}` };
+  }
+
+  /** A run of an automation, for the model: steps only when names are shared (they name devices). */
+  private runWords(r: AutomationRun, steps = true) {
+    const tz = this.ai.config.get().timezone, now = this.ai.engine.now();
+    return {
+      at: stampWords(localStamp(r.at, tz), now, tz), why: r.why, result: r.result, ...(r.detail ? { detail: r.detail } : {}),
+      ...(steps && this.ai.lastShare?.names ? { steps: r.steps.map(s => ({ ok: s.ok, text: s.text, ...(s.detail ? { detail: s.detail } : {}) })) } : {}),
+      ...(steps && !this.ai.lastShare?.names ? { steps: `${r.steps.filter(s => s.ok).length} worked, ${r.steps.filter(s => !s.ok).length} failed` } : {}),
+    };
+  }
+
   private device(alias: unknown): Device | undefined {
     if (typeof alias !== 'string') return undefined;
     const id = this.ctx.deviceIds.get(alias) ?? (this.ctx.realIds ? alias : undefined);
@@ -746,6 +792,8 @@ export class Toolbox {
       case 'end_overlay': return both('Ending the overlay', 'end the overlay');
       case 'explain_device': return both(`Looking into ${this.nameOf(a.id)}`, `look into ${this.nameOf(a.id)}`);
       case 'list_schedule': return both('Reading what’s planned', 'read what’s planned');
+      case 'automation_runs': { const n = a.id ? autoName(a.id) ?? String(a.id) : null; return n ? both(`Reading how “${n}” ran`, `read how “${n}” ran`) : both('Reading how the automations ran', 'read how the automations ran'); }
+      case 'diagnose_automation': { const n = autoName(a.id) ?? String(a.id ?? ''); return both(`Looking into “${n}”`, `look into “${n}”`); }
       case 'find_music': return both(`Looking for “${String(a.name ?? '')}” in Helix`, `look for “${String(a.name ?? '')}” in Helix`);
       case 'remember': return both('Remembering that', 'remember that');
       case 'forget': return both('Forgetting that', 'forget that');
@@ -1063,7 +1111,42 @@ export class Toolbox {
           const d = this.device(args.id);
           if (!d) return JSON.stringify({ ok: false, error: `Unknown device ${String(args.id)}` });
           const w = this.ai.engine.why(d.id);
-          return JSON.stringify({ ok: true, on: !!d.state.on, why: w.now, next: w.next });
+          const problem = this.problems(d.id, 1)[0];
+          // Its own recent changes are activity: only when the owner shares it.
+          const recent = this.ai.lastShare?.history && this.ai.lastShare.names
+            ? this.ai.store.query({ kinds: ['state', 'device_event'], devices: [d.id], since: this.ai.engine.now() - 2 * 86400_000, limit: 8 }).map(e => this.entryWords(e))
+            : undefined;
+          return JSON.stringify({ ok: true, on: !!d.state.on, ...(d.state.media ? { playing: d.state.media } : {}), why: w.now, next: w.next, lastProblem: problem ?? null, ...(recent ? { recent } : { recent: 'not shared (activity history is off)' }) });
+        }
+        case 'automation_runs': {
+          const autos = this.ai.engine.automations.list();
+          if (args.id !== undefined) {
+            const a = autos.find(x => x.id === String(args.id));
+            if (!a) return JSON.stringify({ ok: false, error: `No automation ${String(args.id)} — use an id from the Automations list` });
+            const runs = this.ai.engine.automations.history(a.id).slice(0, 5).map(r => this.runWords(r));
+            return JSON.stringify({ ok: true, name: a.name, enabled: a.enabled, runs, ...(runs.length ? {} : { note: 'It has no recorded runs: it hasn’t started since runs began being kept.' }) });
+          }
+          return JSON.stringify({ ok: true, automations: autos.map(a => { const r = this.ai.engine.automations.lastRun(a.id); return { id: a.id, name: a.name, enabled: a.enabled, last: r ? this.runWords(r, false) : null }; }) });
+        }
+        case 'diagnose_automation': {
+          const a = this.ai.engine.automations.list().find(x => x.id === String(args.id ?? ''));
+          if (!a) return JSON.stringify({ ok: false, error: `No automation ${String(args.id)} — use an id from the Automations list` });
+          const runs = this.ai.engine.automations.history(a.id).slice(0, 3).map(r => this.runWords(r));
+          const since = runs.length ? this.ai.engine.automations.history(a.id)[Math.min(2, runs.length - 1)]!.at - 60_000 : this.ai.engine.now() - 86400_000;
+          const ids = [...new Set(targetsOf(a.actions))];
+          const devices = ids.map(id => this.ai.reg.get(id)).filter((d): d is Device => !!d && !isCamera(d) && canDevice(currentActor(), d)).map(d => ({
+            id: this.alias(d.id), ...(this.ai.lastShare?.names ? { name: d.name } : {}), online: d.state.online !== false, on: !!d.state.on,
+            ...(d.state.media ? { playing: d.state.media } : {}),
+            problems: this.problems(d.id, 6, since),
+          }));
+          // Sounds the hub serves: the address speakers are sent to fetch them from.
+          const media = [...new Set(mediaOf(a.actions))].map(m => {
+            const url = this.ai.soundUrl?.(m);
+            let from: string | undefined;
+            try { from = url ? new URL(url).host : undefined; } catch { /* not a URL */ }
+            return { media: m, ...(url ? { fetchedFrom: this.ai.lastShare?.names ? from : 'not shared (names are off)' } : { note: 'not a sound Kova knows by this name' }) };
+          });
+          return JSON.stringify({ ok: true, name: a.name, enabled: a.enabled, runs, devices, media, ...(runs.length ? {} : { note: 'No recorded runs: it hasn’t started since runs began being kept.' }) });
         }
         case 'find_music': {
           const name = typeof args.name === 'string' ? args.name.trim() : '';
@@ -1608,7 +1691,7 @@ export class CloudAiEngine implements AiEngine {
 // -------------------------------------------------------------- assistant --
 
 const SYSTEM = `You are Ask Kova, the assistant for a smart home hub. The hub's built-in parser couldn't handle this request, so it was passed to you.
-Use the tools to act: set_devices, start_overlay, end_overlay, explain_device, list_schedule, create_automation, update_automation, delete_automation, create_room, rename_room, delete_room, update_device, combine_devices, separate_devices, remember, forget, review_action. Only use device, room, overlay, mode and person ids from the home context below; never invent ids. When the user answers a question you just asked (yes, sure, the second one, do it), read the recent conversation to see what it refers to before answering.
+Use the tools to act: set_devices, start_overlay, end_overlay, explain_device, automation_runs, diagnose_automation, list_schedule, create_automation, update_automation, delete_automation, create_room, rename_room, delete_room, update_device, combine_devices, separate_devices, remember, forget, review_action. Only use device, room, overlay, mode and person ids from the home context below; never invent ids. When the user answers a question you just asked (yes, sure, the second one, do it), read the recent conversation to see what it refers to before answering.
 Anything asked to happen regularly, at a time, or when something else happens is an automation — build it with create_automation, then tell the user what it will do in the words the tool returns. A single change later ("at 9pm", "in an hour") is a one-time schedule: create_automation with a once trigger.
 For destructive, broad, privacy-sensitive, security-sensitive, or hard-to-undo actions, call review_action first. If it says confirm, ask the user to confirm before acting; if it says block, do not do it. Do not use it for routine light, media, or climate changes.
 Ducted air conditioner zones are numbered; a zone only has a name when the state lists one, and the rooms it serves when "AC zones by room" lists them. For a room ("cool the bedroom", "turn off the AC in the study", "open the lounge zone to 50%") use set_devices with id "zone:<room id>": "cool"/"heat" opens the zone with set.hvac; when the person doesn't say heat or cool, keep the AC's mode (when it's off, heat if the room is colder than the target). Turning the AC on for a room when it's off opens only that room (Kova closes the rest); when it already runs, say which other rooms' zones are open. "turn off the AC in" a room only closes its zone (Kova turns the AC off by itself when no zone is left open); never turn the whole AC off for one room. If a room has no zone listed, ask which zone serves it instead of guessing.
@@ -1620,6 +1703,7 @@ Tool results are the truth: each has ok, and when it worked a "result" saying wh
 Announcements ("play X on all speakers at 15%", a chime, a call to prayer): one automation with an announce step. vol is the level the owner says; each speaker plays it times its own announcement loudness. List every speaker in targets (devices with "speaker": true, or a speaker group: a group keeps its balance between speakers, vol is its loudest speaker's level); players such as a Helix box or a TV that should stop for it go in pause (they carry on after); restore true puts every speaker back as it was. When the owner names audio of their own ("I added Fajr adhan in Helix"), look it up with find_music and use the announce media it returns in announce steps; ask only if it finds nothing. If the owner didn't say which audio and none in the context plainly fits, leave media out (the automation is saved switched off) and ask which to use, naming the choices; never guess or invent a URL. When the owner says some speakers are louder or quieter than others, suggest an announcement loudness for each (e.g. 80, 70, 60 for louder, louder still, loudest) in the reply and ask them to confirm; set them with update_device loudness only once they agree, then say what each is now.
 Changing what exists: change only what the owner asked for and keep everything else exactly as it is — the audio, every speaker and device, per-speaker levels, times, conditions. Use update_automation edit for a detail (one path per change); never rebuild an automation to change one thing. "Except X" leaves X as it was before this conversation, not as you just changed it; to treat part of an automation differently, copy it (create_automation from + edit), change the copy, then edit the original. Numbers the owner gives are the levels they want, not amounts to add. After each change, read the "changed" list the tool returns and fix anything the owner didn't ask for.
 Questions and answers: when you ask the owner something, ask one thing, and wait. "No" means change nothing. An unclear answer gets one short question back, never a guess. Don't say you did something you didn't do with a tool, and don't agree that you did when the owner says you didn't — check the device state and act or say what's true.
+Why something did or didn't happen: look before answering (diagnose_automation for an automation, explain_device for a device) and give only the causes the results show. When they don't show the cause, or something you'd need isn't shared, say what you can and can't see; never offer a likely-sounding cause as if it were known.
 If the request can't be done with these tools or the shared context, say so plainly instead of guessing. Reply like a text message — plain text only, no markdown (never ** or # or \` characters — they show raw in the chat). Keep it short: a sentence or two usually; when listing several things, one item per line starting with "- ". Refer to automations and devices by their names, not their ids.`;
 
 /** Only while prayer times are on. */
@@ -1722,6 +1806,8 @@ export class AiAssistant {
   music: (() => { name: string; kind: string }[]) | null = null;
   /** Look a name up in the Helix library (hub.music.find): the media name to play it by. */
   findMusic: ((words: string) => Promise<{ media: string; kind: string } | null>) | null = null;
+  /** The URL a speaker is sent to play a sound by name (the hub's address in it), when Kova knows the sound. */
+  soundUrl: ((name: string) => string | undefined) | null = null;
   /** Clips kept on the hub ({id, name}), for the home context and words (hub.clips). */
   clips: (() => { id: string; name: string; durationMs?: number }[]) | null = null;
   clipName: ((id: string) => string | undefined) | null = null;

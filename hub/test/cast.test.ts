@@ -432,6 +432,8 @@ test('Cast: an endless stream a speaker never got going falls back to the repeat
   const loads = () => spk.log.filter(l => l.type === 'LOAD' || l.type === 'QUEUE_LOAD');
   const wait = (ms: number) => new Promise(r => setTimeout(r, ms));
   const realNow = Date.now;
+  const problems: unknown[] = [];
+  reg.on('event', e => { if (e.type === 'playback-failed') problems.push(e.data); });
   try {
     // Played, then dropped minutes later (the hub restarted): it can play one, so the endless stream again.
     await reg.command(ID, { on: true, media: 'Rain' }, { kind: 'user', label: 'Kauser' });
@@ -453,6 +455,8 @@ test('Cast: an endless stream a speaker never got going falls back to the repeat
     await wait(500);
     assert.equal(loads().at(-1)!.type, 'QUEUE_LOAD');
     assert.equal(loads().at(-1)!.data.repeatMode, 'REPEAT_ALL');
+    // Each drop is told to the hub, with where it fetched from, for Activity and Ask Kova.
+    assert.deepEqual(problems.at(-1), { title: 'Rain', reason: 'ERROR', from: '10.0.0.2:8140', endless: true, retrying: true });
   } finally {
     Date.now = realNow;
     await cast.stop();
