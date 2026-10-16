@@ -46,6 +46,7 @@ Or write `data/integrations.json` by hand: see [docs/architecture.md](docs/archi
 | `KOVA_HOMEKIT` | off | `1` to publish an Apple Home (HomeKit) bridge; setup code is in the log and at `/api/integrations/homekit` |
 | `KOVA_HOMEKIT_PORT` | `51826` | TCP port for the HomeKit bridge |
 | `KOVA_HOST` | `0.0.0.0` | Address to listen on |
+| `KOVA_LAN_IP` | | The hub's IP address on the home network, for the links speakers and Helix fetch from. Normally worked out from the routing table; set it when that guesses wrong. DockBit sets `DOCKBIT_LAN_IP`, which is used when this isn't |
 | `KOVA_BACKUP_TIME` | `03:10` | Nightly backup, in the home's timezone; `off` to disable |
 | `KOVA_BACKUP_KEEP` | `14` | Backups to keep |
 | `KOVA_BACKUP_DIR` | `<KOVA_DATA>/backups` | Where backups go |

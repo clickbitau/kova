@@ -148,18 +148,18 @@ export class Hub extends EventEmitter<{ changed: []; floorplan: [] }> {
     migratePrayer(this.config);
     useHomeStyle(this.config.get());
     this.config.on('changed', () => useHomeStyle(this.config.get()));
-    this.reg = new Registry(this.store, name => {
+    this.reg = new Registry(this.store, (name, host) => {
       const s = this.config.get().sources.find(x => x.name === name);
       // A sound that repeats (or a Helix song): from the hub, which serves it as a seamless loop (api/sound).
       // A Helix song plays lossless (its loop is FLAC, from the original); other sounds as AAC.
-      if (s && this.viaHub(s)) { const base = this.lanBase(); return base ? `${base}/api/sound/${encodeURIComponent(s.name)}.${s.helix ? 'flac' : 'm4a'}` : s.url; }
+      if (s && this.viaHub(s)) { const base = this.lanBase(host); return base ? `${base}/api/sound/${encodeURIComponent(s.name)}.${s.helix ? 'flac' : 'm4a'}` : s.url; }
       return s?.url;
     }, () => this.config.get().devices ?? {});
     this.reg.roomName = id => this.config.get().rooms.find(r => r.id === id)?.name ?? id;
     this.reg.sourceLoops = name => { const s = this.config.get().sources.find(x => x.name === name); return !!(s?.loop || s?.helix); };
-    this.reg.endlessUrl = name => {
+    this.reg.endlessUrl = (name, host) => {
       const s = this.config.get().sources.find(x => x.name === name);
-      const url = s && this.viaHub(s) && this.loops?.available() ? this.reg.streamUrl(name) : undefined;
+      const url = s && this.viaHub(s) && this.loops?.available() ? this.reg.streamUrl(name, host) : undefined;
       return url?.includes('/api/sound/') ? `${url}?endless=1` : undefined;
     };
     this.config.on('changed', () => this.reg.reapplySettings());

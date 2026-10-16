@@ -90,18 +90,18 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
   /** Whether a source loops (set by the hub from the home's sources). */
   sourceLoops: (name: string) => boolean = () => false;
   /** A looping sound as one endless stream from the hub, when it can (set by the hub). */
-  endlessUrl: (name: string) => string | undefined = () => undefined;
+  endlessUrl: (name: string, host?: string) => string | undefined = () => undefined;
 
   /** Announcements playing now, by title → URL: a speaker without its own clip support plays them as a source. */
   private clipSources = new Map<string, string>();
-  private srcUrl(name: string): string | undefined { return this.clipSources.get(name) ?? this.sourceUrl(name); }
+  private srcUrl(name: string, host?: string): string | undefined { return this.clipSources.get(name) ?? this.sourceUrl(name, host); }
   /** A stream or recording's URL by name (a source, or an announcement playing now): what adapters play as a stream. */
-  streamUrl(name: string): string | undefined { return this.srcUrl(name); }
+  streamUrl(name: string, host?: string): string | undefined { return this.srcUrl(name, host); }
 
   /** Queues Kova makes itself (the speaker groups' sync test), by media name, ahead of Helix music. */
   readonly ownQueues = new Map<string, (opts: QueueOptions) => Promise<Queue | null>>();
 
-  constructor(private store: Store, private sourceUrl: (name: string) => string | undefined = () => undefined, private settings: () => Record<string, DeviceSettings> = () => ({})) {
+  constructor(private store: Store, private sourceUrl: (name: string, host?: string) => string | undefined = () => undefined, private settings: () => Record<string, DeviceSettings> = () => ({})) {
     super();
     this.saved = store.get<Record<string, DeviceState>>('deviceState') ?? {};
     this.inputLog = store.get<Record<string, InputChange>>('inputLog') ?? {};
@@ -181,9 +181,9 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
       announce: infos => this.announce(a, infos),
       report: (id, state) => this.report(id, state),
       event: (id, type, data = {}) => this.deviceEvent(id, type, data),
-      sourceUrl: name => this.srcUrl(name),
+      sourceUrl: (name, host) => this.srcUrl(name, host),
       sourceLoops: name => this.sourceLoops(name),
-      endlessUrl: name => this.endlessUrl(name),
+      endlessUrl: (name, host) => this.endlessUrl(name, host),
       queueFor: (media, opts) => this.ownQueues.get(media)?.(opts ?? {}) ?? (this.queues ? this.queues(media, opts ?? {}) : Promise.resolve(null)),
       derive: (id, state) => { const d = this.devices.get(id); if (!d) return; const patch = this.diff(d, state); if (!Object.keys(patch).length) return; d.state = { ...d.state, ...patch }; this.emit('measure'); },
       peer: id => this.adapters.get(id),

@@ -21,15 +21,18 @@ export interface AdapterContext {
   report(deviceId: string, state: DeviceState): void;
   /** Report a momentary event: "person", "ring", "motion", "button". */
   event(deviceId: string, type: string, data?: Record<string, unknown>): void;
-  /** Look up a media source's stream URL by name. */
-  sourceUrl(name: string): string | undefined;
+  /**
+   * Look up a media source's stream URL by name. `host`, the device that will fetch it: a sound the hub serves then
+   * comes from the hub's address on the network that device is reached through.
+   */
+  sourceUrl(name: string, host?: string): string | undefined;
   /** Whether a source plays again from the start when it ends (a recording set to loop). */
   sourceLoops?(name: string): boolean;
   /**
    * A looping sound as one endless stream from the hub (api/sound ?endless): the speaker never reaches an end, so
    * there's no seam to hear. Absent when the hub can't make one (no ffmpeg) or the sound isn't the hub's.
    */
-  endlessUrl?(name: string): string | undefined;
+  endlessUrl?(name: string, host?: string): string | undefined;
   /**
    * Music by name (Helix: "Shuffle all", "Loved", a playlist, "Station: …") → the tracks to queue, in the order
    * to play them (already shuffled when asked). Null when it isn't music Kova knows. Asked again within a few

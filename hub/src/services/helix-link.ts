@@ -160,17 +160,59 @@ export function kovaUrlProblem(value: string, helixUrl = ''): string | null {
 /** An IP address as it goes in a URL. */
 const urlHost = (ip: string) => isIP(bare(ip)) === 6 ? `[${bare(ip)}]` : bare(ip);
 
+/** A row of the kernel's IPv4 routing table: packets for `dest`/`mask` leave through `iface`. */
+export interface Route { iface: string; dest: number; mask: number }
+
+const ipNum = (ip: string) => v4(ip).reduce((n, x) => (n * 256 + x) >>> 0, 0);
+/** /proc/net/route's addresses are host-order hex (little-endian on the boxes Kova runs on). */
+const procNum = (hex: string) => { const n = parseInt(hex, 16) >>> 0; return (((n & 0xff) << 24) | ((n >>> 8 & 0xff) << 16) | ((n >>> 16 & 0xff) << 8) | (n >>> 24)) >>> 0; };
+
+/** The kernel's IPv4 routes (Linux; none elsewhere, or when it can't be read). */
+export function systemRoutes(read = () => readFileSync('/proc/net/route', 'utf8')): Route[] {
+  let text = '';
+  try { text = read(); } catch { return []; }
+  return text.split('\n').slice(1).map(l => l.trim().split(/\s+/)).filter(f => f.length >= 8 && (parseInt(f[3]!, 16) & 1))
+    .map(f => ({ iface: f[0]!, dest: procNum(f[1]!), mask: procNum(f[7]!) }));
+}
+
+/** The interface the kernel sends packets for `target` through (the longest matching prefix); with no target, the default route's. */
+export function routeIface(routes: Route[], target?: string): string | undefined {
+  const t = target && isIP(bare(target)) === 4 ? ipNum(target) : null;
+  let best: Route | undefined;
+  for (const r of routes) {
+    if (t === null ? r.mask !== 0 : ((t & r.mask) >>> 0) !== r.dest) continue;
+    if (!best || r.mask >>> 0 > best.mask >>> 0) best = r;
+  }
+  return best?.iface;
+}
+
 /**
- * This hub's address as Helix would reach it, as an IP literal: the interface on Helix's own /24, else the first private
- * IPv4 one, else a tailnet (100.64/10) one, else a unique-local IPv6 one; null when there is none.
+ * This hub's address as a device on the home network reaches it (Helix, a speaker), as an IP literal: the interface
+ * on the device's own /24, else the one the kernel routes to it through (with no device address, the default route's),
+ * else the first private IPv4 one, else a tailnet (100.64/10) one, else a unique-local IPv6 one; null when there is
+ * none. Routes matter in a container with several networks (DockBit: a Swarm overlay, a bridge and the home's LAN):
+ * the first private address is often an overlay one nothing at home can reach.
+ *
+ * The deployment can say instead: KOVA_LAN_IP, else DOCKBIT_LAN_IP (which DockBit sets to the app's address on the
+ * home's LAN), wins over all of that when it's a private address.
+ *
+ * `nets`, `routes` and `lanIp` are the machine's own unless given; given `nets` means none of the machine's routes or
+ * settings, so a test never mixes them in.
  */
-export function kovaAddress(helixUrl: string, port: number, nets = os.networkInterfaces()): string | null {
+export function kovaAddress(target: string, port: number, nets?: ReturnType<typeof os.networkInterfaces>, routes?: Route[], lanIp?: string): string | null {
+  if (!nets) lanIp ??= process.env.KOVA_LAN_IP?.trim() || process.env.DOCKBIT_LAN_IP?.trim();
+  if (lanIp && isIP(bare(lanIp)) === 4 && (privateV4(lanIp) || sharedV4(lanIp))) return `http://${bare(lanIp)}:${port}`;
+  routes ??= nets ? [] : systemRoutes();
+  nets ??= os.networkInterfaces();
   let host = '';
-  try { host = bare(new URL(helixUrl).hostname); } catch { /* no Helix address yet */ }
+  try { host = bare(new URL(target).hostname); } catch { /* no address yet */ }
+  const fit = (a: string) => privateV4(a) || sharedV4(a);
+  const v4of = (iface?: string) => iface ? (nets![iface] ?? []).filter(a => a && !a.internal).map(a => bare(a.address)).find(a => isIP(a) === 4 && fit(a)) : undefined;
   const addrs = Object.values(nets).flat().filter(a => a && !a.internal).map(a => bare(a!.address));
   const four = addrs.filter(a => isIP(a) === 4);
-  const same = isIP(host) === 4 ? four.find(a => a.split('.').slice(0, 3).join('.') === host.split('.').slice(0, 3).join('.') && (privateV4(a) || sharedV4(a))) : undefined;
-  const pick = same ?? four.find(privateV4) ?? four.find(sharedV4) ?? addrs.find(ulaV6);
+  const same = isIP(host) === 4 ? four.find(a => a.split('.').slice(0, 3).join('.') === host.split('.').slice(0, 3).join('.') && fit(a)) : undefined;
+  const routed = v4of(routeIface(routes, isIP(host) === 4 ? host : undefined));
+  const pick = same ?? routed ?? four.find(privateV4) ?? four.find(sharedV4) ?? addrs.find(ulaV6);
   return pick ? `http://${urlHost(pick)}:${port}` : null;
 }
 
