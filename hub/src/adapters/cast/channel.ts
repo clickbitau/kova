@@ -105,7 +105,9 @@ export class CastChannel extends EventEmitter<{ message: [CastMessage]; close: [
   request(namespace: string, destination: string, data: Record<string, unknown>): Promise<CastMessage> {
     const requestId = this.reqId++;
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { this.pending.delete(requestId); reject(new Error(`${this.o.host}: no reply to ${String(data.type)}`)); }, this.o.timeoutMs ?? 5000);
+      // Loading answers once the speaker has fetched the start of what it's given, which a slow one takes longer over.
+      const ms = (this.o.timeoutMs ?? 5000) * (data.type === 'LOAD' || data.type === 'QUEUE_LOAD' ? 3 : 1);
+      const timer = setTimeout(() => { this.pending.delete(requestId); reject(new Error(`${this.o.host}: no reply to ${String(data.type)}`)); }, ms);
       this.pending.set(requestId, { resolve, reject, timer });
       this.send(namespace, destination, { ...data, requestId });
     });

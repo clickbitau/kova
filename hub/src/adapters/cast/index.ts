@@ -93,6 +93,8 @@ class Receiver {
   /** This speaker couldn't play an endless stream: loops go as a repeating queue. */
   private noEndless = false;
   private endlessAt = 0;
+  /** The endless stream now loaded has been heard playing. */
+  private endlessPlayed = false;
   /** An announcement clip playing (playClip()): when it finishes, the speaker is idle again. */
   clip: string | null = null;
   /** An announcement played together with other speakers: the moment its start was (or would have been) heard. */
@@ -173,6 +175,7 @@ class Receiver {
         this.stream = { url, title, loop, endless };
         this.clip = null;
         this.endlessAt = Date.now();
+        this.endlessPlayed = (e.data.status as MediaStatus[] | undefined)?.[0]?.playerState === 'PLAYING';
         return;
       }
       console.warn(`[cast] ${this.ep.name}: couldn't play ${title} as an endless stream; repeating it instead`);
@@ -294,10 +297,12 @@ class Receiver {
     // without repeating): started again, at most a few times an hour. One stopped by a person (CANCELLED) or replaced
     // by another app (INTERRUPTED) is left alone.
     const sm = this.stream;
+    if (sm?.endless && st?.playerState === 'PLAYING') this.endlessPlayed = true;
     if (sm?.loop && st?.playerState === 'IDLE' && (st.idleReason === 'ERROR' || st.idleReason === 'FINISHED')) {
       const now = Date.now();
-      // An endless stream this speaker gave up on at once: it can't play one; the repeating queue from now on.
-      if (sm.endless && st.idleReason === 'ERROR' && now - this.endlessAt < 20_000) { this.noEndless = true; console.warn(`[cast] ${this.ep.name}: ${sm.title} as an endless stream failed at once; repeating it instead`); }
+      // An endless stream this speaker gave up on at once, or without ever playing it (some take minutes to give up on
+      // one they can't fetch): it can't play one; the repeating queue from now on.
+      if (sm.endless && st.idleReason === 'ERROR' && (now - this.endlessAt < 20_000 || !this.endlessPlayed)) { this.noEndless = true; console.warn(`[cast] ${this.ep.name}: ${sm.title} as an endless stream failed without playing; repeating it instead`); }
       this.restarts = this.restarts.filter(t => now - t < 3600_000);
       console.warn(`[cast] ${this.ep.name}: ${sm.title} stopped by itself (${st.idleReason})${this.restarts.length < LOOP_RESTARTS ? ', starting it again' : ''}`);
       if (this.restarts.length < LOOP_RESTARTS) {
