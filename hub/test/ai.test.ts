@@ -67,7 +67,7 @@ test('Local AI: tool call changes a device through the engine, logged, tagged an
   assert.equal(fake.received.length, 2);
   assert.equal(fake.received[0].url, '/v1/chat/completions');
   assert.equal(fake.received[0].body.model, 'llama3');
-  assert.deepEqual(fake.received[0].body.tools.map((t: any) => t.function.name), ['set_devices', 'start_overlay', 'end_overlay', 'explain_device', 'find_music', 'list_schedule', 'remember', 'forget', 'create_automation', 'update_automation', 'delete_automation', 'create_room', 'update_device', 'rename_room', 'delete_room', 'combine_devices', 'separate_devices', 'review_action']);
+  assert.deepEqual(fake.received[0].body.tools.map((t: any) => t.function.name), ['set_devices', 'start_overlay', 'end_overlay', 'explain_device', 'automation_runs', 'diagnose_automation', 'find_music', 'list_schedule', 'remember', 'forget', 'create_automation', 'update_automation', 'delete_automation', 'create_room', 'update_device', 'rename_room', 'delete_room', 'combine_devices', 'separate_devices', 'review_action']);
   const toolMsg = fake.received[1].body.messages.find((m: any) => m.role === 'tool');
   assert.equal(toolMsg.tool_call_id, 'call_1');
   assert.equal(JSON.parse(toolMsg.content).ok, true);
@@ -176,7 +176,7 @@ test('Cloud AI: Anthropic Messages tool loop against a fake endpoint', async () 
   assert.equal(first.headers['x-api-key'], 'sk-ant-test');
   assert.equal(first.headers.authorization, undefined);
   assert.equal(first.body.model, 'claude-opus-5-5');
-  assert.deepEqual(first.body.tools.map((t: any) => t.name), ['set_devices', 'start_overlay', 'end_overlay', 'explain_device', 'find_music', 'list_schedule', 'remember', 'forget', 'create_automation', 'update_automation', 'delete_automation', 'create_room', 'update_device', 'rename_room', 'delete_room', 'combine_devices', 'separate_devices', 'review_action']);
+  assert.deepEqual(first.body.tools.map((t: any) => t.name), ['set_devices', 'start_overlay', 'end_overlay', 'explain_device', 'automation_runs', 'diagnose_automation', 'find_music', 'list_schedule', 'remember', 'forget', 'create_automation', 'update_automation', 'delete_automation', 'create_room', 'update_device', 'rename_room', 'delete_room', 'combine_devices', 'separate_devices', 'review_action']);
   assert.ok(!('tool_choice' in first.body) || first.body.tool_choice.type === 'auto');
   const sys = JSON.stringify(first.body.system);
   for (const c of CAMERAS) assert.ok(!sys.includes(c), `camera ${c} was sent`);
@@ -557,5 +557,41 @@ test('AI can combine two entries for one physical device, and undo splits them',
   await app.inject({ method: 'POST', url: `/api/undo/${r.undo}` });
   assert.equal((hub.config.get().combined ?? []).length, 0);
   assert.ok(!hub.reg.get('bedroom_tv')!.hidden);
+  await app.close(); await hub.stop(); await fake.close();
+});
+
+test('Diagnosing: the AI reads how an automation ran and what went wrong on its devices, from evidence', async () => {
+  const fake = await fakeServer([
+    openAiToolCall('diagnose_automation', { id: 'a1' }), openAiText('It ran; the lamp couldn’t play it.'),
+    openAiToolCall('automation_runs', {}), openAiText('ok'),
+    openAiToolCall('explain_device', { id: 'lamp' }), openAiText('ok'),
+  ]);
+  const { hub, app, put, ask } = await setup();
+  await put({ engine: 'local', local: { url: fake.url, model: 'm' } });
+  hub.config.update(c => {
+    c.automations = [{ id: 'a1', name: 'Bedtime', enabled: true, triggers: [{ kind: 'time', at: { kind: 'time', at: '21:35' } }], conditions: [], actions: [{ kind: 'set', targets: { lamp: { on: true } } }], mode: 'single' }];
+  });
+  await app.inject({ method: 'POST', url: '/api/automations/a1/run' });
+  hub.reg.deviceEvent('lamp', 'playback-failed', { title: 'Thunderstorm', reason: 'ERROR', from: '10.0.19.6:8140', endless: true, retrying: false });
+  const result = (n: number) => JSON.parse(fake.received[n].body.messages.at(-1).content);
+
+  await ask('why didn’t bedtime play the thunderstorm');
+  const d = result(1);
+  assert.equal(d.ok, true);
+  assert.equal(d.runs.length, 1);
+  assert.equal(d.runs[0].result, 'done');
+  assert.equal(d.runs[0].why, 'Run by hand');
+  assert.match(d.devices[0].problems[0].what, /couldn’t play Thunderstorm from 10\.0\.19\.6:8140 \(error\), gave up/);
+  assert.match(fake.received[0].body.messages[0].content, /never offer a likely-sounding cause/);
+
+  await ask('how did the automations run');
+  assert.equal(result(3).automations[0].last.result, 'done');
+
+  await ask('what went wrong with the lamp');
+  const e = result(5);
+  assert.match(e.lastProblem.what, /gave up/);
+  assert.match(String(e.recent), /not shared/, 'activity history is off by default');
+  // The failure shows in the activity feed too, as a device event.
+  assert.ok(hub.store.query({ kinds: ['device_event'], devices: ['lamp'] }).some(x => x.feed === 'device' && /couldn’t play Thunderstorm/.test(x.what)));
   await app.close(); await hub.stop(); await fake.close();
 });
