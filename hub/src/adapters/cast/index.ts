@@ -700,7 +700,11 @@ export class CastAdapter implements Adapter {
       // Not a radio source: maybe music (Helix), which plays as a queue of songs.
       const queue = url ? null : this.ctx!.queueFor(media, { shuffle: !!ps[0].cmd.shuffle, format: CAST_FORMAT });
       const start = async (r: Receiver) => {
-        if (url) { const loop = !!this.ctx!.sourceLoops?.(media); return r.play(url, media, loop, loop ? this.ctx!.endlessUrl?.(media) : undefined); }
+        if (url) {
+          // From the hub's address on the network this speaker is reached through.
+          const host = r.ep.host, loop = !!this.ctx!.sourceLoops?.(media);
+          return r.play(this.ctx!.sourceUrl(media, host) ?? url, media, loop, loop ? this.ctx!.endlessUrl?.(media, host) : undefined);
+        }
         const q = await queue;
         if (!q) throw new Error(`No stream URL set for “${media}”`);
         await r.playQueue(q);

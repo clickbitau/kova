@@ -9,7 +9,7 @@ import { testHub } from './helpers.ts';
 import { buildServer } from '../src/api/server.ts';
 import { IntegrationsManager } from '../src/integrations-store.ts';
 import { isScreen } from '../src/adapters/helix.ts';
-import { HelixLink, SOUNDBAR_INPUTS, SOUNDBAR_MODES, TV_INPUTS, helixScreens, kovaAddress, kovaUrlProblem } from '../src/services/helix-link.ts';
+import { HelixLink, SOUNDBAR_INPUTS, SOUNDBAR_MODES, TV_INPUTS, helixScreens, kovaAddress, kovaUrlProblem, routeIface, systemRoutes } from '../src/services/helix-link.ts';
 import type { Adapter, AdapterContext } from '../src/adapters/sdk.ts';
 import type { Automation, Command, Device } from '../src/model/types.ts';
 import { automationIdeas, carryOverTvOff, upgradeTvOffOnce, upgradeTvOffWithBox } from '../src/engine/automation-ideas.ts';
@@ -391,6 +391,37 @@ test('Helix link: which TV a box is on, and Kova’s address', () => {
   assert.equal(kovaAddress('http://helix.local:8090', 8140, { tailscale0: [{ family: 'IPv4', address: '100.95.1.5', internal: false }] } as any), 'http://100.95.1.5:8140');
   assert.equal(kovaAddress('http://helix.local:8090', 8140, { eth0: [{ family: 'IPv6', address: 'fd12:3456:789a::5', internal: false }] } as any), 'http://[fd12:3456:789a::5]:8140');
   assert.equal(kovaAddress('http://helix.local:8090', 8140, { eth0: [{ family: 'IPv4', address: '8.8.8.8', internal: false }] } as any), null);
+
+  // In a container on several networks (DockBit: Swarm overlay first, then a bridge, then the home's LAN as a macvlan),
+  // the address is the one on the interface the kernel routes to the device through, not the first private one.
+  const swarm = {
+    eth0: [{ family: 'IPv4', address: '10.0.19.6', internal: false }],
+    eth1: [{ family: 'IPv4', address: '172.18.0.8', internal: false }],
+    eth2: [{ family: 'IPv4', address: '10.10.10.151', internal: false }],
+  } as any;
+  const table = systemRoutes(() => [
+    'Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT',
+    'eth2\t00000000\t010A0A0A\t0003\t0\t0\t0\t00000000\t0\t0\t0',
+    'eth0\t0000000A\t00000000\t0001\t0\t0\t0\t0000FFFF\t0\t0\t0',
+    'eth1\t000012AC\t00000000\t0001\t0\t0\t0\t0000FFFF\t0\t0\t0',
+    'eth2\t000A0A0A\t00000000\t0001\t0\t0\t0\t00FFFFFF\t0\t0\t0',
+    'eth9\t00000000\t00000000\t0000\t0\t0\t0\t00000000\t0\t0\t0', // not up
+  ].join('\n'));
+  assert.deepEqual(table.map(r => r.iface), ['eth2', 'eth0', 'eth1', 'eth2']);
+  assert.equal(routeIface(table), 'eth2');                      // no device: the default route's
+  assert.equal(routeIface(table, '10.10.10.70'), 'eth2');       // the LAN's /24 beats the overlay's 10/16 and the default
+  assert.equal(routeIface(table, '10.0.4.2'), 'eth0');          // the overlay itself
+  assert.equal(routeIface(table, '10.10.30.220'), 'eth2');      // another of the home's VLANs: through the default route
+  assert.equal(kovaAddress('', 8140, swarm, table), 'http://10.10.10.151:8140');
+  assert.equal(kovaAddress('http://10.10.30.220', 8140, swarm, table), 'http://10.10.10.151:8140');
+  assert.equal(kovaAddress('http://10.10.10.70', 8140, swarm, table), 'http://10.10.10.151:8140');
+  assert.equal(kovaAddress('', 8140, swarm), 'http://10.0.19.6:8140');   // nets given, no routes: none of the machine's mixed in
+  assert.deepEqual(systemRoutes(() => { throw new Error('ENOENT'); }), []);
+  // The deployment's own word for it (KOVA_LAN_IP / DOCKBIT_LAN_IP) wins, when it's a private address.
+  assert.equal(kovaAddress('http://10.10.30.220', 8140, swarm, table, '10.10.10.151'), 'http://10.10.10.151:8140');
+  assert.equal(kovaAddress('', 8140, swarm, [], '10.10.10.151'), 'http://10.10.10.151:8140');
+  assert.equal(kovaAddress('', 8140, swarm, table, '8.8.8.8'), 'http://10.10.10.151:8140');   // not private: ignored
+  assert.equal(kovaAddress('', 8140, swarm, table, 'kova.local'), 'http://10.10.10.151:8140'); // not an address: ignored
   assert.equal(kovaUrlProblem('http://192.168.1.5:8140'), null);
   assert.equal(kovaUrlProblem('http://100.95.1.5:8140'), null);
   assert.equal(kovaUrlProblem('http://[fd12::5]:8140'), null);

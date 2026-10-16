@@ -119,6 +119,10 @@ phone app's over-the-air updates (`ota/`). It runs as uid 1000 and writes only t
   - Optional, when the box had them: `KOVA_UPDATE_URL`, `KOVA_UPDATE_CHANNEL`, `KOVA_PRODUCT`,
     `KOVA_LOCATION_PROXY_URL`, `KOVA_GOOGLE_MAPS_API_KEY`, `KOVA_BACKUP_TIME`, `KOVA_BACKUP_KEEP`, `KOVA_BACKUP_DIR`,
     `KOVA_HOMEKIT_PORT`, `KOVA_MATTER_BRIDGE_PORT`, `KOVA_SONOS_HOSTS` and `TZ`.
+- **Its address at home.** Speakers and Helix fetch sounds from a link with the hub's own IP address in it. In a
+  container on several networks (the Swarm overlay, a bridge, the LAN macvlan) the hub uses the address on the
+  interface the kernel routes to that device through, not the first private one (an overlay address nothing at home
+  can reach). `DOCKBIT_LAN_IP`, which DockBit sets to the app's LAN address, or `KOVA_LAN_IP` wins over that.
 - **Network.** The hub must be on the home's LAN, with multicast:
   - mDNS (Cast, HomeKit, `_kova._tcp`, Warden),
   - SSDP (Sonos, TVs),

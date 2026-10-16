@@ -53,7 +53,8 @@ export function mediaUsers(hub: Hub, media: string): string[] {
 export function clipView(c: ReturnType<Clips['all']>[number]) { return { ...c, url: Clips.path(c) }; }
 
 export function registerAnnounceRoutes(app: FastifyInstance, hub: Hub, port: () => number): void {
-  // The hub's address on the speaker's own network (the interface on its /24), for the URLs speakers fetch.
+  // The hub's address on the network the speaker is reached through (services/helix-link.ts kovaAddress), for the URLs
+  // speakers fetch.
   hub.lanBase = host => kovaAddress(host ? `http://${host}` : '', port());
 
   // Uploads: the raw file as the body (any audio type, or octet-stream).
