@@ -14,6 +14,15 @@ RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends ca-cert
  && mkdir -p /opt/airconnect && unzip -q -o /ac.zip "aircast-linux-${cpu}-static" -d /opt/airconnect \
  && chmod 0755 /opt/airconnect/*
 
+# Dependencies, built where compilers are: some (Bluetooth via hap-controller, usb, serialport) are native and
+# build from source when npm finds no prebuilt binary. Only node_modules goes on to the image.
+FROM node:${NODE_VERSION}-bookworm-slim AS deps
+RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends python3 make g++ >/dev/null && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY hub/package.json hub/
+RUN npm ci --omit=dev -w hub --include-workspace-root && npm cache clean --force
+
 FROM node:${NODE_VERSION}-bookworm-slim
 
 ENV NODE_ENV=production \
@@ -26,7 +35,7 @@ RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends ffmpeg 
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY hub/package.json hub/
-RUN npm ci --omit=dev -w hub --include-workspace-root && npm cache clean --force
+COPY --from=deps /app/node_modules node_modules
 COPY hub hub
 COPY web web
 COPY ota ota
