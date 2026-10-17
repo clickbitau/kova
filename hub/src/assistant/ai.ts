@@ -1717,6 +1717,15 @@ const NEGATIVE = /\b(can[’']?t|cannot|couldn[’']?t|didn[’']?t|unable|not a
 
 /** Words that answer or correct the last turn rather than ask something on their own. */
 const FOLLOW_UP = /^\s*(yes|yeah|yep|yup|no|nope|ok|okay|sure|please|do it|go ahead|that one|not that|instead|actually|sorry)\b/i;
+/** Words that point back into the conversation ("it's not", "turn that off", "same again"): never learned. */
+const REFERS_BACK = /\b(it|its|it s|that|this|those|these|them|there|same|again|instead|not|wrong|back)\b/;
+/** Words that don't change what a request means, dropped from a learned phrase's key ("can you please …"). */
+const FILLER = new Set(['please', 'pls', 'kova', 'hey', 'hi', 'can', 'could', 'would', 'will', 'you', 'u', 'the', 'a', 'an', 'just', 'now', 'ok', 'okay', 'thanks', 'thank', 'mate', 'for', 'me', 'to']);
+
+/** A learned phrase's key: its words without the filler, so "can you turn on the bedroom fan please" finds "turn on bedroom fan". */
+export function learnKey(q: string): string {
+  return norm(q).split(' ').filter(w => w && !FILLER.has(w)).join(' ');
+}
 
 /** A reply that says it changed something ("Done", "Master Bed zone set to 19°", "Turned the lamp off"). */
 const CLAIMED = /^\s*(all )?done\b|\b(set to|turned (on|off)|switched (on|off)|now (heating|cooling|on|off)|opened|closed|is now)\b/i;
@@ -2072,9 +2081,11 @@ export class AiAssistant {
     const e = engine ?? this.engineFor(s);
     const q = question.trim();
     // A phrase the AI already handled: replay it locally, no AI needed — even if no engine is set up.
-    const hit = this.learned(norm(q));
-    if (hit) {
-      const r = await this.replay(norm(q), hit);
+    // By its words without filler; a phrase learned before that was kept under its exact words.
+    const lk = learnKey(q), hitKey = this.learned(lk) && lk ? lk : this.learned(norm(q)) ? norm(q) : null;
+    const hit = hitKey ? this.learned(hitKey) : undefined;
+    if (hitKey && hit) {
+      const r = await this.replay(hitKey, hit);
       if (r) return r;
     }
     if (typeof e === 'string') { this.logRequest('unhandled', q, e, [], false); return { text: e, source: 'Built-in · nothing left your home', actions: [], understood: false, engine: 'builtin' }; }
@@ -2104,7 +2115,7 @@ export class AiAssistant {
       // "No" to a question just asked: nothing changes this turn, whatever the model makes of it.
       const lastAsked = [...history].reverse().find(t => t.role === 'assistant');
       tools.declined = DECLINED.test(q) && !!lastAsked && /\?/.test(lastAsked.text);
-      const key = norm(q);
+      const key = learnKey(q) || norm(q);
       let result: EngineResult;
       try {
         result = await e.run(system, chat, tools);
@@ -2127,7 +2138,7 @@ export class AiAssistant {
       // A clean run that changed something becomes a learned phrase: next time it replays without the AI.
       // Undoing the AI's work drops the phrase — the user said it was wrong.
       // A follow-up only means something in its conversation ("Yes", "Heating, not cooling"): never replayed later.
-      const followUp = FOLLOW_UP.test(q) || (history.length > 0 && q.split(/\s+/).filter(Boolean).length < 5);
+      const followUp = FOLLOW_UP.test(q) || REFERS_BACK.test(norm(q)) || q.split(/\s+/).filter(Boolean).length < 3 || (history.length > 0 && q.split(/\s+/).filter(Boolean).length < 5);
       const learnedSomething = tools.okAll && !checked.flagged && tools.learned.length > 0 && !followUp;
       if (learnedSomething) this.learn(key, e.label, tools.learned);
       return { text: text || (tools.undos.length ? 'Done.' : 'I don’t have an answer for that.'), source, actions: [], understood: true, engine: kind, undo: this.undoFor(tools.undos, learnedSomething ? () => this.unlearn(key) : undefined) };
