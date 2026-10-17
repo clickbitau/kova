@@ -182,6 +182,7 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
       report: (id, state) => this.report(id, state),
       event: (id, type, data = {}) => this.deviceEvent(id, type, data),
       sourceUrl: (name, host) => this.srcUrl(name, host),
+      stateOf: id => this.devices.get(id)?.state,
       sourceLoops: name => this.sourceLoops(name),
       endlessUrl: (name, host) => this.endlessUrl(name, host),
       queueFor: (media, opts) => this.ownQueues.get(media)?.(opts ?? {}) ?? (this.queues ? this.queues(media, opts ?? {}) : Promise.resolve(null)),
