@@ -405,6 +405,33 @@ function fakeSonos(swGen?: number) {
   return { server, st, now: () => st.queue[st.track - 1]?.title };
 }
 
+test('Sonos: after a restart, a speaker left paused on Kova’s music is taken back paused, so resume reaches it; one Kova turned off stays off', async () => {
+  for (const was of [{ on: true, paused: true, media: 'Station: sajda' }, { on: false, paused: false, media: null }]) {
+    const sonos = fakeSonos();
+    sonos.st.state = 'PAUSED_PLAYBACK';
+    await new Promise<void>(r => sonos.server.listen(0, '127.0.0.1', r));
+    const store = new Store(':memory:');
+    store.set('deviceState', { sonos_abc123: was });
+    const reg = new Registry(store);
+    const adapter = new SonosAdapter({ hosts: [`127.0.0.1:${(sonos.server.address() as AddressInfo).port}`], discover: false, pollMs: 0 });
+    try {
+      await reg.addAdapter(adapter);
+      await adapter['poll']();
+      const st = reg.get('sonos_abc123')!.state;
+      if (was.on) {
+        assert.deepEqual([st.on, st.paused, st.media], [true, true, 'Station: sajda']);
+        await reg.command('sonos_abc123', { paused: false }, you);
+        assert.equal(sonos.st.state, 'PLAYING');
+      } else {
+        assert.equal(st.on, false, 'paused by Kova turning it off: still off');
+      }
+    } finally {
+      await reg.stop();
+      sonos.server.close();
+    }
+  }
+});
+
 test('Sonos: Helix music plays from the speaker’s own queue, with titles; next and previous; Kova follows it', { timeout: 20_000 }, async () => {
   const h = await fakeHelix(80);
   const music = new HelixMusic(() => ({ url: h.url, token: TOKEN }), { random: seq() });

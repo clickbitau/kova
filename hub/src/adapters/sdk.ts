@@ -26,6 +26,8 @@ export interface AdapterContext {
    * comes from the hub's address on the network that device is reached through.
    */
   sourceUrl(name: string, host?: string): string | undefined;
+  /** What Kova last knew of a device (after a restart, what it was before it): to take back a speaker left paused. */
+  stateOf?(deviceId: string): DeviceState | undefined;
   /** Whether a source plays again from the start when it ends (a recording set to loop). */
   sourceLoops?(name: string): boolean;
   /**

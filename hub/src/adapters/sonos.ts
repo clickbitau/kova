@@ -348,6 +348,12 @@ export class SonosAdapter implements Adapter {
           this.soap(s.host, RC, 'GetVolume', { InstanceID: 0, Channel: 'Master' }),
         ]);
         const state = tag(ti, 'CurrentTransportState') ?? '';
+        // Kova restarted while this speaker was paused on something Kova played: it's that, paused, again, so a resume
+        // reaches it. (Kova also "turns off" a speaker by pausing it; that one was saved as off, so it stays off.)
+        if (/PAUSED/.test(state) && !s.queue && !s.media) {
+          const was = this.ctx!.stateOf?.(s.id);
+          if (was?.on && was.paused && typeof was.media === 'string' && was.media) s.media = was.media;
+        }
         // Paused counts as on (it keeps its place), as with every player that can pause.
         s.paused = /PAUSED/.test(state) && !!(s.queue || s.media) && !((s.holdUntil ?? 0) > Date.now());
         const playing = /PLAYING|TRANSITIONING/.test(state) || s.paused;
