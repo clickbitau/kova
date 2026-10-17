@@ -69,14 +69,8 @@ function byWords<T extends { title: string; album?: string; artist?: string }>(t
   return best;
 }
 
-/** Whether Helix's guess looks like the words asked for: the same start, or a word they share. */
-function lookalike(title: string | undefined, words: string): boolean {
-  const a = norm(title).replace(/[^\p{L}\p{N} ]/gu, ''), b = norm(words).replace(/[^\p{L}\p{N} ]/gu, '');
-  if (!a || !b) return false;
-  if (a.slice(0, 3) === b.slice(0, 3)) return true;
-  const mine = new Set(b.split(' ').filter(w => w.length >= 3));
-  return a.split(' ').some(w => mine.has(w));
-}
+/** Words as compared loosely: lower case, letters and digits only. */
+const plain = (s: string | undefined) => norm(s).replace(/[^\p{L}\p{N} ]/gu, ' ').replace(/\s+/g, ' ').trim();
 
 /** The Media page's four ways into the library. */
 const CHOICES: MusicItem[] = [
@@ -256,6 +250,32 @@ export class HelixMusic {
     return null;
   }
 
+  /**
+   * A song whose title starts with the words, in every music library, Music included: titles carry more than people
+   * say ("Sajda (From “My Name Is Khan”)", "Sajda - Lofi"). With more words after the title ("sajda my name is khan"),
+   * the rest has to be in its title, album or artist. The shortest title wins (the song itself before its remixes).
+   */
+  private async songNamed(words: string): Promise<HelixTrack | null> {
+    const q = plain(words);
+    if (!q) return null;
+    const libs = ((await this.get<{ libraries?: { id: string; kind?: string }[] }>('/v1/libraries').catch(() => null))?.libraries ?? []).filter(l => l.kind === 'music');
+    let best: HelixTrack | null = null;
+    for (const l of libs) {
+      for (let offset = 0; offset < 20_000; offset += 2000) {
+        const page = (await this.get<{ tracks?: HelixTrack[] }>(`/v1/music/tracks?library=${encodeURIComponent(l.id)}&limit=2000&offset=${offset}`).catch(() => null))?.tracks ?? [];
+        for (const t of page) {
+          if (!(t.hasFile || t.streamable)) continue;
+          const title = plain(t.title), main = plain(t.title.replace(/\s*[([-].*$/, ''));
+          const fits = title === q || main === q || title.startsWith(`${q} `)
+            || (!!main && q.startsWith(`${main} `) && [t.title, t.album, t.artist].some(x => plain(x).includes(q.slice(main.length + 1))));
+          if (fits && (!best || t.title.length < best.title.length)) best = t;
+        }
+        if (page.length < 2000) break;
+      }
+    }
+    return best;
+  }
+
   /** Signed looping versions by song id, reused until shortly before they run out. */
   private loops = new Map<string, { url: string; until: number }>();
 
@@ -397,11 +417,10 @@ export class HelixMusic {
         // A station from words Helix only guessed at: first the song by its title (or title and film, album or
         // artist) in every music library, since Helix's lookup searches only Music. "Station: sajda" once started a
         // station from a K-pop song, Helix's nearest guess, while Sajda was in another library.
-        const t = await this.songByTitle(m[2].trim()) ?? await this.titleInMusic(m[2].trim());
+        const t = await this.songByTitle(m[2].trim()) ?? await this.titleInMusic(m[2].trim()) ?? await this.songNamed(m[2].trim());
+        // Nothing better: Helix's guess. A station is "music like this", and a song that isn't in the library ("Sajda")
+        // still gets one from what Helix thinks is nearest (its artist), as it always did.
         if (t) pick = { kind: 'track', id: t.id, title: t.title, ...(t.artist ? { artist: t.artist } : {}) };
-        // Still only a guess: kept when it looks like the words (a misspelling, "jannaetein" → "Jannatein"), never
-        // when it's something else entirely.
-        else if (pick?.approx && !lookalike(pick.title, name)) pick = null;
       }
       if (!pick?.id || !['artist', 'album', 'track'].includes(pick.kind)) return null;
       const spec: Spec = { kind, id: pick.id, seedKind: pick.kind as 'artist' | 'album' | 'track', title: pick.title || name };
