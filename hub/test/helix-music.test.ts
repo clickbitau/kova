@@ -37,6 +37,7 @@ async function fakeHelix(n = 60, o: { modern?: boolean; profile?: string; locked
   const religious = [
     track(901, { title: 'Adhan (feat. Abdul Waheed Meerkar)', artist: 'ST Studio, Abdul Waheed Meerkar' }),
     track(902, { title: 'Fajr Adhan', artist: 'Abdul Waheed Meerkar' }),
+    track(903, { title: 'Sajda (From "My Name Is Khan")', album: 'My Name Is Khan', artist: 'Shankar-Ehsaan-Loy' }),
   ];
   const seen: string[] = [];
   const played: { id: string; body: any }[] = [];
@@ -116,6 +117,9 @@ async function fakeHelix(n = 60, o: { modern?: boolean; profile?: string; locked
       if (name.includes('loved')) return send(200, { kind: 'loved' });
       if (name.includes('coke studio')) return send(200, { kind: 'artist', id: 'helix:a1', title: 'Coke Studio' });
       // A misspelt title Helix still finds ("approx").
+      // Helix's lookup misses a title that carries its film: its guess is another song altogether.
+      if (name.includes('arijit')) return send(200, { kind: 'track', id: lib[1]!.id, title: 'Uska Hi Banana', artist: 'Arijit Singh', approx: true });
+      if (name.startsWith('sajda')) return send(200, { kind: 'track', id: lib[5]!.id, title: '사랑인가 봐 Love, Maybe', artist: 'HUNTR/X', approx: true });
       if (name.includes('jannaetein')) return send(200, { kind: 'track', id: lib[2]!.id, title: 'Jannatein Kahan', artist: lib[2]!.artist, approx: true });
       if (name === 'music') return send(200, { kind: 'default' });
       return send(200, { kind: 'none' });
@@ -189,8 +193,15 @@ test('Helix music: four choices on the page, playlists by name, as songs a speak
     // after it: it starts with that song, not Helix's nearest guess.
     assert.equal((await music.queueFor('Station: Fajr Adhan'))!.tracks[0]!.id, 'helix:t902');
     assert.equal((await music.queueFor('Station: fajr adhan abdul waheed meerkar'))!.tracks[0]!.id, 'helix:t902');
-    // Helix only guessed, and its guess is something else entirely ("adhan" → "Alo R Adhar"): said, never played.
-    await assert.rejects(music.queueFor('Station: adhan'), /Helix has nothing called “adhan”/);
+    // A title that starts with the words, in any library, before Helix's guess ("adhan" → "Adhan (feat. …)").
+    assert.equal((await music.queueFor('Station: adhan'))!.tracks[0]!.id, 'helix:t901');
+    // Nothing in the library by that name: a station from Helix's nearest guess, as before.
+    assert.equal((await music.queueFor('Station: arijit sufi'))!.tracks[0]!.id, h.lib[1]!.id);
+    await assert.rejects(music.queueFor('Station: nothing at all'), /Helix has nothing called “nothing at all”/);
+    // Its title carries more than people say ("Sajda (From “My Name Is Khan”)"): found by how it starts, with or
+    // without the film after it, never Helix's guess.
+    assert.equal((await music.queueFor('Station: sajda'))!.tracks[0]!.id, 'helix:t903');
+    assert.equal((await music.queueFor('Station: sajda my name is khan'))!.tracks[0]!.id, 'helix:t903');
     // Not paired with Helix: no music.
     assert.deepEqual(await new HelixMusic(() => undefined).catalog(), []);
   } finally {
