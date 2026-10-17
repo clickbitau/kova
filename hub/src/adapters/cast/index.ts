@@ -779,8 +779,10 @@ export class CastAdapter implements Adapter {
         }
         const skip = ps.find(p => p.cmd.skip)?.cmd.skip;
         if (skip) await r.skip(skip > 0 ? 1 : -1);
+        // Always sent when asked: what Kova last heard may be stale (a restart), and a resume that isn't sent leaves the
+        // speakers silent while Kova says they play.
         const paused = ps.find(p => p.cmd.paused !== undefined)?.cmd.paused;
-        if (paused !== undefined && paused !== r.paused) await r.setPaused(paused);
+        if (paused !== undefined) await r.setPaused(paused);
         return playedQueue(r);
       }));
     }
@@ -831,16 +833,41 @@ export class CastAdapter implements Adapter {
     await Promise.all(jobs);
   }
 
+  /**
+   * The Cast group this speaker belongs to whose media player is open now, its session taken back when Kova holds
+   * nothing for it (after a restart). `cache` keeps each group's status for one poll.
+   */
+  private async groupPlaying(id: string, cache: Map<string, Promise<{ app?: { appId: string; transportId: string; isIdleScreen?: boolean } }>>): Promise<string | undefined> {
+    for (const [gid, members] of this.groups) {
+      if (!members.has(id)) continue;
+      const g = this.receivers.get(gid);
+      if (!g?.ep.host) continue;
+      if (!cache.has(gid)) cache.set(gid, g.status().catch(() => ({})));
+      const { app } = await cache.get(gid)!;
+      if (!app || app.isIdleScreen || app.appId !== DEFAULT_RECEIVER) continue;
+      if (!g.media && !g.queue && !g.clip) await g.adopt(app.transportId).catch(() => false);
+      return gid;
+    }
+    return undefined;
+  }
+
   private polls = 0;
   private async poll(): Promise<void> {
     // Group members are read at start, but a group that didn't answer then (or was changed in
     // Google Home since) would leave Kova's speaker groups out of sync for good: read again,
     // at once while a group's members are unknown, and every sixth poll otherwise.
     if (this.groups.size && ([...this.groups.values()].some(m => !m.size) || ++this.polls % 6 === 0)) await this.refreshGroups();
+    const groupStatus = new Map<string, Promise<{ app?: { appId: string; transportId: string; isIdleScreen?: boolean } }>>();
     await Promise.all([...this.receivers.values()].filter(r => !r.ep.group).map(async r => {
       const id = r.ep.id;
       try {
         const { volume, app } = await r.status();
+        // Following a Cast group's session (its own app is the group follower, not the media player), and Kova doesn't
+        // know it (it restarted): the group is found again, and what it plays, so pause, resume and next reach it.
+        if (app && !app.isIdleScreen && app.appId !== DEFAULT_RECEIVER && !this.viaGroup.has(id) && !this.silenced.has(id)) {
+          const gid = await this.groupPlaying(id, groupStatus);
+          if (gid) this.viaGroup.set(id, gid);
+        }
         const gid = this.viaGroup.get(id);
         // Taken out of a group that's still playing: it's muted, and off as far as anyone is concerned.
         let playing = !!app && !app.isIdleScreen && !this.silenced.has(id);
