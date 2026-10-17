@@ -52,6 +52,32 @@ interface SiriPick { kind: 'artist' | 'album' | 'track' | 'playlist' | 'loved' |
 /** A title as compared: case, spacing and quotes aside. */
 const norm = (s: string | undefined) => (s ?? '').toLowerCase().replace(/[’']/g, "'").replace(/\s+/g, ' ').trim();
 
+/**
+ * A song named with where it's from, the way people type it ("sajda my name is khan"): its title, then words of its
+ * album or artist. The longest title that fits wins.
+ */
+function byWords<T extends { title: string; album?: string; artist?: string }>(tracks: T[], words: string): T | undefined {
+  const q = norm(words);
+  let best: T | undefined;
+  for (const t of tracks) {
+    const title = norm(t.title);
+    if (!title || !q.startsWith(`${title} `)) continue;
+    const rest = q.slice(title.length + 1);
+    if (!(norm(t.album).includes(rest) || norm(t.artist).includes(rest))) continue;
+    if (!best || title.length > norm(best.title).length) best = t;
+  }
+  return best;
+}
+
+/** Whether Helix's guess looks like the words asked for: the same start, or a word they share. */
+function lookalike(title: string | undefined, words: string): boolean {
+  const a = norm(title).replace(/[^\p{L}\p{N} ]/gu, ''), b = norm(words).replace(/[^\p{L}\p{N} ]/gu, '');
+  if (!a || !b) return false;
+  if (a.slice(0, 3) === b.slice(0, 3)) return true;
+  const mine = new Set(b.split(' ').filter(w => w.length >= 3));
+  return a.split(' ').some(w => mine.has(w));
+}
+
 /** The Media page's four ways into the library. */
 const CHOICES: MusicItem[] = [
   { name: 'Shuffle all', kind: 'all', icon: 'shuffle' },
@@ -208,8 +234,24 @@ export class HelixMusic {
     for (const l of libs) {
       const tracks = (await this.get<{ tracks?: HelixTrack[] }>(`/v1/music/tracks?library=${encodeURIComponent(l.id)}&limit=2000`).catch(() => null))?.tracks ?? [];
       const hit = tracks.find(t => norm(t.title) === norm(title))
-        ?? (bare ? tracks.find(t => norm(t.title) === norm(bare) && norm(t.artist).includes(norm(paren![1]))) : undefined);
+        ?? (bare ? tracks.find(t => norm(t.title) === norm(bare) && norm(t.artist).includes(norm(paren![1]))) : undefined)
+        ?? byWords(tracks, title);
       if (hit) return hit;
+    }
+    return null;
+  }
+
+  /**
+   * A song in Music by its title, when the words carry more (its film or artist after it): Helix's song lookup for the
+   * words, then for fewer of them from the start ("sajda my name is khan", "sajda my name is", … "sajda"), taking only
+   * a song whose title is exactly those words.
+   */
+  private async titleInMusic(words: string): Promise<{ id: string; title: string; artist?: string } | null> {
+    const w = words.trim().split(/\s+/).filter(Boolean);
+    for (let n = w.length; n >= 1 && n > w.length - 6; n--) {
+      const name = w.slice(0, n).join(' ');
+      const p = await this.get<SiriPick>(`/v1/music/siri?name=${encodeURIComponent(name)}&type=song`).catch(() => null);
+      if (p?.kind === 'track' && p.id && norm(p.title) === norm(name)) return { id: p.id, title: p.title ?? name, ...(p.artist ? { artist: p.artist } : {}) };
     }
     return null;
   }
@@ -351,6 +393,16 @@ export class HelixMusic {
           pick = t ? { kind: 'track', id: t.id, title: t.title, ...(t.artist ? { artist: t.artist } : {}) } : null;
         }
       }
+      if (kind === 'station' && (!pick?.id || pick.approx)) {
+        // A station from words Helix only guessed at: first the song by its title (or title and film, album or
+        // artist) in every music library, since Helix's lookup searches only Music. "Station: sajda" once started a
+        // station from a K-pop song, Helix's nearest guess, while Sajda was in another library.
+        const t = await this.songByTitle(m[2].trim()) ?? await this.titleInMusic(m[2].trim());
+        if (t) pick = { kind: 'track', id: t.id, title: t.title, ...(t.artist ? { artist: t.artist } : {}) };
+        // Still only a guess: kept when it looks like the words (a misspelling, "jannaetein" → "Jannatein"), never
+        // when it's something else entirely.
+        else if (pick?.approx && !lookalike(pick.title, name)) pick = null;
+      }
       if (!pick?.id || !['artist', 'album', 'track'].includes(pick.kind)) return null;
       const spec: Spec = { kind, id: pick.id, seedKind: pick.kind as 'artist' | 'album' | 'track', title: pick.title || name };
       this.specs.set(media, spec);
@@ -400,7 +452,8 @@ export class HelixMusic {
 
   private async build(media: string, opts: { shuffle?: boolean }): Promise<Queue | null> {
     const spec = await this.spec(media);
-    if (!spec) return null;
+    // A name that says what it is ("Station: sajda") and isn't in Helix: said plainly, not a silent nothing.
+    if (!spec) { const m = /^station: (.+)$/i.exec(media.trim()); if (m) throw new Error(`Helix has nothing called “${m[1].trim()}”`); return null; }
     let tracks: HelixTrack[] = [];
     let shuffle = !!opts.shuffle;
     switch (spec.kind) {
