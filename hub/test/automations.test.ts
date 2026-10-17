@@ -521,3 +521,20 @@ test('switched off: said in Activity, and a run from days ago shows its day, not
     assert.equal(await label(), 'Wed 30 Sep at 21:30');
   } finally { await h.close(); }
 });
+
+test('An automation switching speakers off leaves one playing what a person cast from another app', async () => {
+  const h = await setup();
+  try {
+    const id = await h.add({
+      name: 'Stop thunderstorm in morning',
+      triggers: [{ kind: 'time', at: { kind: 'time', at: '12:01' } }],
+      actions: [{ kind: 'set', targets: { master_speaker: { on: false }, music_speaker: { on: false } } }],
+    });
+    h.virtual.physical('master_speaker', { on: true, media: 'Casting' });
+    h.virtual.physical('music_speaker', { on: true, media: 'Thunderstorm' });
+    await h.later(90);
+    assert.equal(h.dev('master_speaker').on, true, 'the owner’s own cast plays on');
+    assert.equal(h.dev('music_speaker').on, false, 'the thunderstorm stops');
+    assert.match(h.runs(id)[0].steps[0].detail ?? '', /left Speaker playing what was cast from another app/);
+  } finally { await h.close(); }
+});

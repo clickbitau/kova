@@ -267,6 +267,11 @@ export interface DeviceSettings {
    * same in every room. 20–200.
    */
   announceTrim?: number;
+  /**
+   * Speakers: the quietest an announcement plays here (0–100), whatever the level asked for. A speaker that's nearly
+   * silent at low volumes (5% on a Citation is) still gets heard.
+   */
+  announceMin?: number;
 }
 
 /**

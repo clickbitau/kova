@@ -479,3 +479,43 @@ test('Cast: a speaker slow to answer a load (it fetches the start first) has lon
     spk.server.close();
   }
 });
+
+test('Cast: a loop that stops with no reason given starts again; one stopped from another app or by voice is left, and both say why', async () => {
+  const spk = fakeCast('Bedroom Speaker');
+  const reg = new Registry(new Store(':memory:'), n => (n === 'Rain' ? 'http://10.0.0.2:8140/api/sound/Rain.m4a' : undefined));
+  reg.sourceLoops = () => true;
+  reg.endlessUrl = n => `http://10.0.0.2:8140/api/sound/${n}.m4a?endless=1`;
+  const cast = new CastAdapter({ discover: false, insecure: true, pollMs: 0, batchMs: 20, timeoutMs: 400, endpoints: [{ id: 'abab0000000000000000000000000007', name: spk.name, model: 'Citation 200', host: '127.0.0.1', port: await listen(spk) }] });
+  await reg.addAdapter(cast);
+  const ID = 'cast_abab0000000000000000000000000007';
+  const poll = () => (cast as unknown as { poll(): Promise<void> }).poll();
+  const stops: Record<string, unknown>[] = [];
+  reg.on('event', e => { if (e.type === 'playback-stopped') stops.push(e.data); });
+  const loads = () => spk.log.filter(l => l.type === 'LOAD').length;
+  try {
+    await reg.command(ID, { on: true, media: 'Rain' }, { kind: 'automation', label: 'Bedtime' });
+    await poll();
+    assert.equal(reg.get(ID)!.state.media, 'Rain');
+
+    // 03:10: the media player went away and the speaker said nothing: Rain plays again, and Activity says so.
+    const n = loads();
+    spk.st.app = null; spk.st.url = '';
+    await poll();
+    assert.equal(loads(), n + 1, 'started again');
+    assert.equal(reg.get(ID)!.state.on, true);
+    assert.equal(reg.get(ID)!.state.media, 'Rain');
+    assert.deepEqual(stops.at(-1), { title: 'Rain', reason: 'its media player closed', appId: null, restarting: true });
+
+    // Stopped by voice or from another app (CANCELLED): said, and left stopped.
+    spk.idle('CANCELLED');
+    await new Promise(r => setTimeout(r, 50));
+    spk.st.app = null; spk.st.url = '';
+    await poll();
+    assert.equal(loads(), n + 1, 'not started again');
+    assert.equal(reg.get(ID)!.state.on, false);
+    assert.deepEqual(stops.at(-1), { title: 'Rain', reason: 'CANCELLED', appId: 'CC1AD845', restarting: false });
+  } finally {
+    await cast.stop();
+    spk.server.close();
+  }
+});

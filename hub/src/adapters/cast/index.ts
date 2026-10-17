@@ -90,6 +90,13 @@ class Receiver {
   onTrack?: () => void;
   /** Called when the speaker drops what it was given by itself (it couldn't fetch or play it): for Activity. */
   onProblem?: (p: { title: string; reason: string; from: string; endless: boolean; retrying: boolean }) => void;
+  /**
+   * Called when a looping sound stopped and the speaker didn't say it failed: stopped from another app or by voice
+   * (CANCELLED), another app cast over it (INTERRUPTED), or the media player went away with no reason given.
+   */
+  onStopped?: (p: { title: string; reason: string; appId: string | null; restarting: boolean }) => void;
+  /** The speaker's last idle status: why it stopped, and when. */
+  lastIdle: { reason: string; at: number } | null = null;
   /** The stream or recording it plays (play()), to start it again after an announcement; `endless`: the hub's endless stream of it, playing. */
   stream: Stream | null = null;
   /** This speaker couldn't play an endless stream: loops go as a repeating queue. */
@@ -285,6 +292,15 @@ class Receiver {
     this.onTrack?.();
   }
 
+  /** A looping sound may be started again (at most LOOP_RESTARTS an hour): takes one when it may. */
+  mayRestart(): boolean {
+    const now = Date.now();
+    this.restarts = this.restarts.filter(t => now - t < 3600_000);
+    if (this.restarts.length >= LOOP_RESTARTS) return false;
+    this.restarts.push(now);
+    return true;
+  }
+
   /** What the speaker says it's playing: follow the queue, and add more songs before it runs out. */
   private onStatus(st: MediaStatus | undefined): void {
     if (st?.playerState) this.paused = st.playerState === 'PAUSED';
@@ -300,20 +316,22 @@ class Receiver {
     // by another app (INTERRUPTED) is left alone.
     const sm = this.stream;
     if (sm?.endless && st?.playerState === 'PLAYING') this.endlessPlayed = true;
+    if (st?.playerState === 'IDLE' && st.idleReason) this.lastIdle = { reason: st.idleReason, at: Date.now() };
+    if (sm?.loop && st?.playerState === 'IDLE' && (st.idleReason === 'CANCELLED' || st.idleReason === 'INTERRUPTED')) {
+      console.warn(`[cast] ${this.ep.name}: ${sm.title} stopped (${st.idleReason}): ${st.idleReason === 'CANCELLED' ? 'from another app or by voice' : 'another app cast over it'}`);
+      this.onStopped?.({ title: sm.title, reason: st.idleReason, appId: DEFAULT_RECEIVER, restarting: false });
+    }
     if (sm?.loop && st?.playerState === 'IDLE' && (st.idleReason === 'ERROR' || st.idleReason === 'FINISHED')) {
       const now = Date.now();
       // An endless stream this speaker gave up on at once, or without ever playing it (some take minutes to give up on
       // one they can't fetch): it can't play one; the repeating queue from now on.
       if (sm.endless && st.idleReason === 'ERROR' && (now - this.endlessAt < 20_000 || !this.endlessPlayed)) { this.noEndless = true; console.warn(`[cast] ${this.ep.name}: ${sm.title} as an endless stream failed without playing; repeating it instead`); }
-      this.restarts = this.restarts.filter(t => now - t < 3600_000);
       let from = '';
       try { from = new URL(sm.endless ?? sm.url).host; } catch { /* not a URL */ }
-      this.onProblem?.({ title: sm.title, reason: String(st.idleReason), from, endless: !!sm.endless, retrying: this.restarts.length < LOOP_RESTARTS });
-      console.warn(`[cast] ${this.ep.name}: ${sm.title} stopped by itself (${st.idleReason})${this.restarts.length < LOOP_RESTARTS ? ', starting it again' : ''}`);
-      if (this.restarts.length < LOOP_RESTARTS) {
-        this.restarts.push(now);
-        setTimeout(() => { if (this.stream === sm) void this.play(sm.url, sm.title, true, sm.endless).catch(e => console.warn(`[cast] ${this.ep.name}: ${(e as Error).message}`)); }, 300).unref?.();
-      }
+      const again = this.mayRestart();
+      this.onProblem?.({ title: sm.title, reason: String(st.idleReason), from, endless: !!sm.endless, retrying: again });
+      console.warn(`[cast] ${this.ep.name}: ${sm.title} stopped by itself (${st.idleReason})${again ? ', starting it again' : ''}`);
+      if (again) setTimeout(() => { if (this.stream === sm) void this.play(sm.url, sm.title, true, sm.endless).catch(e => console.warn(`[cast] ${this.ep.name}: ${(e as Error).message}`)); }, 300).unref?.();
       return;
     }
     const qu = this.queue;
@@ -550,6 +568,7 @@ export class CastAdapter implements Adapter {
     const r = new Receiver(ep, this.o);
     r.onTrack = () => this.reportTrack(ep.id);
     r.onProblem = p => this.ctx?.event(this.kovaId(ep.id), 'playback-failed', p);
+    r.onStopped = p => this.ctx?.event(this.kovaId(ep.id), 'playback-stopped', p);
     this.receivers.set(ep.id, r);
     if (ep.group) { this.groups.set(ep.id, new Set()); return; }
     const tv = /tv|oled|qled|s90|bravia/i.test(`${ep.name} ${ep.model}`) && !/nest|audio|hub/i.test(ep.model);
@@ -832,6 +851,21 @@ export class CastAdapter implements Adapter {
         }
         // The media player open with nothing Kova knows of: what it holds (nothing, a few minutes after an announcement).
         if (playing && !gid && app?.appId === DEFAULT_RECEIVER && !r.media && !r.queue && !r.clip) playing = await r.adopt(app.transportId).catch(() => true);
+        // A looping sound Kova started is gone and the speaker gave no reason (the media player closed, or it's back on
+        // its idle screen): nobody stopped it, so it plays again (a stop from another app or by voice is CANCELLED, and
+        // left alone). Another app on it now (Spotify, YouTube) is the person's: only said.
+        const sm = r.stream;
+        if (!playing && sm?.loop && r.media && !gid && !this.silenced.has(id)) {
+          const recent = r.lastIdle && Date.now() - r.lastIdle.at < 60_000 ? r.lastIdle.reason : null;
+          if (!recent) {
+            const other = !!app && !app.isIdleScreen && app.appId !== DEFAULT_RECEIVER;
+            const again = !other && r.mayRestart();
+            const reason = other ? `another app is on it (${app!.appId})` : app?.isIdleScreen ? 'it went back to its idle screen' : 'its media player closed';
+            console.warn(`[cast] ${r.ep.name}: ${sm.title} stopped with no reason given: ${reason}${again ? ', starting it again' : ''}`);
+            r.onStopped?.({ title: sm.title, reason, appId: app?.appId ?? null, restarting: again });
+            if (again) playing = await r.play(sm.url, sm.title, true, sm.endless).then(() => true, e => { console.warn(`[cast] ${r.ep.name}: ${(e as Error).message}`); return false; });
+          }
+        }
         if (!playing) { r.media = null; r.queue = null; }
         const src = gid ? this.receivers.get(gid)! : r;
         if (playing) await src.refreshQueue();

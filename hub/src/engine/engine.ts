@@ -290,7 +290,9 @@ export class Engine extends EventEmitter<{ changed: [] }> {
     // A speaker that dropped what it was playing by itself: which sound, from where, and whether Kova tries again.
     const failed = e.type === 'playback-failed'
       ? `${e.device.name} couldn’t play ${String(e.data?.title ?? 'it')}${e.data?.from ? ` from ${String(e.data.from)}` : ''} (${String(e.data?.reason ?? 'error').toLowerCase()})${e.data?.retrying ? ', trying again' : ', gave up'}`
-      : null;
+      : e.type === 'playback-stopped'
+        ? `${e.device.name} stopped ${String(e.data?.title ?? 'playing')}: ${({ CANCELLED: 'stopped from another app or by voice', INTERRUPTED: 'another app cast over it' } as Record<string, string>)[String(e.data?.reason)] ?? String(e.data?.reason ?? 'no reason given')}${e.data?.restarting ? ', starting it again' : ''}`
+        : null;
     const what = failed ?? (/^power-supply-/.test(e.type) && typeof e.data?.title === 'string' && e.data.title ? `${e.device.name}: ${e.data.title}` : `${e.device.name} ${labels[e.type] ?? e.type}${title}`);
     const entry = e.data?.quiet === true ? null : this.store.append({
       kind: 'device_event', device: e.device.id, feed: failed ? 'device' : 'people', what,
