@@ -306,7 +306,11 @@ export class Registry extends EventEmitter<{ change: [ChangeEvent]; event: [Devi
     if (typeof cmd.media === 'string' && !d.capabilities.includes('queue') && !d.capabilities.includes('library') && !this.srcUrl(cmd.media) && this.isMusic?.(cmd.media)) {
       throw new Error(`${d.name} can’t play Helix music yet (Google Cast, Sonos and AirPlay speakers can)`);
     }
-    const patch = this.diff(d, fitCommand(d, cmd));
+    const fitted = fitCommand(d, cmd);
+    // Asked to play what it holds paused ("Station: sajda" again): it plays. Without this the command matches the
+    // state, nothing is sent, and the speakers stay silent while Kova says they play.
+    if (typeof fitted.media === 'string' && fitted.paused === undefined && fitted.on !== false && d.state.paused && same(d.state.media, fitted.media)) fitted.paused = false;
+    const patch = this.diff(d, fitted);
     // A robot told to clean rooms cleans the areas of its map the owner gave those rooms.
     if (patch.robotSet?.rooms) patch.robotSet = resolveRooms(d, patch.robotSet, this.settings()[d.id]?.areaRooms, r => this.roomName(r));
     if (!Object.keys(patch).length) return {};

@@ -519,3 +519,42 @@ test('Cast: a loop that stops with no reason given starts again; one stopped fro
     spk.server.close();
   }
 });
+
+test('Cast: after a restart, speakers following their group’s session are found again: resume reaches the group, and playing what it holds paused plays it', async () => {
+  const a = fakeCast('Kitchen Speaker'), b = fakeCast('Baby Room speaker');
+  const g = fakeCast('Home Speakers', ['aaaa0000-0000-0000-0000-000000000011', 'bbbb0000-0000-0000-0000-000000000012']);
+  const ep = async (f: ReturnType<typeof fakeCast>, id: string, model: string, group = false) => ({ id, name: f.name, model, host: '127.0.0.1', port: await listen(f), ...(group ? { group: true } : {}) });
+  const reg = new Registry(new Store(':memory:'), n => (n === 'Radio' ? 'https://stream.example/radio.mp3' : undefined));
+  const cast = new CastAdapter({
+    discover: false, insecure: true, pollMs: 0, batchMs: 20, timeoutMs: 400,
+    endpoints: [await ep(a, 'aaaa0000000000000000000000000011', 'Nest Audio'), await ep(b, 'bbbb0000000000000000000000000012', 'Nest Audio'), await ep(g, 'dddd0000000000000000000000000014', 'Google Cast Group', true)],
+  });
+  // What the speakers hold when Kova starts: the group's media player, paused; each member runs the group follower.
+  for (const m of [a, b]) m.st.app = { appId: '705D30C6', sessionId: 'f', transportId: 'follow' };
+  g.st.app = { appId: 'CC1AD845', sessionId: 'sess-g', transportId: 'web-1' };
+  g.st.url = 'https://stream.example/radio.mp3'; g.st.title = 'Radio'; g.st.paused = true;
+  await reg.addAdapter(cast);
+  const poll = () => (cast as unknown as { poll(): Promise<void> }).poll();
+  const plays = () => g.log.filter(l => l.type === 'PLAY').length;
+  try {
+    await poll();
+    const K = 'cast_aaaa0000000000000000000000000011';
+    assert.equal(reg.get(K)!.state.on, true);
+    assert.equal(reg.get(K)!.state.paused, true, 'paused, as the group is');
+
+    // Resume: the PLAY goes to the group's session, not to the speaker's follower.
+    await reg.command(K, { paused: false }, { kind: 'user', label: 'Kauser' });
+    assert.equal(plays(), 1);
+    assert.equal(g.st.paused, false);
+
+    // Paused again, then asked to play what it holds: it plays (it used to match the state and send nothing).
+    await reg.command(K, { paused: true }, { kind: 'user', label: 'Kauser' });
+    assert.equal(g.st.paused, true);
+    await reg.command(K, { on: true, media: reg.get(K)!.state.media as string }, { kind: 'user', label: 'Kauser' });
+    assert.equal(plays(), 2);
+    assert.equal(g.st.paused, false);
+  } finally {
+    await cast.stop();
+    for (const f of [a, b, g]) f.server.close();
+  }
+});
