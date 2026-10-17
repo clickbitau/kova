@@ -492,9 +492,14 @@ export class Automations {
       if (live.cancelled) throw new Cancelled();
       switch (x.kind) {
         case 'set': {
-          const { changed } = await this.reg.applyTargets(x.targets, cause);
+          // A speaker playing something a person cast from another app (Spotify, YouTube: "Casting") isn't switched off
+          // by an automation: "stop the thunderstorm at 7" mustn't end the owner's own music.
+          const theirs = Object.entries(x.targets).filter(([id, c]) => c.on === false && c.media === undefined && this.reg.get(id)?.state.on && this.reg.get(id)?.state.media === 'Casting').map(([id]) => id);
+          const targets = theirs.length ? Object.fromEntries(Object.entries(x.targets).filter(([id]) => !theirs.includes(id))) : x.targets;
+          const { changed } = await this.reg.applyTargets(targets, cause);
           const names = Object.keys(x.targets).map(id => pseudoLabel(id, this.config.get().rooms) ?? this.reg.get(id)?.name ?? id);
-          step(`Set ${names.join(', ')}`, true, changed.length ? `${changed.length} changed` : 'already so');
+          const left = theirs.length ? `; left ${theirs.map(id => this.reg.get(id)?.name ?? id).join(', ')} playing what was cast from another app` : '';
+          step(`Set ${names.join(', ')}`, true, `${changed.length ? `${changed.length} changed` : 'already so'}${left}`);
           if (changed.length) this.store.append({ kind: 'run', device: null, feed: 'auto', what: `${a.name}: ${changed.map(id => this.reg.get(id)?.name ?? id).join(', ')} · ${live.run.why}`, data: { automation: a.id, changed }, cause });
           break;
         }

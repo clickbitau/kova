@@ -4,7 +4,7 @@ import type { Registry, PlaybackSnap } from '../devices/registry.ts';
 import type { Store } from '../store/db.ts';
 import type { ConfigStore } from './config.ts';
 import type { Cause, Command, CombinedDevice, Device, SpeakerGroup } from '../model/types.ts';
-import { announceVol, trimOf } from './announce.ts';
+import { announceVol, minOf, trimOf } from './announce.ts';
 import { SYNC_TEST_FILE, SYNC_TEST_MS } from '../services/clips.ts';
 
 // Speaker groups across brands, kept in time.
@@ -766,7 +766,7 @@ export class GroupSync extends EventEmitter<{ changed: [] }> {
     this.tests.set(groupId, t);
     try {
       const cfg = this.config.get();
-      await Promise.allSettled(players.map(id => this.reg.command(id, { vol: announceVol(level, trimOf(cfg, id)) }, cause, { quiet: true })));
+      await Promise.allSettled(players.map(id => this.reg.command(id, { vol: announceVol(level, trimOf(cfg, id), minOf(cfg, id)) }, cause, { quiet: true })));
       const r = await this.play(g, { on: true, media: SYNC_TEST_MEDIA }, cause, { quiet: true });
       const bad = r.filter(x => x.result.status === 'rejected');
       if (bad.length === r.length) throw (bad[0]!.result as PromiseRejectedResult).reason;

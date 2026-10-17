@@ -6,6 +6,7 @@ import {
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { Readable } from 'node:stream';
+import { Worker } from 'node:worker_threads';
 import { pipeline } from 'node:stream/promises';
 import { createGunzip, createGzip } from 'node:zlib';
 import { tarStream, untar, type TarSource } from '../util/tar.ts';
@@ -92,12 +93,29 @@ async function snapshotDb(db: DatabaseSync, dest: string): Promise<void> {
   } else {
     db.exec(`VACUUM INTO '${dest.replace(/'/g, "''")}'`);
   }
-  const copy = new DatabaseSync(dest);
-  try {
-    copy.exec('PRAGMA journal_mode = DELETE');
-    const ok = (copy.prepare('PRAGMA quick_check').get() as { quick_check: string }).quick_check;
-    if (ok !== 'ok') throw new Error(`Database copy failed its check: ${ok}`);
-  } finally { copy.close(); }
+  const ok = await checkCopy(dest);
+  if (ok !== 'ok') throw new Error(`Database copy failed its check: ${ok}`);
+}
+
+/**
+ * The copy's own check, in a worker thread: reading every page takes a second or more on a big database, and on the
+ * hub's thread that second stalls everything else (a speaker's endless stream, the API).
+ */
+function checkCopy(dest: string): Promise<string> {
+  const code = `
+    const { workerData, parentPort } = require('node:worker_threads');
+    const { DatabaseSync } = require('node:sqlite');
+    const copy = new DatabaseSync(workerData);
+    try {
+      copy.exec('PRAGMA journal_mode = DELETE');
+      parentPort.postMessage(copy.prepare('PRAGMA quick_check').get().quick_check);
+    } finally { copy.close(); }`;
+  return new Promise((resolve, reject) => {
+    const w = new Worker(code, { eval: true, workerData: dest });
+    w.once('message', m => resolve(String(m)));
+    w.once('error', reject);
+    w.once('exit', c => { if (c) reject(new Error(`The database check stopped (${c})`)); });
+  });
 }
 
 /** Whether this process can open a file for reading (a file left behind by root, say, it can't). */

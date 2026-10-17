@@ -17,7 +17,7 @@ import { roomOutdoor } from '../util/sensors.ts';
 import { engineInfo, loadSettings } from '../assistant/ai.ts';
 import { hasZones, suggestZoneRooms, zoneCommandWords, type ZoneCommand } from '../util/zones.ts';
 import { SEASON_LABEL } from '../engine/room-climate.ts';
-import { canAnnounce, trimOf } from '../engine/announce.ts';
+import { canAnnounce, minOf, trimOf } from '../engine/announce.ts';
 import { BUILTIN_ADHANS } from '../services/adhans.ts';
 import { prayerView } from '../services/prayer.ts';
 import { clipView } from './announce-routes.ts';
@@ -245,7 +245,7 @@ export function snapshot(hub: Hub) {
     // `live` (cameras): whether the apps can play its live video (its integration streams it over WebRTC).
     // The floor plan, and where each device shows on it (placed by hand, or in its room).
     floorPlan: cfg.floorPlan ? { ...cfg.floorPlan, spots: spots(cfg.floorPlan, reg.list().filter(d => !cfg.devices?.[d.id]?.archived).map(d => ({ id: d.id, room: d.room }))) } : null,
-    devices: reg.list().map(d => ({ ...d, kind: kindOf(d), why: engine.why(d.id), usedIn: engine.usedIn(d.id), ...wattsSetting(d, cfg.devices?.[d.id]?.watts), ...zoneSettings(d, cfg), ...(d.type === 'vacuum' ? { areaRooms: cfg.devices?.[d.id]?.areaRooms ?? {} } : {}), ...liveSetting(reg, d), ...(canAnnounce(d) ? { canAnnounce: true, announceTrim: trimOf(cfg, d.id) } : {}) })),
+    devices: reg.list().map(d => ({ ...d, kind: kindOf(d), why: engine.why(d.id), usedIn: engine.usedIn(d.id), ...wattsSetting(d, cfg.devices?.[d.id]?.watts), ...zoneSettings(d, cfg), ...(d.type === 'vacuum' ? { areaRooms: cfg.devices?.[d.id]?.areaRooms ?? {} } : {}), ...liveSetting(reg, d), ...(canAnnounce(d) ? { canAnnounce: true, announceTrim: trimOf(cfg, d.id), announceMin: minOf(cfg, d.id) } : {}) })),
     modes,
     current: {
       modeId: mn.mode.id, since: mn.since, until: mn.until, untilLabel: clock(mn.until, tz), nextId: mn.next.id,

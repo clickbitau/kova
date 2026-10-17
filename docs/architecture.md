@@ -790,7 +790,11 @@ words only when names are shared. `diagnose_automation` adds what went wrong on 
 sound it plays, the address speakers fetch it from. A speaker that drops what it plays by itself (Cast: IDLE with
 ERROR) logs a `playback-failed` device event ("Bedroom Speaker couldn't play Thunderstorm from 10.0.19.6:8140 (error),
 gave up"), in the activity feed under devices; `explain_device` returns the last one, and the device's recent changes
-only when activity history is shared.
+only when activity history is shared. A looping sound that stops when the speaker gave no reason (its media player closed, or it went back
+to its idle screen) starts again, within the same hourly limit as one that failed, and logs `playback-stopped` saying
+so; one stopped from another app or by voice (`CANCELLED`) or cast over (`INTERRUPTED`) is left, and logged with that
+reason. An automation switching speakers off leaves one playing something a person cast from another app ("Casting").
+A speaker's `announceMin` (device settings, 0–100) is the quietest an announcement plays there.
 
 Tests: `hub/test/accounts.test.ts` (invites, rate limits, migration, the matrix for each role on the routes that
 matter, every route on the allow-list, scoped snapshots, guest expiry, undo, identity in Activity, managing

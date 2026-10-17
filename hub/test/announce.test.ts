@@ -88,6 +88,10 @@ const auto = (actions: AnnounceAction[], extra: Partial<Automation> = {}): Autom
 test('Calibration: the level × each speaker’s loudness, rounded and kept in 1–100', () => {
   assert.equal(announceVol(15, 100), 15);
   assert.equal(announceVol(15, 60), 9);
+  // A speaker's lowest level for announcements: 5% on a Citation is near silent, so it plays at its floor.
+  assert.equal(announceVol(5, 100, 15), 15);
+  assert.equal(announceVol(30, 100, 15), 30);
+  assert.equal(announceVol(0, 100, 15), 0, 'nothing asked, nothing played');
   assert.equal(announceVol(15, 70), 11);
   assert.equal(announceVol(15, 80), 12);
   assert.equal(announceVol(1, 20), 1, 'never silent when a level was asked for');

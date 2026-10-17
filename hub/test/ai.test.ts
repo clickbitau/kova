@@ -242,13 +242,16 @@ test('Learned: an AI-run phrase replays without the AI; undo forgets it', async 
 
   // Learned phrase was stored.
   const learned = (await app.inject({ url: '/api/assistant/learned' })).json();
-  assert.deepEqual(learned.map((x: any) => x.phrase), ['make the lounge feel cosy']);
+  assert.deepEqual(learned.map((x: any) => x.phrase), ['make lounge feel cosy'], 'kept by its words, without filler');
 
-  // Same ask: no AI call, replayed locally.
+  // Same ask, or the same words with filler around them: no AI call, replayed locally.
   const r2 = await ask('Make the lounge feel cosy!');
   assert.equal(r2.source, 'Learned · no AI needed');
   assert.equal(r2.understood, true);
+  const r3 = await ask('Kova, can you please make the lounge feel cosy');
+  assert.equal(r3.source, 'Learned · no AI needed');
   assert.equal(fake.received.length, 2, 'no new request to the AI');
+  assert.equal((await app.inject({ url: '/api/assistant/learned' })).json()[0].uses, 2);
 
   // Undoing the AI's first run forgets the phrase.
   await app.inject({ method: 'POST', url: `/api/undo/${r1.undo}` });
@@ -593,5 +596,16 @@ test('Diagnosing: the AI reads how an automation ran and what went wrong on its 
   assert.match(String(e.recent), /not shared/, 'activity history is off by default');
   // The failure shows in the activity feed too, as a device event.
   assert.ok(hub.store.query({ kinds: ['device_event'], devices: ['lamp'] }).some(x => x.feed === 'device' && /couldn’t play Thunderstorm/.test(x.what)));
+  await app.close(); await hub.stop(); await fake.close();
+});
+
+test('Learned: a turn that points back into the conversation is never learned', async () => {
+  const fake = await fakeServer([openAiToolCall('set_devices', { devices: [{ id: 'lamp', on: false }] }), openAiText('Off.')]);
+  const { hub, app, put, ask, dev } = await setup();
+  await put({ engine: 'local', local: { url: fake.url, model: 'm' } });
+  await hub.engine.command('lamp', { on: true });
+  await ask('switch that lamp off its too bright in here');
+  assert.equal(dev('lamp').on, false);
+  assert.deepEqual((await app.inject({ url: '/api/assistant/learned' })).json(), []);
   await app.close(); await hub.stop(); await fake.close();
 });

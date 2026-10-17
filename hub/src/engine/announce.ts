@@ -33,9 +33,9 @@ export const isSpeakerGroup = (d: Device) => d.adapter === 'groups';
 export const announceTarget = (d: Device) => canAnnounce(d) || (isSpeakerGroup(d) && !d.archived);
 
 /** The level a speaker plays at: the level the owner asked for × the speaker's announcement loudness (in %). */
-export function announceVol(level: number, trim = 100): number {
+export function announceVol(level: number, trim = 100, min = 0): number {
   if (!(level > 0)) return 0;
-  return Math.max(1, Math.min(100, Math.round(level * (trim > 0 ? trim : 100) / 100)));
+  return Math.max(1, Math.min(100, Math.max(min, Math.round(level * (trim > 0 ? trim : 100) / 100))));
 }
 
 /** An input in words: "the TV input", "HDMI 1". */
@@ -43,6 +43,8 @@ const inputWords = (i: string) => i === 'tv' ? 'the TV input' : /^hdmi\d$/.test(
 
 /** The speaker's loudness setting (100 when unset). */
 export const trimOf = (cfg: Pick<HomeConfig, 'devices'>, id: string) => cfg.devices?.[id]?.announceTrim ?? 100;
+/** The quietest an announcement plays on the speaker (0 when unset). */
+export const minOf = (cfg: Pick<HomeConfig, 'devices'>, id: string) => cfg.devices?.[id]?.announceMin ?? 0;
 
 /** Announce media in words: the source's name, a clip's, a recording's title, "<song> (Helix)", or the URL's file. */
 export function mediaWords(media: string | undefined, clipName?: (id: string) => string | undefined): string {
@@ -248,7 +250,7 @@ export class Announcer {
       // always leave the TV's input; when it hosts the Cast group, the whole group then sits buffering, silent.
       inputs = await this.toWifi(list.map(x => x.d), run.cause, lines);
       // Every speaker at its own volume, then all of them start in the same moment.
-      const vols = new Map(list.map(x => [x.d.id, announceVol(x.level, trimOf(cfg, x.d.id))]));
+      const vols = new Map(list.map(x => [x.d.id, announceVol(x.level, trimOf(cfg, x.d.id), minOf(cfg, x.d.id))]));
       const started = this.o.now?.() ?? Date.now();
       // Together: speakers a Cast group covers play through it, in step; the rest start as it's heard.
       const plays = await this.reg.playClips(list.map(x => ({
@@ -343,7 +345,7 @@ export class Announcer {
     const step: AnnounceAction = { kind: 'announce', media: CHIME_MEDIA, vol: level, targets: { [id]: {} }, restore: true, maxSec: 15 };
     const result = await this.run(step, { cause, overlay: null, wait: (ms, done) => waitReal(this.reg, ms, done) });
     if (result.failed.length) throw new Error(`${d.name} didn’t play it: ${result.failed[0]!.error}`);
-    return { vol: announceVol(level, trimOf(this.config.get(), id)), result };
+    return { vol: announceVol(level, trimOf(this.config.get(), id), minOf(this.config.get(), id)), result };
   }
 }
 
